@@ -1,6 +1,6 @@
 import unittest2
 
-from samsa.utils import StructuredBytesIO
+from samsa.utils.structuredio import StructuredBytesIO
 
 
 class StructuredBytesIOTest(unittest2.TestCase):

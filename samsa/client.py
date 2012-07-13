@@ -1,9 +1,8 @@
 import socket
-import struct
 from zlib import crc32
 
 from samsa.exceptions import ERROR_CODES
-from samsa.utils import StructuredBytesIO
+from samsa.utils.structuredio import StructuredBytesIO
 
 
 (REQUEST_TYPE_PRODUCE, REQUEST_TYPE_FETCH, REQUEST_TYPE_MULTIFETCH,
