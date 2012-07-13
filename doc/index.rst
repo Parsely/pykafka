@@ -6,16 +6,23 @@
 Welcome to samsa's documentation!
 =================================
 
-Contents:
+Usage Documentation
+-------------------
 
 .. toctree::
    :maxdepth: 2
 
-API Documentation
-=================
+   usage/basic
+   usage/advanced
 
-.. automodule:: samsa.client
-   :members:
+API Documentation
+-----------------
+
+.. toctree::
+   :maxdepth: 2
+   :glob:
+
+   api/*
 
 Indices and tables
 ==================
