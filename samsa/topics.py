@@ -82,6 +82,7 @@ class PartitionMap(DelayedConfiguration):
     def __len__(self):
         return sum(map(len, self.__brokers.values()))
 
+    @requires_configuration
     def __iter__(self):
         return itertools.chain.from_iterable(iter(value) for value in self.__brokers.values())
 
