@@ -1,3 +1,6 @@
+from samsa.utils.delayedconfig import DelayedConfiguration, requires_configuration
+
+
 class TopicMap(object):
     """
     Provides a dictionary-like interface to :class:`~samsa.topics.Topic`
@@ -8,6 +11,14 @@ class TopicMap(object):
     """
     def __init__(self, cluster):
         self.cluster = cluster
+
+        self.__topics = {}
+
+    def get(self, name):
+        topic = self.__topics.get(name, None)
+        if topic is None:
+            topic = self.__topics[name] = Topic(self.cluster, name)
+        return topic
 
 
 class Topic(object):
@@ -21,3 +32,13 @@ class Topic(object):
     def __init__(self, cluster, name):
         self.cluster = cluster
         self.name = name
+        self.partitions = PartitionMap(self.cluster, self)
+
+
+class PartitionMap(DelayedConfiguration):
+    def __init__(self, cluster, topic):
+        self.cluster = cluster
+        self.topic = topic
+
+    def _configure(self, event=None):
+        raise NotImplementedError
