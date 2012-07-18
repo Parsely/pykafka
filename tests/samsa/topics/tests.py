@@ -1,7 +1,9 @@
 import mock
 import unittest2
+from zookeeper import NoNodeException
 
-from samsa.topics import TopicMap, Topic
+from samsa.cluster import Cluster
+from samsa.topics import TopicMap, Topic, PartitionMap
 
 
 class TopicMapTest(unittest2.TestCase):
@@ -12,3 +14,45 @@ class TopicMapTest(unittest2.TestCase):
 
         # Retrieving the topic again should return the same object instance.
         self.assertIs(topic, topics.get('topic-1'))
+
+
+class PartitionMapTest(unittest2.TestCase):
+    def setUp(self):
+        self.cluster = Cluster(zookeeper=mock.Mock())
+
+    def test_configuration_no_node(self):
+        def get(node, *args, **kwargs):
+            if node.startswith('/brokers/ids'):
+                return ('::', mock.Mock())
+            else:
+                raise NoNodeException
+
+        def get_children(node, *args, **kwargs):
+            if node.startswith('/brokers/ids'):
+                return ['0', '1', '2']
+            else:
+                raise NoNodeException
+
+        self.cluster.zookeeper.get = get
+        self.cluster.zookeeper.get_children = get_children
+        self.cluster.zookeeper.exists.return_value = None
+
+        topic = self.cluster.topics.get('topic')
+        self.assertEqual(len(topic.partitions), len(self.cluster.brokers))
+
+    def test_configuration_with_nodes(self):
+        nodes = {
+            '0': '5',
+            '1': '2',
+            '3': '4',
+        }
+
+        def get_node_data(path):
+            id = path.rsplit('/', 1)[-1]
+            return (nodes[str(id)], mock.Mock())
+
+        self.cluster.zookeeper.get_children.return_value = nodes.keys()
+        self.cluster.zookeeper.get = get_node_data
+
+        topic = self.cluster.topics.get('topic')
+        self.assertEqual(len(topic.partitions), sum(map(int, nodes.values())))
