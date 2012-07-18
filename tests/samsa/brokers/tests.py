@@ -54,3 +54,25 @@ class BrokerMapTest(unittest2.TestCase):
         self.assertTrue(broker.is_dead)
         with self.assertRaises(KeyError):
             brokers.get(1)
+
+
+class BrokerTest(unittest2.TestCase):
+    def setUp(self):
+        self.cluster = mock.Mock(spec=Cluster)
+        self.cluster.zookeeper = mock.Mock()
+
+    def test_configuration(self):
+        host = 'kafka-1.local'
+        port = 9093
+        self.cluster.zookeeper.get.return_value = ('%(host)s-1342221875610:%(host)s:%(port)s' % {
+            'host': host,
+            'port': port,
+        }, mock.Mock())
+
+        broker = Broker(self.cluster, id='1')
+        self.assertEqual(broker.id, 1)
+        self.assertEqual(self.cluster.zookeeper.get.call_count, 0)
+
+        self.assertEqual(broker.host, host)
+        self.assertEqual(broker.port, port)
+        self.assertEqual(self.cluster.zookeeper.get.call_count, 1)

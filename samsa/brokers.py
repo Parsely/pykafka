@@ -60,7 +60,7 @@ class BrokerMap(DelayedConfiguration):
         return self.__brokers.values()
 
 
-class Broker(object):
+class Broker(DelayedConfiguration):
     """
     A Kafka broker.
 
@@ -71,4 +71,24 @@ class Broker(object):
     def __init__(self, cluster, id):
         self.cluster = cluster
         self.id = int(id)
+
+        self.__host = None
+        self.__port = None
+
         self.is_dead = False
+
+    def _configure(self, event=None):
+        node = '/brokers/ids/%s' % self.id
+        data, stat = self.cluster.zookeeper.get(node, watch=self._configure)
+        creator, self.__host, port = data.split(':')
+        self.__port = int(port)
+
+    @property
+    @requires_configuration
+    def host(self):
+        return self.__host
+
+    @property
+    @requires_configuration
+    def port(self):
+        return self.__port
