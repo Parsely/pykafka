@@ -1,3 +1,8 @@
+class ImproperlyConfigured(Exception):
+    pass
+
+# Protocol Client Exceptions
+
 class UnknownError(Exception):
     ERROR_CODE = -1
 
