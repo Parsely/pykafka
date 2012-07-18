@@ -30,10 +30,11 @@ class BrokerMap(DelayedConfiguration):
                 'ZooKeeper cluster -- is your Kafka cluster running?' % path)
 
         alive = set()
-        for broker_id in broker_ids:
-            broker = Broker(self.cluster, id=broker_id)
-            self.__brokers[broker.id] = broker
-            alive.add(broker.id)
+        for broker_id in map(int, broker_ids):
+            if broker_id not in self.__brokers:
+                broker = Broker(self.cluster, id=broker_id)
+                self.__brokers[broker.id] = broker
+            alive.add(broker_id)
 
         dead = set(self.__brokers.keys()) - alive
         for broker_id in dead:

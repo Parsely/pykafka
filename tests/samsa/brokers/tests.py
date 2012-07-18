@@ -36,13 +36,15 @@ class BrokerMapTest(unittest2.TestCase):
         brokers = BrokerMap(self.cluster)
         self.assertEqual(len(brokers), len(nodes))
 
+        broker = brokers.get(1)
+
         # Emulate a broker entering the pool.
         nodes = ['0', '1', '2']
         self.cluster.zookeeper.get_children.return_value = nodes
         brokers._configure(event=mock.Mock())
         self.assertEqual(len(brokers), len(nodes))
 
-        broker = brokers.get(1)
+        self.assertIs(broker, brokers.get(1))
         self.assertFalse(broker.is_dead)
 
         # Emulate a broker leaving the pool.
