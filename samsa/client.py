@@ -2,6 +2,7 @@ import socket
 from zlib import crc32
 
 from samsa.exceptions import ERROR_CODES
+from samsa.utils import attribute_repr
 from samsa.utils.structuredio import StructuredBytesIO
 
 
@@ -73,6 +74,8 @@ class Client(object):
         self.port = port
         self.timeout = timeout
         self._socket = None
+
+    __repr__ = attribute_repr('host', 'port')
 
     # Socket Management
 

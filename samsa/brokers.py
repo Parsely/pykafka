@@ -1,5 +1,6 @@
 from zookeeper import NoNodeException
 
+from samsa.client import Client
 from samsa.exceptions import ImproperlyConfigured
 from samsa.utils import attribute_repr
 from samsa.utils.delayedconfig import DelayedConfiguration, requires_configuration
@@ -107,3 +108,11 @@ class Broker(DelayedConfiguration):
     @requires_configuration
     def port(self):
         return self.__port
+
+    @property
+    def client(self):
+        try:
+            return self.__client
+        except AttributeError:
+            self.__client = Client(self.host, self.port)
+            return self.__client
