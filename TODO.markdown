@@ -8,3 +8,4 @@
 * Allow semantic partitioning on `Topic.publish`.
 * Clean up logging statements, make `INFO`-level logging more useful.
 * Add message batching for asynchronous send/in-memory buffering.
+* Fix documentation to show correct method signatures for `requires_configuration` decorated methods, and annotate those methods in some fashion as well.
