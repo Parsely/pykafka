@@ -27,9 +27,18 @@ class TopicMap(object):
         self.__topics = {}
 
     def __getitem__(self, key):
+        """
+        Returns a :class:`samsa.topic.Topic` for the given key.
+
+        This is a proxy to :method:`~TopicMap.get` for a more dict-like interface.
+        """
         return self.get(key)
 
     def get(self, name):
+        """
+        Returns a :class:`samsa.topics.Topic` for this topic name, creating a
+        new topic if one has not already been registered.
+        """
         topic = self.__topics.get(name, None)
         if topic is None:
             topic = self.__topics[name] = Topic(self.cluster, name)
@@ -62,6 +71,14 @@ class Topic(object):
 
 
 class PartitionMap(DelayedConfiguration):
+    """
+    Manages the partitions associated with a topic on a per-broker basis.
+
+    :param cluster: The cluster that this partition map is associated with.
+    :type cluster: :class:`samsa.cluster.Cluster`
+    :param topic: The topic that this partition map is associated with.
+    :type type: :class:`samsa.topics.Topic`
+    """
     def __init__(self, cluster, topic):
         self.cluster = cluster
         self.topic = topic
@@ -98,6 +115,9 @@ class PartitionMap(DelayedConfiguration):
 
     @requires_configuration
     def __len__(self):
+        """
+        Returns the total number of partitions for this partition map.
+        """
         return sum(map(len, self.__brokers.values()))
 
     @requires_configuration
@@ -121,6 +141,20 @@ class PartitionMap(DelayedConfiguration):
 
 
 class PartitionSet(DelayedConfiguration):
+    """
+    Manages the partitions for a topic on a single broker.
+
+    :param cluster: The cluster that this partition set is associated with.
+    :type cluster: :class:`samsa.cluster.Cluster`
+    :param topic: The topic that this partion set is associated with.
+    :type topic: :class:`samsa.topics.Topic`
+    :param broker: The broker this partition set is associated with.
+    :type broker: :class:`samsa.brokers.Broker`
+    :param virtual: Whether this is a "virtual" partition set or not. Virtual
+        partition sets are used when a broker does not have any data associated
+        with a specific topic.
+    :type virtual: bool
+    """
     def __init__(self, cluster, topic, broker, virtual=False):
         self.cluster = cluster
         self.topic = topic
@@ -154,13 +188,20 @@ class PartitionSet(DelayedConfiguration):
 
         self.__count = count
 
-    def __iter__(self):
-        for i in xrange(0, len(self)):
-            yield Partition(self.cluster, self.topic, self.broker, i)
-
     @requires_configuration
     def __len__(self):
+        """
+        Returns the total number of partitions available within this partition set.
+        """
         return self.__count
+
+    def __iter__(self):
+        """
+        Returns an iterator of :class:`samsa.topics.Partition` instances for
+        this partition set.
+        """
+        for i in xrange(0, len(self)):
+            yield Partition(self.cluster, self.topic, self.broker, i)
 
 
 class Partition(object):

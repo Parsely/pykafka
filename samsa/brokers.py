@@ -56,30 +56,50 @@ class BrokerMap(DelayedConfiguration):
 
     @requires_configuration
     def __len__(self):
+        """
+        Returns the number of all active brokers.
+        """
         return len(self.__brokers)
 
     @requires_configuration
     def __iter__(self):
+        """
+        Returns an iterator containing all of the broker IDs within the cluster.
+        """
         return iter(self.__brokers)
 
-    @requires_configuration
-    def __getitem__(self, key):
-        return self.__brokers[key]
+    def __getitem__(self, id):
+        """
+        Returns a broker by it's broker ID.
+        """
+        return self.get(id)
 
     @requires_configuration
     def get(self, id):
+        """
+        Returns a broker by it's broker ID.
+        """
         return self.__brokers[id]
 
     @requires_configuration
     def keys(self):
+        """
+        Returns a list of all broker IDs within the cluster.
+        """
         return self.__brokers.keys()
 
     @requires_configuration
     def values(self):
+        """
+        Returns all brokers within the cluster.
+        """
         return self.__brokers.values()
 
     @requires_configuration
     def items(self):
+        """
+        Returns a list of 2-tuples of the format ``(id, broker)``.
+        """
         return self.__brokers.items()
 
 
@@ -103,6 +123,9 @@ class Broker(DelayedConfiguration):
     __repr__ = attribute_repr('id')
 
     def _configure(self, event=None):
+        """
+        Configures a broker based on it's state in ZooKeeper.
+        """
         logger.info('Fetching broker data for %s...', self)
         node = '/brokers/ids/%s' % self.id
         data, stat = self.cluster.zookeeper.get(node, watch=self._configure)
@@ -112,15 +135,26 @@ class Broker(DelayedConfiguration):
     @property
     @requires_configuration
     def host(self):
+        """
+        The host that the broker is available at.
+        """
         return self.__host
 
     @property
     @requires_configuration
     def port(self):
+        """
+        The port that the broker is available at.
+        """
         return self.__port
 
     @property
     def client(self):
+        """
+        The :class:`samsa.client.Client` object for this broker.
+
+        Only one client is created per broker instance.
+        """
         try:
             return self.__client
         except AttributeError:
