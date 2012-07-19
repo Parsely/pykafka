@@ -34,5 +34,6 @@ Subscribing to a Topic
 ::
 
     topic = cluster.topics['topic-name']
-    for message in topic.subscribe('my-group-id'):
+    consumer = topic.subscribe('my-group-id')
+    for message in consumer:
         print message
