@@ -91,14 +91,15 @@ class BrokerMap(DelayedConfiguration):
     @requires_configuration
     def values(self):
         """
-        Returns all brokers within the cluster.
+        Returns a list of every :class:`~samsa.brokers.Broker` within the cluster.
         """
         return self.__brokers.values()
 
     @requires_configuration
     def items(self):
         """
-        Returns a list of 2-tuples of the format ``(id, broker)``.
+        Returns a list of 2-tuples of the format ``(id, broker)``, where
+        ``broker`` is a :class:`~samsa.brokers.Broker` instance.
         """
         return self.__brokers.items()
 
