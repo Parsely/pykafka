@@ -2,6 +2,7 @@ import itertools
 
 from zookeeper import NoNodeException
 
+from samsa.utils import attribute_repr
 from samsa.utils.delayedconfig import DelayedConfiguration, requires_configuration
 
 
@@ -17,6 +18,9 @@ class TopicMap(object):
         self.cluster = cluster
 
         self.__topics = {}
+
+    def __getitem__(self, key):
+        return self.get(key)
 
     def get(self, name):
         topic = self.__topics.get(name, None)
@@ -38,6 +42,8 @@ class Topic(object):
         self.name = name
         self.partitions = PartitionMap(self.cluster, self)
 
+    __repr__ = attribute_repr('name')
+
 
 class PartitionMap(DelayedConfiguration):
     def __init__(self, cluster, topic):
@@ -45,6 +51,8 @@ class PartitionMap(DelayedConfiguration):
         self.topic = topic
 
         self.__brokers = {}
+
+    __repr__ = attribute_repr('topic')
 
     def _configure(self, event=None):
         node = '/brokers/topics/%s' % self.topic.name
@@ -95,6 +103,8 @@ class PartitionSet(DelayedConfiguration):
 
         self.__count = None
 
+    __repr__ = attribute_repr('topic', 'broker')
+
     def _configure(self, event=None):
         node = '/brokers/topics/%s/%s' % (self.topic.name, self.broker.id)
 
@@ -127,3 +137,5 @@ class Partition(object):
         self.topic = topic
         self.broker = broker
         self.number = number
+
+    __repr__ = attribute_repr('topic', 'broker', 'number')

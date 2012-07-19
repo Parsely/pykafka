@@ -1,6 +1,7 @@
 from zookeeper import NoNodeException
 
 from samsa.exceptions import ImproperlyConfigured
+from samsa.utils import attribute_repr
 from samsa.utils.delayedconfig import DelayedConfiguration, requires_configuration
 
 
@@ -30,11 +31,10 @@ class BrokerMap(DelayedConfiguration):
                 'ZooKeeper cluster -- is your Kafka cluster running?' % path)
 
         alive = set()
-        for broker_id in map(int, broker_ids):
-            if broker_id not in self.__brokers:
-                broker = Broker(self.cluster, id=broker_id)
-                self.__brokers[broker.id] = broker
-            alive.add(broker_id)
+        for broker_id in broker_ids:
+            broker = Broker(self.cluster, id=broker_id)
+            self.__brokers[broker.id] = broker
+            alive.add(broker.id)
 
         dead = set(self.__brokers.keys()) - alive
         for broker_id in dead:
@@ -49,6 +49,14 @@ class BrokerMap(DelayedConfiguration):
         return len(self.__brokers)
 
     @requires_configuration
+    def __iter__(self):
+        return iter(self.__brokers)
+
+    @requires_configuration
+    def __getitem__(self, key):
+        return self.__brokers[key]
+
+    @requires_configuration
     def get(self, id):
         return self.__brokers[id]
 
@@ -59,6 +67,10 @@ class BrokerMap(DelayedConfiguration):
     @requires_configuration
     def values(self):
         return self.__brokers.values()
+
+    @requires_configuration
+    def items(self):
+        return self.__brokers.items()
 
 
 class Broker(DelayedConfiguration):
@@ -77,6 +89,8 @@ class Broker(DelayedConfiguration):
         self.__port = None
 
         self.is_dead = False
+
+    __repr__ = attribute_repr('id')
 
     def _configure(self, event=None):
         node = '/brokers/ids/%s' % self.id
