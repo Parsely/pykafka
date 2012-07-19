@@ -1,4 +1,5 @@
 import collections
+import functools
 import itertools
 import logging
 import random
@@ -70,39 +71,29 @@ class PartitionMap(DelayedConfiguration):
     __repr__ = attribute_repr('topic')
 
     def _configure(self, event=None):
-        node = '/brokers/topics/%s' % self.topic.name
-
+        path = '/brokers/topics/%s' % self.topic.name
         logger.info('Looking up brokers for %s...', self)
 
-        # If the topic has never been posted to, it won't exist in ZooKeeper,
-        # but every broker should be able to accept a write to the topic on
-        # partition 0, since every node should handle one or more partitions
-        # for each different topic.
         try:
-            broker_ids = self.cluster.zookeeper.get_children(node, watch=self._configure)
+            broker_ids = self.cluster.zookeeper.get_children(path, watch=self._configure)
         except NoNodeException:
-            # To establish a watch on the topic node (which will be created on
-            # the first write, and brokers will begin to disclose how many
-            # partitions they are serving for this topic), we set a new watch.
-            # If another node has published to this topic by the time we get
-            # here (and the node exists), we can just start the configuration
-            # process over again.
-            if self.cluster.zookeeper.exists(node, watch=self._configure) is not None:
-                logger.info('%s has been created, reconfiguring %s', node, self)
-                return self._configure()
+            if self.cluster.zookeeper.exists(path, watch=self._configure) is not None:
+                self._configure()
+            broker_ids = []
 
-            logger.info('No brokers have been registered for %s, falling back to virtual partitions.', self)
-            broker_ids = self.cluster.brokers.keys()
+        brokers = map(self.cluster.brokers.get, map(int, broker_ids))
 
-        alive = set()
-        for broker_id in map(int, broker_ids):
-            broker = self.cluster.brokers.get(broker_id)
+        # Add any broker IDs that are not already present in the mapping.
+        for broker in brokers:
             if broker not in self.__brokers:
-                self.__brokers[broker] = PartitionSet(self.cluster, self.topic, broker)
-            alive.add(broker)
+                partitionset = PartitionSet(self.cluster, self.topic, broker)
+                logging.info('Discovered new partition set: %s', partitionset)
+                self.__brokers[broker] = partitionset
 
-        dead = set(self.__brokers.keys()) - alive
+        # Remove any brokers that are no longer present in the mapping.
+        dead = set(self.__brokers.keys()) - set(brokers)
         for broker in dead:
+            logging.info('Removing broker %s from %s', broker, self)
             del self.__brokers[broker]
 
     @requires_configuration
@@ -111,36 +102,55 @@ class PartitionMap(DelayedConfiguration):
 
     @requires_configuration
     def __iter__(self):
-        return itertools.chain.from_iterable(iter(value) for value in self.__brokers.values())
+        """
+        Returns an iterator containing every known partition for this topic,
+        including "virtual" partitions for brokers that are present in the
+        cluster, but have not yet registered their topic/partitions with ZooKeeper.
+        """
+        partitionsets = itertools.chain.from_iterable(iter(value)
+            for value in self.__brokers.values())
+
+        # Each uninitialized broker should get a "virtual" partitionset.
+        uninitialized_brokers = set(self.cluster.brokers.values()) - set(self.__brokers.keys())
+        create_virtual_partitionset = functools.partial(PartitionSet,
+            cluster=self.cluster, topic=self.topic, virtual=True)
+        virtual_partitionsets = itertools.chain.from_iterable(
+            iter(create_virtual_partitionset(broker=broker)) for broker in uninitialized_brokers)
+
+        return itertools.chain(partitionsets, virtual_partitionsets)
 
 
 class PartitionSet(DelayedConfiguration):
-    def __init__(self, cluster, topic, broker):
+    def __init__(self, cluster, topic, broker, virtual=False):
         self.cluster = cluster
         self.topic = topic
         self.broker = broker
+        self.virtual = virtual
 
         self.__count = None
 
-    __repr__ = attribute_repr('topic', 'broker')
+    __repr__ = attribute_repr('topic', 'broker', 'virtual')
 
     def _configure(self, event=None):
-        node = '/brokers/topics/%s/%s' % (self.topic.name, self.broker.id)
-
-        # If the node does not exist, this means this broker has not gotten any
-        # writes for this partition yet. We can assume that the broker is
-        # handling at least one partition for this topic, and update when we
-        # have more information by setting an exists watch on the node path.
-        try:
-            data, stat = self.cluster.zookeeper.get(node)
-            count = int(data)
-            logger.info('Found %s partitions for %s', count, self)
-        except NoNodeException:
-            if self.cluster.zookeeper.exists(node, watch=self._configure) is not None:
-                return self._configure()
+        if self.virtual:
             count = 1
-            logger.info('%s is not registered in ZooKeeper, falling back to %s virtual partition(s)',
-                self, count)
+        else:
+            node = '/brokers/topics/%s/%s' % (self.topic.name, self.broker.id)
+
+            # If the node does not exist, this means this broker has not gotten any
+            # writes for this partition yet. We can assume that the broker is
+            # handling at least one partition for this topic, and update when we
+            # have more information by setting an exists watch on the node path.
+            try:
+                data, stat = self.cluster.zookeeper.get(node)
+                count = int(data)
+                logger.info('Found %s partitions for %s', count, self)
+            except NoNodeException:
+                if self.cluster.zookeeper.exists(node, watch=self._configure) is not None:
+                    return self._configure()
+                count = 1
+                logger.info('%s is not registered in ZooKeeper, falling back to %s virtual partition(s)',
+                    self, count)
 
         self.__count = count
 
