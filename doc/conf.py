@@ -17,3 +17,5 @@ master_doc = 'index'
 html_theme = 'nature'
 pygments_style = 'sphinx'
 htmlhelp_basename = 'samsadoc'
+
+autodoc_default_flags = ['special-members', 'show-inheritance']
