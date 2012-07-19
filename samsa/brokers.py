@@ -1,9 +1,14 @@
+import logging
+
 from zookeeper import NoNodeException
 
 from samsa.client import Client
 from samsa.exceptions import ImproperlyConfigured
 from samsa.utils import attribute_repr
 from samsa.utils.delayedconfig import DelayedConfiguration, requires_configuration
+
+
+logger = logging.getLogger(__name__)
 
 
 class BrokerMap(DelayedConfiguration):
@@ -25,6 +30,7 @@ class BrokerMap(DelayedConfiguration):
         # key, and just return that there are no brokers that are alive, to
         # avoid any race conditions between cluster/application startup?
         path = '/brokers/ids'
+        logger.info('Refreshing broker configuration from %s...', self.cluster.zookeeper)
         try:
             broker_ids = self.cluster.zookeeper.get_children(path, watch=self._configure)
         except NoNodeException:
@@ -32,14 +38,17 @@ class BrokerMap(DelayedConfiguration):
                 'ZooKeeper cluster -- is your Kafka cluster running?' % path)
 
         alive = set()
-        for broker_id in broker_ids:
-            broker = Broker(self.cluster, id=broker_id)
-            self.__brokers[broker.id] = broker
-            alive.add(broker.id)
+        for broker_id in map(int, broker_ids):
+            if broker_id not in self.__brokers:
+                broker = Broker(self.cluster, id=broker_id)
+                logger.info('Adding new broker to %s: %s', self, broker)
+                self.__brokers[broker.id] = broker
+            alive.add(broker_id)
 
         dead = set(self.__brokers.keys()) - alive
         for broker_id in dead:
             broker = self.__brokers[broker_id]
+            logger.info('Removing dead broker from %s: %s', self, broker)
             broker.is_dead = True
             del self.__brokers[broker.id]
 
@@ -94,6 +103,7 @@ class Broker(DelayedConfiguration):
     __repr__ = attribute_repr('id')
 
     def _configure(self, event=None):
+        logging.info('Fetching broker data for %s...', self)
         node = '/brokers/ids/%s' % self.id
         data, stat = self.cluster.zookeeper.get(node, watch=self._configure)
         creator, self.__host, port = data.split(':')

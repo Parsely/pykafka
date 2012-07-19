@@ -1,4 +1,8 @@
 import functools
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 def requires_configuration(method):
@@ -10,6 +14,7 @@ def requires_configuration(method):
     @functools.wraps(method)
     def wrapped(self, *args, **kwargs):
         if not self._configured:
+            logger.debug('%s requires configuration before %s may be invoked', self, method)
             self._configure()
             self._configured = True
         return method(self, *args, **kwargs)

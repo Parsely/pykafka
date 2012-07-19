@@ -1,11 +1,15 @@
 import collections
 import itertools
+import logging
 import random
 
 from zookeeper import NoNodeException
 
 from samsa.utils import attribute_repr
 from samsa.utils.delayedconfig import DelayedConfiguration, requires_configuration
+
+
+logger = logging.getLogger(__name__)
 
 
 class TopicMap(object):
@@ -28,6 +32,7 @@ class TopicMap(object):
         topic = self.__topics.get(name, None)
         if topic is None:
             topic = self.__topics[name] = Topic(self.cluster, name)
+            logger.info('Registered new topic: %s', topic)
         return topic
 
 
@@ -67,6 +72,8 @@ class PartitionMap(DelayedConfiguration):
     def _configure(self, event=None):
         node = '/brokers/topics/%s' % self.topic.name
 
+        logger.info('Looking up brokers for %s...', self)
+
         # If the topic has never been posted to, it won't exist in ZooKeeper,
         # but every broker should be able to accept a write to the topic on
         # partition 0, since every node should handle one or more partitions
@@ -81,8 +88,10 @@ class PartitionMap(DelayedConfiguration):
             # here (and the node exists), we can just start the configuration
             # process over again.
             if self.cluster.zookeeper.exists(node, watch=self._configure) is not None:
+                logger.info('%s has been created, reconfiguring %s', node, self)
                 return self._configure()
 
+            logger.info('No brokers have been registered for %s, falling back to virtual partitions.', self)
             broker_ids = self.cluster.brokers.keys()
 
         alive = set()
@@ -124,13 +133,16 @@ class PartitionSet(DelayedConfiguration):
         # have more information by setting an exists watch on the node path.
         try:
             data, stat = self.cluster.zookeeper.get(node)
+            count = int(data)
+            logging.info('Found %s partitions for %s', count, self)
         except NoNodeException:
             if self.cluster.zookeeper.exists(node, watch=self._configure) is not None:
                 return self._configure()
+            count = 1
+            logging.info('%s is not registered in ZooKeeper, falling back to %s virtual partition(s)',
+                self, count)
 
-            data = 1
-
-        self.__count = int(data)
+        self.__count = count
 
     def __iter__(self):
         for i in xrange(0, len(self)):
