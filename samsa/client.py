@@ -69,19 +69,19 @@ class Client(object):
     :param port: broker port number
     :param timeout: socket timeout
     """
-    def __init__(self, host, port=9092, timeout=None):
+    def __init__(self, host, port=9092, timeout=None, autoconnect=True):
         self.host = host
         self.port = port
         self.timeout = timeout
         self._socket = None
+        if autoconnect:
+            self.connect()
 
     __repr__ = attribute_repr('host', 'port')
 
     # Socket Management
 
     def get_socket(self):
-        if not self._socket:
-            raise IOError('socket not connected')
         return self._socket
 
     socket = property(get_socket)

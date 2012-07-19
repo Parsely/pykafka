@@ -1,4 +1,6 @@
+import collections
 import itertools
+import random
 
 from zookeeper import NoNodeException
 
@@ -43,6 +45,14 @@ class Topic(object):
         self.partitions = PartitionMap(self.cluster, self)
 
     __repr__ = attribute_repr('name')
+
+    def publish(self, data):
+        """
+        Publishes one or more messages to a random partition of this topic.
+        """
+        # TODO: This could/should be much more efficient.
+        partition = random.choice(list(self.partitions))
+        return partition.publish(data)
 
 
 class PartitionMap(DelayedConfiguration):
@@ -139,3 +149,16 @@ class Partition(object):
         self.number = number
 
     __repr__ = attribute_repr('topic', 'broker', 'number')
+
+    def publish(self, data):
+        """
+        Publishes one or more messages to this partition.
+        """
+        if isinstance(data, basestring):
+            messages = [data]
+        elif isinstance(data, collections.Sequence):
+            messages = data
+        else:
+            raise TypeError
+
+        return self.broker.client.produce(self.topic.name, self.number, messages)
