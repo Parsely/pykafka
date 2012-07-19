@@ -134,12 +134,12 @@ class PartitionSet(DelayedConfiguration):
         try:
             data, stat = self.cluster.zookeeper.get(node)
             count = int(data)
-            logging.info('Found %s partitions for %s', count, self)
+            logger.info('Found %s partitions for %s', count, self)
         except NoNodeException:
             if self.cluster.zookeeper.exists(node, watch=self._configure) is not None:
                 return self._configure()
             count = 1
-            logging.info('%s is not registered in ZooKeeper, falling back to %s virtual partition(s)',
+            logger.info('%s is not registered in ZooKeeper, falling back to %s virtual partition(s)',
                 self, count)
 
         self.__count = count

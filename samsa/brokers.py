@@ -103,7 +103,7 @@ class Broker(DelayedConfiguration):
     __repr__ = attribute_repr('id')
 
     def _configure(self, event=None):
-        logging.info('Fetching broker data for %s...', self)
+        logger.info('Fetching broker data for %s...', self)
         node = '/brokers/ids/%s' % self.id
         data, stat = self.cluster.zookeeper.get(node, watch=self._configure)
         creator, self.__host, port = data.split(':')
