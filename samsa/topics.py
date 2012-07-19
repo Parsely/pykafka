@@ -77,7 +77,7 @@ class PartitionMap(DelayedConfiguration):
     :param cluster: The cluster that this partition map is associated with.
     :type cluster: :class:`samsa.cluster.Cluster`
     :param topic: The topic that this partition map is associated with.
-    :type type: :class:`samsa.topics.Topic`
+    :type topic: :class:`samsa.topics.Topic`
     """
     def __init__(self, cluster, topic):
         self.cluster = cluster
