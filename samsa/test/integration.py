@@ -7,8 +7,10 @@ import time
 
 import unittest2
 from kazoo.testing import KazooTestHarness
+from nose.plugins.attrib import attr
 
 
+@attr('integration')
 class IntegrationTestCase(unittest2.TestCase, KazooTestHarness):
     def setUp(self):
         self.setup_zookeeper()
@@ -57,5 +59,3 @@ class IntegrationTestCase(unittest2.TestCase, KazooTestHarness):
             self._kafka_broker.kill()
 
         # TODO: Clean up temporary directory and configuration files.
-
-IntegrationTestCase.integration = True
