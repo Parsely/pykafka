@@ -113,31 +113,52 @@ class PartitionMap(DelayedConfiguration):
             logging.info('Removing broker %s from %s', broker, self)
             del self.__brokers[broker]
 
-    @requires_configuration
     def __len__(self):
         """
-        Returns the total number of partitions for this partition map.
+        Returns the total number of partitions for this partition map,
+        including virtual partitions.
         """
-        return sum(map(len, self.__brokers.values()))
+        partitions = list(iter(self))
+        return len(partitions)
 
-    @requires_configuration
     def __iter__(self):
         """
-        Returns an iterator containing every known partition for this topic,
-        including "virtual" partitions for brokers that are present in the
-        cluster, but have not yet registered their topic/partitions with ZooKeeper.
-        """
-        partitionsets = itertools.chain.from_iterable(iter(value)
-            for value in self.__brokers.values())
+        Returns an iterator containing every known partition for this topic.
 
-        # Each uninitialized broker should get a "virtual" partitionset.
+        This includes "virtual" partitions for brokers that are present in the
+        cluster, but have not yet registered their topic/partitions with the
+        ZooKeeper cluster.
+        """
+        return itertools.chain(self.actual, self.virtual)
+
+    @property
+    @requires_configuration
+    def actual(self):
+        """
+        Returns an iterator containing all of the partitions for this topic
+        that have been registered by a broker in ZooKeeper.
+        """
+        return itertools.chain.from_iterable(iter(value) for value in self.__brokers.values())
+
+    @property
+    @requires_configuration
+    def virtual(self):
+        """
+        Returns an iterator containing "virtual" partitions for this topic.
+
+        Virtual partitions are placeholder partitions for brokers that are
+        known to be alive but are not aware of a topic. Since these brokers
+        haven't seen the topic yet, they will not have published the number of
+        partitions that they're serving. Every broker should be able to accept
+        writes on the 0th partition for each topic, however, so the virtual
+        partitions provide a partition objects for those partitions that have
+        not yet been registered but are assumed to exist.
+        """
         uninitialized_brokers = set(self.cluster.brokers.values()) - set(self.__brokers.keys())
         create_virtual_partitionset = functools.partial(PartitionSet,
             cluster=self.cluster, topic=self.topic, virtual=True)
-        virtual_partitionsets = itertools.chain.from_iterable(
+        return itertools.chain.from_iterable(
             iter(create_virtual_partitionset(broker=broker)) for broker in uninitialized_brokers)
-
-        return itertools.chain(partitionsets, virtual_partitionsets)
 
 
 class PartitionSet(DelayedConfiguration):
@@ -166,6 +187,13 @@ class PartitionSet(DelayedConfiguration):
     __repr__ = attribute_repr('topic', 'broker', 'virtual')
 
     def _configure(self, event=None):
+        # TODO: At some point it might be wise to enable a "hint" size for
+        # virtual partitions -- this way if brokers are serving a large number
+        # of partitions, we can still maintain a reasonably even distribution
+        # in a predictable environment. This might cause some problems in more
+        # dynamic/less homogenous environments, however, since there's no good
+        # way to track down a failure on a produce request to an invalid
+        # partition.
         if self.virtual:
             count = 1
         else:
