@@ -28,9 +28,9 @@ class TopicMap(object):
 
     def __getitem__(self, key):
         """
-        Returns a :class:`samsa.topic.Topic` for the given key.
+        Returns a :class:`samsa.topics.Topic` for the given key.
 
-        This is a proxy to :method:`~TopicMap.get` for a more dict-like interface.
+        This is a proxy to :meth:`~TopicMap.get` for a more dict-like interface.
         """
         return self.get(key)
 
