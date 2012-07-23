@@ -34,15 +34,16 @@ class IntegrationTestCase(unittest2.TestCase, KazooTestHarness):
 
         self._kafka_configuration_file = tempfile.NamedTemporaryFile(delete=False)
         with contextlib.closing(self._kafka_configuration_file):
-            self._kafka_configuration_file.writelines('='.join(map(str, item))
-                for item in configuration.items())
-            self._kafka_configuration_file.flush()
+            for key, value in configuration.iteritems():
+                self._kafka_configuration_file.write('%s=%s\n' % (key, value))
 
         executable = os.path.join(os.path.dirname(__file__), 'kafka-run-class.sh')
 
         null = open('/dev/null')
         args = [executable, 'kafka.Kafka', self._kafka_configuration_file.name]
-        self._kafka_broker = subprocess.Popen(args, stderr=null, stdout=null)
+
+        # TODO: Allow redirection to a logging handler instead of squelching it.
+        self._kafka_broker = subprocess.Popen(args, stdout=null, stderr=null)
         time.sleep(1)
 
     def teardown_kafka(self):
