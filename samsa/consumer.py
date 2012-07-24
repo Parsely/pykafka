@@ -11,11 +11,21 @@ from samsa.utils.delayedconfig import DelayedConfiguration, requires_configurati
 
 logger = logging.getLogger(__name__)
 
+class PartitionName(namedtuple('Partition', ['broker_id', 'partition_id'])):
 
-PartitionName = namedtuple('Partitioin', ['broker_id', 'partition_id'])
+    @staticmethod
+    def from_str(s):
+        broker_id, partition_id = s.split('-')
+        return PartitionName(broker_id, partition_id)
+
+    def to_str(self):
+        return "%s-%s" % (self.broker_id, self.partition_id)
+
+    def __str__(self):
+        return self.to_str()
 
 
-class PartitionOwnerRegistry(DelayedConfiguration):
+class PartitionOwnerRegistry(object):
     """
     Manages the Partition Owner Registry for a particular Consumer.
     """
@@ -26,41 +36,35 @@ class PartitionOwnerRegistry(DelayedConfiguration):
         self.path = '/consumers/%s/owners/%s' % (group, topic.name)
         self.cluster.zookeeper.ensure_path(self.path)
 
-    def _configure(self, event=None):
-        self._partitions = {}
-        self._stats = {}
+        self._partitions = set([])
 
         zk = self.cluster.zookeeper
-        partitions = zk.get_children(self.path, watch=self._configure)
+        partitions = zk.get_children(self.path)
 
-        for p in partitions:
-            stat, value = zk.get(self._path_from_partition(p))
+        for name in partitions:
+            p = PartitionName.from_str(name)
+            _, value = zk.get(self._path_from_partition(p))
             if value == self.consumer_id:
-                self._stats[p] = stat
-                self._partitions[p] = value
+                self._partitions.add(p)
 
-    @requires_configuration
     def get(self):
         return self._partitions
 
-    @requires_configuration
     def remove(self, partitions):
         for p in partitions:
             assert p in self._partitions
-            self.cluster.zookeeper.delete(
-                self._path_from_partition(p),
-                self._stats[p].version
-            )
+            self.cluster.zookeeper.delete(self._path_from_partition(p))
+            self._partitions.remove(p)
 
-    @requires_configuration
     def add(self, partitions):
         for p in partitions:
             self.cluster.zookeeper.create(
                 self._path_from_partition(p), self.consumer_id, ephemeral=True
             )
+            self._partitions.add(p)
 
     def _path_from_partition(self, p):
-        return "%s/%s-%s" % (self.path, p.broker_id, p.partition_id)
+        return "%s/%s" % (self.path, p)
 
 
 class Consumer(DelayedConfiguration):
@@ -115,6 +119,7 @@ class Consumer(DelayedConfiguration):
         # 6.
         i = participants.index(self.id)
         parts_per_consumer = len(self.topic.partitions) / len(participants)
+        # TODO: deal with remainder
         remaining_ppc = len(self.topic.partitions) % len(participants)
 
         # 7. assign partitions from i*N to (i+1)*N - 1 to consumer Ci
@@ -123,22 +128,22 @@ class Consumer(DelayedConfiguration):
             i * parts_per_consumer,
             (i + 1) * parts_per_consumer
         )
-        new_partitions = itertools.imap(
-            lambda p: PartitionName(p.broker.id, p.number),
-            new_partitions
-        )
+
+        new_partitions = set(
+            PartitionName(p.broker.id, p.number) for p in new_partitions)
 
         old_partitions = self.partition_owner_registry.get()
 
         # 8. remove current entries from the partition owner registry
         self.partition_owner_registry.remove(
-            set(old_partitions) - set(new_partitions)
+            old_partitions - new_partitions
         )
 
         # 9. add newly assigned partitions to the partition owner registry
         self.partition_owner_registry.add(
-            set(new_partitions) - set(old_partitions)
+            new_partitions - old_partitions
         )
+        print self.partition_owner_registry.get()
 
 
     @requires_configuration
