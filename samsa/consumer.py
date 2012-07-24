@@ -18,6 +18,10 @@ class PartitionName(namedtuple('Partition', ['broker_id', 'partition_id'])):
         broker_id, partition_id = s.split('-')
         return PartitionName(broker_id, partition_id)
 
+    @staticmethod
+    def from_partition(p):
+        return PartitionName(p.broker.id, p.number)
+
     def to_str(self):
         return "%s-%s" % (self.broker_id, self.partition_id)
 
@@ -133,8 +137,7 @@ class Consumer(DelayedConfiguration):
             (i + 1) * parts_per_consumer
         )
 
-        new_partitions = set(
-            PartitionName(p.broker.id, p.number) for p in new_partitions)
+        new_partitions = set(PartitionName.from_partition(p) for p in new_partitions)
 
         old_partitions = self.partition_owner_registry.get()
 
@@ -147,7 +150,8 @@ class Consumer(DelayedConfiguration):
         self.partition_owner_registry.add(
             new_partitions - old_partitions
         )
-        print self.partition_owner_registry.get()
+
+        self.partitions = self.partition_owner_registry.get()
 
 
     @requires_configuration
@@ -156,7 +160,17 @@ class Consumer(DelayedConfiguration):
         Returns an iterator of messages.
         """
 
-        raise NotImplementedError
+        partitions = itertools.ifilter(
+            lambda p: PartitionName.from_partition(p) in self.partitions,
+            self.topic.partitions
+        )
+
+        return itertools.chain.from_iterable(
+            itertools.imap(
+                lambda p: p.fetch(0, 1000),
+                partitions
+            )
+        )
 
     @requires_configuration
     def commit_offsets(self):

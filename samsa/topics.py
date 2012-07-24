@@ -257,3 +257,6 @@ class Partition(object):
             raise TypeError
 
         return self.broker.client.produce(self.topic.name, self.number, messages)
+
+    def fetch(self, offset, size):
+        return self.broker.client.fetch(self.topic.name, self.number, offset, size)
