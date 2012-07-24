@@ -25,7 +25,7 @@ class PartitionName(namedtuple('Partition', ['broker_id', 'partition_id'])):
         return self.to_str()
 
 
-class PartitionOwnerRegistry(object):
+class PartitionOwnerRegistry(DelayedConfiguration):
     """
     Manages the Partition Owner Registry for a particular Consumer.
     """
@@ -36,10 +36,11 @@ class PartitionOwnerRegistry(object):
         self.path = '/consumers/%s/owners/%s' % (group, topic.name)
         self.cluster.zookeeper.ensure_path(self.path)
 
+    def _configure(self, event=None):
         self._partitions = set([])
 
         zk = self.cluster.zookeeper
-        partitions = zk.get_children(self.path)
+        partitions = zk.get_children(self.path, watch=self._configure)
 
         for name in partitions:
             p = PartitionName.from_str(name)
@@ -47,15 +48,18 @@ class PartitionOwnerRegistry(object):
             if value == self.consumer_id:
                 self._partitions.add(p)
 
+    @requires_configuration
     def get(self):
         return self._partitions
 
+    @requires_configuration
     def remove(self, partitions):
         for p in partitions:
             assert p in self._partitions
             self.cluster.zookeeper.delete(self._path_from_partition(p))
             self._partitions.remove(p)
 
+    @requires_configuration
     def add(self, partitions):
         for p in partitions:
             self.cluster.zookeeper.create(
@@ -151,6 +155,7 @@ class Consumer(DelayedConfiguration):
         """
         Returns an iterator of messages.
         """
+
         raise NotImplementedError
 
     @requires_configuration
