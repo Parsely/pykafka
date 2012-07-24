@@ -6,6 +6,7 @@ import random
 
 from zookeeper import NoNodeException
 
+from samsa.consumer import Consumer
 from samsa.utils import attribute_repr
 from samsa.utils.delayedconfig import DelayedConfiguration, requires_configuration
 
@@ -68,6 +69,9 @@ class Topic(object):
         # TODO: This could/should be much more efficient.
         partition = random.choice(list(self.partitions))
         return partition.publish(data)
+
+    def subscribe(self, group):
+        return Consumer(self.cluster, self, group)
 
 
 class PartitionMap(DelayedConfiguration):
