@@ -1,6 +1,7 @@
 import logging
 import itertools
 import socket
+import time
 
 from collections import namedtuple
 from kazoo.exceptions import NodeExistsException, NoNodeException
@@ -159,7 +160,6 @@ class Consumer(object):
                 )
                 break
             except NodeExistsException:
-                import time
                 time.sleep(i ** 2)
                 continue
         else:

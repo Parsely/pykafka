@@ -85,7 +85,15 @@ class TestConsumer(KazooTestCase):
         t = Topic(self.c, 'mwhooker')
 
         consumers = [t.subscribe('group1') for i in xrange(n_consumers)]
+        partitions = []
+        for c in consumers:
+            partitions.extend(c.partitions)
 
-        self.assertEquals(sum([len(c.partitions) for c in consumers]), n_partitions)
-
+        print partitions
         print [c.partitions for c in consumers]
+        print [len(c.partitions) for c in consumers]
+
+        # test that there are no duplicates.
+        self.assertEquals(len(partitions), n_partitions)
+        # test that every partitions is represented.
+        self.assertEquals(len(set(partitions)), n_partitions)
