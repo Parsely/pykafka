@@ -85,6 +85,10 @@ class TestConsumer(KazooTestCase):
         t = Topic(self.c, 'mwhooker')
 
         consumers = [t.subscribe('group1') for i in xrange(n_consumers)]
+
+        import time
+        time.sleep(5)
+
         partitions = []
         for c in consumers:
             partitions.extend(c.partitions)
