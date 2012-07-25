@@ -156,10 +156,6 @@ class Consumer(object):
             start + num_parts
         )
 
-        # new_partitions = list(new_partitions)
-        # print "new: ", [p.broker.id for p in new_partitions]
-        # print "old: ", [p.broker_id for p in old_partitions]
-
         new_partitions = set(PartitionName.from_partition(p) for p in new_partitions)
 
         self.commit_offsets()
