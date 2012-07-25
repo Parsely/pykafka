@@ -128,8 +128,6 @@ class Consumer(object):
         # 5.
         participants.sort()
 
-        self.commit_offsets()
-
         # 6.
         i = participants.index(self.id)
         parts_per_consumer = len(self.topic.partitions) / len(participants)
@@ -146,12 +144,13 @@ class Consumer(object):
             start + num_parts
         )
 
-        #new_partitions = list(new_partitions)
-        #print "new: ", [p.broker.id for p in new_partitions]
-        #print "old: ", [p.broker_id for p in old_partitions]
+        # new_partitions = list(new_partitions)
+        # print "new: ", [p.broker.id for p in new_partitions]
+        # print "old: ", [p.broker_id for p in old_partitions]
 
         new_partitions = set(PartitionName.from_partition(p) for p in new_partitions)
 
+        self.commit_offsets()
 
         # 8. remove current entries from the partition owner registry
         self.partition_owner_registry.remove(
@@ -161,6 +160,8 @@ class Consumer(object):
         # 9. add newly assigned partitions to the partition owner registry
         for i in xrange(self.MAX_RETRIES):
             try:
+                # TODO: ensure that any subset of blocked partitions eventually
+                # decreases to 0
                 self.partition_owner_registry.add(
                     new_partitions - old_partitions
                 )

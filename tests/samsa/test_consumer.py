@@ -36,7 +36,7 @@ class TestPartitionOwnerRegistry(KazooTestCase):
             'group'
         )
 
-        self.partitions = [consumer.PartitionName(str(i), '0') for i in
+        self.partitions = [consumer.PartitionName(i, 0) for i in
                            xrange(5)]
 
     def test_crd(self):
@@ -66,6 +66,13 @@ class TestPartitionOwnerRegistry(KazooTestCase):
         self.assertEquals(self.por.get(), por2.get())
         self.assertEquals(self.por.get(), set(self.partitions))
 
+    def test_grows(self):
+
+        partitions = self.por.get()
+        self.assertEquals(len(partitions), 0)
+
+        self.por.add(self.partitions)
+        self.assertEquals(len(partitions), len(self.partitions))
 
 
 class TestConsumer(KazooTestCase):
@@ -98,14 +105,16 @@ class TestConsumer(KazooTestCase):
 
         consumers = [t.subscribe('group1') for i in xrange(n_consumers)]
 
-        time.sleep(5)
+        # TODO: need to block until all n_consumers * 2 rebalances have
+        # happened.
+        time.sleep(15)
 
         partitions = []
         for c in consumers:
             partitions.extend(c.partitions)
 
         print partitions
-        print [c.partitions for c in consumers]
+        print [[p.broker_id for p in c.partitions] for c in consumers]
         print [len(c.partitions) for c in consumers]
 
         # test that there are no duplicates.
