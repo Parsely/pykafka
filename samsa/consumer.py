@@ -168,6 +168,11 @@ class Consumer(object):
         self.partitions = self.partition_owner_registry.get()
 
 
+    """
+     TODO:
+         Deal with offset tracking
+    """
+
     def __iter__(self):
         """
         Returns an iterator of messages.
@@ -178,9 +183,10 @@ class Consumer(object):
             self.topic.partitions
         )
 
+        # fetch size is the kafka default.
         return itertools.chain.from_iterable(
             itertools.imap(
-                lambda p: p.fetch(0, 1000),
+                lambda p: p.fetch(0, 300 * 1024),
                 partitions
             )
         )

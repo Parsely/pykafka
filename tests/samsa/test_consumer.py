@@ -42,7 +42,6 @@ class TestPartitionOwnerRegistry(KazooTestCase):
         )
 
     def test_watch(self):
-        # TODO: assert that the watch works correctly.
         self.por.add(self.partitions)
 
         por2 = consumer.PartitionOwnerRegistry(
