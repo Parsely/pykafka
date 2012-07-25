@@ -103,7 +103,6 @@ class Consumer(object):
         Joins a consumer group and claims partitions.
         """
 
-        #print "_rebalance(%s)" % self.id
         logger.info('Rebalancing consumer %s for topic %s.' % (
             self.id, self.topic.name)
         )
@@ -125,7 +124,6 @@ class Consumer(object):
                 participants.append(id_)
         # 5.
         participants.sort()
-        #print "participants: ", participants
 
         self.commit_offsets()
 
@@ -133,9 +131,9 @@ class Consumer(object):
         i = participants.index(self.id)
         parts_per_consumer = len(self.topic.partitions) / len(participants)
         # TODO: deal with remainder
-        #if i == len(participants) - 1:
         #    parts_per_consumer += len(self.topic.partitions) % len(participants)
-        #print "ppc: ", parts_per_consumer
+        remainder_ppc = len(self.topic.partitions) % len(participants)
+        print "remainder: ", remainder_ppc
 
         # 7. assign partitions from i*N to (i+1)*N - 1 to consumer Ci
         new_partitions = itertools.islice(
@@ -144,17 +142,25 @@ class Consumer(object):
             (i + 1) * parts_per_consumer
         )
 
+        if i == len(participants) - 1 and remainder_ppc > 0:
+            new_partitions = itertools.chain(
+                new_partitions,
+                itertools.islice(
+                    self.topic.partitions,
+                    (i + 1) * parts_per_consumer,
+                    (i + 1) * parts_per_consumer + remainder_ppc
+                )
+            )
+
+
         new_partitions = set(PartitionName.from_partition(p) for p in new_partitions)
-        #print "new, ", new_partitions
 
         old_partitions = self.partition_owner_registry.get()
-        #print "old: ", old_partitions
 
         # 8. remove current entries from the partition owner registry
         self.partition_owner_registry.remove(
             old_partitions - new_partitions
         )
-        #print "to remove: ", old_partitions - new_partitions
 
         # 9. add newly assigned partitions to the partition owner registry
         for i in xrange(self.MAX_RETRIES):

@@ -43,10 +43,7 @@ class TestPartitionOwnerRegistry(KazooTestCase):
 
     def test_watch(self):
         # TODO: assert that the watch works correctly.
-        import time
         self.por.add(self.partitions)
-
-        print "por: ", self.por.get()
 
         por2 = consumer.PartitionOwnerRegistry(
             self.consumer,
@@ -55,7 +52,6 @@ class TestPartitionOwnerRegistry(KazooTestCase):
             'group'
         )
 
-        print por2.get()
         self.assertEquals(self.por.get(), por2.get())
         self.assertEquals(self.por.get(), set(self.partitions))
 
