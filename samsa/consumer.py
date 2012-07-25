@@ -40,12 +40,12 @@ class PartitionOwnerRegistry(DelayedConfiguration):
         self.cluster = cluster
         self.path = '/consumers/%s/owners/%s' % (group, topic.name)
         self.cluster.zookeeper.ensure_path(self.path)
-
-    def _configure(self, event=None):
         self._partitions = set([])
 
+    def _configure(self, event=None):
         zk = self.cluster.zookeeper
         partitions = zk.get_children(self.path, watch=self._configure)
+        new_partitions = set([])
 
         for name in partitions:
             p = PartitionName.from_str(name)
@@ -55,7 +55,11 @@ class PartitionOwnerRegistry(DelayedConfiguration):
                 # some other consumer has removed this node. it's not ours.
                 continue
             if value == self.consumer_id:
-                self._partitions.add(p)
+                new_partitions.add(p)
+
+        # we want references to self._partitions to not change.
+        self._partitions.difference_update(self._partitions - new_partitions)
+        self._partitions.update(new_partitions)
 
     @requires_configuration
     def get(self):

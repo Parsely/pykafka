@@ -36,8 +36,8 @@ class TestPartitionOwnerRegistry(KazooTestCase):
             'group'
         )
 
-        self.partitions = [consumer.PartitionName(i, 0) for i in
-                           xrange(5)]
+        self.partitions = [consumer.PartitionName(i, 0)
+                           for i in xrange(5)]
 
     def test_crd(self):
         self.por.add(self.partitions[:3])
@@ -61,7 +61,6 @@ class TestPartitionOwnerRegistry(KazooTestCase):
             self.topic,
             'group'
         )
-        time.sleep(0.5)
 
         self.assertEquals(self.por.get(), por2.get())
         self.assertEquals(self.por.get(), set(self.partitions))
@@ -107,6 +106,7 @@ class TestConsumer(KazooTestCase):
 
         # TODO: need to block until all n_consumers * 2 rebalances have
         # happened.
+        # i.e. come up with a way to count watch calls.
         time.sleep(15)
 
         partitions = []
