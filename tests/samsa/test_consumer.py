@@ -104,18 +104,9 @@ class TestConsumer(KazooTestCase):
 
         consumers = [t.subscribe('group1') for i in xrange(n_consumers)]
 
-        # TODO: need to block until all n_consumers * 2 rebalances have
-        # happened.
-        # i.e. come up with a way to count watch calls.
-        # time.sleep(15)
-
         partitions = []
         for c in consumers:
             partitions.extend(c.partitions)
-
-        print partitions
-        print [[p.broker_id for p in c.partitions] for c in consumers]
-        print [len(c.partitions) for c in consumers]
 
         # test that there are no duplicates.
         self.assertEquals(len(partitions), n_partitions)

@@ -187,12 +187,6 @@ class Consumer(object):
             raise Exception("Couldn't acquire partitions.")
 
 
-
-    """
-     TODO:
-         Deal with offset tracking
-    """
-
     def __iter__(self):
         """
         Returns an iterator of messages.
@@ -216,4 +210,3 @@ class Consumer(object):
         Commit the offsets of all messages consumed so far.
         """
         return
-        raise NotImplementedError
