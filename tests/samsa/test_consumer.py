@@ -92,9 +92,6 @@ class TestConsumer(KazooTestCase):
         Test rebalance
 
         Adjust n_* to see how rebalancing performs.
-
-        I've sometimes gotten some intermittent failures,
-        which indicates that we need more robust zookeeper interaction.
         """
 
         n_partitions = 10
