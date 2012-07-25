@@ -1,4 +1,5 @@
 import mock
+import time
 
 from kazoo.testing import KazooTestCase
 
@@ -50,6 +51,7 @@ class TestPartitionOwnerRegistry(KazooTestCase):
             self.topic,
             'group'
         )
+        time.sleep(0.5)
 
         self.assertEquals(self.por.get(), por2.get())
         self.assertEquals(self.por.get(), set(self.partitions))
@@ -86,7 +88,6 @@ class TestConsumer(KazooTestCase):
 
         consumers = [t.subscribe('group1') for i in xrange(n_consumers)]
 
-        import time
         time.sleep(5)
 
         partitions = []
