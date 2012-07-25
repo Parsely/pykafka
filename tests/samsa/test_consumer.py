@@ -2,10 +2,20 @@ import mock
 import time
 
 from kazoo.testing import KazooTestCase
+from unittest2 import TestCase
 
 from samsa.cluster import Cluster
 from samsa.topics import Topic
 from samsa import consumer
+
+
+class TestPartitionName(TestCase):
+
+    def test_ser_de(self):
+
+        pn = consumer.PartitionName(1, 2)
+        pns = pn.to_str()
+        self.assertEquals(consumer.PartitionName.from_str(pns), pn)
 
 
 class TestPartitionOwnerRegistry(KazooTestCase):

@@ -17,7 +17,7 @@ class PartitionName(namedtuple('PartitionName', ['broker_id', 'partition_id'])):
     @staticmethod
     def from_str(s):
         broker_id, partition_id = s.split('-')
-        return PartitionName(broker_id, partition_id)
+        return PartitionName(int(broker_id), int(partition_id))
 
     @staticmethod
     def from_partition(p):
@@ -63,7 +63,6 @@ class PartitionOwnerRegistry(DelayedConfiguration):
 
     @requires_configuration
     def remove(self, partitions):
-        print "PartitionOwnerRegistry.remove(%s)" % partitions
         for p in partitions:
             assert p in self._partitions
             self.cluster.zookeeper.delete(self._path_from_partition(p))
@@ -71,7 +70,6 @@ class PartitionOwnerRegistry(DelayedConfiguration):
 
     @requires_configuration
     def add(self, partitions):
-        print "PartitionOwnerRegistry.add(%s)" % partitions
         for p in partitions:
             self.cluster.zookeeper.create(
                 self._path_from_partition(p), self.consumer_id, ephemeral=True
@@ -141,15 +139,19 @@ class Consumer(object):
         num_parts = parts_per_consumer + (0 if (i + 1 > remainder_ppc) else 1)
 
         # 7. assign partitions from i*N to (i+1)*N - 1 to consumer Ci
+        old_partitions = self.partition_owner_registry.get()
         new_partitions = itertools.islice(
             self.topic.partitions,
             start,
             start + num_parts
         )
 
+        #new_partitions = list(new_partitions)
+        #print "new: ", [p.broker.id for p in new_partitions]
+        #print "old: ", [p.broker_id for p in old_partitions]
+
         new_partitions = set(PartitionName.from_partition(p) for p in new_partitions)
 
-        old_partitions = self.partition_owner_registry.get()
 
         # 8. remove current entries from the partition owner registry
         self.partition_owner_registry.remove(
