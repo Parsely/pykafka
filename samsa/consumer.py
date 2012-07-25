@@ -3,15 +3,15 @@ import itertools
 import socket
 
 from collections import namedtuple
+from kazoo.exceptions import NodeExistsException, NoNodeException
 from uuid import uuid4
-from zookeeper import NoNodeException
 
 from samsa.exceptions import ImproperlyConfigured
 from samsa.utils.delayedconfig import DelayedConfiguration, requires_configuration
 
 logger = logging.getLogger(__name__)
 
-class PartitionName(namedtuple('Partition', ['broker_id', 'partition_id'])):
+class PartitionName(namedtuple('PartitionName', ['broker_id', 'partition_id'])):
 
     @staticmethod
     def from_str(s):
@@ -76,6 +76,9 @@ class PartitionOwnerRegistry(DelayedConfiguration):
 
 
 class Consumer(DelayedConfiguration):
+
+    MAX_RETRIES = 5
+
     def __init__(self, cluster, topic, group):
         self.cluster = cluster
         self.topic = topic
@@ -147,9 +150,14 @@ class Consumer(DelayedConfiguration):
         )
 
         # 9. add newly assigned partitions to the partition owner registry
-        self.partition_owner_registry.add(
-            new_partitions - old_partitions
-        )
+        for i in xrange(self.MAX_RETRIES):
+            try:
+                self.partition_owner_registry.add(
+                    new_partitions - old_partitions
+                )
+                break
+            except NodeExistsException:
+                continue
 
         self.partitions = self.partition_owner_registry.get()
 
