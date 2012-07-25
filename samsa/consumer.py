@@ -44,7 +44,7 @@ class PartitionOwnerRegistry(DelayedConfiguration):
         self._partitions = set([])
 
         zk = self.cluster.zookeeper
-        partitions = zk.get_children(self.path, watch=self._configure)
+        partitions = zk.get_children(self.path)
 
         for name in partitions:
             p = PartitionName.from_str(name)
@@ -133,8 +133,8 @@ class Consumer(object):
         i = participants.index(self.id)
         parts_per_consumer = len(self.topic.partitions) / len(participants)
         # TODO: deal with remainder
-        if i == len(participants) - 1:
-            parts_per_consumer += len(self.topic.partitions) % len(participants)
+        #if i == len(participants) - 1:
+        #    parts_per_consumer += len(self.topic.partitions) % len(participants)
         print "ppc: ", parts_per_consumer
 
         # 7. assign partitions from i*N to (i+1)*N - 1 to consumer Ci
@@ -145,14 +145,16 @@ class Consumer(object):
         )
 
         new_partitions = set(PartitionName.from_partition(p) for p in new_partitions)
+        print "new, ", new_partitions
 
         old_partitions = self.partition_owner_registry.get()
+        print "old: ", old_partitions
 
         # 8. remove current entries from the partition owner registry
         self.partition_owner_registry.remove(
             old_partitions - new_partitions
         )
-        #print "to remove: ", old_partitions - new_partitions
+        print "to remove: ", old_partitions - new_partitions
 
         # 9. add newly assigned partitions to the partition owner registry
         for i in xrange(self.MAX_RETRIES):
@@ -169,7 +171,6 @@ class Consumer(object):
             raise Exception("Couldn't acquire partitions.")
 
         self.partitions = self.partition_owner_registry.get()
-        print self.partitions
 
 
     def __iter__(self):

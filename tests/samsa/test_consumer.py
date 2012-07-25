@@ -64,8 +64,10 @@ class TestConsumer(KazooTestCase):
 
         c2 = t.subscribe('group1')
 
-        print c.partitions
-        print c2.partitions
+        self.assertEquals(len(c.partitions) + len(c2.partitions), 5)
+
+        print "c partitions: ", c.partitions
+        print "c2 partitions: ", c2.partitions
         """
         self.assertEquals(
             c.partitions,
