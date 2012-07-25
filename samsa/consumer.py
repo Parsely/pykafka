@@ -49,7 +49,11 @@ class PartitionOwnerRegistry(DelayedConfiguration):
 
         for name in partitions:
             p = PartitionName.from_str(name)
-            value, _ = zk.get(self._path_from_partition(p))
+            try:
+                value, _ = zk.get(self._path_from_partition(p))
+            except NoNodeException:
+                # some other consumer has removed this node. it's not ours.
+                continue
             if value == self.consumer_id:
                 self._partitions.add(p)
 
