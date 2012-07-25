@@ -102,13 +102,13 @@ class Consumer(object):
         self.id = "%s:%s" % (socket.gethostname(), uuid4())
 
         self.id_path = '/consumers/%s/ids' % self.group
-        self.cluster.zookeeper.ensure_path(self.id_path)
 
         self.partition_owner_registry = PartitionOwnerRegistry(
             self, cluster, topic, group)
         self.partitions = self.partition_owner_registry.get()
 
         path = '%s/%s' % (self.id_path, self.id)
+        self.cluster.zookeeper.ensure_path(self.id_path)
         self.cluster.zookeeper.create(path, self.topic.name, ephemeral=True)
 
         self._rebalance()
@@ -149,7 +149,6 @@ class Consumer(object):
         num_parts = parts_per_consumer + (0 if (i + 1 > remainder_ppc) else 1)
 
         # 7. assign partitions from i*N to (i+1)*N - 1 to consumer Ci
-        old_partitions = self.partition_owner_registry.get()
         new_partitions = itertools.islice(
             self.topic.partitions,
             start,
@@ -162,16 +161,16 @@ class Consumer(object):
 
         # 8. remove current entries from the partition owner registry
         self.partition_owner_registry.remove(
-            old_partitions - new_partitions
+            self.partitions - new_partitions
         )
 
         # 9. add newly assigned partitions to the partition owner registry
         for i in xrange(self.MAX_RETRIES):
             try:
-                # old_partitions will always reflect the most current view of
+                # self.partitions will always reflect the most current view of
                 # owned partitions. Therefor retrying this method will progress.
                 self.partition_owner_registry.add(
-                    new_partitions - old_partitions
+                    new_partitions - self.partitions
                 )
                 break
             except PartitionOwnedException, e:
