@@ -28,9 +28,19 @@ class TestPartitionOwnerRegistry(KazooTestCase):
         self.partitions = [consumer.PartitionName(str(i), '0') for i in
                            xrange(5)]
 
-    def test_add(self):
+    def test_crd(self):
         self.por.add(self.partitions[:3])
-        print self.por.get()
+        self.assertEquals(
+            self.por.get(),
+            set(self.partitions[:3])
+        )
+
+        self.por.remove([self.partitions[0]])
+        self.assertEquals(
+            self.por.get(),
+            set(self.partitions[1:3])
+        )
+
 
 
 class TestConsumer(KazooTestCase):
@@ -49,14 +59,13 @@ class TestConsumer(KazooTestCase):
     def test_assigns_partitions(self):
         self._register_fake_brokers(5)
         t = Topic(self.c, 'mwhooker')
+
         c = t.subscribe('group1')
+
         c2 = t.subscribe('group1')
 
-        c._rebalance()
-        c2._rebalance()
         print c.partitions
         print c2.partitions
-
         """
         self.assertEquals(
             c.partitions,

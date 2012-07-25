@@ -58,6 +58,7 @@ class PartitionOwnerRegistry(DelayedConfiguration):
 
     @requires_configuration
     def remove(self, partitions):
+        print "PartitionOwnerRegistry.remove(%s)" % partitions
         for p in partitions:
             assert p in self._partitions
             self.cluster.zookeeper.delete(self._path_from_partition(p))
@@ -65,9 +66,10 @@ class PartitionOwnerRegistry(DelayedConfiguration):
 
     @requires_configuration
     def add(self, partitions):
+        print "PartitionOwnerRegistry.add(%s)" % partitions
         for p in partitions:
             self.cluster.zookeeper.create(
-                self._path_from_partition(p), self.consumer_id, ephemeral=True
+                self._path_from_partition(p), str(self.consumer_id), ephemeral=True
             )
             self._partitions.add(p)
 
@@ -75,7 +77,7 @@ class PartitionOwnerRegistry(DelayedConfiguration):
         return "%s/%s" % (self.path, p)
 
 
-class Consumer(DelayedConfiguration):
+class Consumer(object):
 
     MAX_RETRIES = 5
 
@@ -91,17 +93,17 @@ class Consumer(DelayedConfiguration):
         self.partition_owner_registry = PartitionOwnerRegistry(
             self, cluster, topic, group)
 
-    def _configure(self, event=None):
-        """
-        Joins a consumer group and claims partitions.
-        """
-
         path = '%s/%s' % (self.id_path, self.id)
         self.cluster.zookeeper.create(path, self.topic.name, ephemeral=True)
 
         self._rebalance()
 
-    def _rebalance(self):
+    def _rebalance(self, event=None):
+        """
+        Joins a consumer group and claims partitions.
+        """
+
+        print "_rebalance(%s)" % self.id
         logger.info('Rebalancing consumer %s for topic %s.' % (
             self.id, self.topic.name)
         )
@@ -114,8 +116,6 @@ class Consumer(DelayedConfiguration):
             raise ImproperlyConfigured('The broker_path "%s" does not exist in your '
                 'ZooKeeper cluster -- is your Kafka cluster running?' % broker_path)
 
-        self.commit_offsets()
-
         # 3. all consumers in the same group as Ci that consume topic T
         consumer_ids = zk.get_children(self.id_path, watch=self._rebalance)
         participants = []
@@ -125,13 +125,17 @@ class Consumer(DelayedConfiguration):
                 participants.append(id_)
         # 5.
         participants.sort()
+        print "participants: ", participants
 
+        self.commit_offsets()
 
         # 6.
         i = participants.index(self.id)
         parts_per_consumer = len(self.topic.partitions) / len(participants)
         # TODO: deal with remainder
-        remaining_ppc = len(self.topic.partitions) % len(participants)
+        if i == len(participants) - 1:
+            parts_per_consumer += len(self.topic.partitions) % len(participants)
+        print "ppc: ", parts_per_consumer
 
         # 7. assign partitions from i*N to (i+1)*N - 1 to consumer Ci
         new_partitions = itertools.islice(
@@ -148,6 +152,7 @@ class Consumer(DelayedConfiguration):
         self.partition_owner_registry.remove(
             old_partitions - new_partitions
         )
+        #print "to remove: ", old_partitions - new_partitions
 
         # 9. add newly assigned partitions to the partition owner registry
         for i in xrange(self.MAX_RETRIES):
@@ -157,12 +162,16 @@ class Consumer(DelayedConfiguration):
                 )
                 break
             except NodeExistsException:
+                import time
+                time.sleep(i ** 2)
                 continue
+        else:
+            raise Exception("Couldn't acquire partitions.")
 
         self.partitions = self.partition_owner_registry.get()
+        print self.partitions
 
 
-    @requires_configuration
     def __iter__(self):
         """
         Returns an iterator of messages.
@@ -180,7 +189,6 @@ class Consumer(DelayedConfiguration):
             )
         )
 
-    @requires_configuration
     def commit_offsets(self):
         """
         Commit the offsets of all messages consumed so far.
