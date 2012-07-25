@@ -71,22 +71,22 @@ class TestConsumer(KazooTestCase):
             self.client.create(path, data)
 
     def test_assigns_partitions(self):
-        self._register_fake_brokers(5)
+        """
+        Test rebalance
+
+        Adjust n_* to see how rebalancing performs.
+
+        I've sometimes gotten some intermittent failures,
+        which indicates that we need more robust zookeeper interaction.
+        """
+
+        n_partitions = 10
+        n_consumers = 3
+        self._register_fake_brokers(n_partitions)
         t = Topic(self.c, 'mwhooker')
 
-        c = t.subscribe('group1')
+        consumers = [t.subscribe('group1') for i in xrange(n_consumers)]
 
-        c2 = t.subscribe('group1')
+        self.assertEquals(sum([len(c.partitions) for c in consumers]), n_partitions)
 
-        self.assertEquals(len(c.partitions) + len(c2.partitions), 5)
-
-        print "c partitions: ", c.partitions
-        print "c2 partitions: ", c2.partitions
-        """
-        self.assertEquals(
-            c.partitions,
-            set([consumer.PartitionName(broker_id=0, partition_id=0),
-                 consumer.PartitionName(broker_id=1, partition_id=0),
-                 consumer.PartitionName(broker_id=2, partition_id=0)])
-        )
-        """
+        print [c.partitions for c in consumers]

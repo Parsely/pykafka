@@ -130,28 +130,17 @@ class Consumer(object):
         # 6.
         i = participants.index(self.id)
         parts_per_consumer = len(self.topic.partitions) / len(participants)
-        # TODO: deal with remainder
-        #    parts_per_consumer += len(self.topic.partitions) % len(participants)
         remainder_ppc = len(self.topic.partitions) % len(participants)
-        print "remainder: ", remainder_ppc
+
+        start = parts_per_consumer * i + min(i, remainder_ppc)
+        num_parts = parts_per_consumer + (0 if (i + 1 > remainder_ppc) else 1)
 
         # 7. assign partitions from i*N to (i+1)*N - 1 to consumer Ci
         new_partitions = itertools.islice(
             self.topic.partitions,
-            i * parts_per_consumer,
-            (i + 1) * parts_per_consumer
+            start,
+            start + num_parts
         )
-
-        if i == len(participants) - 1 and remainder_ppc > 0:
-            new_partitions = itertools.chain(
-                new_partitions,
-                itertools.islice(
-                    self.topic.partitions,
-                    (i + 1) * parts_per_consumer,
-                    (i + 1) * parts_per_consumer + remainder_ppc
-                )
-            )
-
 
         new_partitions = set(PartitionName.from_partition(p) for p in new_partitions)
 
