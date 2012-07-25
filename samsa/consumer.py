@@ -35,7 +35,7 @@ class PartitionOwnerRegistry(DelayedConfiguration):
     """
 
     def __init__(self, consumer, cluster, topic, group):
-        self.consumer_id = consumer.id
+        self.consumer_id = str(consumer.id)
         self.cluster = cluster
         self.path = '/consumers/%s/owners/%s' % (group, topic.name)
         self.cluster.zookeeper.ensure_path(self.path)
@@ -44,11 +44,11 @@ class PartitionOwnerRegistry(DelayedConfiguration):
         self._partitions = set([])
 
         zk = self.cluster.zookeeper
-        partitions = zk.get_children(self.path)
+        partitions = zk.get_children(self.path, watch=self._configure)
 
         for name in partitions:
             p = PartitionName.from_str(name)
-            _, value = zk.get(self._path_from_partition(p))
+            value, _ = zk.get(self._path_from_partition(p))
             if value == self.consumer_id:
                 self._partitions.add(p)
 
@@ -69,7 +69,7 @@ class PartitionOwnerRegistry(DelayedConfiguration):
         print "PartitionOwnerRegistry.add(%s)" % partitions
         for p in partitions:
             self.cluster.zookeeper.create(
-                self._path_from_partition(p), str(self.consumer_id), ephemeral=True
+                self._path_from_partition(p), self.consumer_id, ephemeral=True
             )
             self._partitions.add(p)
 
@@ -103,7 +103,7 @@ class Consumer(object):
         Joins a consumer group and claims partitions.
         """
 
-        print "_rebalance(%s)" % self.id
+        #print "_rebalance(%s)" % self.id
         logger.info('Rebalancing consumer %s for topic %s.' % (
             self.id, self.topic.name)
         )
@@ -125,7 +125,7 @@ class Consumer(object):
                 participants.append(id_)
         # 5.
         participants.sort()
-        print "participants: ", participants
+        #print "participants: ", participants
 
         self.commit_offsets()
 
@@ -135,7 +135,7 @@ class Consumer(object):
         # TODO: deal with remainder
         #if i == len(participants) - 1:
         #    parts_per_consumer += len(self.topic.partitions) % len(participants)
-        print "ppc: ", parts_per_consumer
+        #print "ppc: ", parts_per_consumer
 
         # 7. assign partitions from i*N to (i+1)*N - 1 to consumer Ci
         new_partitions = itertools.islice(
@@ -145,16 +145,16 @@ class Consumer(object):
         )
 
         new_partitions = set(PartitionName.from_partition(p) for p in new_partitions)
-        print "new, ", new_partitions
+        #print "new, ", new_partitions
 
         old_partitions = self.partition_owner_registry.get()
-        print "old: ", old_partitions
+        #print "old: ", old_partitions
 
         # 8. remove current entries from the partition owner registry
         self.partition_owner_registry.remove(
             old_partitions - new_partitions
         )
-        print "to remove: ", old_partitions - new_partitions
+        #print "to remove: ", old_partitions - new_partitions
 
         # 9. add newly assigned partitions to the partition owner registry
         for i in xrange(self.MAX_RETRIES):
