@@ -107,7 +107,7 @@ class TestConsumer(KazooTestCase):
         # TODO: need to block until all n_consumers * 2 rebalances have
         # happened.
         # i.e. come up with a way to count watch calls.
-        time.sleep(15)
+        # time.sleep(15)
 
         partitions = []
         for c in consumers:

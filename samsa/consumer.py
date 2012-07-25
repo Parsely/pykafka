@@ -12,6 +12,10 @@ from samsa.utils.delayedconfig import DelayedConfiguration, requires_configurati
 
 logger = logging.getLogger(__name__)
 
+
+class PartitionOwnedException(Exception): pass
+
+
 class PartitionName(namedtuple('PartitionName', ['broker_id', 'partition_id'])):
 
     @staticmethod
@@ -75,9 +79,12 @@ class PartitionOwnerRegistry(DelayedConfiguration):
     @requires_configuration
     def add(self, partitions):
         for p in partitions:
-            self.cluster.zookeeper.create(
-                self._path_from_partition(p), self.consumer_id, ephemeral=True
-            )
+            try:
+                self.cluster.zookeeper.create(
+                    self._path_from_partition(p), self.consumer_id, ephemeral=True
+                )
+            except NodeExistsException:
+                raise PartitionOwnedException(p)
             self._partitions.add(p)
 
     def _path_from_partition(self, p):
@@ -99,6 +106,7 @@ class Consumer(object):
 
         self.partition_owner_registry = PartitionOwnerRegistry(
             self, cluster, topic, group)
+        self.partitions = self.partition_owner_registry.get()
 
         path = '%s/%s' % (self.id_path, self.id)
         self.cluster.zookeeper.create(path, self.topic.name, ephemeral=True)
@@ -164,19 +172,20 @@ class Consumer(object):
         # 9. add newly assigned partitions to the partition owner registry
         for i in xrange(self.MAX_RETRIES):
             try:
-                # TODO: ensure that any subset of blocked partitions eventually
-                # decreases to 0
+                # old_partitions will always reflect the most current view of
+                # owned partitions. Therefor retrying this method will progress.
                 self.partition_owner_registry.add(
                     new_partitions - old_partitions
                 )
                 break
-            except NodeExistsException:
+            except PartitionOwnedException, e:
+                # print ("Someone still owns partition %s. Retrying" %
+                #        str(e.message))
                 time.sleep(i ** 2)
                 continue
         else:
             raise Exception("Couldn't acquire partitions.")
 
-        self.partitions = self.partition_owner_registry.get()
 
 
     """
