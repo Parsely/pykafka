@@ -4,6 +4,7 @@ import socket
 import time
 
 from kazoo.exceptions import NodeExistsException, NoNodeException
+from functools import partial
 from uuid import uuid4
 
 from samsa.partitions import Partition
@@ -15,6 +16,27 @@ logger = logging.getLogger(__name__)
 
 class PartitionOwnedException(Exception): pass
 
+class OwnedPartition(Partition):
+
+    # TODO:
+        # get latest offset on creation
+        # implement commit_offset
+    def __init__(self, partition, group):
+        super(OwnedPartition, self).__init__(
+            partition.cluster, partition.topic,
+            partition.broker, partition.number
+        )
+        self.offset = 0
+        self.group = group
+
+    def fetch(self, size):
+        last_offset, msg = super(OwnedPartition, self).fetch(self.offset, size)
+        self.offset = last_offset + len(msg)
+        return msg
+
+    def commit_offset(self):
+        return
+
 
 class PartitionOwnerRegistry(DelayedConfiguration):
     """
@@ -25,6 +47,8 @@ class PartitionOwnerRegistry(DelayedConfiguration):
         self.consumer_id = str(consumer.id)
         self.cluster = cluster
         self.topic = topic
+
+        self.Partition = partial(OwnedPartition, group=group)
         self.path = '/consumers/%s/owners/%s' % (group, topic.name)
         self.cluster.zookeeper.ensure_path(self.path)
         self._partitions = set([])
@@ -75,10 +99,11 @@ class PartitionOwnerRegistry(DelayedConfiguration):
         return "%s/%s-%s" % (self.path, p.broker.id, p.number)
 
     def _partition_from_name(self, name):
-        """name as it appears as a znode. <broker id>-<parititon number>."""
+        """name as it appears as a znode. <broker id>-<partition number>."""
         broker_id, partition_id = name.split('-')
         broker = self.cluster.brokers[int(broker_id)]
-        return Partition(self.cluster, self.topic, broker, partition_id)
+        p = Partition(self.cluster, self.topic, broker, partition_id)
+        return self.Partition(p)
 
 
 class Consumer(object):
@@ -145,6 +170,12 @@ class Consumer(object):
             start + num_parts
         )
 
+        # cast partitions to owned partitions.
+        new_partitions = itertools.imap(
+            self.partition_owner_registry.Partition,
+            new_partitions
+        )
+
         new_partitions = set(new_partitions)
 
         self.commit_offsets()
@@ -164,8 +195,8 @@ class Consumer(object):
                 )
                 break
             except PartitionOwnedException, e:
-                # print ("Someone still owns partition %s. Retrying" %
-                #        str(e.message))
+                print("Someone still owns partition %s. Retrying" %
+                        str(e.message))
                 time.sleep(i ** 2)
                 continue
         else:
@@ -180,7 +211,7 @@ class Consumer(object):
         # fetch size is the kafka default.
         return itertools.chain.from_iterable(
             itertools.imap(
-                lambda p: p.fetch(0, 300 * 1024),
+                lambda p: p.fetch(300 * 1024),
                 self.partitions
             )
         )
@@ -189,4 +220,7 @@ class Consumer(object):
         """
         Commit the offsets of all messages consumed so far.
         """
-        return
+        for partition in self.partitions:
+            # TODO: I want self.partitions to hold the data necessary for
+            # persisting offsets.
+            partition.commit_offset()
