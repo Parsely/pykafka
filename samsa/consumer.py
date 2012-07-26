@@ -3,10 +3,10 @@ import itertools
 import socket
 import time
 
-from collections import namedtuple
 from kazoo.exceptions import NodeExistsException, NoNodeException
 from uuid import uuid4
 
+from samsa.partitions import Partition
 from samsa.exceptions import ImproperlyConfigured
 from samsa.utils.delayedconfig import DelayedConfiguration, requires_configuration
 
@@ -14,24 +14,6 @@ logger = logging.getLogger(__name__)
 
 
 class PartitionOwnedException(Exception): pass
-
-
-class PartitionName(namedtuple('PartitionName', ['broker_id', 'partition_id'])):
-
-    @staticmethod
-    def from_str(s):
-        broker_id, partition_id = s.split('-')
-        return PartitionName(int(broker_id), int(partition_id))
-
-    @staticmethod
-    def from_partition(p):
-        return PartitionName(p.broker.id, p.number)
-
-    def to_str(self):
-        return "%s-%s" % (self.broker_id, self.partition_id)
-
-    def __str__(self):
-        return self.to_str()
 
 
 class PartitionOwnerRegistry(DelayedConfiguration):
@@ -42,6 +24,7 @@ class PartitionOwnerRegistry(DelayedConfiguration):
     def __init__(self, consumer, cluster, topic, group):
         self.consumer_id = str(consumer.id)
         self.cluster = cluster
+        self.topic = topic
         self.path = '/consumers/%s/owners/%s' % (group, topic.name)
         self.cluster.zookeeper.ensure_path(self.path)
         self._partitions = set([])
@@ -52,7 +35,8 @@ class PartitionOwnerRegistry(DelayedConfiguration):
         new_partitions = set([])
 
         for name in partitions:
-            p = PartitionName.from_str(name)
+            p = self._partition_from_name(name)
+
             try:
                 value, _ = zk.get(self._path_from_partition(p))
             except NoNodeException:
@@ -88,7 +72,13 @@ class PartitionOwnerRegistry(DelayedConfiguration):
             self._partitions.add(p)
 
     def _path_from_partition(self, p):
-        return "%s/%s" % (self.path, p)
+        return "%s/%s-%s" % (self.path, p.broker.id, p.number)
+
+    def _partition_from_name(self, name):
+        """name as it appears as a znode. <broker id>-<parititon number>."""
+        broker_id, partition_id = name.split('-')
+        broker = self.cluster.brokers[int(broker_id)]
+        return Partition(self.cluster, self.topic, broker, partition_id)
 
 
 class Consumer(object):
@@ -155,7 +145,7 @@ class Consumer(object):
             start + num_parts
         )
 
-        new_partitions = set(PartitionName.from_partition(p) for p in new_partitions)
+        new_partitions = set(new_partitions)
 
         self.commit_offsets()
 
@@ -187,16 +177,11 @@ class Consumer(object):
         Returns an iterator of messages.
         """
 
-        partitions = itertools.ifilter(
-            lambda p: PartitionName.from_partition(p) in self.partitions,
-            self.topic.partitions
-        )
-
         # fetch size is the kafka default.
         return itertools.chain.from_iterable(
             itertools.imap(
                 lambda p: p.fetch(0, 300 * 1024),
-                partitions
+                self.topic.partitions
             )
         )
 

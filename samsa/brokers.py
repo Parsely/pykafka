@@ -40,7 +40,7 @@ class BrokerMap(DelayedConfiguration):
         alive = set()
         for broker_id in map(int, broker_ids):
             if broker_id not in self.__brokers:
-                broker = Broker(self.cluster, id=broker_id)
+                broker = Broker(self.cluster, id_=broker_id)
                 logger.info('Adding new broker to %s: %s', self, broker)
                 self.__brokers[broker.id] = broker
             alive.add(broker_id)

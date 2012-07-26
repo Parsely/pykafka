@@ -1,20 +1,11 @@
 import mock
 
 from kazoo.testing import KazooTestCase
-from unittest2 import TestCase
 
 from samsa.cluster import Cluster
 from samsa.topics import Topic
+from samsa.partitions import Partition
 from samsa import consumer
-
-
-class TestPartitionName(TestCase):
-
-    def test_ser_de(self):
-
-        pn = consumer.PartitionName(1, 2)
-        pns = pn.to_str()
-        self.assertEquals(consumer.PartitionName.from_str(pns), pn)
 
 
 class TestPartitionOwnerRegistry(KazooTestCase):
@@ -22,6 +13,10 @@ class TestPartitionOwnerRegistry(KazooTestCase):
     def setUp(self):
         super(TestPartitionOwnerRegistry, self).setUp()
         self.c = Cluster(self.client)
+        self.c.brokers = mock.MagicMock()
+        broker = mock.Mock()
+        broker.id = 1
+        self.c.brokers.__getitem__.return_value = broker
 
         self.consumer = mock.Mock()
         self.consumer.id  = 1234
@@ -35,8 +30,11 @@ class TestPartitionOwnerRegistry(KazooTestCase):
             'group'
         )
 
-        self.partitions = [consumer.PartitionName(i, 0)
-                           for i in xrange(5)]
+        self.partitions = []
+        for i in xrange(5):
+            self.partitions.append(
+                Partition(self.c, self.topic, broker, i)
+            )
 
     def test_crd(self):
         self.por.add(self.partitions[:3])
