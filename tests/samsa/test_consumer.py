@@ -1,5 +1,4 @@
 import mock
-import time
 
 from kazoo.testing import KazooTestCase
 from unittest2 import TestCase
