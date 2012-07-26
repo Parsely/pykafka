@@ -181,7 +181,7 @@ class Consumer(object):
         return itertools.chain.from_iterable(
             itertools.imap(
                 lambda p: p.fetch(0, 300 * 1024),
-                self.topic.partitions
+                self.partitions
             )
         )
 
