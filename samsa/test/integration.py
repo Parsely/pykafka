@@ -152,11 +152,9 @@ class KafkaIntegrationTestCase(unittest2.TestCase, KazooTestHarness):
         """
         self.__kafka_directory = tempfile.mkdtemp()
 
-        # Logging Configuratin
         self.__kafka_logging_configuration_file = \
             self.__write_property_file(self.KAFKA_LOGGING_CONFIGURATION)
 
-        # Broker Configuration
         broker_configuration = merge(self.KAFKA_BROKER_CONFIGURATION, {
             'log.dir': self.__kafka_directory,
             'zk.connect': self.hosts,
