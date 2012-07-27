@@ -18,16 +18,22 @@ class PartitionOwnedException(Exception): pass
 
 class OwnedPartition(Partition):
 
-    # TODO:
-        # get latest offset on creation
-        # implement commit_offset
     def __init__(self, partition, group):
         super(OwnedPartition, self).__init__(
             partition.cluster, partition.topic,
             partition.broker, partition.number
         )
-        self.offset = 0
         self.group = group
+        self.path = "/consumers/%s/offsets/%s/%s-%s" % (
+            self.group, self.topic.name,
+            self.broker.id, self.number
+        )
+
+        try:
+            self.offset, stat = self.cluster.zk.get(self.path)
+        except NoNodeException:
+            self.cluster.zk.create(self.path, str(0))
+            self.offset = 0
 
     def fetch(self, size):
         last_offset, msg = super(OwnedPartition, self).fetch(self.offset, size)
@@ -35,7 +41,7 @@ class OwnedPartition(Partition):
         return msg
 
     def commit_offset(self):
-        return
+        self.cluster.zk.set(self.path, self.offset)
 
 
 class PartitionOwnerRegistry(DelayedConfiguration):
@@ -58,6 +64,7 @@ class PartitionOwnerRegistry(DelayedConfiguration):
         partitions = zk.get_children(self.path, watch=self._configure)
         new_partitions = set([])
 
+        # TODO: this watch it probably not needed.
         for name in partitions:
             p = self._partition_from_name(name)
 
