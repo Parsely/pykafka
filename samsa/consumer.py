@@ -30,9 +30,10 @@ class OwnedPartition(Partition):
         )
 
         try:
-            self.offset, stat = self.cluster.zk.get(self.path)
+            offset, stat = self.cluster.zookeeper.get(self.path)
+            self.offset = int(offset)
         except NoNodeException:
-            self.cluster.zk.create(self.path, str(0))
+            self.cluster.zookeeper.create(self.path, str(0), makepath=True)
             self.offset = 0
 
     def fetch(self, size):
@@ -41,7 +42,7 @@ class OwnedPartition(Partition):
         return msg
 
     def commit_offset(self):
-        self.cluster.zk.set(self.path, self.offset)
+        self.cluster.zookeeper.set(self.path, str(self.offset))
 
 
 class PartitionOwnerRegistry(DelayedConfiguration):
@@ -216,11 +217,9 @@ class Consumer(object):
         """
 
         # fetch size is the kafka default.
-        return itertools.chain.from_iterable(
-            itertools.imap(
-                lambda p: p.fetch(300 * 1024),
-                self.partitions
-            )
+        return itertools.imap(
+            lambda p: p.fetch(300 * 1024),
+            self.partitions
         )
 
     def commit_offsets(self):

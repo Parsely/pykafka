@@ -106,3 +106,23 @@ class TestConsumer(KazooTestCase):
         self.assertEquals(len(partitions), n_partitions)
         # test that every partitions is represented.
         self.assertEquals(len(set(partitions)), n_partitions)
+
+    @mock.patch.object(Partition, 'fetch')
+    def test_commits_offsets(self, p):
+        self._register_fake_brokers(1)
+        t = Topic(self.c, 'mwhooker')
+
+        consumer = t.subscribe('group')
+        p.return_value = 0, "123"
+
+        i = list(consumer)
+        consumer.commit_offsets()
+
+        self.assertEquals(i, ['123'])
+        self.assertEquals(len(consumer.partitions), 1)
+        p = list(consumer.partitions)[0]
+
+        self.assertEquals(p.offset, 3)
+
+        d, stat = self.client.get(p.path)
+        self.assertEquals(d, '3')
