@@ -131,8 +131,9 @@ class Consumer(object):
         self.partitions = self.partition_owner_registry.get()
 
         path = '%s/%s' % (self.id_path, self.id)
-        self.cluster.zookeeper.ensure_path(self.id_path)
-        self.cluster.zookeeper.create(path, self.topic.name, ephemeral=True)
+        self.cluster.zookeeper.create(
+            path, self.topic.name, ephemeral=True, makepath=True
+        )
 
         self._rebalance()
 
