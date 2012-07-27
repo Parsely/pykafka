@@ -37,9 +37,10 @@ class OwnedPartition(Partition):
             self.offset = 0
 
     def fetch(self, size):
-        last_offset, msg = super(OwnedPartition, self).fetch(self.offset, size)
-        self.offset = last_offset + len(msg)
-        return msg
+        messages = super(OwnedPartition, self).fetch(self.offset, size)
+        for last_offset, msg in messages:
+            self.offset = last_offset + len(msg)
+            yield msg
 
     def commit_offset(self):
         self.cluster.zookeeper.set(self.path, str(self.offset))
@@ -218,9 +219,11 @@ class Consumer(object):
         """
 
         # fetch size is the kafka default.
-        return itertools.imap(
-            lambda p: p.fetch(300 * 1024),
-            self.partitions
+        return itertools.chain.from_iterable(
+                itertools.imap(
+                lambda p: p.fetch(300 * 1024),
+                self.partitions
+            )
         )
 
     def commit_offsets(self):
