@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 """
 Copyright 2012 DISQUS
 
@@ -14,7 +15,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-#!/usr/bin/env python
 import sys
 
 from setuptools import setup
@@ -41,6 +41,12 @@ if 'nosetests' in sys.argv[1:]:
 
 setup(
     name='samsa',
+    version='0.1',
+    author='Ted Kaemming & Matthew Hooker',
+    author_email='samsa@libralist.com',
+    url='https://github.com/disqus/samsa',
+    description='Featureful Kafka client.',
+    license='Apache License 2.0',
     packages=('samsa',),
     install_requires=install_requires,
     tests_require=tests_require,
