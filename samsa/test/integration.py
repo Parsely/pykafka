@@ -214,6 +214,10 @@ class KafkaIntegrationTestCase(unittest2.TestCase, KazooTestHarness):
             'compression.codec': 0,
             'serializer.class': 'kafka.serializer.StringEncoder',
         })
+
+        if 'stdout' not in kwargs:
+            kwargs['stdout'] = open('/dev/null')
+
         process = self.__run_class('kafka.tools.ProducerShell',
             '--topic', topic, '--props', configuration_file.name,
             **kwargs)
