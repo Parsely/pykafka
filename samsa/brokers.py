@@ -40,7 +40,7 @@ class BrokerMap(DelayedConfiguration):
         alive = set()
         for broker_id in map(int, broker_ids):
             if broker_id not in self.__brokers:
-                broker = Broker(self.cluster, id=broker_id)
+                broker = Broker(self.cluster, id_=broker_id)
                 logger.info('Adding new broker to %s: %s', self, broker)
                 self.__brokers[broker.id] = broker
             alive.add(broker_id)
@@ -68,18 +68,18 @@ class BrokerMap(DelayedConfiguration):
         """
         return iter(self.__brokers)
 
-    def __getitem__(self, id):
+    def __getitem__(self, id_):
         """
         Returns a broker by it's broker ID.
         """
-        return self.get(id)
+        return self.get(id_)
 
     @requires_configuration
-    def get(self, id):
+    def get(self, id_):
         """
         Returns a broker by it's broker ID.
         """
-        return self.__brokers[id]
+        return self.__brokers[id_]
 
     @requires_configuration
     def keys(self):
@@ -112,9 +112,9 @@ class Broker(DelayedConfiguration):
     :type cluster: :class:`samsa.cluster.Cluster`
     :param id: Kafka broker ID
     """
-    def __init__(self, cluster, id):
+    def __init__(self, cluster, id_):
         self.cluster = cluster
-        self.id = int(id)
+        self.id = int(id_)
 
         self.__host = None
         self.__port = None
