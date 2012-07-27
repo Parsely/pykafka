@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 
 
 def merge(*dicts):
+    """
+    Merges a sequence of dictionaries, with values in later dictionaries
+    overwriting values in the earlier dictionaries.
+    """
     return reduce(lambda x, y: dict(x, **y), dicts, {})
 
 
@@ -23,6 +27,11 @@ class TimeoutError(Exception):
 
 
 def polling_timeout(predicate, duration, interval=0.1, error='timeout exceeded'):
+    """
+    Provides a blocking timeout until either the predicate function returns a
+    non-False value, or the timeout is exceeded in which case a `TimeoutError`
+    is raised.
+    """
     for _ in xrange(0, int(duration / interval)):
         if predicate():
             return
@@ -58,11 +67,38 @@ class KafkaIntegrationTestCase(unittest2.TestCase, KazooTestHarness):
         self.setup_zookeeper()
         self.setup_kafka_broker()
 
+        self.subprocesses = []
+
     def tearDown(self):
         self.teardown_kafka_broker()
         self.teardown_zookeeper()
 
+        for subprocess in self.subprocesses:
+            if subprocess.returncode is None:
+                self.clean_shutdown(subprocess)
+
+    def clean_shutdown(self, process, timeout=3):
+        logger.debug('Sending SIGTERM to %s', process)
+
+        def process_exited():
+            process.poll()
+            return process.returncode is not None
+
+        process.terminate()
+        try:
+            polling_timeout(process_exited, timeout)
+            logger.debug('%s exited cleanly', process)
+        except TimeoutError:
+            logger.info('%s did not exit within timeout, sending SIGKILL...', process)
+            process.kill()
+
     def __run_class(self, cls, *args, **kwargs):
+        """
+        Runs the provided Kafka class in a subprocess.
+
+        Logging from the subprocess via stderr is converted into Python logging
+        statements in a separate thread of execution.
+        """
         executable = os.path.join(os.path.dirname(__file__), 'kafka-run-class.sh')
         args = (executable, cls) + args
 
@@ -77,6 +113,10 @@ class KafkaIntegrationTestCase(unittest2.TestCase, KazooTestHarness):
         process = subprocess.Popen(args, stderr=subprocess.PIPE, **kwargs)
 
         def convert_log_output(process, namespace):
+            """
+            Scrapes log4j output, forwarding the log output to the corresponding
+            Python logging endpoint.
+            """
             while process.returncode is None:
                 line = process.stderr.readline().strip()
                 if not line:
@@ -84,17 +124,22 @@ class KafkaIntegrationTestCase(unittest2.TestCase, KazooTestHarness):
 
                 try:
                     name, level, message = (bit.strip() for bit in line.split(':', 2))
-                    logging.getLogger('%s:%s' % (namespace, name)).log(getattr(logging, level.upper()), message)
+                    logging.getLogger('%s.%s' % (namespace, name)).log(getattr(logging, level.upper()), message)
                 except ValueError:
-                    logging.getLogger('%s:unfiltered' % namespace).warning(line)
+                    logging.getLogger('%s.raw' % namespace).warning(line)
 
-        logthread = threading.Thread(target=convert_log_output, args=(process, cls))
+        logthread = threading.Thread(target=convert_log_output,
+            args=(process, 'java.%s' % cls))
         logthread.daemon = True  # shouldn't be necessary, but just in case
         logthread.start()
 
         return process
 
     def __write_property_file(self, properties):
+        """
+        Writes a dictionary if configuration properties to a file readable
+        by Kafka.
+        """
         file = tempfile.NamedTemporaryFile(delete=False)
         for item in properties.iteritems():
             file.write('%s=%s\n' % item)
@@ -102,6 +147,9 @@ class KafkaIntegrationTestCase(unittest2.TestCase, KazooTestHarness):
         return file
 
     def setup_kafka_broker(self):
+        """
+        Starts the Kafka broker.
+        """
         self.__kafka_directory = tempfile.mkdtemp()
 
         # Logging Configuratin
@@ -133,33 +181,32 @@ class KafkaIntegrationTestCase(unittest2.TestCase, KazooTestHarness):
             raise TimeoutError('Kafka broker did not start within %s seconds' % timeout)
 
     def teardown_kafka_broker(self):
-        self.kafka_broker.terminate()
-
-        def broker_exited():
-            self.kafka_broker.poll()
-            return self.kafka_broker.returncode is not None
-
+        """
+        Stops the Kafka broker.
+        """
         logger.debug('Shutting down Kafka broker...')
-        try:
-            polling_timeout(broker_exited, 3)
-        except TimeoutError:
-            logger.info('Broker did not exit cleanly within timeout, sending SIGKILL...')
-            self.kafka_broker.kill()
-        finally:
-            # TODO: Clean up temporary directory and configuration files.
-            pass
+        self.clean_shutdown(self.kafka_broker)
 
-    def consumer(self, topic, group='test-consumer-group'):
+    def consumer(self, topic, group='test-consumer-group', **kwargs):
+        """
+        Returns a subprocess for a consumer shell for the given topic and
+        consumer group.
+        """
         # TODO: Clean up after self.
         configuration_file = self.__write_property_file({
             'zk.connect': self.hosts,
             'groupid': group,
         })
-        return self.__run_class('kafka.tools.ConsumerShell',
+        process = self.__run_class('kafka.tools.ConsumerShell',
             '--topic', topic, '--props', configuration_file.name,
-            stdout=subprocess.PIPE)
+            stdout=subprocess.PIPE, **kwargs)
+        self.subprocesses.append(process)
+        return process
 
     def producer(self, topic, **kwargs):
+        """
+        Returns a subprocess for a producer shell for the given topic.
+        """
         # TODO: Clean up after self.
         configuration_file = self.__write_property_file({
             'zk.connect': self.hosts,
@@ -167,6 +214,8 @@ class KafkaIntegrationTestCase(unittest2.TestCase, KazooTestHarness):
             'compression.codec': 0,
             'serializer.class': 'kafka.serializer.StringEncoder',
         })
-        return self.__run_class('kafka.tools.ProducerShell',
+        process = self.__run_class('kafka.tools.ProducerShell',
             '--topic', topic, '--props', configuration_file.name,
             **kwargs)
+        self.subprocesses.append(process)
+        return process

@@ -48,9 +48,7 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
 
         consumed = next(filter_messages(consumer.stdout))
         self.assertEqual(consumed, message)
-
-        consumer.terminate()
-        consumer.wait()
+        self.clean_shutdown(consumer)
 
     def test_multiproduce(self):
         topics = ('topic-a', 'topic-b')
@@ -71,8 +69,7 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
         for topic, consumer in consumers.items():
             consumed = next(filter_messages(consumer.stdout))
             self.assertEqual(consumed, message_for_topic(topic))
-            consumer.terminate()
-            consumer.wait()
+            self.clean_shutdown(consumer)
 
     def test_fetch(self):
         topic = 'topic'
@@ -81,10 +78,9 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
 
         producer = self.producer(topic, stdin=subprocess.PIPE)
         producer.stdin.write('%s\n' % message)
-        producer.stdin.flush()
+        producer.stdin.close()
         time.sleep(1)  # TODO: Not this
-        producer.terminate()
-        producer.wait()
+        self.clean_shutdown(producer)
 
         messages = list(self.kafka.fetch(topic, 0, 0, size))
         self.assertEqual(len(messages), 1)
@@ -101,10 +97,9 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
         for topic in topics:
             producer = self.producer(topic, stdin=subprocess.PIPE)
             producer.stdin.write('%s\n' % message_for_topic(topic))
-            producer.stdin.flush()
+            producer.stdin.close()
             time.sleep(1)  # TODO: Not this
-            producer.terminate()
-            producer.wait()
+            self.clean_shutdown(producer)
 
         batches = [(topic, 0, 0, size) for topic in topics]
         responses = self.kafka.multifetch(batches)
