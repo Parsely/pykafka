@@ -14,11 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import logging
 import itertools
+import logging
 import os
-import subprocess
 import random
+import subprocess
 import tempfile
 import threading
 import time
@@ -215,7 +215,6 @@ class ManagedProducer(ExternalClassRunner):
 
     def __init__(self, hosts, topic):
         super(ManagedProducer, self).__init__()
-
         self.hosts = hosts
         self.topic = topic
 
@@ -235,7 +234,6 @@ class ManagedConsumer(ExternalClassRunner):
 
     def __init__(self, hosts, topic, group='test-consumer-group'):
         super(ManagedConsumer, self).__init__()
-
         self.hosts = hosts
         self.topic = topic
         self.group = group
@@ -247,6 +245,7 @@ class ManagedConsumer(ExternalClassRunner):
 
         self.args = ['--topic', self.topic,
             '--props', self.configuration_file.name]
+
 
 @attr('integration')
 class KafkaClusterIntegrationTestCase(unittest2.TestCase, KazooTestHarness):
