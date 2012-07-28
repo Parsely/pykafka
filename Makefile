@@ -1,6 +1,10 @@
 doc:
 	cd doc/ && make html
 
+lint:
+	pyflakes ./samsa
+	pyflakes ./tests
+
 unit:
 	python setup.py nosetests --attr=!integration
 

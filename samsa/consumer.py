@@ -25,7 +25,6 @@ from uuid import uuid4
 
 from samsa.partitions import Partition
 from samsa.exceptions import ImproperlyConfigured
-from samsa.utils.delayedconfig import DelayedConfiguration, requires_configuration
 
 logger = logging.getLogger(__name__)
 

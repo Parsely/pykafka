@@ -14,11 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import itertools
-import mock
-import subprocess
 import time
-import unittest2
 
 from samsa.client import Client, OFFSET_EARLIEST, OFFSET_LATEST
 from samsa.test.integration import (KafkaIntegrationTestCase,
@@ -139,5 +135,9 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
 
     def test_offsets(self):
         offsets = self.kafka.offsets('topic', 0, OFFSET_EARLIEST, 1)
+        self.assertEqual(len(offsets), 1)
+        self.assertEqual(offsets[0], 0)
+
+        offsets = self.kafka.offsets('topic', 0, OFFSET_LATEST, 1)
         self.assertEqual(len(offsets), 1)
         self.assertEqual(offsets[0], 0)

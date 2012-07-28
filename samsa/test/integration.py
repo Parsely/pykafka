@@ -17,7 +17,6 @@ limitations under the License.
 import itertools
 import logging
 import os
-import random
 import subprocess
 import tempfile
 import threading

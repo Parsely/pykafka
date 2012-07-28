@@ -19,7 +19,7 @@ import unittest2
 from zookeeper import NoNodeException
 
 from samsa.cluster import Cluster
-from samsa.topics import TopicMap, Topic, PartitionMap
+from samsa.topics import TopicMap, Topic
 
 
 class TopicMapTest(unittest2.TestCase):
