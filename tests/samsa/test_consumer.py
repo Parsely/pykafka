@@ -129,7 +129,7 @@ class TestConsumer(KazooTestCase):
         t = Topic(self.c, 'mwhooker')
 
         consumer = t.subscribe('group')
-        p.return_value = 0, "123"
+        p.return_value = ((0, "123"),)
 
         i = list(consumer)
         consumer.commit_offsets()
