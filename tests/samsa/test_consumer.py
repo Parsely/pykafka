@@ -1,3 +1,19 @@
+"""
+Copyright 2012 DISQUS
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
+
 import mock
 
 from kazoo.testing import KazooTestCase
@@ -48,19 +64,6 @@ class TestPartitionOwnerRegistry(KazooTestCase):
             self.por.get(),
             set(self.partitions[1:3])
         )
-
-    def test_watch(self):
-        self.por.add(self.partitions)
-
-        por2 = consumer.PartitionOwnerRegistry(
-            self.consumer,
-            self.c,
-            self.topic,
-            'group'
-        )
-
-        self.assertEquals(self.por.get(), por2.get())
-        self.assertEquals(self.por.get(), set(self.partitions))
 
     def test_grows(self):
 
@@ -113,7 +116,7 @@ class TestConsumer(KazooTestCase):
         t = Topic(self.c, 'mwhooker')
 
         consumer = t.subscribe('group')
-        p.return_value = 0, "123"
+        p.return_value = ((0, "123"),)
 
         i = list(consumer)
         consumer.commit_offsets()

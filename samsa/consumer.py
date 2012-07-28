@@ -1,3 +1,19 @@
+"""
+Copyright 2012 DISQUS
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
+
 import logging
 import itertools
 import socket
@@ -46,7 +62,7 @@ class OwnedPartition(Partition):
         self.cluster.zookeeper.set(self.path, str(self.offset))
 
 
-class PartitionOwnerRegistry(DelayedConfiguration):
+class PartitionOwnerRegistry(object):
     """
     Manages the Partition Owner Registry for a particular Consumer.
     """
@@ -61,39 +77,15 @@ class PartitionOwnerRegistry(DelayedConfiguration):
         self.cluster.zookeeper.ensure_path(self.path)
         self._partitions = set([])
 
-    def _configure(self, event=None):
-        zk = self.cluster.zookeeper
-        partitions = zk.get_children(self.path, watch=self._configure)
-        new_partitions = set([])
-
-        # TODO: this watch it probably not needed.
-        for name in partitions:
-            p = self._partition_from_name(name)
-
-            try:
-                value, _ = zk.get(self._path_from_partition(p))
-            except NoNodeException:
-                # some other consumer has removed this node. it's not ours.
-                continue
-            if value == self.consumer_id:
-                new_partitions.add(p)
-
-        # we want references to self._partitions to not change.
-        self._partitions.difference_update(self._partitions - new_partitions)
-        self._partitions.update(new_partitions)
-
-    @requires_configuration
     def get(self):
         return self._partitions
 
-    @requires_configuration
     def remove(self, partitions):
         for p in partitions:
             assert p in self._partitions
             self.cluster.zookeeper.delete(self._path_from_partition(p))
             self._partitions.remove(p)
 
-    @requires_configuration
     def add(self, partitions):
         for p in partitions:
             try:
