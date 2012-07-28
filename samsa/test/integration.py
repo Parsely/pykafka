@@ -254,3 +254,31 @@ class KafkaIntegrationTestCase(unittest2.TestCase, KazooTestHarness):
         Stops a Kafka broker.
         """
         self.kafka_broker.stop()
+
+
+@attr('integration')
+class KafkaClusterIntegrationTestCase(unittest2.TestCase, KazooTestHarness):
+    def setUp(self):
+        self.setup_zookeeper()
+        self.kafka_brokers = []
+
+    def tearDown(self):
+        self.teardown_kafka_cluster()
+        self.teardown_zookeeper()
+
+    def setup_kafka_broker(self, *args, **kwargs):
+        """
+        Starts a Kafka broker, adding it to the cluster.
+        """
+        broker = ManagedBroker(self.client, self.hosts, *args, **kwargs)
+        broker.start()
+        self.kafka_brokers.append(broker)
+        return broker
+
+    def teardown_kafka_cluster(self):
+        """
+        Stops the Kafka cluster.
+        """
+        # TODO: make this mapped over a thread pool or something for speed
+        for broker in self.kafka_brokers:
+            broker.stop()
