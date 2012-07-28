@@ -1,4 +1,5 @@
 import logging
+import itertools
 import os
 import subprocess
 import random
@@ -142,14 +143,14 @@ class ManagedBroker(ExternalClassRunner):
         'log.flush.interval': 1,  # commit messages as soon as possible
     }
 
-    def __init__(self, zookeeper, hosts, brokerid=0, partitions=1):
+    def __init__(self, zookeeper, hosts, brokerid=0, partitions=1, port=9092):
         super(ManagedBroker, self).__init__()
         self.directory = tempfile.mkdtemp()
 
         self.zookeeper = zookeeper
         self.brokerid = brokerid
         self.partitions = partitions
-        self.port = 9092
+        self.port = port
 
         self.configuration = merge(self.CONFIGURATION, {
             'log.dir': self.directory,
@@ -231,36 +232,14 @@ class ManagedConsumer(ExternalClassRunner):
         self.args = ['--topic', self.topic,
             '--props', self.configuration_file.name]
 
-
-@attr('integration')
-class KafkaIntegrationTestCase(unittest2.TestCase, KazooTestHarness):
-    def setUp(self):
-        self.setup_zookeeper()
-        self.setup_kafka_broker()
-
-    def tearDown(self):
-        self.teardown_kafka_broker()
-        self.teardown_zookeeper()
-
-    def setup_kafka_broker(self):
-        """
-        Starts a Kafka broker.
-        """
-        self.kafka_broker = ManagedBroker(self.client, self.hosts)
-        self.kafka_broker.start()
-
-    def teardown_kafka_broker(self):
-        """
-        Stops a Kafka broker.
-        """
-        self.kafka_broker.stop()
-
-
 @attr('integration')
 class KafkaClusterIntegrationTestCase(unittest2.TestCase, KazooTestHarness):
     def setUp(self):
         self.setup_zookeeper()
         self.kafka_brokers = []
+
+        self._id_generator = itertools.count(start=0)
+        self._port_generator = itertools.count(start=9092)
 
     def tearDown(self):
         self.teardown_kafka_cluster()
@@ -268,9 +247,12 @@ class KafkaClusterIntegrationTestCase(unittest2.TestCase, KazooTestHarness):
 
     def setup_kafka_broker(self, *args, **kwargs):
         """
-        Starts a Kafka broker, adding it to the cluster.
+        Starts a Kafka broker with a sequence generated broker ID and port, and
+        adds it to the cluster.
         """
-        broker = ManagedBroker(self.client, self.hosts, *args, **kwargs)
+        broker = ManagedBroker(self.client, self.hosts,
+            brokerid=next(self._id_generator),
+            port=next(self._port_generator), *args, **kwargs)
         broker.start()
         self.kafka_brokers.append(broker)
         return broker
@@ -282,3 +264,10 @@ class KafkaClusterIntegrationTestCase(unittest2.TestCase, KazooTestHarness):
         # TODO: make this mapped over a thread pool or something for speed
         for broker in self.kafka_brokers:
             broker.stop()
+
+
+@attr('integration')
+class KafkaIntegrationTestCase(KafkaClusterIntegrationTestCase):
+    def setUp(self):
+        super(KafkaIntegrationTestCase, self).setUp()
+        self.kafka_broker = self.setup_kafka_broker()

@@ -39,7 +39,7 @@ def filter_messages(stream):
 class ClientIntegrationTestCase(KafkaIntegrationTestCase):
     def setUp(self):
         super(ClientIntegrationTestCase, self).setUp()
-        self.kafka = Client(host='localhost')
+        self.kafka = Client(host='localhost', port=self.kafka_broker.port)
 
     def test_produce(self):
         topic = 'topic'
