@@ -177,5 +177,20 @@ class TestConsumerIntegration(KafkaIntegrationTestCase):
 
         consumer = t.subscribe('group2')
 
-        polling_timeout(lambda: len(list(consumer)) > 0, 1)
-        self.assertEquals(list(consumer), [message])
+        def test():
+            try:
+                self.assertEquals(list(consumer), [message])
+                return True
+            except AssertionError:
+                return False
+
+        polling_timeout(test, 1)
+
+        self.assertEquals(list(consumer), [])
+
+    def test_empty_topic(self):
+        topic = 'topic'
+        t = Topic(self.samsa_cluster, topic)
+
+        consumer = t.subscribe('group2')
+        self.assertEquals(list(consumer), [])
