@@ -62,13 +62,13 @@ class PartitionMap(DelayedConfiguration):
         for broker in brokers:
             if broker not in self.__brokers:
                 partitionset = PartitionSet(self.cluster, self.topic, broker)
-                logging.info('Discovered new partition set: %s', partitionset)
+                logger.info('Discovered new partition set: %s', partitionset)
                 self.__brokers[broker] = partitionset
 
         # Remove any brokers that are no longer present in the mapping.
         dead = set(self.__brokers.keys()) - set(brokers)
         for broker in dead:
-            logging.info('Removing broker %s from %s', broker, self)
+            logger.info('Removing broker %s from %s', broker, self)
             del self.__brokers[broker]
 
     def __len__(self):
