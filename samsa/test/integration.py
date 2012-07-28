@@ -52,7 +52,7 @@ def write_property_file(properties):
     return file
 
 
-class Runnable(object):
+class ExternalClassRunner(object):
     args = []
     kwargs = {}
     executable = os.path.join(os.path.dirname(__file__), 'kafka-run-class.sh')
@@ -134,7 +134,7 @@ class Runnable(object):
             self.process.kill()
 
 
-class ManagedBroker(Runnable):
+class ManagedBroker(ExternalClassRunner):
     cls = 'kafka.Kafka'
 
     CONFIGURATION = {
@@ -183,7 +183,7 @@ class ManagedBroker(Runnable):
         # TODO: Remove configuration, log dir
 
 
-class ManagedProducer(Runnable):
+class ManagedProducer(ExternalClassRunner):
     cls = 'kafka.tools.ProducerShell'
     kwargs = {
         'stdout': open('/dev/null'),
@@ -210,7 +210,7 @@ class ManagedProducer(Runnable):
             '--props', self.configuration_file.name]
 
 
-class ManagedConsumer(Runnable):
+class ManagedConsumer(ExternalClassRunner):
     cls = 'kafka.tools.ConsumerShell'
     kwargs = {
         'stdout': subprocess.PIPE,
