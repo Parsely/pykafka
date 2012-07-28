@@ -68,6 +68,10 @@ def decode_message(value):
     return content
 
 def decode_messages(value):
+    """
+    For each message, yeild the (offset, msg)
+    where `offset` is the next offset, and `msg` is the current data.
+    """
     length = len(value)
     offset = value.tell()
     while offset < length:

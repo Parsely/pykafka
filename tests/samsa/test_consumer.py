@@ -118,7 +118,7 @@ class TestConsumer(KazooTestCase):
         t = Topic(self.c, 'testtopic')
 
         c = t.subscribe('group')
-        fetch.return_value = ((0, "123"),)
+        fetch.return_value = ((3, "123"),)
 
         i = list(c)
         c.commit_offsets()
