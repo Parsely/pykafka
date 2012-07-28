@@ -65,3 +65,17 @@ class StructuredBytesIO(io.BytesIO):
         payload.write(self.unframe(size, validate))
         payload.seek(0)
         return payload
+
+    def print_debug(self):
+        import string
+        offset = self.tell()
+        print ''.join([ "%02X " % ord( x ) for x in self.read()]).strip()
+        self.seek(offset)
+
+        def filt(c):
+            if ord(c) < 32 or ord(c) > 126 or c not in string.printable:
+                return '?'
+            return c
+        print '  '.join(map(filt, self.read()))
+
+        self.seek(offset)
