@@ -97,7 +97,7 @@ class TestConsumer(KazooTestCase):
         n_partitions = 10
         n_consumers = 3
         self._register_fake_brokers(n_partitions)
-        t = Topic(self.c, 'mwhooker')
+        t = Topic(self.c, 'testtopic')
 
         consumers = [t.subscribe('group1') for i in xrange(n_consumers)]
 
@@ -111,21 +111,50 @@ class TestConsumer(KazooTestCase):
         self.assertEquals(len(set(partitions)), n_partitions)
 
     @mock.patch.object(Partition, 'fetch')
-    def test_commits_offsets(self, p):
+    def test_commits_offsets(self, fetch):
         self._register_fake_brokers(1)
-        t = Topic(self.c, 'mwhooker')
+        t = Topic(self.c, 'testtopic')
 
-        consumer = t.subscribe('group')
-        p.return_value = ((0, "123"),)
+        c = t.subscribe('group')
+        fetch.return_value = ((0, "123"),)
 
-        i = list(consumer)
-        consumer.commit_offsets()
+        i = list(c)
+        c.commit_offsets()
 
         self.assertEquals(i, ['123'])
-        self.assertEquals(len(consumer.partitions), 1)
-        p = list(consumer.partitions)[0]
+        self.assertEquals(len(c.partitions), 1)
+        p = list(c.partitions)[0]
 
         self.assertEquals(p.offset, 3)
 
         d, stat = self.client.get(p.path)
         self.assertEquals(d, '3')
+
+    @mock.patch.object(Partition, 'fetch')
+    def test_consumer_remembers_offset(self, fetch):
+        topic = 'testtopic'
+        group = 'testgroup'
+        offset = 10
+
+        fake_partition = mock.Mock()
+        fake_partition.cluster = self.c
+        fake_partition.topic.name = topic
+        fake_partition.broker.id = 0
+        fake_partition.number = 0
+        fetch.return_value = ()
+
+        op = consumer.OwnedPartition(fake_partition, group)
+        op.offset = offset
+        op.commit_offset()
+
+        self._register_fake_brokers(1)
+        t = Topic(self.c, topic)
+        c = t.subscribe(group)
+
+        self.assertEquals(len(c.partitions), 1)
+        p = list(c.partitions)[0]
+        self.assertEquals(p.offset, offset)
+
+        self.assertEquals(list(p.fetch(100)), [])
+
+        fetch.assert_called_with(offset, 100)
