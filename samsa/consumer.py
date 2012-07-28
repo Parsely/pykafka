@@ -55,6 +55,7 @@ class OwnedPartition(Partition):
         messages = super(OwnedPartition, self).fetch(self.offset, size)
         last_offset = 0
         for offset, msg in messages:
+            # offset is relative to this response.
             self.offset += offset - last_offset
             last_offset = offset
             yield msg
