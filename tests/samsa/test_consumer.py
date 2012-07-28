@@ -186,6 +186,10 @@ class TestConsumerIntegration(KafkaIntegrationTestCase):
 
         polling_timeout(test, 1)
 
+        self.assertEquals(
+            [p.offset for p in consumer.partitions],
+            [len(message)]
+        )
         self.assertEquals(list(consumer), [])
 
     def test_empty_topic(self):
