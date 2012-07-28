@@ -15,6 +15,7 @@ limitations under the License.
 """
 
 import logging
+import itertools
 import os
 import subprocess
 import random
@@ -56,21 +57,28 @@ def polling_timeout(predicate, duration, interval=0.1, error='timeout exceeded')
         raise TimeoutError(error)
 
 
-@attr('integration')
-class KafkaIntegrationTestCase(unittest2.TestCase, KazooTestHarness):
-    KAFKA_BROKER_CONFIGURATION = {
-        'brokerid': 0,
-        'port': 9092,
-        'num.partitions': 1,
-        'enable.zookeeper': 'true',
-        'log.flush.interval': 1,  # commit messages as soon as possible
-    }
+def write_property_file(properties):
+    """
+    Writes a dictionary if configuration properties to a file readable
+    by Kafka.
+    """
+    file = tempfile.NamedTemporaryFile(delete=False)
+    for item in properties.iteritems():
+        file.write('%s=%s\n' % item)
+    file.close()
+    return file
+
+
+class ExternalClassRunner(object):
+    args = []
+    kwargs = {}
+    executable = os.path.join(os.path.dirname(__file__), 'kafka-run-class.sh')
 
     KAFKA_OPTIONS = {
         'heap_max': '512M',
     }
 
-    KAFKA_LOGGING_CONFIGURATION = {
+    LOGGING_CONFIGURATION = {
         'log4j.rootLogger': 'INFO, stderr',
         'log4j.appender.stderr': 'org.apache.log4j.ConsoleAppender',
         'log4j.appender.stderr.target': 'System.err',
@@ -79,161 +87,203 @@ class KafkaIntegrationTestCase(unittest2.TestCase, KazooTestHarness):
         'log4j.logger.kafka': 'INFO',
     }
 
-    def setUp(self):
-        self.setup_zookeeper()
-        self.setup_kafka_broker()
+    def __init__(self):
+        self.logging_configuration_file = \
+            write_property_file(self.LOGGING_CONFIGURATION)
 
-        self.subprocesses = []
+    def start(self):
+        args = [self.executable, self.cls] + self.args
 
-    def tearDown(self):
-        self.teardown_kafka_broker()
-        self.teardown_zookeeper()
-
-        for subprocess in self.subprocesses:
-            if subprocess.returncode is None:
-                self.clean_shutdown(subprocess)
-
-    def clean_shutdown(self, process, timeout=3):
-        logger.debug('Sending SIGTERM to %s', process)
-
-        def process_exited():
-            process.poll()
-            return process.returncode is not None
-
-        process.terminate()
-        try:
-            polling_timeout(process_exited, timeout)
-            logger.debug('%s exited cleanly', process)
-        except TimeoutError:
-            logger.info('%s did not exit within timeout, sending SIGKILL...', process)
-            process.kill()
-
-    def __run_class(self, cls, *args, **kwargs):
-        """
-        Runs the provided Kafka class in a subprocess.
-
-        Logging from the subprocess via stderr is converted into Python logging
-        statements in a separate thread of execution.
-        """
-        executable = os.path.join(os.path.dirname(__file__), 'kafka-run-class.sh')
-        args = (executable, cls) + args
-
+        kwargs = self.kwargs.copy()
         kwargs['env'] = kwargs.get('env', os.environ).copy()
         kwargs['env'].update({
             'KAFKA_OPTS': '-Xmx%(heap_max)s -server -Dlog4j.configuration=file:%(logging_config)s' % \
                 merge(self.KAFKA_OPTIONS, {
-                    'logging_config': self.__kafka_logging_configuration_file.name,
+                    'logging_config': self.logging_configuration_file.name,
                 })
         })
 
-        process = subprocess.Popen(args, stderr=subprocess.PIPE, **kwargs)
+        self.process = subprocess.Popen(args, stderr=subprocess.PIPE, **kwargs)
 
-        def convert_log_output(process, namespace):
+        def convert_log_output(namespace):
             """
             Scrapes log4j output, forwarding the log output to the corresponding
             Python logging endpoint.
             """
-            while process.returncode is None:
-                line = process.stderr.readline().strip()
+            while True:
+                line = self.process.stderr.readline().strip()
                 if not line:
                     continue
 
                 try:
                     name, level, message = (bit.strip() for bit in line.split(':', 2))
-                    logging.getLogger('%s.%s' % (namespace, name)).log(getattr(logging, level.upper()), message)
-                except ValueError:
-                    logging.getLogger('%s.raw' % namespace).warning(line)
+                    logger = logging.getLogger('%s.%s' % (namespace, name))
+                    logger.log(getattr(logging, level.upper()), message)
+                except Exception:
+                    logger = logging.getLogger('%s.raw' % namespace)
+                    logger.warning(line)
 
-        logthread = threading.Thread(target=convert_log_output,
-            args=(process, 'java.%s' % cls))
-        logthread.daemon = True  # shouldn't be necessary, but just in case
-        logthread.start()
+        self.log_thread = threading.Thread(target=convert_log_output,
+            args=('java.%s' % self.cls,))
+        self.log_thread.daemon = True  # shouldn't be necessary, but just in case
+        self.log_thread.start()
 
-        return process
+    def is_running(self):
+        if not hasattr(self, 'process'):
+            return False
 
-    def __write_property_file(self, properties):
-        """
-        Writes a dictionary if configuration properties to a file readable
-        by Kafka.
-        """
-        file = tempfile.NamedTemporaryFile(delete=False)
-        for item in properties.iteritems():
-            file.write('%s=%s\n' % item)
-        file.close()
-        return file
+        self.process.poll()
+        return self.process.returncode is None
 
-    def setup_kafka_broker(self):
-        """
-        Starts the Kafka broker.
-        """
-        self.__kafka_directory = tempfile.mkdtemp()
+    def stop(self, timeout=3):
+        if not self.is_running():
+            return
 
-        self.__kafka_logging_configuration_file = \
-            self.__write_property_file(self.KAFKA_LOGGING_CONFIGURATION)
+        logger.debug('Sending SIGTERM to %s...', self.process)
 
-        broker_configuration = merge(self.KAFKA_BROKER_CONFIGURATION, {
-            'log.dir': self.__kafka_directory,
-            'zk.connect': self.hosts,
+        self.process.terminate()
+        try:
+            polling_timeout(lambda: not self.is_running(), timeout)
+            logger.debug('%s exited cleanly', self.process)
+        except TimeoutError:
+            logger.info('%s did not exit within %s timeout, sending SIGKILL...',
+                timeout, self.process)
+            self.process.kill()
+
+
+class ManagedBroker(ExternalClassRunner):
+    cls = 'kafka.Kafka'
+
+    CONFIGURATION = {
+        'enable.zookeeper': 'true',
+        'log.flush.interval': 1,  # commit messages as soon as possible
+    }
+
+    def __init__(self, zookeeper, hosts, brokerid=0, partitions=1, port=9092):
+        super(ManagedBroker, self).__init__()
+        self.directory = tempfile.mkdtemp()
+
+        self.zookeeper = zookeeper
+        self.brokerid = brokerid
+        self.partitions = partitions
+        self.port = port
+
+        self.configuration = merge(self.CONFIGURATION, {
+            'log.dir': self.directory,
+            'zk.connect': hosts,
+            'brokerid': self.brokerid,
+            'num.partitions': self.partitions,
+            'port': self.port,
         })
-        self.__kafka_broker_configuration_file = \
-            self.__write_property_file(broker_configuration)
 
+        self.configuration_file = write_property_file(self.configuration)
+        self.args = [self.configuration_file.name]
+
+    def start(self, timeout=3):
         ready = threading.Event()
-        path = '/brokers/ids/%(brokerid)s' % broker_configuration
-        if self.client.exists(path, watch=lambda *a, **k: ready.set()) is not None:
-            raise AssertionError('Kafka broker is already running!')
+        path = '/brokers/ids/%s' % self.brokerid
+        if self.zookeeper.exists(path, watch=lambda *a, **k: ready.set()) is not None:
+            raise AssertionError('Kafka broker with broker ID %s is already running!' % self.brokerid)
 
-        logger.info('Starting Kafka broker...')
-        self.kafka_broker = self.__run_class('kafka.Kafka', self.__kafka_broker_configuration_file.name)
+        super(ManagedBroker, self).start()
 
-        timeout = 3
         for _ in xrange(0, timeout):
             if ready.is_set():
                 break
-            ready.wait(timeout=1)
+            ready.wait(1)
         else:
             raise TimeoutError('Kafka broker did not start within %s seconds' % timeout)
 
-    def teardown_kafka_broker(self):
-        """
-        Stops the Kafka broker.
-        """
+    def stop(self, *args, **kwargs):
         logger.debug('Shutting down Kafka broker...')
-        self.clean_shutdown(self.kafka_broker)
+        super(ManagedBroker, self).stop(*args, **kwargs)
+        # TODO: Remove configuration, log dir
 
-    def consumer(self, topic, group='test-consumer-group', **kwargs):
-        """
-        Returns a subprocess for a consumer shell for the given topic and
-        consumer group.
-        """
-        # TODO: Clean up after self.
-        configuration_file = self.__write_property_file({
+
+class ManagedProducer(ExternalClassRunner):
+    cls = 'kafka.tools.ProducerShell'
+    kwargs = {
+        'stdout': open('/dev/null'),
+        'stdin': subprocess.PIPE,
+    }
+
+    CONFIGURATION = {
+        'producer.type': 'sync',
+        'compression.codec': 0,
+        'serializer.class': 'kafka.serializer.StringEncoder',
+    }
+
+    def __init__(self, hosts, topic):
+        super(ManagedProducer, self).__init__()
+
+        self.hosts = hosts
+        self.topic = topic
+
+        self.configuration_file = write_property_file(merge(self.CONFIGURATION, {
             'zk.connect': self.hosts,
-            'groupid': group,
-        })
-        process = self.__run_class('kafka.tools.ConsumerShell',
-            '--topic', topic, '--props', configuration_file.name,
-            stdout=subprocess.PIPE, **kwargs)
-        self.subprocesses.append(process)
-        return process
+        }))
 
-    def producer(self, topic, **kwargs):
-        """
-        Returns a subprocess for a producer shell for the given topic.
-        """
-        # TODO: Clean up after self.
-        configuration_file = self.__write_property_file({
+        self.args = ['--topic', self.topic,
+            '--props', self.configuration_file.name]
+
+
+class ManagedConsumer(ExternalClassRunner):
+    cls = 'kafka.tools.ConsumerShell'
+    kwargs = {
+        'stdout': subprocess.PIPE,
+    }
+
+    def __init__(self, hosts, topic, group='test-consumer-group'):
+        super(ManagedConsumer, self).__init__()
+
+        self.hosts = hosts
+        self.topic = topic
+        self.group = group
+
+        self.configuration_file = write_property_file({
             'zk.connect': self.hosts,
-            'producer.type': 'sync',
-            'compression.codec': 0,
-            'serializer.class': 'kafka.serializer.StringEncoder',
+            'groupid': self.group,
         })
 
-        if 'stdout' not in kwargs:
-            kwargs['stdout'] = open('/dev/null')
+        self.args = ['--topic', self.topic,
+            '--props', self.configuration_file.name]
 
-        process = self.__run_class('kafka.tools.ProducerShell',
-            '--topic', topic, '--props', configuration_file.name,
-            **kwargs)
-        self.subprocesses.append(process)
-        return process
+@attr('integration')
+class KafkaClusterIntegrationTestCase(unittest2.TestCase, KazooTestHarness):
+    def setUp(self):
+        self.setup_zookeeper()
+        self.kafka_brokers = []
+
+        self._id_generator = itertools.count(start=0)
+        self._port_generator = itertools.count(start=9092)
+
+    def tearDown(self):
+        self.teardown_kafka_cluster()
+        self.teardown_zookeeper()
+
+    def setup_kafka_broker(self, *args, **kwargs):
+        """
+        Starts a Kafka broker with a sequence generated broker ID and port, and
+        adds it to the cluster.
+        """
+        broker = ManagedBroker(self.client, self.hosts,
+            brokerid=next(self._id_generator),
+            port=next(self._port_generator), *args, **kwargs)
+        broker.start()
+        self.kafka_brokers.append(broker)
+        return broker
+
+    def teardown_kafka_cluster(self):
+        """
+        Stops the Kafka cluster.
+        """
+        # TODO: make this mapped over a thread pool or something for speed
+        for broker in self.kafka_brokers:
+            broker.stop()
+
+
+@attr('integration')
+class KafkaIntegrationTestCase(KafkaClusterIntegrationTestCase):
+    def setUp(self):
+        super(KafkaIntegrationTestCase, self).setUp()
+        self.kafka_broker = self.setup_kafka_broker()
