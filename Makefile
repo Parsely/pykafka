@@ -14,4 +14,4 @@ integration:
 test:
 	python setup.py test
 
-.PHONY: doc unit integration test
+.PHONY: doc unit integration test lint
