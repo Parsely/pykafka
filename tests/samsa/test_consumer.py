@@ -65,19 +65,6 @@ class TestPartitionOwnerRegistry(KazooTestCase):
             set(self.partitions[1:3])
         )
 
-    def test_watch(self):
-        self.por.add(self.partitions)
-
-        por2 = consumer.PartitionOwnerRegistry(
-            self.consumer,
-            self.c,
-            self.topic,
-            'group'
-        )
-
-        self.assertEquals(self.por.get(), por2.get())
-        self.assertEquals(self.por.get(), set(self.partitions))
-
     def test_grows(self):
 
         partitions = self.por.get()
