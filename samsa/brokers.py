@@ -126,7 +126,7 @@ class Broker(DelayedConfiguration):
 
     :param cluster: The cluster this broker is associated with.
     :type cluster: :class:`samsa.cluster.Cluster`
-    :param id: Kafka broker ID
+    :param id_: Kafka broker ID
     """
     def __init__(self, cluster, id_):
         self.cluster = cluster

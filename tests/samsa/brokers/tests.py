@@ -87,7 +87,7 @@ class BrokerTest(unittest2.TestCase):
             'port': port,
         }, mock.Mock())
 
-        broker = Broker(self.cluster, id='1')
+        broker = Broker(self.cluster, id_='1')
         self.assertEqual(broker.id, 1)
         self.assertEqual(self.cluster.zookeeper.get.call_count, 0)
 
