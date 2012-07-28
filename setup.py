@@ -43,7 +43,7 @@ setup(
     name='samsa',
     version='0.1',
     author='Ted Kaemming & Matthew Hooker',
-    author_email='samsa@libralist.com',
+    author_email='samsa@librelist.com',
     url='https://github.com/disqus/samsa',
     description='Featureful Kafka client.',
     license='Apache License 2.0',
