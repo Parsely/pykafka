@@ -18,6 +18,8 @@ import mock
 
 from kazoo.testing import KazooTestCase
 
+from samsa.test.integration import KafkaIntegrationTestCase, polling_timeout
+from samsa.client import Client
 from samsa.cluster import Cluster
 from samsa.topics import Topic
 from samsa.partitions import Partition
@@ -156,5 +158,24 @@ class TestConsumer(KazooTestCase):
         self.assertEquals(p.offset, offset)
 
         self.assertEquals(list(p.fetch(100)), [])
-
         fetch.assert_called_with(offset, 100)
+
+
+class TestConsumerIntegration(KafkaIntegrationTestCase):
+
+    def setUp(self):
+        super(TestConsumerIntegration, self).setUp()
+        self.samsa_cluster = Cluster(self.client)
+        self.kafka = Client(host='localhost', port=self.kafka_broker.port)
+
+    def test_consumes(self):
+        topic = 'topic'
+        message = 'hello world'
+        self.kafka.produce(topic, 0, (message,))
+
+        t = Topic(self.samsa_cluster, topic)
+
+        consumer = t.subscribe('group2')
+
+        polling_timeout(lambda: len(list(consumer)) > 0, 1)
+        self.assertEquals(list(consumer), [message])
