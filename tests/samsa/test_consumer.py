@@ -170,8 +170,8 @@ class TestConsumerIntegration(KafkaIntegrationTestCase):
 
     def test_consumes(self):
         topic = 'topic'
-        message = 'hello world'
-        self.kafka.produce(topic, 0, (message,))
+        messages = ['hello world', 'foobar']
+        self.kafka.produce(topic, 0, messages)
 
         t = Topic(self.samsa_cluster, topic)
 
@@ -179,18 +179,21 @@ class TestConsumerIntegration(KafkaIntegrationTestCase):
 
         def test():
             try:
-                self.assertEquals(list(consumer), [message])
+                self.assertEquals(list(consumer), messages)
                 return True
             except AssertionError:
                 return False
 
         polling_timeout(test, 1)
 
-        self.assertEquals(
-            [p.offset for p in consumer.partitions],
-            [len(message)]
-        )
+        old_offset = [p.offset for p in consumer.partitions][0]
+        self.assertTrue(old_offset > 0)
         self.assertEquals(list(consumer), [])
+
+        self.kafka.produce(topic, 0, messages)
+        polling_timeout(test, 1)
+        self.assertTrue([p.offset for p in consumer.partitions][0] > old_offset)
+
 
     def test_empty_topic(self):
         topic = 'topic'
