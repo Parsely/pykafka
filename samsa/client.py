@@ -71,8 +71,9 @@ def decode_messages(value):
     length = len(value)
     offset = value.tell()
     while offset < length:
-        yield offset, decode_message(value)
+        msg = decode_message(value)
         offset = value.tell()
+        yield offset, msg
 
 
 # Client API
@@ -195,7 +196,7 @@ class Client(object):
         """
         Fetches messages from the broker on a single topic/partition.
 
-        >>> for offset, message in client.fetch('test', 0, 0, 1000): 
+        >>> for offset, message in client.fetch('test', 0, 0, 1000):
         ...     print offset, message
         0L 'hello world'
         20L 'hello world'
