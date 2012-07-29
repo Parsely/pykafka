@@ -1,0 +1,24 @@
+language: python
+python:
+  - "2.6"
+  - "2.7"
+
+notifications:
+  email:
+    - mwhooker@disqus.com
+    - ted@disqus.com
+
+before_install:
+    - sudo apt-get update >/dev/null 2>&1
+    - sudo apt-get install zookeeper 2>&1
+    - sudo apt-get install kafka 2>&1
+    - sudo apt-get install libev-dev >/dev/null 2>&1
+
+install:
+    - pip install -f http://code.google.com/p/gevent/downloads/list gevent>1.0dev >/dev/null 2>&1
+    - pip install "git+https://github.com/python-zk/kazoo.git"
+    - pip install --use-mirrors zc-zookeeper-static >/dev/null 2>&1
+    - python setup.py develop
+    - pip install --use-mirrors samsa[test]
+
+script: ZOOKEEPER_PATH=/usr/share/java KAFKA_PATH=/usr/share/java make test
