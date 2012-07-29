@@ -1,5 +1,7 @@
 # samsa
 
+> One morning, as Gregor Samsa was waking up from anxious dreams, he discovered that in bed he had been changed into a monstrous verminous bug.
+
 A cluster-aware Kafka client and routing library for Python.
 
 ## What is Kafka?
