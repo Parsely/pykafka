@@ -102,7 +102,7 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
 
         messages = list(self.kafka.fetch(topic, 0, 0, size))
         self.assertEqual(len(messages), 1)
-        self.assertEqual(messages[0][0], 0)
+        self.assertTrue(messages[0][0] > 0)
         self.assertEqual(messages[0][1], message)
 
     def test_multifetch(self):
@@ -127,7 +127,7 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
         for topic, response in zip(topics, responses):
             messages = list(response)
             self.assertEqual(len(messages), 1)
-            self.assertEqual(messages[0][0], 0)
+            self.assertTrue(messages[0][0] > 0)
             self.assertEqual(messages[0][1], message_for_topic(topic))
             num_responses += 1
 

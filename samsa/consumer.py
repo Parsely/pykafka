@@ -53,8 +53,11 @@ class OwnedPartition(Partition):
 
     def fetch(self, size):
         messages = super(OwnedPartition, self).fetch(self.offset, size)
-        for last_offset, msg in messages:
-            self.offset = last_offset + len(msg)
+        last_offset = 0
+        for offset, msg in messages:
+            # offset is relative to this response.
+            self.offset += offset - last_offset
+            last_offset = offset
             yield msg
 
     def commit_offset(self):
