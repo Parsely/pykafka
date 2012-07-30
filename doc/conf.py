@@ -16,10 +16,11 @@ limitations under the License.
 
 # -*- coding: utf-8 -*-
 import sys, os
+import samsa
 
 project = u'samsa'
 copyright = u'2012, DISQUS'
-version = release = '0.0'
+version = release = samsa.__version__
 
 extensions = ['sphinx.ext.autodoc']
 

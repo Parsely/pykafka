@@ -18,6 +18,7 @@ limitations under the License.
 import sys
 
 from setuptools import setup
+from samsa import __version__
 
 try:
     import multiprocessing
@@ -41,7 +42,7 @@ if 'nosetests' in sys.argv[1:]:
 
 setup(
     name='samsa',
-    version='0.1dev',
+    version=__version__,
     author='Ted Kaemming & Matthew Hooker',
     author_email='samsa@librelist.com',
     url='https://github.com/disqus/samsa',
