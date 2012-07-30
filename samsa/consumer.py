@@ -96,8 +96,11 @@ class PartitionOwnerRegistry(object):
         """
         :param consumer: consumer which owns these partitions.
         :type consumer: :class:`samsa.consumer.Consumer`.
+        :param cluster:
         :type cluster: :class:`samsa.cluster.Cluster`.
+        :param topic: The topic the partitions belong to.
         :type topic: :class:`samsa.topics.Topic`.
+        :param group: The group the partitions belong to.
         :type group: str.
 
         """
@@ -166,8 +169,11 @@ class Consumer(object):
 
     def __init__(self, cluster, topic, group):
         """
+        :param cluster:
         :type cluster: :class:`samsa.cluster.Cluster`.
+        :param topic: The topic to consume messages from.
         :type topic: :class:`samsa.topics.Topic`.
+        :param group: The consumer group to join.
         :type group: str.
 
         """
