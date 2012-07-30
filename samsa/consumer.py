@@ -32,8 +32,21 @@ logger = logging.getLogger(__name__)
 class PartitionOwnedException(Exception): pass
 
 class OwnedPartition(Partition):
+    """Represents a consumer group partition.
+
+    Manages offset tracking and message fetching.
+    """
 
     def __init__(self, partition, group):
+        """Initialize with a partition and consumer group.
+
+        :param partition: Partition to initialize with.
+        :type partition: :class:`samsa.partitions.Partition`.
+        :param group: Group that owns this partition.
+        :type group: str.
+
+        """
+
         super(OwnedPartition, self).__init__(
             partition.cluster, partition.topic,
             partition.broker, partition.number
@@ -52,6 +65,14 @@ class OwnedPartition(Partition):
             self.offset = 0
 
     def fetch(self, size):
+        """Fetch up to `size` bytes of new messages.
+
+        :param size: size in bytes of new messages to fetch.
+        :type size: int
+        :returns: generator -- message iterator.
+
+        """
+
         messages = super(OwnedPartition, self).fetch(self.offset, size)
         last_offset = 0
         for offset, msg in messages:
@@ -61,15 +82,26 @@ class OwnedPartition(Partition):
             yield msg
 
     def commit_offset(self):
+        """Commit current offset to zookeeper.
+        """
+
         self.cluster.zookeeper.set(self.path, str(self.offset))
 
 
 class PartitionOwnerRegistry(object):
-    """
-    Manages the Partition Owner Registry for a particular Consumer.
+    """Manages the Partition Owner Registry for a particular Consumer.
     """
 
     def __init__(self, consumer, cluster, topic, group):
+        """
+        :param consumer: consumer which owns these partitions.
+        :type consumer: :class:`samsa.consumer.Consumer`.
+        :type cluster: :class:`samsa.cluster.Cluster`.
+        :type topic: :class:`samsa.topics.Topic`.
+        :type group: str.
+
+        """
+
         self.consumer_id = str(consumer.id)
         self.cluster = cluster
         self.topic = topic
@@ -80,15 +112,32 @@ class PartitionOwnerRegistry(object):
         self._partitions = set([])
 
     def get(self):
+        """Get all owned partitions.
+        """
+
         return self._partitions
 
     def remove(self, partitions):
+        """Remove `partitions` from the registry.
+
+        :param partitions: partitions to remove.
+        :type partitions: iterable.
+
+        """
+
         for p in partitions:
             assert p in self._partitions
             self.cluster.zookeeper.delete(self._path_from_partition(p))
             self._partitions.remove(p)
 
     def add(self, partitions):
+        """Add `partitions` to the registry.
+
+        :param partitions: partitions to add.
+        :type partitions: iterable.
+
+        """
+
         for p in partitions:
             try:
                 self.cluster.zookeeper.create(
@@ -110,10 +159,19 @@ class PartitionOwnerRegistry(object):
 
 
 class Consumer(object):
+    """Primary API for consuming kazoo messages as a group.
+    """
 
     MAX_RETRIES = 5
 
     def __init__(self, cluster, topic, group):
+        """
+        :type cluster: :class:`samsa.cluster.Cluster`.
+        :type topic: :class:`samsa.topics.Topic`.
+        :type group: str.
+
+        """
+
         self.cluster = cluster
         self.topic = topic
         self.group = group
@@ -133,8 +191,7 @@ class Consumer(object):
         self._rebalance()
 
     def _rebalance(self, event=None):
-        """
-        Joins a consumer group and claims partitions.
+        """Joins a consumer group and claims partitions.
         """
 
         logger.info('Rebalancing consumer %s for topic %s.' % (
@@ -192,7 +249,7 @@ class Consumer(object):
         # 9. add newly assigned partitions to the partition owner registry
         for i in xrange(self.MAX_RETRIES):
             try:
-                # self.partitions will always reflect the most current view of
+                # N.B. self.partitions will always reflect the most current view of
                 # owned partitions. Therefor retrying this method will progress.
                 self.partition_owner_registry.add(
                     new_partitions - self.partitions
@@ -208,8 +265,7 @@ class Consumer(object):
 
 
     def __iter__(self):
-        """
-        Returns an iterator of messages.
+        """Returns an iterator of messages.
         """
 
         # fetch size is the kafka default.
@@ -221,8 +277,8 @@ class Consumer(object):
         )
 
     def commit_offsets(self):
+        """Commit the offsets of all messages consumed so far.
         """
-        Commit the offsets of all messages consumed so far.
-        """
+
         for partition in self.partitions:
             partition.commit_offset()
