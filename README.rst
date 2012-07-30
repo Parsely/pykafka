@@ -50,6 +50,7 @@ Creating a Cluster
 ==================
 
 ::
+
     >>> from kazoo.client import KazooClient
     >>> from samsa.cluster import Cluster
     >>> zookeeper = KazooClient()
@@ -62,6 +63,7 @@ Brokers
 To list all of the brokers by their broker ID within the cluster:
 
 ::
+
     >>> print cluster.brokers.keys()
     [0, 1]
 
