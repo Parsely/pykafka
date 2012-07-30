@@ -225,6 +225,4 @@ class Consumer(object):
         Commit the offsets of all messages consumed so far.
         """
         for partition in self.partitions:
-            # TODO: I want self.partitions to hold the data necessary for
-            # persisting offsets.
             partition.commit_offset()
