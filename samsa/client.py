@@ -15,11 +15,159 @@ limitations under the License.
 """
 
 import socket
+import struct
 from zlib import crc32
 
 from samsa.exceptions import ERROR_CODES
 from samsa.utils import attribute_repr
+from samsa.utils.namedstruct import NamedStruct
 from samsa.utils.structuredio import StructuredBytesIO
+
+
+# Socket Utilities
+
+def recvall_into(socket, bytea):
+    """
+    Reads enough data from the socket to fill the provided bytearray (modifies
+    in-place.)
+
+    This is basically a hack around the fact that ``socket.recv_into`` doesn't
+    allow buffer offsets.
+
+    :type socket: :class:`socket.Socket`
+    :type bytea: ``bytearray``
+    :rtype: ``bytearray``
+    """
+    offset = 0
+    size = len(bytea)
+    while offset < size:
+        remaining = size - offset
+        chunk = socket.recv(remaining)
+        bytea[offset:(offset+len(chunk))] = chunk
+        offset += len(chunk)
+    return bytea
+
+
+def recv_struct(socket, struct):
+    """
+    Reads enough data from the socket to unpack the given struct.
+
+    :type socket: :class:`socket.Socket`
+    :type struct: :class:`struct.Struct`
+    :rtype: ``tuple``
+    """
+    bytea = bytearray(struct.size)
+    recvall_into(socket, bytea)
+    return struct.unpack_from(buffer(bytea))
+
+
+def recv_framed(socket, framestruct):
+    """
+    :type socket: :class:`socket.Socket`
+    :type frame: :class:`struct.Struct`
+    :rtype: ``bytearray``
+    """
+    (size,) = recv_struct(socket, framestruct)
+    return recvall_into(socket, bytearray(size))
+
+
+# Message Decoding
+
+MessageSetHeader = NamedStruct('MessageSetHeader', (
+    ('i', 'length'),
+    ('h', 'error'),
+))
+
+def decode_message_sets(payload, from_offsets):
+    offset = 0
+    for from_offset in from_offsets:
+        (length,) = ResponseFrameHeader.unpack_from(payload, offset=offset)
+        header = ResponseErrorHeader.unpack_from(payload, offset=offset + ResponseFrameHeader.size)
+        if header.error:
+            error_class = ERROR_CODES.get(header.error, -1)
+            raise error_class(error_class.reason)
+        message_set_payload = buffer(payload, 
+            offset + (ResponseFrameHeader.size + ResponseErrorHeader.size),
+            length - ResponseErrorHeader.size)
+        yield decode_messages(message_set_payload, from_offset)
+        offset += length + ResponseFrameHeader.size
+
+def decode_messages(payload, from_offset):
+    """
+    Decodes ``Message`` objects from a ``payload`` buffer.
+    """
+    offset = 0
+    while offset < len(payload):
+        header = Message.Header.unpack_from(payload, offset)
+        length = 4 + header.length
+        yield Message(raw=buffer(payload, offset, length), offset=from_offset + offset)
+        offset += length
+
+
+class Message(object):
+    __slots__ = ('_headers', 'raw', 'offset')
+
+    Header = NamedStruct('Header', (
+        ('i', 'length'),
+        ('b', 'magic'),
+    ))
+
+    VersionHeaders = {
+        0: NamedStruct('Header', (
+            ('i', 'checksum'),
+        )),
+        1: NamedStruct('HeaderWithCompression', (
+            ('b', 'compression'),
+            ('i', 'checksum'),
+        )),
+    }
+
+    def __init__(self, raw, offset=0):
+        self.raw = raw
+        self.offset = offset
+
+        self._headers = []
+        header = self.Header.unpack_from(self.raw)
+        self._headers.append(header)
+
+        versioned_header = self.VersionHeaders[header.magic].unpack_from(self.raw, offset=self.Header.size)
+        self._headers.append(versioned_header)
+
+    __repr__ = attribute_repr('raw', 'offset')
+
+    def __len__(self):
+        return len(self.raw)
+
+    def __str__(self):
+        return str(self.payload)
+
+    def __getitem__(self, name):
+        for header in self._headers:
+            try:
+                return getattr(header, name)
+            except AttributeError:
+                pass
+        else:
+            raise AttributeError('%s does not have a field named "%s".' % (repr(self), name))
+
+    def get(self, name, default=None):
+        try:
+            return self[name]
+        except AttributeError:
+            return default
+
+    @property
+    def next_offset(self):
+        return self.offset + len(self)
+
+    @property
+    def payload(self):
+        start = self.Header.size + self.VersionHeaders[self['magic']].size
+        return self.raw[start:]
+
+    def validate(self):
+        if self['checksum'] != crc32(self.payload):
+            raise ValueError('invalid checksum')
 
 
 (REQUEST_TYPE_PRODUCE, REQUEST_TYPE_FETCH, REQUEST_TYPE_MULTIFETCH,
@@ -48,39 +196,21 @@ def encode_messages(messages):
         payload.write(encode_message(message))
     return payload.wrap(4)
 
-def decode_message(value):
-    payload = value.unwrap(4)
-    magic = payload.unpack(1)
-    if magic == 0:
-        compression = None
-    elif magic == 1:
-        compression = payload.unpack(1)
-    else:
-        raise ValueError('Message is of an unknown version or corrupt')
-
-    if compression:
-        raise NotImplementedError  # TODO: Implement compression.
-
-    crc = payload.unpack(4)
-    content = payload.read()
-    if crc != crc32(content):
-        raise ValueError('Message failed CRC check')
-    return content
-
-def decode_messages(value):
-    """
-    For each message, yeild the (offset, msg)
-    where `offset` is the next offset, and `msg` is the current data.
-    """
-    length = len(value)
-    offset = value.tell()
-    while offset < length:
-        msg = decode_message(value)
-        offset = value.tell()
-        yield offset, msg
-
 
 # Client API
+
+ResponseFrameHeader = struct.Struct('!i')
+ResponseErrorHeader = NamedStruct('ResponseErrorHeader', (
+    ('h', 'error'),
+))
+
+OffsetsResponseHeader = NamedStruct('OffsetsResponseHeader', (
+    ('i', 'count'),
+))
+
+Offset = NamedStruct('Offset', (
+    ('q', 'value'),
+))
 
 class Client(object):
     """
@@ -126,7 +256,7 @@ class Client(object):
             self._socket = None
 
     def reconnect(self):
-        self.close()
+        self.disconnect()
         self.connect()
 
     def request(self, request):
@@ -134,22 +264,12 @@ class Client(object):
         return self.socket.sendall(str(request.wrap(4)))
 
     def response(self):
-        # TODO: Read this to a buffered stream instead.
-        length = self.recvall(4).unpack(4)
-        response = self.recvall(length)
-        error = response.unpack(2)
-        if error != 0:
-            exception_class = ERROR_CODES.get(error, -1)
+        response = recv_framed(self.socket, ResponseFrameHeader)
+        header = ResponseErrorHeader.unpack_from(buffer(response))
+        if header.error:
+            exception_class = ERROR_CODES.get(header.error, -1)
             raise exception_class  # TODO: Add better error messaging.
-        return StructuredBytesIO(response.read())
-
-    def recvall(self, size):
-        # TODO: Retry/reconnect on failure?
-        response = StructuredBytesIO()
-        while len(response) < size:  # O(1) because this is actually a string
-            response.write(self.socket.recv(size - len(response)))
-        response.seek(0)
-        return response
+        return buffer(response, ResponseErrorHeader.size)
 
     # Protocol Implementation
 
@@ -219,8 +339,8 @@ class Client(object):
         request.pack(8, offset)
         request.pack(4, size)
         self.request(request)
-        response = self.response()
-        return decode_messages(response)
+
+        return decode_messages(self.response(), from_offset=offset)
 
     def multifetch(self, data):
         """
@@ -247,9 +367,11 @@ class Client(object):
             For more information, see :meth:`Client.fetch`.
         """
         payloads = []
+        from_offsets = []
         for topic, partition, offset, size in data:
             payload = StructuredBytesIO()
             write_request_header(payload, topic, partition)
+            from_offsets.append(offset)
             payload.pack(8, offset)
             payload.pack(4, size)
             payloads.append(payload)
@@ -260,17 +382,7 @@ class Client(object):
         for payload in payloads:
             request.write(payload)
         self.request(request)
-        response = self.response()
-
-        while response.tell() < len(response):
-            # TODO: Extract out fetch response processing into something reusable.
-            size = response.unpack(4)
-            error = response.unpack(2)
-            if error != 0:
-                raise NotImplementedError  # TODO
-            content = response.read(size - 2)
-            block = StructuredBytesIO(content)
-            yield decode_messages(block)
+        return decode_message_sets(self.response(), from_offsets)
 
     def offsets(self, topic, partition, time, max):
         """
@@ -293,9 +405,10 @@ class Client(object):
         request.pack(8, time)
         request.pack(4, max)
         self.request(request)
-
         response = self.response()
+        (count,) = OffsetsResponseHeader.unpack_from(response)
         offsets = []
-        for i in xrange(0, response.unpack(4)):
-            offsets.append(response.unpack(8))
+        for i in xrange(0, count):
+            offsets.append(Offset.unpack_from(response,
+                offset=OffsetsResponseHeader.size + (i * Offset.size)).value)
         return offsets
