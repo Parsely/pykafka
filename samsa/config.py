@@ -8,17 +8,12 @@ class Config(object):
         """Update cls attrs with kwargs and return the resulting dict.
         """
 
-        """
         config = {}
+
         for i in cls.__dict__:
             if not i.startswith('__'):
-                if i in kwargs:
-                    config[i] = kwargs[i]
-                else:
-                    config[i] = getattr(cls, i)
-        """
-        config = itertools.ifilterfalse(lambda i: i.startswith('__'), cls.__dict__)
-        config = dict(itertools.imap(lambda k: (k, getattr(cls, k)), config))
+                config[i] = getattr(cls, i)
+
         for k in kwargs:
             if validate and k not in cls.__dict__:
                 raise AttributeError("%s not in %s." % (k, cls.__name__))
