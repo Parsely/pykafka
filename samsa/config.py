@@ -1,7 +1,7 @@
 class Config(object):
 
     @classmethod
-    def build(cls, kwargs, validate=True):
+    def build(cls, kwargs=None, validate=True):
         """Update cls attrs with kwargs and return the resulting dict.
         """
 
@@ -11,7 +11,7 @@ class Config(object):
             if not i.startswith('__'):
                 config[i] = getattr(cls, i)
 
-        for k in kwargs:
+        for k in kwargs or []:
             if validate and k not in cls.__dict__:
                 raise AttributeError("%s not in %s." % (k, cls.__name__))
             config[k] = kwargs[k]
@@ -48,7 +48,7 @@ class ConsumerConfig(Config):
     largest : automatically reset the offset to the largest offset available on the broker.
     anything else: throw an exception to the consumer.
     """
-    autooffset_reset = 'smallest '
+    autooffset_reset = 'smallest'
 
     # By default, this value is -1 and a consumer blocks indefinitely if no new message is available for consumption. By setting the value to a positive integer, a timeout exception is thrown to the consumer if no message is available for consumption after the specified timeout value.
     consumer_timeout_ms = -1 

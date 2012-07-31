@@ -23,8 +23,9 @@ from kazoo.exceptions import NodeExistsException, NoNodeException
 from functools import partial
 from uuid import uuid4
 
-from samsa.partitions import Partition
+from samsa.config import ConsumerConfig
 from samsa.exceptions import ImproperlyConfigured
+from samsa.partitions import Partition
 
 logger = logging.getLogger(__name__)
 
@@ -165,8 +166,6 @@ class Consumer(object):
     """Primary API for consuming kazoo messages as a group.
     """
 
-    MAX_RETRIES = 5
-
     def __init__(self, cluster, topic, group):
         """
         :param cluster:
@@ -178,6 +177,7 @@ class Consumer(object):
 
         """
 
+        self.config = ConsumerConfig().build()
         self.cluster = cluster
         self.topic = topic
         self.group = group
@@ -253,7 +253,7 @@ class Consumer(object):
         )
 
         # 9. add newly assigned partitions to the partition owner registry
-        for i in xrange(self.MAX_RETRIES):
+        for i in xrange(self.config['rebalance_retries_max']):
             try:
                 # N.B. self.partitions will always reflect the most current view of
                 # owned partitions. Therefor retrying this method will progress.
@@ -277,7 +277,7 @@ class Consumer(object):
         # fetch size is the kafka default.
         return itertools.chain.from_iterable(
                 itertools.imap(
-                lambda p: p.fetch(300 * 1024),
+                lambda p: p.fetch(self.config['fetch_size']),
                 self.partitions
             )
         )
