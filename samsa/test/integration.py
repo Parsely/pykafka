@@ -267,7 +267,7 @@ class KafkaClusterIntegrationTestCase(unittest2.TestCase, KazooTestHarness):
         self.kafka_brokers = []
 
         self._id_generator = itertools.count(0)
-        self._port_generator = itertools.ifilter(is_port_available, itertools.count(start=9092))
+        self._port_generator = itertools.ifilter(is_port_available, itertools.count(9092))
 
     def tearDown(self):
         self.teardown_kafka_cluster()
