@@ -17,13 +17,15 @@ limitations under the License.
 
 import sys
 
-from setuptools import setup
+from setuptools import setup, find_packages
+
 from samsa import __version__
 
 try:
     import multiprocessing
 except ImportError:
     pass
+
 
 install_requires = [
     'zc-zookeeper-static',
@@ -48,7 +50,7 @@ setup(
     url='https://github.com/disqus/samsa',
     description='Featureful Kafka client.',
     license='Apache License 2.0',
-    packages=('samsa',),
+    packages=find_packages(),
     install_requires=install_requires,
     tests_require=tests_require,
     setup_requires=setup_requires,
