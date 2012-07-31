@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import errno
 import itertools
 import logging
 import os
@@ -40,7 +41,7 @@ def is_port_available(port):
         s.close()
         return False
     except IOError, err:
-        return err.errno == 61
+        return err.errno == errno.ECONNREFUSED
 
 
 def merge(*dicts):
