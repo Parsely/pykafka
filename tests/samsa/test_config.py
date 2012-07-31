@@ -6,7 +6,7 @@ from samsa.config import ConsumerConfig
 class Configured(object):
 
     def __init__(self, **kwargs):
-        self.config = ConsumerConfig.init(kwargs)
+        self.config = ConsumerConfig.build(kwargs)
 
 
 class TestConfig(TestCase):

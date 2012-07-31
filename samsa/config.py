@@ -1,7 +1,7 @@
 class Config(object):
 
     @classmethod
-    def init(cls, kwargs):
+    def build(cls, kwargs):
         """Update cls attrs with kwargs and return the resulting dict.
         """
 
