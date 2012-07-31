@@ -14,9 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import errno
 import itertools
 import logging
 import os
+import socket
 import subprocess
 import tempfile
 import threading
@@ -28,6 +30,18 @@ from nose.plugins.attrib import attr
 
 
 logger = logging.getLogger(__name__)
+
+
+def is_port_available(port):
+    """
+    Checks to see if the local port is available for use.
+    """
+    try:
+        s = socket.create_connection(('localhost', port))
+        s.close()
+        return False
+    except IOError, err:
+        return err.errno == errno.ECONNREFUSED
 
 
 def merge(*dicts):
@@ -253,7 +267,7 @@ class KafkaClusterIntegrationTestCase(unittest2.TestCase, KazooTestHarness):
         self.kafka_brokers = []
 
         self._id_generator = itertools.count(start=0)
-        self._port_generator = itertools.count(start=9092)
+        self._port_generator = itertools.ifilter(is_port_available, itertools.count(start=9092))
 
     def tearDown(self):
         self.teardown_kafka_cluster()
