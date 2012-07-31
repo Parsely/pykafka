@@ -18,5 +18,9 @@ class TestConfig(TestCase):
 
     def test_override(self):
 
-        obj = Configured(autocommit_interval_ms=False)
-        self.assertFalse(obj.config['autocommit_interval_ms'])
+        obj = Configured(autocommit_enable=False)
+        self.assertFalse(obj.config['autocommit_enable'])
+
+    def test_raises(self):
+
+        self.assertRaises(AttributeError, Configured, foo='bar')

@@ -1,10 +1,14 @@
+import itertools
+
+
 class Config(object):
 
     @classmethod
-    def build(cls, kwargs):
+    def build(cls, kwargs, validate=True):
         """Update cls attrs with kwargs and return the resulting dict.
         """
 
+        """
         config = {}
         for i in cls.__dict__:
             if not i.startswith('__'):
@@ -12,6 +16,14 @@ class Config(object):
                     config[i] = kwargs[i]
                 else:
                     config[i] = getattr(cls, i)
+        """
+        config = itertools.ifilterfalse(lambda i: i.startswith('__'), cls.__dict__)
+        config = dict(itertools.imap(lambda k: (k, getattr(cls, k)), config))
+        for k in kwargs:
+            if validate and k not in cls.__dict__:
+                raise AttributeError("%s not in %s." % (k, cls.__name__))
+            config[k] = kwargs[k]
+
 
         return config
 
