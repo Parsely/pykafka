@@ -1,6 +1,3 @@
-import itertools
-
-
 class Config(object):
 
     @classmethod
