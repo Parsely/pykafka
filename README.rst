@@ -7,9 +7,9 @@ samsa
 
 Samsa is a cluster-aware Kafka protocol client and routing library for Python.
 
-******
-Basics
-******
+************
+Introduction
+************
 
 What is Kafka?
 ==============
@@ -27,8 +27,8 @@ The clients of a Kafka cluster are generally split into two different categories
 * Producer
 * Consumer
 
-Goals
-=====
+Goals of this Project
+=====================
 
 * Your application code should not be dependent on broker state or Kafka cluster
   configuration. The only service that it should know about directly is the
@@ -42,9 +42,9 @@ Guarantees
 * Every publish will be written to (at least) one node, as long as a node is up
   to accept the write.
 
-*****
-Usage
-*****
+**********************
+Usage and API Overview
+**********************
 
 Creating a Cluster
 ==================
