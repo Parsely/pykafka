@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import contextlib
 import time
 
 from samsa.client import Client, Message, OFFSET_EARLIEST, OFFSET_LATEST
@@ -52,6 +53,20 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
     def setUp(self):
         super(ClientIntegrationTestCase, self).setUp()
         self.kafka = Client(host='localhost', port=self.kafka_broker.port)
+
+    def assertPassesWithMultipleAttempts(self, fn, attempts, timeout=1, backoff=None):
+        if backoff is None:
+            backoff = lambda attempt, timeout: timeout
+
+        for attempt in xrange(1, attempts + 1):
+            try:
+                fn()
+                break
+            except AssertionError:
+                if attempt < attempts:
+                    time.sleep(backoff(attempt, timeout))
+                else:
+                    raise
 
     def test_produce(self):
         topic = 'topic'
@@ -98,47 +113,36 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
         producer.start()
         producer.publish([payload])
 
-        attempts = 5  # retry until passing, allowing for some latency
-        for i in xrange(1, attempts + 1):
+        def ensure_valid_response():
+            messages = list(self.kafka.fetch(topic, 0, 0, size))
+            self.assertEqual(len(messages), 1)
+
+            message = messages[0]
+            self.assertIsInstance(message, Message)
+            self.assertEqual(message.offset, 0)
+            self.assertEqual(message.next_offset, len(message))
+            self.assertEqual(message.payload, payload)
+            self.assertEqual(message['compression'], 0)
             try:
-                messages = list(self.kafka.fetch(topic, 0, 0, size))
-                self.assertEqual(len(messages), 1)
-                break
-            except AssertionError:
-                if i < attempts:
-                    time.sleep(1)
-                else:
-                    raise
+                message.validate()
+            except Exception, exc:
+                self.fail('Message should pass checksum validation, instead got %s' % exc)
 
-        message = messages[0]
-        self.assertIsInstance(message, Message)
-        self.assertEqual(message.offset, 0)
-        self.assertEqual(message.next_offset, len(message))
-        self.assertEqual(message.payload, payload)
-        self.assertEqual(message['compression'], 0)
-        try:
-            message.validate()
-        except Exception, exc:
-            self.fail('Message should pass checksum validation, instead got %s' % exc)
+            self.offset = message.next_offset
 
-        offset = message.next_offset
+        self.assertPassesWithMultipleAttempts(ensure_valid_response, 5)
+
         payloads = ['hello', 'world']
         producer.publish(payloads)
 
-        attempts = 5
-        for i in xrange(1, attempts + 1):
-            try:
-                messages = list(self.kafka.fetch(topic, 0, offset, size))
-                self.assertEqual(len(messages), 2)
-                self.assertTrue(all(isinstance(m, Message) for m in messages))
-                self.assertEqual([m.payload for m in messages], payloads)
-                self.assertEqual(messages[0].offset, offset)
-                break
-            except AssertionError:
-                if i < attempts:
-                    time.sleep(1)
-                else:
-                    raise
+        def ensure_valid_response():
+            messages = list(self.kafka.fetch(topic, 0, self.offset, size))
+            self.assertEqual(len(messages), 2)
+            self.assertTrue(all(isinstance(m, Message) for m in messages))
+            self.assertEqual([m.payload for m in messages], payloads)
+            self.assertEqual(messages[0].offset, self.offset)
+
+        self.assertPassesWithMultipleAttempts(ensure_valid_response, 5)
 
         producer.stop()
 
@@ -157,47 +161,53 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
             producer.publish([payload_for_topic(topic)])
             producers[topic] = producer
 
-        batches = [(topic, 0, 0, size) for topic in topics]
-        responses = self.kafka.multifetch(batches)
+        def ensure_valid_response():
+            batches = [(topic, 0, 0, size) for topic in topics]
+            responses = self.kafka.multifetch(batches)
 
-        next_offsets = {}
-        num_responses = 0
-        for topic, response in zip(topics, responses):
-            messages = list(response)
-            self.assertEqual(len(messages), 1)
+            self.next_offsets = {}
+            num_responses = 0
+            for topic, response in zip(topics, responses):
+                messages = list(response)
+                self.assertEqual(len(messages), 1)
 
-            message = messages[0]
-            self.assertIsInstance(message, Message)
-            self.assertEqual(message.offset, 0)
-            self.assertEqual(message.next_offset, len(message))
-            next_offsets[topic] = message.next_offset
-            self.assertEqual(message.payload, payload_for_topic(topic))
-            self.assertEqual(message['compression'], 0)
-            try:
-                message.validate()
-            except Exception, exc:
-                self.fail('Message should pass checksum validation, instead got %s' % exc)
+                message = messages[0]
+                self.assertIsInstance(message, Message)
+                self.assertEqual(message.offset, 0)
+                self.assertEqual(message.next_offset, len(message))
+                self.next_offsets[topic] = message.next_offset
+                self.assertEqual(message.payload, payload_for_topic(topic))
+                self.assertEqual(message['compression'], 0)
+                try:
+                    message.validate()
+                except Exception, exc:
+                    self.fail('Message should pass checksum validation, instead got %s' % exc)
 
-            num_responses += 1
+                num_responses += 1
 
-        self.assertEqual(len(batches), num_responses)
+            self.assertEqual(len(batches), num_responses)
+
+        self.assertPassesWithMultipleAttempts(ensure_valid_response, 5)
 
         batches = []
         num_messages = 2
         for topic, producer in producers.items():
             payloads = [payload_for_topic(topic)] * num_messages
             producer.publish(payloads)
-            batches.append((topic, 0, next_offsets[topic], size))
+            batches.append((topic, 0, self.next_offsets[topic], size))
 
-        responses = self.kafka.multifetch(batches)
-        for topic, response in zip(topics, responses):
-            messages = list(response)
-            self.assertEqual(len(messages), num_messages)
+        def ensure_valid_response():
+            responses = self.kafka.multifetch(batches)
+            for topic, response in zip(topics, responses):
+                messages = list(response)
+                self.assertEqual(len(messages), num_messages)
 
-            message = messages[0]
-            self.assertEqual(message.offset, next_offsets[topic])
-            self.assertEqual([m.payload for m in messages],
-                [payload_for_topic(topic)] * num_messages)
+                message = messages[0]
+                self.assertEqual(message.offset, self.next_offsets[topic])
+                self.assertEqual([m.payload for m in messages],
+                    [payload_for_topic(topic)] * num_messages)
+
+        self.assertPassesWithMultipleAttempts(ensure_valid_response, 5)
 
         for producer in producers.values():
             producer.stop()  # todo: thread pooling or something
