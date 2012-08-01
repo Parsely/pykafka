@@ -7,12 +7,12 @@ notifications:
   email:
     - mwhooker@disqus.com
     - ted@disqus.com
+  irc: "irc.freenode.org#samsa"
 
 before_install:
-    - sudo apt-get update >/dev/null 2>&1
-    - sudo apt-get install zookeeper 2>&1
+    - sudo apt-get update -qq
+    - sudo apt-get install -qq zookeeper libev-dev
     - sudo apt-get install kafka 2>&1
-    - sudo apt-get install libev-dev >/dev/null 2>&1
 
 install:
     - pip install -f http://code.google.com/p/gevent/downloads/list gevent>1.0dev >/dev/null 2>&1
@@ -21,4 +21,6 @@ install:
     - python setup.py develop
     - pip install --use-mirrors samsa[test]
 
-script: ZOOKEEPER_PATH=/usr/share/java KAFKA_PATH=/usr/share/java make test
+env: ZOOKEEPER_PATH=/usr/share/java KAFKA_PATH=/usr/share/java
+
+script: make test
