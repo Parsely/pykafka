@@ -260,7 +260,7 @@ class Consumer(object):
                 break
             except PartitionOwnedException, e:
                 logger.debug("Someone still owns partition %s. Retrying" %
-                        str(e.message))
+                        e)
                 time.sleep(i ** 2)
                 continue
         else:
