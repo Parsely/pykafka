@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import time
+
 from samsa.client import Client, Message, OFFSET_EARLIEST, OFFSET_LATEST
 from samsa.test.integration import (KafkaIntegrationTestCase,
     ManagedConsumer, ManagedProducer)
@@ -96,8 +98,17 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
         producer.start()
         producer.publish([payload])
 
-        messages = list(self.kafka.fetch(topic, 0, 0, size))
-        self.assertEqual(len(messages), 1)
+        attempts = 5  # retry until passing, allowing for some latency
+        for i in xrange(1, attempts + 1):
+            try:
+                messages = list(self.kafka.fetch(topic, 0, 0, size))
+                self.assertEqual(len(messages), 1)
+                break
+            except AssertionError:
+                if i < attempts:
+                    time.sleep(1)
+                else:
+                    raise
 
         message = messages[0]
         self.assertIsInstance(message, Message)
@@ -114,11 +125,20 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
         payloads = ['hello', 'world']
         producer.publish(payloads)
 
-        messages = list(self.kafka.fetch(topic, 0, offset, size))
-        self.assertEqual(len(messages), 2)
-        self.assertTrue(all(isinstance(m, Message) for m in messages))
-        self.assertEqual([m.payload for m in messages], payloads)
-        self.assertEqual(messages[0].offset, offset)
+        attempts = 5
+        for i in xrange(1, attempts + 1):
+            try:
+                messages = list(self.kafka.fetch(topic, 0, offset, size))
+                self.assertEqual(len(messages), 2)
+                self.assertTrue(all(isinstance(m, Message) for m in messages))
+                self.assertEqual([m.payload for m in messages], payloads)
+                self.assertEqual(messages[0].offset, offset)
+                break
+            except AssertionError:
+                if i < attempts:
+                    time.sleep(1)
+                else:
+                    raise
 
         producer.stop()
 

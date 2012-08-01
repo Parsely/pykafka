@@ -253,7 +253,6 @@ class ManagedProducer(ExternalClassRunner):
         for message in messages:
             stream.write('%s\n' % message)
         stream.flush()
-        time.sleep(1)  # TODO: Not this
 
 
 class ManagedConsumer(ExternalClassRunner):
