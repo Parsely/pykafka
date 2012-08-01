@@ -1,4 +1,4 @@
-"""
+__license__ = """
 Copyright 2012 DISQUS
 
 Licensed under the Apache License, Version 2.0 (the "License");
