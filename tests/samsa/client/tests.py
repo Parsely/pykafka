@@ -134,14 +134,14 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
         payloads = ['hello', 'world']
         producer.publish(payloads)
 
-        def ensure_valid_response():
+        def ensure_valid_response_again():
             messages = list(self.kafka.fetch(topic, 0, self.offset, size))
             self.assertEqual(len(messages), 2)
             self.assertTrue(all(isinstance(m, Message) for m in messages))
             self.assertEqual([m.payload for m in messages], payloads)
             self.assertEqual(messages[0].offset, self.offset)
 
-        self.assertPassesWithMultipleAttempts(ensure_valid_response, 5)
+        self.assertPassesWithMultipleAttempts(ensure_valid_response_again, 5)
 
         producer.stop()
 
@@ -195,7 +195,7 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
             producer.publish(payloads)
             batches.append((topic, 0, self.next_offsets[topic], size))
 
-        def ensure_valid_response():
+        def ensure_valid_response_again():
             responses = self.kafka.multifetch(batches)
             for topic, response in zip(topics, responses):
                 messages = list(response)
@@ -206,7 +206,7 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
                 self.assertEqual([m.payload for m in messages],
                     [payload_for_topic(topic)] * num_messages)
 
-        self.assertPassesWithMultipleAttempts(ensure_valid_response, 5)
+        self.assertPassesWithMultipleAttempts(ensure_valid_response_again, 5)
 
         for producer in producers.values():
             producer.stop()  # todo: thread pooling or something
