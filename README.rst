@@ -98,7 +98,7 @@ a ``Topic`` instances's ``publish`` method::
     >>> topic.publish('hello world')
     >>> topic.publish(['hello', 'world'])
 
-If a list of message is provided, all messages will be delivered to the same
+If a list of messages is provided, all messages will be delivered to the same
 partition, in order, on the same broker. Individual messages hold no such
 guarantee, and are subject to end up on any number of hosts as determined by
 the partitioning method, and can be distributed across a number of partitions,

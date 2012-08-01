@@ -1,5 +1,14 @@
 .. include:: introduction.rst
 
+*******
+Testing
+*******
+
+.. toctree::
+   :maxdepth: 2
+
+   testing
+
 *****************
 API Documentation
 *****************
