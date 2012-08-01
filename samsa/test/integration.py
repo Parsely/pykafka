@@ -87,6 +87,8 @@ class ExternalClassRunner(object):
     kwargs = {}
     executable = os.path.join(os.path.dirname(__file__), 'kafka-run-class.sh')
 
+    stop_timeout = 3
+
     KAFKA_OPTIONS = {
         'heap_max': '512M',
     }
@@ -148,9 +150,12 @@ class ExternalClassRunner(object):
         self.process.poll()
         return self.process.returncode is None
 
-    def stop(self, timeout=3):
+    def stop(self, timeout=None):
         if not self.is_running():
             return
+
+        if timeout is None:
+            timeout = self.stop_timeout
 
         logger.debug('Sending SIGTERM to %s...', self.process)
 
@@ -166,6 +171,8 @@ class ExternalClassRunner(object):
 
 class ManagedBroker(ExternalClassRunner):
     cls = 'kafka.Kafka'
+
+    start_timeout = int(os.environ.get('KAFKA_START_TIMEOUT', 3))
 
     CONFIGURATION = {
         'enable.zookeeper': 'true',
@@ -192,7 +199,10 @@ class ManagedBroker(ExternalClassRunner):
         self.configuration_file = write_property_file(self.configuration)
         self.args = [self.configuration_file.name]
 
-    def start(self, timeout=3):
+    def start(self, timeout=None):
+        if timeout is None:
+            timeout = self.start_timeout
+
         ready = threading.Event()
         path = '/brokers/ids/%s' % self.brokerid
         if self.zookeeper.exists(path, watch=lambda *a, **k: ready.set()) is not None:
