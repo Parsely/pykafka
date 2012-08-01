@@ -248,6 +248,13 @@ class ManagedProducer(ExternalClassRunner):
         self.args = ['--topic', self.topic,
             '--props', self.configuration_file.name]
 
+    def publish(self, messages):
+        stream = self.process.stdin
+        for message in messages:
+            stream.write('%s\n' % message)
+        stream.flush()
+        time.sleep(1)  # TODO: Not this
+
 
 class ManagedConsumer(ExternalClassRunner):
     cls = 'kafka.tools.ConsumerShell'
