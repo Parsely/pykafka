@@ -133,7 +133,10 @@ class TestConsumer(KazooTestCase):
         t = Topic(self.c, 'testtopic')
 
         c = t.subscribe('group')
-        fetch.return_value = ((3, "123"),)
+        msg = mock.Mock()
+        msg.next_offset = 3
+        msg.payload = '123'
+        fetch.return_value = [msg]
 
         i = list(c)
         c.commit_offsets()
