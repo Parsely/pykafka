@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 class PartitionOwnedException(Exception): pass
 
 class OwnedPartition(Partition):
-    """Represents a consumer group partition.
+    """Represents a partition as a consumer group sees it.
 
     Manages offset tracking and message fetching.
     """
