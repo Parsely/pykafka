@@ -27,6 +27,8 @@ from samsa import consumer
 
 
 class TestPartitionOwnerRegistry(KazooTestCase):
+    """Test the methods of :class:`samsa.consumer.PartitionOwnerRegistry`.
+    """
 
     def setUp(self):
         super(TestPartitionOwnerRegistry, self).setUp()
@@ -48,6 +50,7 @@ class TestPartitionOwnerRegistry(KazooTestCase):
             'group'
         )
 
+        # Create 5 partitions with on the same topic and broker
         self.partitions = []
         for i in xrange(5):
             self.partitions.append(
@@ -55,12 +58,17 @@ class TestPartitionOwnerRegistry(KazooTestCase):
             )
 
     def test_crd(self):
+        """Test partition *c*reate, *r*ead, and *d*elete.
+        """
+
+        # Add the first 3 partitions to the registry and see that they're set
         self.por.add(self.partitions[:3])
         self.assertEquals(
             self.por.get(),
             set(self.partitions[:3])
         )
 
+        # Remove the first partition and see that only [1, 2] exist
         self.por.remove([self.partitions[0]])
         self.assertEquals(
             self.por.get(),
@@ -68,6 +76,10 @@ class TestPartitionOwnerRegistry(KazooTestCase):
         )
 
     def test_grows(self):
+        """Test that the reference returned by
+        :func:`samsa.consumer.PartitionOwnerRegistry.get` reflects the latest
+        state.
+        """
 
         partitions = self.por.get()
         self.assertEquals(len(partitions), 0)
@@ -114,6 +126,9 @@ class TestConsumer(KazooTestCase):
 
     @mock.patch.object(Partition, 'fetch')
     def test_commits_offsets(self, fetch):
+        """Test that message offsets are persisted to ZK.
+        """
+
         self._register_fake_brokers(1)
         t = Topic(self.c, 'testtopic')
 
@@ -134,6 +149,9 @@ class TestConsumer(KazooTestCase):
 
     @mock.patch.object(Partition, 'fetch')
     def test_consumer_remembers_offset(self, fetch):
+        """Test that offsets are successfully retrieved from zk.
+        """
+
         topic = 'testtopic'
         group = 'testgroup'
         offset = 10
@@ -169,33 +187,52 @@ class TestConsumerIntegration(KafkaIntegrationTestCase):
         self.kafka = Client(host='localhost', port=self.kafka_broker.port)
 
     def test_consumes(self):
+        """Test that :class:`samsa.consumer.Consumer` can consume messages from
+        kafka.
+        """
+
         topic = 'topic'
         messages = ['hello world', 'foobar']
+
+        # publish `messages` to `topic`
         self.kafka.produce(topic, 0, messages)
 
         t = Topic(self.samsa_cluster, topic)
 
+        # subscribe to `topic`
         consumer = t.subscribe('group2')
 
         def test():
+            """Test that `consumer` can see `messages`.
+
+            catches exceptions so we can retry while we wait for kafka to
+            coallesce.
+            """
             try:
                 self.assertEquals(list(consumer), messages)
                 return True
             except AssertionError:
                 return False
 
+        # wait for one second for :func:`test` to return true or raise an error
         polling_timeout(test, 1)
 
         old_offset = [p.offset for p in consumer.partitions][0]
+        # test that the offset of our 1 partition is not 0
         self.assertTrue(old_offset > 0)
+        # and that consumer contains no more messages.
         self.assertEquals(list(consumer), [])
 
+        # repeat and see if offset grows.
         self.kafka.produce(topic, 0, messages)
         polling_timeout(test, 1)
         self.assertTrue([p.offset for p in consumer.partitions][0] > old_offset)
 
 
     def test_empty_topic(self):
+        """Test that consuming an empty topic returns an empty list.
+        """
+
         topic = 'topic'
         t = Topic(self.samsa_cluster, topic)
 
