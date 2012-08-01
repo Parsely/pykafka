@@ -86,7 +86,7 @@ def decode_message_sets(payload, from_offsets):
         if header.error:
             error_class = ERROR_CODES.get(header.error, -1)
             raise error_class(error_class.reason)
-        message_set_payload = buffer(payload, 
+        message_set_payload = buffer(payload,
             offset + (ResponseFrameHeader.size + ResponseErrorHeader.size),
             length - ResponseErrorHeader.size)
         yield decode_messages(message_set_payload, from_offset)
