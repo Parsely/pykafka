@@ -14,7 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import contextlib
 import time
 
 from samsa.client import Client, Message, OFFSET_EARLIEST, OFFSET_LATEST
