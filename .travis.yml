@@ -13,6 +13,13 @@ before_install:
     - sudo apt-get update -qq
     - sudo apt-get install -qq zookeeper libev-dev
     - sudo apt-get install kafka 2>&1
+    - sudo mkdir -p /usr/share/kafka
+    - cd /usr/share/kafka
+    - sudo curl -O $KAFKA_URL
+    - tar xzf ${SRC_TGZ}
+    - cd kafka-${KAFKA_VERSION}
+    - ./sbt update
+    - ./sbt package
 
 install:
     - pip install -f http://code.google.com/p/gevent/downloads/list gevent>1.0dev >/dev/null 2>&1
@@ -21,6 +28,10 @@ install:
     - python setup.py develop
     - pip install --use-mirrors samsa[test]
 
-env: ZOOKEEPER_PATH=/usr/share/java KAFKA_PATH=/usr/share/java
+env:
+    - ZOOKEEPER_PATH=/usr/share/java KAFKA_PATH=/usr/share/java
+    - KAFKA_VERSION=0.7.1-incubating
+    - KAFKA_URL=http://mirrors.sonic.net/apache/incubator/kafka/kafka-${KAFKA_VERSION}/kafka-${KAFKA_VERSION}-src.tgz
+    - SRC_TGZ=$(basename $KAFKA_URL)
 
 script: make test
