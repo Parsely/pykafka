@@ -280,13 +280,16 @@ class ManagedConsumer(ExternalClassRunner):
 class KafkaClusterIntegrationTestCase(unittest2.TestCase, KazooTestHarness):
     def setUp(self):
         self.setup_zookeeper()
-        self.kafka_brokers = []
+        self._subprocesses = []
 
         self._id_generator = itertools.count(0)
         self._port_generator = itertools.ifilter(is_port_available, itertools.count(9092))
 
     def tearDown(self):
-        self.teardown_kafka_cluster()
+        for process in self._subprocesses:
+            if process.is_running():
+                process.stop()
+
         self.teardown_zookeeper()
 
     def setup_kafka_broker(self, *args, **kwargs):
@@ -298,16 +301,20 @@ class KafkaClusterIntegrationTestCase(unittest2.TestCase, KazooTestHarness):
             brokerid=next(self._id_generator),
             port=next(self._port_generator), *args, **kwargs)
         broker.start()
-        self.kafka_brokers.append(broker)
+        self._subprocesses.append(broker)
         return broker
 
-    def teardown_kafka_cluster(self):
-        """
-        Stops the Kafka cluster.
-        """
-        # TODO: make this mapped over a thread pool or something for speed
-        for broker in self.kafka_brokers:
-            broker.stop()
+    def consumer(self, *args, **kwargs):
+        consumer = ManagedConsumer(self.hosts, *args, **kwargs)
+        consumer.start()
+        self._subprocesses.append(consumer)
+        return consumer
+
+    def producer(self, *args, **kwargs):
+        producer = ManagedProducer(self.hosts, *args, **kwargs)
+        producer.start()
+        self._subprocesses.append(producer)
+        return producer
 
 
 @attr('integration')

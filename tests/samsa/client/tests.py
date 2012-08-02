@@ -18,8 +18,7 @@ import logging
 import time
 
 from samsa.client import Client, Message, OFFSET_EARLIEST, OFFSET_LATEST
-from samsa.test.integration import (KafkaIntegrationTestCase,
-    ManagedConsumer, ManagedProducer)
+from samsa.test.integration import KafkaIntegrationTestCase
 
 
 logger = logging.getLogger(__name__)
@@ -78,14 +77,11 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
     def test_produce(self):
         topic = 'topic'
         message = 'hello world'
-        consumer = ManagedConsumer(self.hosts, topic)
+        consumer = self.consumer(topic)
         self.kafka.produce(topic, 0, (message,))
-
-        consumer.start()
 
         consumed = next(filter_messages(consumer.process.stdout))
         self.assertEqual(consumed, message)
-        consumer.stop()
 
     def test_multiproduce(self):
         topics = ('topic-a', 'topic-b')
@@ -95,8 +91,7 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
 
         consumers = {}
         for topic in topics:
-            consumer = ManagedConsumer(self.hosts, topic)
-            consumer.start()
+            consumer = self.consumer(topic)
             consumers[topic] = consumer
 
         batch = []
@@ -108,7 +103,6 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
         for topic, consumer in consumers.items():
             consumed = next(filter_messages(consumer.process.stdout))
             self.assertEqual(consumed, message_for_topic(topic))
-            consumer.stop()
 
     def test_fetch(self):
         # TODO: test error conditions
@@ -116,8 +110,7 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
         payload = 'hello world'
         size = 1024 * 300
 
-        producer = ManagedProducer(self.hosts, topic)
-        producer.start()
+        producer = self.producer(topic)
         producer.publish([payload])
 
         def ensure_valid_response():
@@ -151,7 +144,6 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
 
         self.assertPassesWithMultipleAttempts(ensure_valid_response_again, 5)
 
-        producer.stop()
 
     def test_multifetch(self):
         # TODO: test error conditions
@@ -163,8 +155,7 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
 
         producers = {}
         for topic in topics:
-            producer = ManagedProducer(self.hosts, topic)
-            producer.start()
+            producer = self.producer(topic)
             producer.publish([payload_for_topic(topic)])
             producers[topic] = producer
 
@@ -215,9 +206,6 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
                     [payload_for_topic(topic)] * num_messages)
 
         self.assertPassesWithMultipleAttempts(ensure_valid_response_again, 5)
-
-        for producer in producers.values():
-            producer.stop()  # todo: thread pooling or something
 
     def test_offsets(self):
         offsets = self.kafka.offsets('topic', 0, OFFSET_EARLIEST, 1)
