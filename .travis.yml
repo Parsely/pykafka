@@ -35,4 +35,4 @@ install:
 
 env: ZOOKEEPER_PATH=/usr/share/java KAFKA_PATH=/usr/local/kafka KAFKA_START_TIMEOUT=10
 
-script: python setup.py nosetests --logging-conf tests/debug-logging.conf
+script: make test
