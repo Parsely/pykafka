@@ -14,12 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import logging
 import time
 
 from samsa.client import Client, Message, OFFSET_EARLIEST, OFFSET_LATEST
 from samsa.test.integration import (KafkaIntegrationTestCase,
     ManagedConsumer, ManagedProducer)
 
+
+logger = logging.getLogger(__name__)
 
 # class ClientTestCase(unittest2.TestCase):
 #     def test_produce(self):
@@ -58,12 +61,17 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
             backoff = lambda attempt, timeout: timeout
 
         for attempt in xrange(1, attempts + 1):
+            logger.debug('Starting attempt %s for %s...', attempt, fn)
             try:
                 fn()
+                logger.info('Passed attempt %s for %s', attempt, fn)
                 break
             except AssertionError:
                 if attempt < attempts:
-                    time.sleep(backoff(attempt, timeout))
+                    wait = backoff(attempt, timeout)
+                    logger.exception('Failed attempt %s for %s, waiting for %s seconds',
+                        attempt, fn, wait)
+                    time.sleep(wait)
                 else:
                     raise
 
