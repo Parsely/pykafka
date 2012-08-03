@@ -57,7 +57,6 @@ class Consumer(object):
         self.partition_owner_registry = PartitionOwnerRegistry(
             self, cluster, topic, group)
         self.partitions = self.partition_owner_registry.get()
-        self.queue = PartitionQueue(self.partitions)
 
         path = '%s/%s' % (self.id_path, self.id)
         self.cluster.zookeeper.create(
@@ -145,10 +144,10 @@ class Consumer(object):
         """
 
         while True:
-            yield self.queue.get()
+            yield self.next_message(self.config['consumer_timeout'])
 
     def next_message(self, timeout=None):
-        return random.choice(self.partitions).next_msg(timeout)
+        return random.choice(self.partitions).next_message(timeout)
 
     def commit_offsets(self):
         """Commit the offsets of all messages consumed so far.
@@ -164,3 +163,6 @@ class Consumer(object):
         self.commit_offset()
         for partition in self.partitions:
             partition.stop()
+
+    def empty(self):
+        return all(map(lambda p: p.queue.empty(), self.partitions))

@@ -16,6 +16,7 @@ limitations under the License.
 
 import mock
 
+from itertools import islice
 from kazoo.testing import KazooTestCase
 
 from samsa.test.integration import KafkaIntegrationTestCase, polling_timeout
@@ -138,10 +139,9 @@ class TestConsumer(KazooTestCase):
         msg.payload = '123'
         fetch.return_value = [msg]
 
-        i = list(c)
         c.commit_offsets()
 
-        self.assertEquals(i, ['123'])
+        self.assertEquals(c.next_message(), '123')
         self.assertEquals(len(c.partitions), 1)
         p = list(c.partitions)[0]
 
@@ -178,7 +178,7 @@ class TestConsumer(KazooTestCase):
         p = list(c.partitions)[0]
         self.assertEquals(p.offset, offset)
 
-        self.assertEquals(list(p.fetch(100)), [])
+        self.assertEquals(p.next_message(), [])
         fetch.assert_called_with(offset, 100)
 
 
@@ -212,7 +212,7 @@ class TestConsumerIntegration(KafkaIntegrationTestCase):
             coallesce.
             """
             try:
-                self.assertEquals(list(consumer), messages)
+                self.assertEquals(islice(consumer, 0, len(messages)), messages)
                 return True
             except AssertionError:
                 return False
@@ -224,7 +224,7 @@ class TestConsumerIntegration(KafkaIntegrationTestCase):
         # test that the offset of our 1 partition is not 0
         self.assertTrue(old_offset > 0)
         # and that consumer contains no more messages.
-        self.assertEquals(list(consumer), [])
+        self.assertTrue(consumer.empty())
 
         # repeat and see if offset grows.
         self.kafka.produce(topic, 0, messages)
@@ -240,4 +240,4 @@ class TestConsumerIntegration(KafkaIntegrationTestCase):
         t = Topic(self.samsa_cluster, topic)
 
         consumer = t.subscribe('group2')
-        self.assertEquals(list(consumer), [])
+        self.assertTrue(consumer.empty())

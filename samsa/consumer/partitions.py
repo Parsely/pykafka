@@ -1,4 +1,5 @@
 import threading
+import time
 
 from kazoo.exceptions import NodeExistsException, NoNodeException
 from functools import partial
@@ -67,11 +68,14 @@ class OwnedPartition(Partition):
 
         while not self.stop_fetch.is_set():
             messages = super(OwnedPartition, self).fetch(self._offset, size)
+            if not len(messages):
+                time.sleep(1)
             for message in messages:
                 self._offset = message.next_offset
-                self.queue.put(message.payload, True)
+                self.queue.put(message.payload, True,
+                               self.config['consumer_timeout'])
 
-    def next_msg(self, timeout):
+    def next_message(self, timeout):
         if self.queue.empty():
             self.needs_fetch.set()
         return self.queue.get(True, timeout)
@@ -115,7 +119,6 @@ class PartitionOwnerRegistry(object):
     def get(self):
         """Get all owned partitions.
         """
-
         return self._partitions
 
     def remove(self, partitions):
@@ -125,7 +128,6 @@ class PartitionOwnerRegistry(object):
         :type partitions: iterable.
 
         """
-
         for p in partitions:
             assert p in self._partitions
             self.cluster.zookeeper.delete(self._path_from_partition(p))
@@ -138,7 +140,6 @@ class PartitionOwnerRegistry(object):
         :type partitions: iterable.
 
         """
-
         for p in partitions:
             try:
                 self.cluster.zookeeper.create(
