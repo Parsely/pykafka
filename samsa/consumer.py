@@ -24,13 +24,11 @@ from functools import partial
 from uuid import uuid4
 
 from samsa.config import ConsumerConfig
-from samsa.exceptions import ImproperlyConfigured
+from samsa.exceptions import PartitionOwnedException, ImproperlyConfigured
 from samsa.partitions import Partition
 
 logger = logging.getLogger(__name__)
 
-
-class PartitionOwnedException(Exception): pass
 
 class OwnedPartition(Partition):
     """Represents a partition as a consumer group sees it.

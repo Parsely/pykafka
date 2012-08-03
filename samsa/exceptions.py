@@ -26,6 +26,10 @@ class NoAvailablePartitions(SamsaException):
     pass
 
 
+class PartitionOwnedException(SamsaException):
+    pass
+
+
 # Protocol Client Exceptions
 
 class UnknownError(SamsaException):
