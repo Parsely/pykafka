@@ -7,7 +7,10 @@ samsa
 
 Samsa is a cluster-aware Kafka protocol client and routing library for Python.
 
-.. image:: https://secure.travis-ci.org/disqus/samsa.png
+|travis-ci|_
+
+.. |travis-ci| image:: https://magnum.travis-ci.com/disqus/samsa.png?branch=master
+.. _travis-ci: https://magnum.travis-ci.com/disqus/samsa
 
 ************
 Introduction
