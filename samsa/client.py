@@ -164,6 +164,10 @@ class Message(object):
         else:
             raise AttributeError('%s does not have a field named "%s".' % (repr(self), name))
 
+    @property
+    def headers(self):
+        return reduce(lambda x, y: dict(x, **y), (header._asdict() for header in self._headers), {})
+
     def get(self, name, default=None):
         try:
             return self[name]
