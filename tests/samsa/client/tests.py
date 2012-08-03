@@ -20,7 +20,7 @@ import string
 import time
 
 from samsa.client import Client, Message, OFFSET_EARLIEST, OFFSET_LATEST
-from samsa.exceptions import InvalidFetchSize, WrongPartition
+from samsa.exceptions import WrongPartition
 from samsa.test.integration import KafkaIntegrationTestCase
 
 
