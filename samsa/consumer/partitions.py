@@ -1,5 +1,4 @@
 import threading
-import time
 
 from kazoo.exceptions import NodeExistsException, NoNodeException
 from functools import partial
@@ -68,16 +67,12 @@ class OwnedPartition(Partition):
 
         while not self.stop_fetch.is_set():
             messages = super(OwnedPartition, self).fetch(self._offset, size)
-            if not len(messages):
-                time.sleep(1)
             for message in messages:
                 self._offset = message.next_offset
                 self.queue.put(message.payload, True,
                                self.config['consumer_timeout'])
 
     def next_message(self, timeout):
-        if self.queue.empty():
-            self.needs_fetch.set()
         return self.queue.get(True, timeout)
 
     def commit_offset(self):
@@ -88,6 +83,9 @@ class OwnedPartition(Partition):
     def stop(self):
         self.stop_fetch.set()
         self.fetch_thread.join()
+
+    def __del__(self):
+        self.stop()
 
 
 class PartitionOwnerRegistry(object):
