@@ -16,6 +16,7 @@ limitations under the License.
 
 import logging
 import itertools
+import random
 import socket
 import time
 
@@ -24,6 +25,7 @@ from uuid import uuid4
 
 from samsa.config import ConsumerConfig
 from samsa.consumer.partitions import PartitionOwnerRegistry
+#from samsa.consumer.queue import PartitionQueue
 from samsa.exceptions import SamsaException, PartitionOwnedException, ImproperlyConfigured
 
 logger = logging.getLogger(__name__)
@@ -55,6 +57,7 @@ class Consumer(object):
         self.partition_owner_registry = PartitionOwnerRegistry(
             self, cluster, topic, group)
         self.partitions = self.partition_owner_registry.get()
+        self.queue = PartitionQueue(self.partitions)
 
         path = '%s/%s' % (self.id_path, self.id)
         self.cluster.zookeeper.create(
@@ -112,7 +115,7 @@ class Consumer(object):
 
         new_partitions = set(new_partitions)
 
-        self.commit_offsets()
+        self.stop_partitions()
 
         # 8. remove current entries from the partition owner registry
         self.partition_owner_registry.remove(
@@ -138,16 +141,14 @@ class Consumer(object):
 
 
     def __iter__(self):
-        """Returns an iterator of messages.
+        """Iterate over available messages. Does not return.
         """
 
-        # fetch size is the kafka default.
-        return itertools.chain.from_iterable(
-                itertools.imap(
-                lambda p: p.fetch(self.config['fetch_size']),
-                self.partitions
-            )
-        )
+        while True:
+            yield self.queue.get()
+
+    def next_message(self, timeout=None):
+        return random.choice(self.partitions).next_msg(timeout)
 
     def commit_offsets(self):
         """Commit the offsets of all messages consumed so far.
@@ -155,3 +156,11 @@ class Consumer(object):
 
         for partition in self.partitions:
             partition.commit_offset()
+
+    def stop_partitions(self):
+        """Stop partitions from fetching more threads.
+        """
+
+        self.commit_offset()
+        for partition in self.partitions:
+            partition.stop()

@@ -1,6 +1,10 @@
+import threading
+
 from kazoo.exceptions import NodeExistsException, NoNodeException
 from functools import partial
+from Queue import Queue
 
+from samsa.config import ConsumerConfig
 from samsa.exceptions import PartitionOwnedException
 from samsa.partitions import Partition
 
@@ -25,6 +29,9 @@ class OwnedPartition(Partition):
             partition.cluster, partition.topic,
             partition.broker, partition.number
         )
+
+        self.config = ConsumerConfig().build()
+
         self.group = group
         self.path = "/consumers/%s/offsets/%s/%s-%s" % (
             self.group, self.topic.name,
@@ -33,30 +40,50 @@ class OwnedPartition(Partition):
 
         try:
             offset, stat = self.cluster.zookeeper.get(self.path)
-            self.offset = int(offset)
+            self._offset = int(offset)
         except NoNodeException:
             self.cluster.zookeeper.create(self.path, str(0), makepath=True)
-            self.offset = 0
+            self._offset = 0
 
-    def fetch(self, size):
-        """Fetch up to `size` bytes of new messages.
+        self.queue = Queue(self.config['queuedchunks_max'])
+        self.stop_fetch = threading.Event()
+
+        self.fetch_thread = threading.Thread(
+            target=self._fetch,
+            args=(self.config['fetch_size'],)
+        )
+        self.fetch_thread.daemon = True
+        self.fetch_thread.run()
+
+    def _fetch(self, size):
+        """Fetch up to `size` bytes of new messages and add to queue.
+
+        runs until self.stop_fetch is set.
 
         :param size: size in bytes of new messages to fetch.
         :type size: int
-        :returns: generator -- message iterator.
 
         """
 
-        messages = super(OwnedPartition, self).fetch(self.offset, size)
-        for message in messages:
-            self.offset = message.next_offset
-            yield str(message.payload)
+        while not self.stop_fetch.is_set():
+            messages = super(OwnedPartition, self).fetch(self._offset, size)
+            for message in messages:
+                self._offset = message.next_offset
+                self.queue.put(message.payload, True)
+
+    def next_msg(self, timeout):
+        if self.queue.empty():
+            self.needs_fetch.set()
+        return self.queue.get(True, timeout)
 
     def commit_offset(self):
         """Commit current offset to zookeeper.
         """
+        self.cluster.zookeeper.set(self.path, str(self._offset))
 
-        self.cluster.zookeeper.set(self.path, str(self.offset))
+    def stop(self):
+        self.stop_fetch.set()
+        self.fetch_thread.join()
 
 
 class PartitionOwnerRegistry(object):
