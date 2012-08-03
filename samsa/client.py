@@ -105,11 +105,10 @@ def decode_messages(payload, from_offset):
         header = Message.Header.unpack_from(payload, offset)
         length = 4 + header.length
         message = Message(raw=buffer(payload, offset, length), offset=from_offset + offset)
-        if len(message) != length:
-            logger.info('Discarding partial message (expected %s bytes, got %s): %s',
-                length, len(message), message)
-        else:
-            yield message
+        if not message.valid:
+            if len(message) + offset == len(payload):
+                raise ValueError("message failed validation.")
+        yield message
         offset += length
 
 
@@ -174,9 +173,9 @@ class Message(object):
         start = self.Header.size + self.VersionHeaders[self['magic']].size
         return self.raw[start:]
 
-    def validate(self):
-        if self['checksum'] != crc32(self.payload):
-            raise ValueError('invalid checksum')
+    @property
+    def valid(self):
+        return self['checksum'] != crc32(self.payload)
 
 
 (REQUEST_TYPE_PRODUCE, REQUEST_TYPE_FETCH, REQUEST_TYPE_MULTIFETCH,
