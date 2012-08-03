@@ -63,15 +63,14 @@ class MessageTestCase(unittest2.TestCase):
             return Message(framed)
 
         message = make_message(self.payload)
-        message.validate()
+        self.assertTrue(message.valid)
         self.assertEqual(message.payload, self.payload)
         self.assertDictContainsSubset({
             'checksum': self.valid_checksum,
             'magic': magic,
         }, message.headers)
 
-        with self.assertRaises(ValueError):
-            make_message(self.payload, self.valid_checksum - 1).validate()
+        self.assertFalse(make_message(self.payload, self.valid_checksum - 1).valid)
 
     def test_07_format(self):
         magic = 1
@@ -84,7 +83,7 @@ class MessageTestCase(unittest2.TestCase):
             return Message(framed)
 
         message = make_message(self.payload)
-        message.validate()
+        self.assertTrue(message.valid)
         self.assertEqual(message.payload, self.payload)
         self.assertDictContainsSubset({
             'checksum': self.valid_checksum,
@@ -93,8 +92,7 @@ class MessageTestCase(unittest2.TestCase):
 
         # TODO: Test with compression
 
-        with self.assertRaises(ValueError):
-            make_message(self.payload, self.valid_checksum - 1).validate()
+        self.assertFalse(make_message(self.payload, self.valid_checksum - 1).valid)
 
 
 def filter_messages(stream):
@@ -180,10 +178,7 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
             self.assertEqual(message.next_offset, len(message))
             self.assertEqual(message.payload, payload)
             self.assertEqual(message['compression'], 0)
-            try:
-                message.validate()
-            except Exception, exc:
-                self.fail('Message should pass checksum validation, instead got %s' % exc)
+            self.assertTrue(message.valid)
 
             self.offset = message.next_offset
 
@@ -216,7 +211,7 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
             messages = list(self.kafka.fetch(topic, partition, 0, 1024 * 300))
             self.assertEqual(len(messages), 1)
             message = messages[0]
-            message.validate()
+            self.assertTrue(message.valid)
             self.assertEqual(message.payload, payload)
 
         self.assertPassesWithMultipleAttempts(ensure_no_partial_messages, 5)
@@ -256,10 +251,7 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
                 self.next_offsets[topic] = message.next_offset
                 self.assertEqual(message.payload, payload_for_topic(topic))
                 self.assertEqual(message['compression'], 0)
-                try:
-                    message.validate()
-                except Exception, exc:
-                    self.fail('Message should pass checksum validation, instead got %s' % exc)
+                self.assertTrue(message.valid)
 
                 num_responses += 1
 
