@@ -14,28 +14,37 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-class ImproperlyConfigured(Exception):
+class SamsaException(Exception):
     pass
+
+
+class ImproperlyConfigured(SamsaException):
+    pass
+
+
+class NoAvailablePartitions(SamsaException):
+    pass
+
 
 # Protocol Client Exceptions
 
-class UnknownError(Exception):
+class UnknownError(SamsaException):
     ERROR_CODE = -1
 
 
-class OffsetOutOfRange(Exception):
+class OffsetOutOfRange(SamsaException):
     ERROR_CODE = 1
 
 
-class InvalidMessage(Exception):
+class InvalidMessage(SamsaException):
     ERROR_CODE = 2
 
 
-class WrongPartition(Exception):
+class WrongPartition(SamsaException):
     ERROR_CODE = 3
 
 
-class InvalidFetchSize(Exception):
+class InvalidFetchSize(SamsaException):
     ERROR_CODE = 4
 
 

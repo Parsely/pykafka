@@ -17,6 +17,7 @@ limitations under the License.
 import logging
 import random
 
+from samsa.exceptions import NoAvailablePartitions
 from samsa.partitions import PartitionMap
 from samsa.consumer import Consumer
 from samsa.utils import attribute_repr
@@ -78,7 +79,11 @@ class Topic(object):
         Publishes one or more messages to a random partition of this topic.
         """
         # TODO: This could/should be much more efficient.
-        partition = random.choice(list(self.partitions))
+        try:
+            partition = random.choice(list(self.partitions))
+        except IndexError:
+            message = 'No partitions are available to accept a write to %s. (Is your Kafka broker running?)' % self
+            raise NoAvailablePartitions(message)
         return partition.publish(data)
 
     def subscribe(self, group):
