@@ -111,12 +111,11 @@ def decode_messages(payload, from_offset):
                     # If this is the last message, it's OK to drop it if it's truncated.
                     logger.info('Discarding partial message (expected %s bytes, got %s): %s',
                         length, len(message), message)
-                    break
                 else:
                     raise AssertionError("Length of %s (%s) does not match it's "
                         "stated frame size of %s" % (message, len(message), length))
-        else:
-            yield message
+            else:
+                yield message
         offset += length
 
 
