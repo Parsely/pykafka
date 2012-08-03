@@ -23,7 +23,7 @@ from samsa.client import Client
 from samsa.cluster import Cluster
 from samsa.topics import Topic
 from samsa.partitions import Partition
-from samsa import consumer
+from samsa.consumer.partitions import PartitionOwnerRegistry, OwnedPartition
 
 
 class TestPartitionOwnerRegistry(KazooTestCase):
@@ -43,7 +43,7 @@ class TestPartitionOwnerRegistry(KazooTestCase):
         self.topic = mock.Mock()
         self.topic.name = 'topic'
 
-        self.por = consumer.PartitionOwnerRegistry(
+        self.por = PartitionOwnerRegistry(
             self.consumer,
             self.c,
             self.topic,
@@ -77,8 +77,8 @@ class TestPartitionOwnerRegistry(KazooTestCase):
 
     def test_grows(self):
         """Test that the reference returned by
-        :func:`samsa.consumer.PartitionOwnerRegistry.get` reflects the latest
-        state.
+        :func:`samsa.consumer.partitions.PartitionOwnerRegistry.get` reflects
+        the latest state.
         """
 
         partitions = self.por.get()
@@ -166,7 +166,7 @@ class TestConsumer(KazooTestCase):
         fake_partition.number = 0
         fetch.return_value = ()
 
-        op = consumer.OwnedPartition(fake_partition, group)
+        op = OwnedPartition(fake_partition, group)
         op.offset = offset
         op.commit_offset()
 
