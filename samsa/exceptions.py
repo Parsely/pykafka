@@ -32,23 +32,27 @@ class PartitionOwnedException(SamsaException):
 
 # Protocol Client Exceptions
 
-class UnknownError(SamsaException):
+class ProtocolClientException(SamsaException):
+    ERROR_CODE = None
+
+
+class UnknownError(ProtocolClientException):
     ERROR_CODE = -1
 
 
-class OffsetOutOfRange(SamsaException):
+class OffsetOutOfRange(ProtocolClientException):
     ERROR_CODE = 1
 
 
-class InvalidMessage(SamsaException):
+class InvalidMessage(ProtocolClientException):
     ERROR_CODE = 2
 
 
-class WrongPartition(SamsaException):
+class WrongPartition(ProtocolClientException):
     ERROR_CODE = 3
 
 
-class InvalidFetchSize(SamsaException):
+class InvalidFetchSize(ProtocolClientException):
     ERROR_CODE = 4
 
 
