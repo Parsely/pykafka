@@ -22,15 +22,27 @@ What is Kafka?
 Kafka is a distributed publish-subscribe messaging system. Cluster management
 happens with ZooKeeper.
 
-* Brokers
-* Topics
-* Partitions
-* Messages
+Messages
+    Messages are units of data to be communicated between clients or services.
+    Messages don't have any have any inherent structure -- as far as Kafka is
+    concerned, the message is just an array of bytes and the application can
+    serialize/deserialize the payload in a way that makes sense to it's own environment.
+Brokers
+    Brokers are nodes/servers that store and serve messages.
+Topics
+    Messages are published to topics, which are similar to channels. Every topic
+    is available on all servers.
+Partitions
+    Topics are divided into partitions, which are distributed across brokers.
+    Each partition is owned by a single broker.
 
-The clients of a Kafka cluster are generally split into two different categories:
+The clients of a Kafka cluster are generally split into two different categories,
+although these roles are not mutually exclusive:
 
-* Producer
-* Consumer
+Producer
+    Producers publish messages to topics.
+Consumer
+    Consumers subscribe to messages from topics.
 
 Goals of this Project
 =====================
