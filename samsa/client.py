@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import logging
 import socket
 import struct
 from zlib import crc32
@@ -22,6 +23,9 @@ from samsa.exceptions import ERROR_CODES
 from samsa.utils import attribute_repr
 from samsa.utils.namedstruct import NamedStruct
 from samsa.utils.structuredio import StructuredBytesIO
+
+
+logger = logging.getLogger(__name__)
 
 
 # Socket Utilities
@@ -100,7 +104,12 @@ def decode_messages(payload, from_offset):
     while offset < len(payload):
         header = Message.Header.unpack_from(payload, offset)
         length = 4 + header.length
-        yield Message(raw=buffer(payload, offset, length), offset=from_offset + offset)
+        message = Message(raw=buffer(payload, offset, length), offset=from_offset + offset)
+        if len(message) != length:
+            logger.info('Discarding partial message (expected %s bytes, got %s): %s',
+                length, len(message), message)
+        else:
+            yield message
         offset += length
 
 

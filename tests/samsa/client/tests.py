@@ -15,9 +15,12 @@ limitations under the License.
 """
 
 import logging
+import random
+import string
 import time
 
 from samsa.client import Client, Message, OFFSET_EARLIEST, OFFSET_LATEST
+from samsa.exceptions import InvalidFetchSize, WrongPartition
 from samsa.test.integration import KafkaIntegrationTestCase
 
 
@@ -144,6 +147,29 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
 
         self.assertPassesWithMultipleAttempts(ensure_valid_response_again, 5)
 
+    def test_fetch_sizing(self):
+        topic = 'topic'
+        partition = 0
+        payload = ''.join(random.choice(string.ascii_letters) for _ in xrange(0, 300))
+
+        producer = self.producer(topic)
+        producer.publish([payload])
+
+        def ensure_no_partial_messages():
+            messages = list(self.kafka.fetch(topic, partition, 0, len(payload) // 2))
+            self.assertEqual(len(messages), 0)
+
+            messages = list(self.kafka.fetch(topic, partition, 0, 1024 * 300))
+            self.assertEqual(len(messages), 1)
+            message = messages[0]
+            message.validate()
+            self.assertEqual(message.payload, payload)
+
+        self.assertPassesWithMultipleAttempts(ensure_no_partial_messages, 5)
+
+    def test_fetch_wrong_partition(self):
+        with self.assertRaises(WrongPartition):
+            self.kafka.fetch('topic', 10, 0, 1024 * 300)
 
     def test_multifetch(self):
         # TODO: test error conditions
