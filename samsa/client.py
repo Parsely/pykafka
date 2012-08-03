@@ -108,6 +108,10 @@ def decode_messages(payload, from_offset):
         if not message.valid:
             if len(message) + offset == len(payload):
                 raise ValueError("message failed validation.")
+            else:
+                logger.info('Discarding partial message (expected %s bytes, got %s): %s',
+                            110 - length, len(message), message)
+                break
         yield message
         offset += length
 
