@@ -17,7 +17,11 @@ limitations under the License.
 import logging
 import random
 import string
+import struct
 import time
+from zlib import crc32
+
+import unittest2
 
 from samsa.client import Client, Message, OFFSET_EARLIEST, OFFSET_LATEST
 from samsa.exceptions import WrongPartition
@@ -41,6 +45,56 @@ logger = logging.getLogger(__name__)
 #
 #     def test_offsets(self):
 #         raise NotImplementedError
+
+
+class MessageTestCase(unittest2.TestCase):
+    def setUp(self):
+        self.payload = 'hello world'
+        self.valid_checksum = crc32(self.payload)
+
+    def test_06_format(self):
+        magic = 0
+
+        def make_message(payload, checksum=None):
+            if checksum is None:
+                checksum = self.valid_checksum
+            encoded = ''.join([struct.pack('!bi', magic, checksum), payload])
+            framed = buffer(''.join([struct.pack('!i', len(encoded)), encoded]))
+            return Message(framed)
+
+        message = make_message(self.payload)
+        message.validate()
+        self.assertEqual(message.payload, self.payload)
+        self.assertDictContainsSubset({
+            'checksum': self.valid_checksum,
+            'magic': magic,
+        }, message.headers)
+
+        with self.assertRaises(ValueError):
+            make_message(self.payload, self.valid_checksum - 1).validate()
+
+    def test_07_format(self):
+        magic = 1
+
+        def make_message(payload, checksum=None, compression=0):
+            if checksum is None:
+                checksum = self.valid_checksum
+            encoded = ''.join([struct.pack('!bbi', magic, compression, checksum), payload])
+            framed = buffer(''.join([struct.pack('!i', len(encoded)), encoded]))
+            return Message(framed)
+
+        message = make_message(self.payload)
+        message.validate()
+        self.assertEqual(message.payload, self.payload)
+        self.assertDictContainsSubset({
+            'checksum': self.valid_checksum,
+            'magic': magic,
+        }, message.headers)
+
+        # TODO: Test with compression
+
+        with self.assertRaises(ValueError):
+            make_message(self.payload, self.valid_checksum - 1).validate()
 
 
 def filter_messages(stream):
