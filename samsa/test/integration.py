@@ -28,6 +28,8 @@ import unittest2
 from kazoo.testing import KazooTestHarness
 from nose.plugins.attrib import attr
 
+from samsa.cluster import Cluster
+
 
 logger = logging.getLogger(__name__)
 
@@ -284,6 +286,8 @@ class KafkaClusterIntegrationTestCase(unittest2.TestCase, KazooTestHarness):
 
         self._id_generator = itertools.count(0)
         self._port_generator = itertools.ifilter(is_port_available, itertools.count(9092))
+
+        self.kafka_cluster = Cluster(self.client)
 
     def tearDown(self):
         for process in self._subprocesses:
