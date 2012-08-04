@@ -64,11 +64,14 @@ class OwnedPartition(Partition):
         :type size: int
 
         """
-        messages = super(OwnedPartition, self).fetch(self._offset, size)
-        for message in messages:
-            self._offset = message.next_offset
-            self.queue.put(message.payload, True,
-                           self.config['consumer_timeout'])
+        try:
+            messages = super(OwnedPartition, self).fetch(self._offset, size)
+            for message in messages:
+                self._offset = message.next_offset
+                self.queue.put(message.payload, True,
+                               self.config['consumer_timeout'])
+        except Exception:
+            return
 
     def next_message(self, timeout=None):
         if not self.fetch_thread.is_alive():
