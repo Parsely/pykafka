@@ -26,9 +26,9 @@ $(KAFKA_FULL): $(KAFKA_SRC_TGZ)
 	tar xzf $(KAFKA_SRC_TGZ)
 
 kafka: $(KAFKA_FULL)
-	cd kafka-$(KAFKA_VERSION)
-	./sbt update
-	./sbt package
+	cd kafka-$(KAFKA_VERSION) \
+		&& ./sbt update \
+		&& ./sbt package
 	cd ..
 	mv $(KAFKA_FULL) kafka
 
