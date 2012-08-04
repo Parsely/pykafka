@@ -150,10 +150,3 @@ class PartitionOwnerRegistry(object):
 
     def _path_from_partition(self, p):
         return "%s/%s-%s" % (self.path, p.broker.id, p.number)
-
-    def _partition_from_name(self, name):
-        """name as it appears as a znode. <broker id>-<partition number>."""
-        broker_id, partition_id = name.split('-')
-        broker = self.cluster.brokers[int(broker_id)]
-        p = Partition(self.cluster, self.topic, broker, partition_id)
-        return self.Partition(p)
