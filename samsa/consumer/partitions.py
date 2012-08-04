@@ -10,9 +10,11 @@ from samsa.partitions import Partition
 
 
 class OwnedPartition(Partition):
+
     """Represents a partition as a consumer group sees it.
 
     Manages offset tracking and message fetching.
+
     """
 
     def __init__(self, partition, group):
@@ -74,6 +76,12 @@ class OwnedPartition(Partition):
             return
 
     def next_message(self, timeout=None):
+        """Retrieve the next message for this partition.
+
+        :param timeout: blog for timeout if integer, or indefinitely if None.
+
+        """
+
         if not self.fetch_thread.is_alive():
             self.fetch_thread = self._create_thread()
         if not timeout:
@@ -93,6 +101,7 @@ class OwnedPartition(Partition):
 
 
 class PartitionOwnerRegistry(object):
+
     """Manages the Partition Owner Registry for a particular Consumer.
     """
 
