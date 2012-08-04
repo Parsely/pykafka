@@ -124,7 +124,7 @@ class PartitionOwnerRegistry(object):
         """Remove `partitions` from the registry.
 
         :param partitions: partitions to remove.
-        :type partitions: iterable.
+        :type partitions: iterable of :class:`samsa.partitions.Partition`.
 
         """
         for p in partitions:
@@ -136,7 +136,7 @@ class PartitionOwnerRegistry(object):
         """Add `partitions` to the registry.
 
         :param partitions: partitions to add.
-        :type partitions: iterable.
+        :type partitions: iterable of :class:`samsa.partitions.Partition`.
 
         """
         for p in partitions:
@@ -146,7 +146,7 @@ class PartitionOwnerRegistry(object):
                 )
             except NodeExistsException:
                 raise PartitionOwnedException(p)
-            self._partitions.add(p)
+            self._partitions.add(self.Partition(p))
 
     def _path_from_partition(self, p):
         return "%s/%s-%s" % (self.path, p.broker.id, p.number)

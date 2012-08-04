@@ -106,12 +106,6 @@ class Consumer(object):
             start + num_parts
         )
 
-        # cast partitions to owned partitions.
-        new_partitions = itertools.imap(
-            self.partition_owner_registry.Partition,
-            new_partitions
-        )
-
         new_partitions = set(new_partitions)
 
         self.stop_partitions()

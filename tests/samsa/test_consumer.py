@@ -142,8 +142,7 @@ class TestConsumer(KazooTestCase):
         msg.payload = '123'
         fetch.return_value = [msg]
 
-
-        self.assertEquals(c.next_message(1), '123')
+        self.assertEquals(c.next_message(10), '123')
         self.assertEquals(len(c.partitions), 1)
         p = list(c.partitions)[0]
 
