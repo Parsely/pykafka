@@ -46,35 +46,33 @@ class OwnedPartition(Partition):
             self._offset = 0
 
         self.queue = Queue(self.config['queuedchunks_max'])
-        self.stop_fetch = threading.Event()
+        self.fetch_thread = self._create_thread()
 
-        self.fetch_thread = threading.Thread(
+    def _create_thread(self):
+        fetch_thread = threading.Thread(
             target=self._fetch,
             args=(self.config['fetch_size'],)
         )
-        self.fetch_thread.daemon = True
-        self.fetch_thread.start()
+        fetch_thread.daemon = True
+        fetch_thread.start()
+        return fetch_thread
 
     def _fetch(self, size):
         """Fetch up to `size` bytes of new messages and add to queue.
-
-        runs until self.stop_fetch is set.
 
         :param size: size in bytes of new messages to fetch.
         :type size: int
 
         """
-
-        while not self.stop_fetch.is_set():
-            messages = super(OwnedPartition, self).fetch(self._offset, size)
-            print "HII!!"
-            print messages
-            for message in messages:
-                self._offset = message.next_offset
-                self.queue.put(message.payload, True,
-                               self.config['consumer_timeout'])
+        messages = super(OwnedPartition, self).fetch(self._offset, size)
+        for message in messages:
+            self._offset = message.next_offset
+            self.queue.put(message.payload, True,
+                           self.config['consumer_timeout'])
 
     def next_message(self, timeout=None):
+        if not self.fetch_thread.is_alive():
+            self.fetch_thread = self._create_thread()
         if not timeout:
             timeout = self.config['consumer_timeout']
         return self.queue.get(True, timeout)
@@ -85,7 +83,6 @@ class OwnedPartition(Partition):
         self.cluster.zookeeper.set(self.path, str(self._offset))
 
     def stop(self):
-        self.stop_fetch.set()
         self.fetch_thread.join()
 
     def __del__(self):

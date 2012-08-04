@@ -142,13 +142,13 @@ class TestConsumer(KazooTestCase):
         msg.payload = '123'
         fetch.return_value = [msg]
 
-        c.commit_offsets()
 
         self.assertEquals(c.next_message(0), '123')
         self.assertEquals(len(c.partitions), 1)
         p = list(c.partitions)[0]
 
         self.assertEquals(p._offset, 3)
+        c.commit_offsets()
 
         d, stat = self.client.get(p.path)
         self.assertEquals(d, '3')
