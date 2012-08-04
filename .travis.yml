@@ -10,7 +10,6 @@ notifications:
   irc: "irc.freenode.org#samsa"
 
 before_install:
-    - sudo apt-get update -qq
     - sudo apt-get install -qq zookeeper libev-dev
     - export KAFKA_VERSION=0.7.1-incubating
     - export KAFKA_URL=http://mirrors.sonic.net/apache/incubator/kafka/kafka-${KAFKA_VERSION}/kafka-${KAFKA_VERSION}-src.tgz
