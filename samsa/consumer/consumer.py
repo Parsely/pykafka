@@ -141,7 +141,7 @@ class Consumer(object):
             yield self.next_message(self.config['consumer_timeout'])
 
     def next_message(self, timeout=None):
-        return random.choice(list(self.partitions)).next_message(timeout)
+        return random.sample(self.partitions, 1)[0].next_message(timeout)
 
     def commit_offsets(self):
         """Commit the offsets of all messages consumed so far.
