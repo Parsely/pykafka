@@ -25,8 +25,8 @@ from uuid import uuid4
 
 from samsa.config import ConsumerConfig
 from samsa.consumer.partitions import PartitionOwnerRegistry
-#from samsa.consumer.queue import PartitionQueue
-from samsa.exceptions import SamsaException, PartitionOwnedException, ImproperlyConfigured
+from samsa.exceptions import (SamsaException, PartitionOwnedException,
+                              ImproperlyConfigured)
 
 logger = logging.getLogger(__name__)
 
@@ -78,8 +78,11 @@ class Consumer(object):
         try:
             zk.get_children(broker_path, watch=self._rebalance)
         except NoNodeException:
-            raise ImproperlyConfigured('The broker_path "%s" does not exist in your '
-                'ZooKeeper cluster -- is your Kafka cluster running?' % broker_path)
+            raise ImproperlyConfigured(
+                'The broker_path "%s" does not exist in your '
+                'ZooKeeper cluster -- is your Kafka cluster running?' %
+                    broker_path
+            )
 
         # 3. all consumers in the same group as Ci that consume topic T
         consumer_ids = zk.get_children(self.id_path, watch=self._rebalance)
@@ -118,8 +121,9 @@ class Consumer(object):
         # 9. add newly assigned partitions to the partition owner registry
         for i in xrange(self.config['rebalance_retries_max']):
             try:
-                # N.B. self.partitions will always reflect the most current view of
-                # owned partitions. Therefor retrying this method will progress.
+                # N.B. self.partitions will always reflect the most current
+                # view of owned partitions. Therefor retrying this method
+                # will progress.
                 self.partition_owner_registry.add(
                     new_partitions - self.partitions
                 )
@@ -131,7 +135,6 @@ class Consumer(object):
                 continue
         else:
             raise SamsaException("Couldn't acquire partitions.")
-
 
     def __iter__(self):
         """Iterate over available messages. Does not return.
