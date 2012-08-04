@@ -215,9 +215,12 @@ class TestConsumerIntegration(KafkaIntegrationTestCase):
             coallesce.
             """
             try:
-                self.assertEquals(islice(consumer, 0, len(messages)), messages)
+                self.assertEquals(
+                    list(islice(consumer, 0, len(messages))),
+                    messages
+                )
                 return True
-            except AssertionError:
+            except (AssertionError, Queue.Empty):
                 return False
 
         # wait for one second for :func:`test` to return true or raise an error
