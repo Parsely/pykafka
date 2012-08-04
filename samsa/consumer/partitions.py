@@ -53,7 +53,7 @@ class OwnedPartition(Partition):
             args=(self.config['fetch_size'],)
         )
         self.fetch_thread.daemon = True
-        self.fetch_thread.run()
+        self.fetch_thread.start()
 
     def _fetch(self, size):
         """Fetch up to `size` bytes of new messages and add to queue.
@@ -67,12 +67,16 @@ class OwnedPartition(Partition):
 
         while not self.stop_fetch.is_set():
             messages = super(OwnedPartition, self).fetch(self._offset, size)
+            print "HII!!"
+            print messages
             for message in messages:
                 self._offset = message.next_offset
                 self.queue.put(message.payload, True,
                                self.config['consumer_timeout'])
 
-    def next_message(self, timeout):
+    def next_message(self, timeout=None):
+        if not timeout:
+            timeout = self.config['consumer_timeout']
         return self.queue.get(True, timeout)
 
     def commit_offset(self):
