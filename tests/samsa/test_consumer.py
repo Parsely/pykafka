@@ -137,12 +137,15 @@ class TestConsumer(KazooTestCase):
         t = Topic(self.c, 'testtopic')
 
         c = t.subscribe('group')
-        msg = mock.Mock()
-        msg.next_offset = 3
-        msg.payload = '123'
-        fetch.return_value = [msg]
+        msgs = []
+        for i in xrange(1, 10):
+            msg = mock.Mock()
+            msg.next_offset = 3 * i
+            msg.payload = str(i) * 3
+            msgs.append(msg)
+        fetch.return_value = msgs
 
-        self.assertEquals(c.next_message(10), '123')
+        self.assertEquals(c.next_message(10), msgs[0].payload)
         self.assertEquals(len(c.partitions), 1)
         p = list(c.partitions)[0]
 

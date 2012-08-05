@@ -84,8 +84,7 @@ class OwnedPartition(Partition):
         """
         messages = super(OwnedPartition, self).fetch(self._offset, size)
         for message in messages:
-            self._offset = message.next_offset
-            self.queue.put(message.payload, True,
+            self.queue.put(message, True,
                            self.config['consumer_timeout'])
 
     def next_message(self, timeout=None):
@@ -99,7 +98,10 @@ class OwnedPartition(Partition):
             self.fetch_thread = self._create_thread()
         if not timeout:
             timeout = self.config['consumer_timeout']
-        return self.queue.get(True, timeout)
+
+        msg = self.queue.get(True, timeout)
+        self._offset = msg.next_offset
+        return msg.payload
 
     def commit_offset(self):
         """Commit current offset to zookeeper.
