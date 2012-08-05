@@ -84,8 +84,10 @@ class OwnedPartition(Partition):
         """
         messages = super(OwnedPartition, self).fetch(self._offset, size)
         for message in messages:
-            self.queue.put(message, True,
-                           self.config['consumer_timeout'])
+            self.queue.put(
+                message, True,
+                self.config['consumer_timeout']
+            )
 
     def next_message(self, timeout=None):
         """Retrieve the next message for this partition.
