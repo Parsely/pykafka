@@ -21,6 +21,7 @@ from zlib import crc32
 
 from samsa.exceptions import ERROR_CODES
 from samsa.utils import attribute_repr
+from samsa.utils.functional import methodimap
 from samsa.utils.namedstruct import NamedStruct
 from samsa.utils.structuredio import StructuredBytesIO
 
@@ -167,7 +168,7 @@ class Message(object):
 
     @property
     def headers(self):
-        return reduce(lambda x, y: dict(x, **y), (header._asdict() for header in self._headers), {})
+        return reduce(lambda x, y: dict(x, **y), methodimap('_asdict', self._headers), {})
 
     def get(self, name, default=None):
         try:

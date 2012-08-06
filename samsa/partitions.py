@@ -96,7 +96,7 @@ class PartitionMap(DelayedConfiguration):
         Returns an iterator containing all of the partitions for this topic
         that have been registered by a broker in ZooKeeper.
         """
-        return itertools.chain.from_iterable(iter(value) for value in self.__brokers.values())
+        return itertools.chain.from_iterable(itertools.imap(iter, self.__brokers.values()))
 
     @property
     @requires_configuration
@@ -115,8 +115,8 @@ class PartitionMap(DelayedConfiguration):
         uninitialized_brokers = set(self.cluster.brokers.values()) - set(self.__brokers.keys())
         create_virtual_partitionset = functools.partial(PartitionSet,
             cluster=self.cluster, topic=self.topic, virtual=True)
-        return itertools.chain.from_iterable(
-            iter(create_virtual_partitionset(broker=broker)) for broker in uninitialized_brokers)
+        virtual_iterator = lambda broker: iter(create_virtual_partitionset(broker=broker))
+        return itertools.chain.from_iterable(itertools.imap(virtual_iterator, uninitialized_brokers))
 
 
 class PartitionSet(DelayedConfiguration):
