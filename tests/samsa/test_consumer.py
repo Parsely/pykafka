@@ -64,6 +64,11 @@ class TestPartitionOwnerRegistry(KazooTestCase):
                 Partition(self.c, self.topic, broker, i)
             )
 
+    def run(self, *args, **kwargs):
+        # Creating owned partitions should not cause them to start consuming.
+        with mock.patch.object(OwnedPartition, '_create_thread'):
+            return super(TestPartitionOwnerRegistry, self).run(*args, **kwargs)
+
     def test_crd(self):
         """Test partition *c*reate, *r*ead, and *d*elete.
         """
@@ -106,10 +111,11 @@ class TestConsumer(KazooTestCase):
         self.client.ensure_path("/brokers/ids")
         for i in xrange(n):
             path = "/brokers/ids/%d" % i
-            data = "127.0.0.1"
+            data = "creator:127.0.0.1:%s" % (9092 + i)
             self.client.create(path, data)
 
-    def test_assigns_partitions(self):
+    @mock.patch.object(OwnedPartition, '_fetch')
+    def test_assigns_partitions(self, *args):
         """
         Test rebalance
 
