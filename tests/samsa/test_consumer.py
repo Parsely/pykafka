@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import logging
 import mock
 import Queue
 
@@ -27,6 +28,9 @@ from samsa.config import ConsumerConfig
 from samsa.topics import Topic
 from samsa.partitions import Partition
 from samsa.consumer.partitions import PartitionOwnerRegistry, OwnedPartition
+
+
+logger = logging.getLogger(__name__)
 
 
 class TestPartitionOwnerRegistry(KazooTestCase):
@@ -216,6 +220,7 @@ class TestConsumerIntegration(KafkaIntegrationTestCase):
             catches exceptions so we can retry while we wait for kafka to
             coallesce.
             """
+            logger.debug('Running `test`...')
             try:
                 self.assertEquals(
                     list(islice(consumer, 0, len(messages))),
@@ -223,7 +228,7 @@ class TestConsumerIntegration(KafkaIntegrationTestCase):
                 )
                 return True
             except (AssertionError, Queue.Empty) as e:
-                print e
+                logger.exception('Caught exception: %s', e)
                 return False
 
         # wait for one second for :func:`test` to return true or raise an error

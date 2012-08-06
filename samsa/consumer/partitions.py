@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import logging
 import threading
 
 from kazoo.exceptions import NodeExistsException, NoNodeException
@@ -23,6 +24,9 @@ from Queue import Queue
 from samsa.config import ConsumerConfig
 from samsa.exceptions import PartitionOwnedException
 from samsa.partitions import Partition
+
+
+logger = logging.getLogger(__name__)
 
 
 class OwnedPartition(Partition):
@@ -84,6 +88,7 @@ class OwnedPartition(Partition):
         """
         messages = super(OwnedPartition, self).fetch(self._offset, size)
         for message in messages:
+            logger.info('%s: Received message: %s', self, message)
             self.queue.put(
                 message, True,
                 self.config['consumer_timeout']
