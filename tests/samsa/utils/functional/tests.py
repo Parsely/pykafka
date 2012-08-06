@@ -1,5 +1,4 @@
 import itertools
-import types
 import unittest2
 
 from samsa.utils.functional import methodmap, methodimap
@@ -15,8 +14,6 @@ class MethodMapTestCase(unittest2.TestCase):
         self.assertEqual(methodmap(self.method, self.values), self.expected)
 
     def test_methodimap(self):
-        values = ['hello  ', ' world ']
-        expected = ['hello', 'world']
         result = methodimap(self.method, self.values)
         self.assertIsInstance(result, itertools.imap)
         self.assertEqual(list(result), expected)
