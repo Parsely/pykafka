@@ -16,4 +16,4 @@ class MethodMapTestCase(unittest2.TestCase):
     def test_methodimap(self):
         result = methodimap(self.method, self.values)
         self.assertIsInstance(result, itertools.imap)
-        self.assertEqual(list(result), expected)
+        self.assertEqual(list(result), self.expected)
