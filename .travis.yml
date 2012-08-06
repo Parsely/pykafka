@@ -10,21 +10,9 @@ notifications:
   irc: "irc.freenode.org#samsa"
 
 before_install:
-    - sudo apt-get update -qq
     - sudo apt-get install -qq zookeeper libev-dev
-    - export KAFKA_VERSION=0.7.1-incubating
-    - export KAFKA_URL=http://mirrors.sonic.net/apache/incubator/kafka/kafka-${KAFKA_VERSION}/kafka-${KAFKA_VERSION}-src.tgz
-    - export SRC_TGZ=$(basename $KAFKA_URL)
-    - export TEMP=$(mktemp -d)
-    - pushd ${TEMP}
-    - sudo curl -O $KAFKA_URL
-    - tar xzf ${SRC_TGZ}
-    - pushd kafka-${KAFKA_VERSION}
-    - ./sbt update
-    - ./sbt package
-    - popd
-    - sudo mv kafka-${KAFKA_VERSION} /usr/local/kafka
-    - popd
+    - make kafka
+    - sudo mv kafka /usr/local/kafka
 
 install:
     - pip install -f http://code.google.com/p/gevent/downloads/list gevent>1.0dev >/dev/null 2>&1

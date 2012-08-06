@@ -59,6 +59,13 @@ class TopicMap(object):
         return topic
 
 
+def random_partitioner(partitions, key):
+    """
+    Returns a random partition out of all of the available partitions.
+    """
+    return random.choice(list(partitions))
+
+
 class Topic(object):
     """
     A topic within a Kafka cluster.
@@ -66,25 +73,40 @@ class Topic(object):
     :param cluster: The cluster that this topic is associated with.
     :type cluster: :class:`samsa.cluster.Cluster`
     :param name: The name of this topic.
+    :param partitioner: callable that takes two arguments, ``partitions`` and
+        ``key`` and returns a single :class:`~samsa.partitions.Partition`
+        instance to publish the message to.
+    :type partitioner: any callable type
     """
-    def __init__(self, cluster, name):
+    def __init__(self, cluster, name, partitioner=random_partitioner):
         self.cluster = cluster
         self.name = name
         self.partitions = PartitionMap(self.cluster, self)
+        self.partitioner = partitioner
 
     __repr__ = attribute_repr('name')
 
-    def publish(self, data):
+    def publish(self, data, key=None):
         """
         Publishes one or more messages to a random partition of this topic.
+
+        :param data: message(s) to be sent to the broker.
+        :type data: ``str`` or sequence of ``str``.
+        :param key: a key to be used for semantic partitioning
+        :type key: implementation-specific
         """
-        # TODO: This could/should be much more efficient.
-        try:
-            partition = random.choice(list(self.partitions))
-        except IndexError:
-            message = 'No partitions are available to accept a write to %s. (Is your Kafka broker running?)' % self
-            raise NoAvailablePartitions(message)
+        if len(self.partitions) < 1:
+            raise NoAvailablePartitions('No partitions are available to accept '
+                'a write for this message. (Is your Kafka broker running?)')
+        partition = self.partitioner(self.partitions, key)
         return partition.publish(data)
 
     def subscribe(self, group):
+        """
+        Returns a new consumer that can be used for reading from this topic.
+
+        :param group: the name of the consumer group this consumer belongs to
+        :type group: ``str``
+        :rtype: :class:`samsa.consumer.consumer.Consumer`
+        """
         return Consumer(self.cluster, self, group)
