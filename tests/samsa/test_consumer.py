@@ -222,7 +222,8 @@ class TestConsumerIntegration(KafkaIntegrationTestCase):
                     messages
                 )
                 return True
-            except (AssertionError, Queue.Empty):
+            except (AssertionError, Queue.Empty) as e:
+                print e
                 return False
 
         # wait for one second for :func:`test` to return true or raise an error
