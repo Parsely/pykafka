@@ -56,6 +56,7 @@ class OwnedPartition(Partition):
             self.broker.id, self.number
         )
 
+        # _offset is cursor to next message we haven't consumed
         try:
             offset, stat = self.cluster.zookeeper.get(self.path)
             self._offset = int(offset)
@@ -63,6 +64,8 @@ class OwnedPartition(Partition):
             self.cluster.zookeeper.create(self.path, str(0), makepath=True)
             self._offset = 0
 
+        # the offset at which we should make our next fetch
+        self._fetch_offset = self._offset
         self.queue = Queue(self.config['queuedchunks_max'])
         self.fetch_thread = self._create_thread()
 
@@ -82,12 +85,20 @@ class OwnedPartition(Partition):
         :type size: int
 
         """
-        messages = super(OwnedPartition, self).fetch(self._offset, size)
+        last_offset = self._fetch_offset
+
+        messages = super(OwnedPartition, self).fetch(
+            self._fetch_offset,
+            size
+        )
+
         for message in messages:
+            last_offset = message.next_offset
             self.queue.put(
                 message, True,
                 self.config['consumer_timeout']
             )
+        self._fetch_offset = last_offset
 
     def next_message(self, timeout=None):
         """Retrieve the next message for this partition.
