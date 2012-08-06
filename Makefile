@@ -2,8 +2,11 @@ doc:
 	cd doc/ && make html
 
 lint:
+	pip install -r requirements/lint.txt
 	pyflakes ./samsa
 	pyflakes ./tests
+	pep8 ./samsa
+	pep8 ./tests
 
 unit:
 	python setup.py nosetests --attr=!integration
