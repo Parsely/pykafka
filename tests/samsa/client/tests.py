@@ -110,25 +110,6 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
         super(ClientIntegrationTestCase, self).setUp()
         self.kafka = Client(host='localhost', port=self.kafka_broker.port)
 
-    def assertPassesWithMultipleAttempts(self, fn, attempts, timeout=1, backoff=None):
-        if backoff is None:
-            backoff = lambda attempt, timeout: timeout
-
-        for attempt in xrange(1, attempts + 1):
-            logger.debug('Starting attempt %s for %s...', attempt, fn)
-            try:
-                fn()
-                logger.info('Passed attempt %s for %s', attempt, fn)
-                break
-            except AssertionError:
-                if attempt < attempts:
-                    wait = backoff(attempt, timeout)
-                    logger.exception('Failed attempt %s for %s, waiting for %s seconds',
-                        attempt, fn, wait)
-                    time.sleep(wait)
-                else:
-                    raise
-
     def test_produce(self):
         topic = 'topic'
         message = 'hello world'
