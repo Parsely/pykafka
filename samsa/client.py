@@ -17,6 +17,8 @@ limitations under the License.
 import logging
 import socket
 import struct
+from Queue import Queue
+from threading import Event, Thread
 from zlib import crc32
 
 from samsa.exceptions import ERROR_CODES
@@ -232,30 +234,59 @@ Offset = NamedStruct('Offset', (
     ('q', 'value'),
 ))
 
-class Client(object):
-    """
-    Low-level Kafka protocol client.
 
-    :param host: broker host
-    :param port: broker port number
-    :param timeout: socket timeout
-    """
-    def __init__(self, host, port=9092, timeout=None, autoconnect=True):
+class ResponseFuture(object):
+
+    def __init__(self, request):
+        self._ready = Event()
+        self.error = False
+        self.request = request
+
+    def set_response(self, response):
+        self.response = response
+        self._ready.set()
+
+    def set_error(self, error):
+        self.error = error
+        self._ready.set()
+
+    def get(self):
+        self._ready.wait()
+        if self.error:
+            raise self.error
+        return self.response
+
+
+class ConnectionHandler(object):
+
+    def __init__(self, host, port, timeout):
         self.host = host
         self.port = port
         self.timeout = timeout
-        self._socket = None
-        if autoconnect:
-            self.connect()
 
-    __repr__ = attribute_repr('host', 'port')
+    def connect(self):
+        raise NotImplementedError
 
-    # Socket Management
+    def disconnect(self):
+        raise NotImplementedError
 
-    def get_socket(self):
-        return self._socket
+    def reconnect(self):
+        raise NotImplementedError
 
-    socket = property(get_socket)
+    def request(self):
+        raise NotImplementedError
+
+
+import atexit
+class ThreadedConnectionHandler(ConnectionHandler):
+
+    def __init__(self, host, port, timeout):
+        super(ThreadedConnectionHandler, self).__init__(host, port, timeout)
+        self._requests = Queue()
+        self.ending = Event()
+        self.connect()
+        self.start()
+        atexit.register(self.stop)
 
     def connect(self):
         """
@@ -279,17 +310,75 @@ class Client(object):
         self.disconnect()
         self.connect()
 
-    def request(self, request):
-        # TODO: Retry/reconnect on failure?
-        return self.socket.sendall(str(request.wrap(4)))
+    def request(self, request, response=True):
+        """Enqueue a request
 
-    def response(self):
-        response = recv_framed(self.socket, ResponseFrameHeader)
+        :param response: Whether we should expect a response.
+        :type response: bool
+
+        """
+        future = ResponseFuture(request)
+        self._requests.put((response, future))
+        return future
+
+    def start(self):
+        self.t = self._start_thread()
+
+    def stop(self):
+        self._requests.join()
+        self.ending.set()
+        self.disconnect()
+
+    def _start_thread(self):
+        def worker():
+            while not self.ending.is_set():
+                expect_response, future = self._requests.get()
+                try:
+                    self._request(future)
+                    if expect_response:
+                        self._response(future)
+                except Exception, e:
+                    future.set_error(e)
+                finally:
+                    self._requests.task_done()
+
+        t = Thread(target=worker)
+        t.daemon = True
+        t.start()
+        return t
+
+    def _request(self, future):
+        # TODO: Retry/reconnect on failure?
+        self._socket.sendall(str(future.request.wrap(4)))
+
+    def _response(self, future):
+
+        response = recv_framed(self._socket, ResponseFrameHeader)
         header = ResponseErrorHeader.unpack_from(buffer(response))
         if header.error:
             exception_class = ERROR_CODES.get(header.error, -1)
-            raise exception_class  # TODO: Add better error messaging.
-        return buffer(response, ResponseErrorHeader.size)
+            # TODO: Add better error messaging.
+            future.set_error(exception_class)
+        else:
+            future.set_response(buffer(response, ResponseErrorHeader.size))
+
+
+class Client(object):
+    """
+    Low-level Kafka protocol client.
+
+    :param host: broker host
+    :param port: broker port number
+    :param timeout: socket timeout
+    """
+    def __init__(self, host, port=9092, timeout=None, autoconnect=True):
+        self.host = host
+        self.port = port
+        self.connection = ThreadedConnectionHandler(host, port, timeout)
+        if autoconnect:
+            self.connection.connect()
+
+    __repr__ = attribute_repr('connection')
 
     # Protocol Implementation
 
@@ -308,7 +397,7 @@ class Client(object):
         request.pack(2, REQUEST_TYPE_PRODUCE)
         write_request_header(request, topic, partition)
         request.write(encode_messages(messages))
-        return self.request(request)
+        return self.connection.request(request, response=False)
 
     def multiproduce(self, data):
         """
@@ -334,7 +423,7 @@ class Client(object):
         request.pack(2, len(payloads))
         for payload in payloads:
             request.write(payload)
-        return self.request(request)
+        return self.connection.request(request, response=False)
 
     def fetch(self, topic, partition, offset, size):
         """
@@ -358,9 +447,9 @@ class Client(object):
         write_request_header(request, topic, partition)
         request.pack(8, offset)
         request.pack(4, size)
-        self.request(request)
+        response = self.connection.request(request)
 
-        return decode_messages(self.response(), from_offset=offset)
+        return decode_messages(response.get(), from_offset=offset)
 
     def multifetch(self, data):
         """
@@ -401,8 +490,8 @@ class Client(object):
         request.pack(2, len(payloads))
         for payload in payloads:
             request.write(payload)
-        self.request(request)
-        return decode_message_sets(self.response(), from_offsets)
+        response = self.connection.request(request)
+        return decode_message_sets(response.get(), from_offsets)
 
     def offsets(self, topic, partition, time, max):
         """
@@ -424,11 +513,10 @@ class Client(object):
         write_request_header(request, topic, partition)
         request.pack(8, time)
         request.pack(4, max)
-        self.request(request)
-        response = self.response()
-        (count,) = OffsetsResponseHeader.unpack_from(response)
+        response = self.connection.request(request)
+        (count,) = OffsetsResponseHeader.unpack_from(response.get())
         offsets = []
         for i in xrange(0, count):
-            offsets.append(Offset.unpack_from(response,
+            offsets.append(Offset.unpack_from(response.get(),
                 offset=OffsetsResponseHeader.size + (i * Offset.size)).value)
         return offsets
