@@ -18,6 +18,7 @@ import atexit
 import logging
 import socket
 import struct
+from collections import namedtuple
 from Queue import Queue
 from threading import Event, Thread
 from zlib import crc32
@@ -239,16 +240,7 @@ Offset = NamedStruct('Offset', (
 class ResponseFuture(object):
     """A samsa response which may have a value at some point."""
 
-    def __init__(self, request, has_response):
-        """
-        :param request:
-        :type request:
-        :param has_response: Whether we should wait for a response.
-        :type has_response: bool
-
-        """
-        self.request = request
-        self.has_response = has_response
+    def __init__(self):
         self.error = False
         self._ready = Event()
 
@@ -300,6 +292,8 @@ class RequestHandler(object):
 class ThreadedRequestHandler(RequestHandler):
     """Uses a worker thread to dispatch requests."""
 
+    Task = namedtuple('Task', ['request', 'future'])
+
     def __init__(self, connection):
         super(ThreadedRequestHandler, self).__init__(connection)
         self._requests = Queue()
@@ -307,8 +301,12 @@ class ThreadedRequestHandler(RequestHandler):
         atexit.register(self.stop)
 
     def request(self, request, has_response=True):
-        future = ResponseFuture(request, has_response)
-        self._requests.put(future)
+        future = None
+        if has_response:
+            future = ResponseFuture()
+
+        task = self.Task(request, future)
+        self._requests.put(task)
         return future
 
     def start(self):
@@ -321,13 +319,14 @@ class ThreadedRequestHandler(RequestHandler):
     def _start_thread(self):
         def worker():
             while not self.ending.is_set():
-                future = self._requests.get()
+                task = self._requests.get()
                 try:
-                    self.connection.request(future)
-                    if future.has_response:
-                        self.connection.response(future)
+                    self.connection.request(task.request)
+                    if task.future:
+                        self.connection.response(task.future)
                 except Exception, e:
-                    future.set_error(e)
+                    if task.future:
+                        task.future.set_error(e)
                 finally:
                     self._requests.task_done()
 
@@ -368,15 +367,15 @@ class Connection(object):
         self.disconnect()
         self.connect()
 
-    def request(self, future):
-        """Make a request using the data in `future`.
+    def request(self, request):
+        """Make a request using the data in `request`.
 
-        :param future: future object which holds request data.
-        :type future: :class:`samsa.client.ResponseFuture`
+        :param request: Request data.
+        :type request: :class:`samsa.utils.structuredio.StructuredBytesIO`
 
         """
         # TODO: Retry/reconnect on failure?
-        self._socket.sendall(str(future.request.wrap(4)))
+        self._socket.sendall(str(request.wrap(4)))
 
     def response(self, future):
         """Wait for a response and assign to future.
