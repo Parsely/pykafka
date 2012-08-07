@@ -69,7 +69,7 @@ class StructuredBytesIO(io.BytesIO):
     def print_debug(self):
         import string
         offset = self.tell()
-        print ''.join([ "%02X " % ord( x ) for x in self.read()]).strip()
+        print ''.join(["%02X " % ord(x) for x in self.read()]).strip()
         self.seek(offset)
 
         def filt(c):
