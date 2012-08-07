@@ -17,7 +17,8 @@ limitations under the License.
 import mock
 import unittest2
 
-from samsa.utils.delayedconfig import DelayedConfiguration, requires_configuration
+from samsa.utils.delayedconfig import (DelayedConfiguration,
+    requires_configuration)
 
 
 class Example(DelayedConfiguration):

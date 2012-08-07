@@ -42,7 +42,8 @@ class BrokerMapTest(unittest2.TestCase):
         brokers = BrokerMap(self.cluster)
         self.assertEqual(len(brokers), len(nodes))
         self.assertEqual(brokers.keys(), map(int, nodes))
-        self.assertTrue(all(isinstance(value, Broker) for value in brokers.values()))
+        self.assertTrue(all(isinstance(value, Broker) for value
+            in brokers.values()))
 
         self.assertEqual(self.cluster.zookeeper.get_children.call_count, 1)
 
@@ -82,7 +83,8 @@ class BrokerTest(unittest2.TestCase):
     def test_configuration(self):
         host = 'kafka-1.local'
         port = 9093
-        self.cluster.zookeeper.get.return_value = ('%(host)s-1342221875610:%(host)s:%(port)s' % {
+        template = '%(host)s-1342221875610:%(host)s:%(port)s'
+        self.cluster.zookeeper.get.return_value = (template % {
             'host': host,
             'port': port,
         }, mock.Mock())
