@@ -13,7 +13,7 @@ echo "creating tag $VERSION"
 git tag $VERSION
 
 echo "pushing tag"
-git push origin $VERSION
+git push ${REMOTE:-origin} $VERSION
 
 if [ -f MANIFEST ]; then
     echo "removing manifest file"
