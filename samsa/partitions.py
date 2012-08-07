@@ -22,7 +22,8 @@ import logging
 from zookeeper import NoNodeException
 
 from samsa.utils import attribute_repr
-from samsa.utils.delayedconfig import DelayedConfiguration, requires_configuration
+from samsa.utils.delayedconfig import (DelayedConfiguration,
+    requires_configuration)
 
 
 logger = logging.getLogger(__name__)
@@ -50,9 +51,11 @@ class PartitionMap(DelayedConfiguration):
         logger.info('Looking up brokers for %s...', self)
 
         try:
-            broker_ids = self.cluster.zookeeper.get_children(path, watch=self._configure)
+            broker_ids = self.cluster.zookeeper.get_children(path,
+                watch=self._configure)
         except NoNodeException:
-            if self.cluster.zookeeper.exists(path, watch=self._configure) is not None:
+            if self.cluster.zookeeper.exists(path, watch=self._configure) \
+                    is not None:
                 self._configure()
             broker_ids = []
 
@@ -96,7 +99,8 @@ class PartitionMap(DelayedConfiguration):
         Returns an iterator containing all of the partitions for this topic
         that have been registered by a broker in ZooKeeper.
         """
-        return itertools.chain.from_iterable(itertools.imap(iter, self.__brokers.values()))
+        return itertools.chain.from_iterable(itertools.imap(iter,
+            self.__brokers.values()))
 
     @property
     @requires_configuration
@@ -112,11 +116,14 @@ class PartitionMap(DelayedConfiguration):
         partitions provide a partition objects for those partitions that have
         not yet been registered but are assumed to exist.
         """
-        uninitialized_brokers = set(self.cluster.brokers.values()) - set(self.__brokers.keys())
+        uninitialized_brokers = set(self.cluster.brokers.values()) - \
+            set(self.__brokers.keys())
         create_virtual_partitionset = functools.partial(PartitionSet,
             cluster=self.cluster, topic=self.topic, virtual=True)
-        virtual_iterator = lambda broker: iter(create_virtual_partitionset(broker=broker))
-        return itertools.chain.from_iterable(itertools.imap(virtual_iterator, uninitialized_brokers))
+        virtual_iterator = lambda broker: \
+            iter(create_virtual_partitionset(broker=broker))
+        return itertools.chain.from_iterable(itertools.imap(virtual_iterator,
+            uninitialized_brokers))
 
 
 class PartitionSet(DelayedConfiguration):
@@ -157,27 +164,30 @@ class PartitionSet(DelayedConfiguration):
         else:
             node = '/brokers/topics/%s/%s' % (self.topic.name, self.broker.id)
 
-            # If the node does not exist, this means this broker has not gotten any
-            # writes for this partition yet. We can assume that the broker is
-            # handling at least one partition for this topic, and update when we
-            # have more information by setting an exists watch on the node path.
+            # If the node does not exist, this means this broker has not gotten
+            # any writes for this partition yet. We can assume that the broker
+            # is handling at least one partition for this topic, and update
+            # when we have more information by setting an exists watch on the
+            # node path.
             try:
                 data, stat = self.cluster.zookeeper.get(node)
                 count = int(data)
                 logger.info('Found %s partitions for %s', count, self)
             except NoNodeException:
-                if self.cluster.zookeeper.exists(node, watch=self._configure) is not None:
+                if self.cluster.zookeeper.exists(node, watch=self._configure) \
+                        is not None:
                     return self._configure()
                 count = 1
-                logger.info('%s is not registered in ZooKeeper, falling back to %s virtual partition(s)',
-                    self, count)
+                logger.info('%s is not registered in ZooKeeper, falling back '
+                    'to %s virtual partition(s)', self, count)
 
         self.__count = count
 
     @requires_configuration
     def __len__(self):
         """
-        Returns the total number of partitions available within this partition set.
+        Returns the total number of partitions available within this partition
+        set.
         """
         return self.__count
 
@@ -210,10 +220,12 @@ class Partition(object):
         else:
             raise TypeError
 
-        return self.broker.client.produce(self.topic.name, self.number, messages)
+        return self.broker.client.produce(self.topic.name, self.number,
+            messages)
 
     def fetch(self, offset, size):
-        return self.broker.client.fetch(self.topic.name, self.number, offset, size)
+        return self.broker.client.fetch(self.topic.name, self.number, offset,
+            size)
 
     def __hash__(self):
         return hash((self.topic, self.broker.id, self.number))

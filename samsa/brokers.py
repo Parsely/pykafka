@@ -21,7 +21,8 @@ from zookeeper import NoNodeException
 from samsa.client import Client
 from samsa.exceptions import ImproperlyConfigured
 from samsa.utils import attribute_repr
-from samsa.utils.delayedconfig import DelayedConfiguration, requires_configuration
+from samsa.utils.delayedconfig import (DelayedConfiguration,
+    requires_configuration)
 
 
 logger = logging.getLogger(__name__)
@@ -46,9 +47,12 @@ class BrokerMap(DelayedConfiguration):
         # key, and just return that there are no brokers that are alive, to
         # avoid any race conditions between cluster/application startup?
         path = '/brokers/ids'
-        logger.info('Refreshing broker configuration from %s...', self.cluster.zookeeper)
+        logger.info('Refreshing broker configuration from %s...',
+            self.cluster.zookeeper)
+
         try:
-            broker_ids = self.cluster.zookeeper.get_children(path, watch=self._configure)
+            broker_ids = self.cluster.zookeeper.get_children(path,
+                watch=self._configure)
         except NoNodeException:
             raise ImproperlyConfigured('The path "%s" does not exist in your '
                 'ZooKeeper cluster -- is your Kafka cluster running?' % path)
@@ -80,7 +84,8 @@ class BrokerMap(DelayedConfiguration):
     @requires_configuration
     def __iter__(self):
         """
-        Returns an iterator containing all of the broker IDs within the cluster.
+        Returns an iterator containing all of the broker IDs within the
+        cluster.
         """
         return iter(self.__brokers)
 
@@ -107,7 +112,8 @@ class BrokerMap(DelayedConfiguration):
     @requires_configuration
     def values(self):
         """
-        Returns a list of every :class:`~samsa.brokers.Broker` within the cluster.
+        Returns a list of every :class:`~samsa.brokers.Broker` within the
+        cluster.
         """
         return self.__brokers.values()
 

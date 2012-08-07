@@ -16,7 +16,7 @@ def methodmap(name, values, *args, **kwargs):
 
 def methodimap(name, values, *args, **kwargs):
     """
-    Iterator-based implementation of :func:``samsa.utils.functional.methodmap``.
+    Iterator-based implementation of :func:``.methodmap``.
     """
     fn = methodcaller(name, *args, **kwargs)
     return imap(fn, values)

@@ -51,7 +51,8 @@ class StructuredBytesIO(io.BytesIO):
         length = self.unpack(size)
         value = self.read(int(length))
         if validate and len(value) != length:
-            raise ValueError('Payload length does not match length specified in header')
+            raise ValueError('Payload length does not match length specified '
+                'in header')
         return value
 
     def wrap(self, size):
