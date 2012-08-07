@@ -29,6 +29,7 @@ from nose.plugins.attrib import attr
 
 from samsa.cluster import Cluster
 from samsa.test.case import TestCase
+from samsa.utils.functional import methodmap
 
 
 logger = logging.getLogger(__name__)
@@ -58,7 +59,8 @@ class TimeoutError(Exception):
     pass
 
 
-def polling_timeout(predicate, duration, interval=0.1, error='timeout exceeded'):
+def polling_timeout(predicate, duration, interval=0.1,
+        error='timeout exceeded'):
     """
     Provides a blocking timeout until either the predicate function returns a
     non-False value, or the timeout is exceeded in which case a `TimeoutError`
@@ -114,7 +116,8 @@ class ExternalClassRunner(object):
         kwargs = self.kwargs.copy()
         kwargs['env'] = kwargs.get('env', os.environ).copy()
         kwargs['env'].update({
-            'KAFKA_OPTS': '-Xmx%(heap_max)s -server -Dlog4j.configuration=file:%(logging_config)s' % \
+            'KAFKA_OPTS': '-Xmx%(heap_max)s -server '
+                '-Dlog4j.configuration=file:%(logging_config)s' %
                 merge(self.KAFKA_OPTIONS, {
                     'logging_config': self.logging_configuration_file.name,
                 })
@@ -124,8 +127,8 @@ class ExternalClassRunner(object):
 
         def convert_log_output(namespace):
             """
-            Scrapes log4j output, forwarding the log output to the corresponding
-            Python logging endpoint.
+            Scrapes log4j output, forwarding the log output to the
+            corresponding Python logging endpoint.
             """
             while True:
                 line = self.process.stderr.readline().strip()
@@ -133,7 +136,8 @@ class ExternalClassRunner(object):
                     continue
 
                 try:
-                    name, level, message = (bit.strip() for bit in line.split(':', 2))
+                    name, level, message = \
+                        methodmap('strip', line.split(':', 2))
                     logger = logging.getLogger('%s.%s' % (namespace, name))
                     logger.log(getattr(logging, level.upper()), message)
                 except Exception:
@@ -142,7 +146,7 @@ class ExternalClassRunner(object):
 
         self.log_thread = threading.Thread(target=convert_log_output,
             args=('java.%s' % self.cls,))
-        self.log_thread.daemon = True  # shouldn't be necessary, but just in case
+        self.log_thread.daemon = True  # shouldn't be necessary, just in case
         self.log_thread.start()
 
     def is_running(self):
@@ -166,8 +170,8 @@ class ExternalClassRunner(object):
             polling_timeout(lambda: not self.is_running(), timeout)
             logger.debug('%s exited cleanly', self.process)
         except TimeoutError:
-            logger.info('%s did not exit within %s timeout, sending SIGKILL...',
-                timeout, self.process)
+            logger.info('%s did not exit within %s timeout, sending '
+                'SIGKILL...', timeout, self.process)
             self.process.kill()
 
 
@@ -207,8 +211,10 @@ class ManagedBroker(ExternalClassRunner):
 
         ready = threading.Event()
         path = '/brokers/ids/%s' % self.brokerid
-        if self.zookeeper.exists(path, watch=lambda *a, **k: ready.set()) is not None:
-            raise AssertionError('Kafka broker with broker ID %s is already running!' % self.brokerid)
+        callback = lambda *a, **k: ready.set()
+        if self.zookeeper.exists(path, watch=callback) is not None:
+            raise AssertionError('Kafka broker with broker ID %s is already '
+                'running!' % self.brokerid)
 
         super(ManagedBroker, self).start()
 
@@ -217,7 +223,8 @@ class ManagedBroker(ExternalClassRunner):
                 break
             ready.wait(1)
         else:
-            raise TimeoutError('Kafka broker did not start within %s seconds' % timeout)
+            raise TimeoutError('Kafka broker did not start within %s seconds'
+                % timeout)
 
     def stop(self, *args, **kwargs):
         logger.debug('Shutting down Kafka broker...')
@@ -243,9 +250,10 @@ class ManagedProducer(ExternalClassRunner):
         self.hosts = hosts
         self.topic = topic
 
-        self.configuration_file = write_property_file(merge(self.CONFIGURATION, {
-            'zk.connect': self.hosts,
-        }))
+        self.configuration_file = write_property_file(merge(
+            self.CONFIGURATION, {
+                'zk.connect': self.hosts,
+            }))
 
         self.args = ['--topic', self.topic,
             '--props', self.configuration_file.name]
@@ -285,7 +293,8 @@ class KafkaClusterIntegrationTestCase(TestCase, KazooTestHarness):
         self._subprocesses = []
 
         self._id_generator = itertools.count(0)
-        self._port_generator = itertools.ifilter(is_port_available, itertools.count(9092))
+        self._port_generator = itertools.ifilter(is_port_available,
+            itertools.count(9092))
 
         self.kafka_cluster = Cluster(self.client)
 

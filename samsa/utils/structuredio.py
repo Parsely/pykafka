@@ -51,7 +51,8 @@ class StructuredBytesIO(io.BytesIO):
         length = self.unpack(size)
         value = self.read(int(length))
         if validate and len(value) != length:
-            raise ValueError('Payload length does not match length specified in header')
+            raise ValueError('Payload length does not match length specified '
+                'in header')
         return value
 
     def wrap(self, size):
@@ -69,7 +70,7 @@ class StructuredBytesIO(io.BytesIO):
     def print_debug(self):
         import string
         offset = self.tell()
-        print ''.join([ "%02X " % ord( x ) for x in self.read()]).strip()
+        print ''.join(["%02X " % ord(x) for x in self.read()]).strip()
         self.seek(offset)
 
         def filt(c):

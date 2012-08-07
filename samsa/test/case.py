@@ -5,7 +5,8 @@ from samsa.utils.log import get_logger_for_function
 
 
 class TestCase(unittest2.TestCase):
-    def assertPassesWithMultipleAttempts(self, fn, attempts, timeout=1, backoff=None, logger=None):
+    def assertPassesWithMultipleAttempts(self, fn, attempts, timeout=1,
+            backoff=None, logger=None):
         if backoff is None:
             backoff = lambda attempt, timeout: timeout
 
@@ -21,9 +22,8 @@ class TestCase(unittest2.TestCase):
             except AssertionError:
                 if attempt < attempts:
                     wait = backoff(attempt, timeout)
-                    logger.exception('Failed attempt %s for %s, waiting for %s seconds',
-                        attempt, fn, wait)
+                    logger.exception('Failed attempt %s for %s, waiting for '
+                        '%s seconds', attempt, fn, wait)
                     time.sleep(wait)
                 else:
                     raise
-
