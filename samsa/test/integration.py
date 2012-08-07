@@ -24,11 +24,11 @@ import tempfile
 import threading
 import time
 
-import unittest2
 from kazoo.testing import KazooTestHarness
 from nose.plugins.attrib import attr
 
 from samsa.cluster import Cluster
+from samsa.test.case import TestCase
 
 
 logger = logging.getLogger(__name__)
@@ -279,7 +279,7 @@ class ManagedConsumer(ExternalClassRunner):
 
 
 @attr('integration')
-class KafkaClusterIntegrationTestCase(unittest2.TestCase, KazooTestHarness):
+class KafkaClusterIntegrationTestCase(TestCase, KazooTestHarness):
     def setUp(self):
         self.setup_zookeeper()
         self._subprocesses = []
