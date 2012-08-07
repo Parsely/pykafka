@@ -237,22 +237,37 @@ Offset = NamedStruct('Offset', (
 
 
 class ResponseFuture(object):
+    """A samsa response which may have a value at some point."""
 
     def __init__(self, request, has_response):
+        """
+        :param request:
+        :type request:
+        :param has_response: Whether we should wait for a response.
+        :type has_response: bool
+
+        """
         self.request = request
         self.has_response = has_response
         self.error = False
         self._ready = Event()
 
     def set_response(self, response):
+        """Set response data and trigger get method."""
         self.response = response
         self._ready.set()
 
     def set_error(self, error):
+        """Set error and trigger get method."""
         self.error = error
         self._ready.set()
 
     def get(self):
+        """Block until data is ready and return.
+
+        Raises exception if there was an error.
+
+        """
         self._ready.wait()
         if self.error:
             raise self.error
@@ -260,21 +275,30 @@ class ResponseFuture(object):
 
 
 class RequestHandler(object):
+    """Interface for request handlers."""
 
     def __init__(self, connection):
         self.connection = connection
 
     def start(self):
+        """Start the request processor."""
         raise NotImplementedError
 
     def stop(self):
+        """Stop the request processor."""
         raise NotImplementedError
 
     def request(self):
+        """Construct a new requst
+
+        :returns: :class:`samsa.client.ResponseFuture`
+
+        """
         raise NotImplementedError
 
 
 class ThreadedRequestHandler(RequestHandler):
+    """Uses a worker thread to dispatch requests."""
 
     def __init__(self, connection):
         super(ThreadedRequestHandler, self).__init__(connection)
@@ -283,12 +307,6 @@ class ThreadedRequestHandler(RequestHandler):
         atexit.register(self.stop)
 
     def request(self, request, has_response=True):
-        """Enqueue a request
-
-        :param has_response: Whether we should expect a response.
-        :type has_response: bool
-
-        """
         future = ResponseFuture(request, has_response)
         self._requests.put(future)
         return future
@@ -320,11 +338,13 @@ class ThreadedRequestHandler(RequestHandler):
 
 
 class SamsaConnection(object):
+    """A socket connection to Kafka."""
 
     def __init__(self, host, port, timeout):
         self.host = host
         self.port = port
         self.timeout = timeout
+        self._socket = None
 
     def connect(self):
         """
@@ -349,10 +369,22 @@ class SamsaConnection(object):
         self.connect()
 
     def request(self, future):
+        """Make a request using the data in `future`.
+
+        :param future: future object which holds request data.
+        :type future: :class:`samsa.client.ResponseFuture`
+
+        """
         # TODO: Retry/reconnect on failure?
         self._socket.sendall(str(future.request.wrap(4)))
 
     def response(self, future):
+        """Wait for a response and assign to future.
+
+        :param future: Where to assign response data.
+        :type future: :class:`samsa.client.ResponseFuture`
+
+        """
         response = recv_framed(self._socket, ResponseFrameHeader)
         header = ResponseErrorHeader.unpack_from(buffer(response))
         if header.error:
