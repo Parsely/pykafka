@@ -52,7 +52,7 @@ def recvall_into(socket, bytea):
     while offset < size:
         remaining = size - offset
         chunk = socket.recv(remaining)
-        bytea[offset:(offset+len(chunk))] = chunk
+        bytea[offset:(offset + len(chunk))] = chunk
         offset += len(chunk)
     return bytea
 
@@ -87,11 +87,15 @@ MessageSetHeader = NamedStruct('MessageSetHeader', (
     ('h', 'error'),
 ))
 
+
 def decode_message_sets(payload, from_offsets):
     offset = 0
     for from_offset in from_offsets:
         (length,) = ResponseFrameHeader.unpack_from(payload, offset=offset)
-        header = ResponseErrorHeader.unpack_from(payload, offset=offset + ResponseFrameHeader.size)
+        header = ResponseErrorHeader.unpack_from(
+            payload,
+            offset=offset + ResponseFrameHeader.size
+        )
         if header.error:
             error_class = ERROR_CODES.get(header.error, -1)
             raise error_class(error_class.reason)
@@ -101,6 +105,7 @@ def decode_message_sets(payload, from_offsets):
         yield decode_messages(message_set_payload, from_offset)
         offset += length + ResponseFrameHeader.size
 
+
 def decode_messages(payload, from_offset):
     """
     Decodes ``Message`` objects from a ``payload`` buffer.
@@ -109,18 +114,25 @@ def decode_messages(payload, from_offset):
     while offset < len(payload):
         header = Message.Header.unpack_from(payload, offset)
         length = 4 + header.length
-        message = Message(raw=buffer(payload, offset, length), offset=from_offset + offset)
+        message = Message(
+            raw=buffer(payload, offset, length),
+            offset=from_offset + offset
+        )
         if message.valid:
             yield message
         else:
             if len(message) + offset == len(payload):
-                # If this is the last message, it's OK to drop it if it's truncated.
-                logger.info('Discarding partial message (expected %s bytes, got %s): %s',
+                # If this is the last message,
+                # it's OK to drop it if it's truncated.
+                logger.info('Discarding partial message '
+                            '(expected %s bytes, got %s): %s',
                     length, len(message), message)
                 return
             else:
-                raise AssertionError("Length of %s (%s) does not match it's "
-                    "stated frame size of %s" % (message, len(message), length))
+                raise AssertionError(
+                    "Length of %s (%s) does not match it's "
+                    "stated frame size of %s" % (message, len(message), length)
+                )
         offset += length
 
 
@@ -150,7 +162,9 @@ class Message(object):
         header = self.Header.unpack_from(self.raw)
         self._headers.append(header)
 
-        versioned_header = self.VersionHeaders[header.magic].unpack_from(self.raw, offset=self.Header.size)
+        versioned_header = self.VersionHeaders[header.magic].unpack_from(
+            self.raw, offset=self.Header.size
+        )
         self._headers.append(versioned_header)
 
     __repr__ = attribute_repr('raw', 'offset')
@@ -168,11 +182,16 @@ class Message(object):
             except AttributeError:
                 pass
         else:
-            raise AttributeError('%s does not have a field named "%s".' % (repr(self), name))
+            raise AttributeError('%s does not have a field named "%s".' % (
+                repr(self), name)
+            )
 
     @property
     def headers(self):
-        return reduce(lambda x, y: dict(x, **y), methodimap('_asdict', self._headers), {})
+        return reduce(
+            lambda x, y: dict(x, **y),
+            methodimap('_asdict', self._headers), {}
+        )
 
     def get(self, name, default=None):
         try:
@@ -206,6 +225,7 @@ def write_request_header(request, topic, partition):
     request.pack(4, partition)
     return request
 
+
 def encode_message(content):
     magic = 0
     payload = StructuredBytesIO()
@@ -213,6 +233,7 @@ def encode_message(content):
     payload.pack(4, crc32(content))
     payload.write(content)
     return payload.wrap(4)
+
 
 def encode_messages(messages):
     payload = StructuredBytesIO()
@@ -439,7 +460,8 @@ class Client(object):
         ...    ('topic-2', 0, ('message', 'message',)),
         ... ))
 
-        :param data: sequence of 3-tuples of the format ``(topic, partition, messages)``
+        :param data: sequence of 3-tuples of the format
+                     ``(topic, partition, messages)``
         :type data: list, generator, or other iterable
         """
         payloads = []
@@ -501,8 +523,9 @@ class Client(object):
         0L 'hello world'
         20L 'hello world'
 
-        :param data: sequence of 4-tuples of the format ``(topic, partition, offset, size)``
-            For more information, see :meth:`Client.fetch`.
+        :param data: sequence of 4-tuples of the format
+                     ``(topic, partition, offset, size)``
+                     For more information, see :meth:`Client.fetch`.
         :rtype: generator of fetch responses (message generators).
             For more information, see :meth:`Client.fetch`.
         """
@@ -526,7 +549,8 @@ class Client(object):
 
     def offsets(self, topic, partition, time, max):
         """
-        Returns message offsets before a certain time for the given topic/partition.
+        Returns message offsets before a certain time for the given
+        topic/partition.
 
         >>> client.offsets('test', 0, OFFSET_EARLIEST, 1)
         [0]
