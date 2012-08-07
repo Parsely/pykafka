@@ -18,7 +18,6 @@ import logging
 import random
 import string
 import struct
-import time
 from zlib import crc32
 
 import unittest2
