@@ -264,6 +264,12 @@ class ConnectionHandler(object):
         self.port = port
         self.timeout = timeout
 
+    def start(self):
+        raise NotImplementedError
+
+    def stop(self):
+        raise NotImplementedError
+
     def connect(self):
         raise NotImplementedError
 
@@ -352,7 +358,6 @@ class ThreadedConnectionHandler(ConnectionHandler):
         self._socket.sendall(str(future.request.wrap(4)))
 
     def _response(self, future):
-
         response = recv_framed(self._socket, ResponseFrameHeader)
         header = ResponseErrorHeader.unpack_from(buffer(response))
         if header.error:
