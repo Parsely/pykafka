@@ -33,5 +33,3 @@ def attribute_repr(*attributes):
         pairs = ('%s=%s' % (attribute, repr(getattr(self, attribute, None))) for attribute in attributes)
         return u'<%s.%s at 0x%x: %s>' % (cls.__module__, cls.__name__, id(self), ', '.join(pairs))
     return _repr
-
-

@@ -26,4 +26,3 @@ class TestCase(unittest2.TestCase):
                     time.sleep(wait)
                 else:
                     raise
-
