@@ -337,7 +337,7 @@ class ThreadedRequestHandler(RequestHandler):
         return t
 
 
-class SamsaConnection(object):
+class Connection(object):
     """A socket connection to Kafka."""
 
     def __init__(self, host, port, timeout):
@@ -404,7 +404,7 @@ class Client(object):
     :param timeout: socket timeout
     """
     def __init__(self, host, port=9092, timeout=None, autoconnect=True):
-        connection = SamsaConnection(host, port, timeout)
+        connection = Connection(host, port, timeout)
         if autoconnect:
             connection.connect()
         self.handler = ThreadedRequestHandler(connection)
