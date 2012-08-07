@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import atexit
 import logging
 import socket
 import struct
@@ -237,10 +238,11 @@ Offset = NamedStruct('Offset', (
 
 class ResponseFuture(object):
 
-    def __init__(self, request):
-        self._ready = Event()
-        self.error = False
+    def __init__(self, request, has_response):
         self.request = request
+        self.has_response = has_response
+        self.error = False
+        self._ready = Event()
 
     def set_response(self, response):
         self.response = response
@@ -257,12 +259,10 @@ class ResponseFuture(object):
         return self.response
 
 
-class ConnectionHandler(object):
+class RequestHandler(object):
 
-    def __init__(self, host, port, timeout):
-        self.host = host
-        self.port = port
-        self.timeout = timeout
+    def __init__(self, connection):
+        self.connection = connection
 
     def start(self):
         raise NotImplementedError
@@ -270,29 +270,61 @@ class ConnectionHandler(object):
     def stop(self):
         raise NotImplementedError
 
-    def connect(self):
-        raise NotImplementedError
-
-    def disconnect(self):
-        raise NotImplementedError
-
-    def reconnect(self):
-        raise NotImplementedError
-
     def request(self):
         raise NotImplementedError
 
 
-import atexit
-class ThreadedConnectionHandler(ConnectionHandler):
+class ThreadedRequestHandler(RequestHandler):
 
-    def __init__(self, host, port, timeout):
-        super(ThreadedConnectionHandler, self).__init__(host, port, timeout)
+    def __init__(self, connection):
+        super(ThreadedRequestHandler, self).__init__(connection)
         self._requests = Queue()
         self.ending = Event()
-        self.connect()
-        self.start()
         atexit.register(self.stop)
+
+    def request(self, request, has_response=True):
+        """Enqueue a request
+
+        :param has_response: Whether we should expect a response.
+        :type has_response: bool
+
+        """
+        future = ResponseFuture(request, has_response)
+        self._requests.put(future)
+        return future
+
+    def start(self):
+        self.t = self._start_thread()
+
+    def stop(self):
+        self._requests.join()
+        self.ending.set()
+
+    def _start_thread(self):
+        def worker():
+            while not self.ending.is_set():
+                future = self._requests.get()
+                try:
+                    self.connection.request(future)
+                    if future.has_response:
+                        self.connection.response(future)
+                except Exception, e:
+                    future.set_error(e)
+                finally:
+                    self._requests.task_done()
+
+        t = Thread(target=worker)
+        t.daemon = True
+        t.start()
+        return t
+
+
+class SamsaConnection(object):
+
+    def __init__(self, host, port, timeout):
+        self.host = host
+        self.port = port
+        self.timeout = timeout
 
     def connect(self):
         """
@@ -316,48 +348,11 @@ class ThreadedConnectionHandler(ConnectionHandler):
         self.disconnect()
         self.connect()
 
-    def request(self, request, response=True):
-        """Enqueue a request
-
-        :param response: Whether we should expect a response.
-        :type response: bool
-
-        """
-        future = ResponseFuture(request)
-        self._requests.put((response, future))
-        return future
-
-    def start(self):
-        self.t = self._start_thread()
-
-    def stop(self):
-        self._requests.join()
-        self.ending.set()
-        self.disconnect()
-
-    def _start_thread(self):
-        def worker():
-            while not self.ending.is_set():
-                expect_response, future = self._requests.get()
-                try:
-                    self._request(future)
-                    if expect_response:
-                        self._response(future)
-                except Exception, e:
-                    future.set_error(e)
-                finally:
-                    self._requests.task_done()
-
-        t = Thread(target=worker)
-        t.daemon = True
-        t.start()
-        return t
-
-    def _request(self, future):
+    def request(self, future):
         # TODO: Retry/reconnect on failure?
         self._socket.sendall(str(future.request.wrap(4)))
 
-    def _response(self, future):
+    def response(self, future):
         response = recv_framed(self._socket, ResponseFrameHeader)
         header = ResponseErrorHeader.unpack_from(buffer(response))
         if header.error:
@@ -377,11 +372,11 @@ class Client(object):
     :param timeout: socket timeout
     """
     def __init__(self, host, port=9092, timeout=None, autoconnect=True):
-        self.host = host
-        self.port = port
-        self.connection = ThreadedConnectionHandler(host, port, timeout)
+        connection = SamsaConnection(host, port, timeout)
         if autoconnect:
-            self.connection.connect()
+            connection.connect()
+        self.handler = ThreadedRequestHandler(connection)
+        self.handler.start()
 
     __repr__ = attribute_repr('connection')
 
@@ -402,7 +397,7 @@ class Client(object):
         request.pack(2, REQUEST_TYPE_PRODUCE)
         write_request_header(request, topic, partition)
         request.write(encode_messages(messages))
-        return self.connection.request(request, response=False)
+        return self.handler.request(request, has_response=False)
 
     def multiproduce(self, data):
         """
@@ -428,7 +423,7 @@ class Client(object):
         request.pack(2, len(payloads))
         for payload in payloads:
             request.write(payload)
-        return self.connection.request(request, response=False)
+        return self.handler.request(request, has_response=False)
 
     def fetch(self, topic, partition, offset, size):
         """
@@ -452,7 +447,7 @@ class Client(object):
         write_request_header(request, topic, partition)
         request.pack(8, offset)
         request.pack(4, size)
-        response = self.connection.request(request)
+        response = self.handler.request(request)
 
         return decode_messages(response.get(), from_offset=offset)
 
@@ -495,7 +490,7 @@ class Client(object):
         request.pack(2, len(payloads))
         for payload in payloads:
             request.write(payload)
-        response = self.connection.request(request)
+        response = self.handler.request(request)
         return decode_message_sets(response.get(), from_offsets)
 
     def offsets(self, topic, partition, time, max):
@@ -518,7 +513,7 @@ class Client(object):
         write_request_header(request, topic, partition)
         request.pack(8, time)
         request.pack(4, max)
-        response = self.connection.request(request)
+        response = self.handler.request(request)
         (count,) = OffsetsResponseHeader.unpack_from(response.get())
         offsets = []
         for i in xrange(0, count):
