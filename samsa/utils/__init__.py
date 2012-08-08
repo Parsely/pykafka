@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+
 def attribute_repr(*attributes):
     """
     Provides an alternative ``__repr__`` implementation that adds the values of
@@ -30,8 +31,8 @@ def attribute_repr(*attributes):
     """
     def _repr(self):
         cls = self.__class__
-        pairs = ('%s=%s' % (attribute, repr(getattr(self, attribute, None))) for attribute in attributes)
-        return u'<%s.%s at 0x%x: %s>' % (cls.__module__, cls.__name__, id(self), ', '.join(pairs))
+        pairs = ('%s=%s' % (attribute, repr(getattr(self, attribute, None)))
+            for attribute in attributes)
+        return u'<%s.%s at 0x%x: %s>' % (
+            cls.__module__, cls.__name__, id(self), ', '.join(pairs))
     return _repr
-
-

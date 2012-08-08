@@ -18,7 +18,6 @@ import logging
 import random
 import string
 import struct
-import time
 from zlib import crc32
 
 import unittest2
@@ -59,7 +58,8 @@ class MessageTestCase(unittest2.TestCase):
             if checksum is None:
                 checksum = self.valid_checksum
             encoded = ''.join([struct.pack('!bi', magic, checksum), payload])
-            framed = buffer(''.join([struct.pack('!i', len(encoded)), encoded]))
+            framed = buffer(''.join([struct.pack('!i', len(encoded)),
+                encoded]))
             return Message(framed)
 
         message = make_message(self.payload)
@@ -70,7 +70,8 @@ class MessageTestCase(unittest2.TestCase):
             'magic': magic,
         }, message.headers)
 
-        self.assertFalse(make_message(self.payload, self.valid_checksum - 1).valid)
+        self.assertFalse(make_message(self.payload,
+            self.valid_checksum - 1).valid)
 
     def test_07_format(self):
         magic = 1
@@ -78,8 +79,10 @@ class MessageTestCase(unittest2.TestCase):
         def make_message(payload, checksum=None, compression=0):
             if checksum is None:
                 checksum = self.valid_checksum
-            encoded = ''.join([struct.pack('!bbi', magic, compression, checksum), payload])
-            framed = buffer(''.join([struct.pack('!i', len(encoded)), encoded]))
+            encoded = ''.join([
+                struct.pack('!bbi', magic, compression, checksum), payload])
+            framed = buffer(''.join([struct.pack('!i', len(encoded)),
+                encoded]))
             return Message(framed)
 
         message = make_message(self.payload)
@@ -92,7 +95,8 @@ class MessageTestCase(unittest2.TestCase):
 
         # TODO: Test with compression
 
-        self.assertFalse(make_message(self.payload, self.valid_checksum - 1).valid)
+        self.assertFalse(make_message(self.payload,
+            self.valid_checksum - 1).valid)
 
 
 def filter_messages(stream):
@@ -109,25 +113,6 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
     def setUp(self):
         super(ClientIntegrationTestCase, self).setUp()
         self.kafka = Client(host='localhost', port=self.kafka_broker.port)
-
-    def assertPassesWithMultipleAttempts(self, fn, attempts, timeout=1, backoff=None):
-        if backoff is None:
-            backoff = lambda attempt, timeout: timeout
-
-        for attempt in xrange(1, attempts + 1):
-            logger.debug('Starting attempt %s for %s...', attempt, fn)
-            try:
-                fn()
-                logger.info('Passed attempt %s for %s', attempt, fn)
-                break
-            except AssertionError:
-                if attempt < attempts:
-                    wait = backoff(attempt, timeout)
-                    logger.exception('Failed attempt %s for %s, waiting for %s seconds',
-                        attempt, fn, wait)
-                    time.sleep(wait)
-                else:
-                    raise
 
     def test_produce(self):
         topic = 'topic'
@@ -199,13 +184,15 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
     def test_fetch_sizing(self):
         topic = 'topic'
         partition = 0
-        payload = ''.join(random.choice(string.ascii_letters) for _ in xrange(0, 300))
+        payload = ''.join(random.choice(string.ascii_letters) for _
+            in xrange(0, 300))
 
         producer = self.producer(topic)
         producer.publish([payload])
 
         def ensure_no_partial_messages():
-            messages = list(self.kafka.fetch(topic, partition, 0, len(payload) // 2))
+            size = len(payload) // 2
+            messages = list(self.kafka.fetch(topic, partition, 0, size))
             self.assertEqual(len(messages), 0)
 
             messages = list(self.kafka.fetch(topic, partition, 0, 1024 * 300))

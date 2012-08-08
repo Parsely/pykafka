@@ -43,7 +43,8 @@ class TopicMap(object):
         """
         Returns a :class:`samsa.topics.Topic` for the given key.
 
-        This is a proxy to :meth:`~TopicMap.get` for a more dict-like interface.
+        This is a proxy to :meth:`~TopicMap.get` for a more dict-like
+        interface.
         """
         return self.get(key)
 
@@ -96,8 +97,9 @@ class Topic(object):
         :type key: implementation-specific
         """
         if len(self.partitions) < 1:
-            raise NoAvailablePartitions('No partitions are available to accept '
-                'a write for this message. (Is your Kafka broker running?)')
+            raise NoAvailablePartitions('No partitions are available to '
+                'accept a write for this message. (Is your Kafka broker '
+                'running?)')
         partition = self.partitioner(self.partitions, key)
         return partition.publish(data)
 
