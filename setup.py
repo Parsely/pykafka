@@ -55,6 +55,10 @@ setup(
     tests_require=tests_require,
     setup_requires=setup_requires,
     dependency_links=dependency_links,
+    extras_require={
+        'test': tests_require,
+        'all': install_requires + tests_require
+    },
     zip_safe=False,
     test_suite='nose.collector',
 )
