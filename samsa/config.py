@@ -77,7 +77,7 @@ class ConsumerConfig(Config):
     # message is available for consumption. By setting the value to a positive
     # integer, a timeout exception is thrown to the consumer if no message is
     # available for consumption after the specified timeout value.
-    consumer_timeout_ms = -1
+    consumer_timeout = 4
 
     # max number of retries during rebalance
     rebalance_retries_max = 4
