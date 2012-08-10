@@ -7,7 +7,7 @@ doc:
 	cd doc/ && make html
 
 lint:
-	pip install -r requirements/lint.txt
+	pip install --use-mirrors samsa[lint]
 	pyflakes ./samsa
 	pyflakes ./tests
 	pep8 ./samsa ./tests
