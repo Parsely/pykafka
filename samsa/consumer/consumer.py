@@ -162,4 +162,4 @@ class Consumer(object):
             partition.stop()
 
     def empty(self):
-        return all(map(lambda p: p.queue.empty(), self.partitions))
+        return all([p.queue.empty() for p in self.partitions])
