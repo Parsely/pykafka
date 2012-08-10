@@ -89,7 +89,8 @@ class OwnedPartition(Partition):
         :type size: int
 
         """
-        last_offset = self._fetch_offset
+
+        last_offset = None
 
         messages = super(OwnedPartition, self).fetch(
             self._fetch_offset,
@@ -103,7 +104,9 @@ class OwnedPartition(Partition):
                 message, True,
                 self.config['consumer_timeout']
             )
-        self._fetch_offset = last_offset
+
+        if last_offset:
+            self._fetch_offset = last_offset
 
     def next_message(self, timeout=None):
         """Retrieve the next message for this partition.
@@ -117,9 +120,9 @@ class OwnedPartition(Partition):
         if not timeout:
             timeout = self.config['consumer_timeout']
 
-        msg = self.queue.get(True, timeout)
-        self._offset = msg.next_offset
-        return msg.payload
+        message = self.queue.get(True, timeout)
+        self._offset = message.next_offset
+        return message.payload
 
     def commit_offset(self):
         """Commit current offset to zookeeper.
