@@ -63,6 +63,7 @@ setup(
     extras_require={
         'test': tests_require,
         'all': install_requires + tests_require,
+        'docs': ['sphinx'] + tests_require,
         'lint': lint_requires
     },
     zip_safe=False,
