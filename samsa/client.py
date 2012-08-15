@@ -23,7 +23,7 @@ from Queue import Queue
 from threading import Event, Thread
 from zlib import crc32
 
-from samsa.exceptions import ERROR_CODES
+from samsa.exceptions import ERROR_CODES, InvalidVersion
 from samsa.utils import attribute_repr
 from samsa.utils.functional import methodimap
 from samsa.utils.namedstruct import NamedStruct
@@ -41,6 +41,13 @@ logger = logging.getLogger(__name__)
 
 OFFSET_LATEST = -1
 OFFSET_EARLIEST = -2
+
+DEFAULT_VERSION = 0
+
+COMPRESSION_TYPE_NONE = 0
+COMPRESSION_TYPE_GZIP = 1
+COMPRESSION_TYPE_SNAPPY = 2
+COMPRESSION_TYPES = (COMPRESSION_TYPE_NONE, COMPRESSION_TYPE_GZIP, COMPRESSION_TYPE_SNAPPY)
 
 MessageSetFrameHeader = NamedStruct('MessageSetFrameHeader', (
     ('i', 'length'),
@@ -70,6 +77,11 @@ Offset = NamedStruct('Offset', (
 
 # Messages
 
+class VersionHeaderMap(dict):
+    def __missing__(self, key):
+        raise InvalidVersion('%s is not a valid version identifier' % key)
+
+
 class Message(object):
     __slots__ = ('_headers', 'raw', 'offset')
 
@@ -78,7 +90,7 @@ class Message(object):
         ('b', 'magic'),
     ))
 
-    VersionHeaders = {
+    VersionHeaders = VersionHeaderMap({
         0: NamedStruct('Header', (
             ('i', 'checksum'),
         )),
@@ -86,7 +98,7 @@ class Message(object):
             ('b', 'compression'),
             ('i', 'checksum'),
         )),
-    }
+    })
 
     def __init__(self, raw, offset=0):
         self.raw = raw
@@ -147,7 +159,7 @@ class Message(object):
         return self['checksum'] == crc32(self.payload)
 
     @classmethod
-    def pack_into(cls, bytea, offset, payload, version=0):
+    def pack_into(cls, bytea, offset, payload, version, compression=None):
         """
         Packs a message payload into a buffer.
 
@@ -159,21 +171,43 @@ class Message(object):
         :type payload: str
         :param version: message version to publish ("magic number")
         :type version: int
+        :param compression: which compression format to use (only for version 1)
+        :type compression: int
         :returns: total amount of written (in bytes)
         :rtype: int
         """
-        assert version == 0  # todo
+        if version < 1:
+            if compression is not None:
+                raise ValueError('Compression is not supported on version %s' % version)
+        elif compression is not None:
+            if compression not in COMPRESSION_TYPES:
+                raise ValueError('%s is not a valid compression type' % compression)
+            elif compression is not COMPRESSION_TYPE_NONE:
+                raise NotImplementedError  # TODO
+        else:
+            compression = COMPRESSION_TYPE_NONE
+
         VersionHeader = cls.VersionHeaders[version]
+
+        # Write generic message header.
         length = cls.Header.size + VersionHeader.size + len(payload)
         cls.Header.pack_into(bytea, offset=offset, length=length - 4, magic=version)
         offset += cls.Header.size
-        VersionHeader.pack_into(bytea, offset=offset, checksum=crc32(payload))
+
+        # Write versioned message header.
+        version_kwargs = {}
+        if compression is not None:
+            version_kwargs['compression'] = compression
+        VersionHeader.pack_into(bytea, offset=offset, checksum=crc32(payload), **version_kwargs)
         offset += VersionHeader.size
+
+        # Write message payload.
         bytea[offset:offset+len(payload)] = payload
+
         return length
 
     @classmethod
-    def encode(cls, messages, version=0):
+    def encode(cls, messages, version, **kwargs):
         """
         Encodes multiple messages.
 
@@ -181,6 +215,7 @@ class Message(object):
         :type messages: sequence of strs
         :param version: message version to publish ("magic number")
         :type version: int
+        :param \*\*kwargs: extra arguments to pass to :meth:`.pack_into`
         :returns: encoded messages
         :rtype: :class:`samsa.utils.structuredio.StructuredBytesIO`
         """
@@ -190,7 +225,7 @@ class Message(object):
         MessageSetFrameHeader.pack_into(bytea, 0, length=length - 4)
         offset = MessageSetFrameHeader.size
         for message in messages:
-            written = cls.pack_into(bytea, offset, payload=message, version=version)
+            written = cls.pack_into(bytea, offset, payload=message, version=version, **kwargs)
             offset += written
         return StructuredBytesIO(bytea)
 
@@ -425,7 +460,7 @@ class Client(object):
 
     # Protocol Implementation
 
-    def produce(self, topic, partition, messages):
+    def produce(self, topic, partition, messages, version=DEFAULT_VERSION, **kwargs):
         """
         Sends messages to the broker on a single topic/partition combination.
 
@@ -435,14 +470,18 @@ class Client(object):
         :param partition: partition ID
         :param messages: the messages to be sent
         :type messages: list, generator, or other iterable of strings
+        :param version: version of message encoding
+        :type version: int
+        :param \*\*kwargs: extra (version-specific) keyword arguments to pass to
+            message encoder
         """
         request = StructuredBytesIO()
         request.pack(2, REQUEST_TYPE_PRODUCE)
         write_request_header(request, topic, partition)
-        request.write(Message.encode(messages))
+        request.write(Message.encode(messages, version=version, **kwargs))
         return self.handler.request(request, has_response=False)
 
-    def multiproduce(self, data):
+    def multiproduce(self, data, version=DEFAULT_VERSION, **kwargs):
         """
         Sends messages to the broker on multiple topics and/or partitions.
 
@@ -454,12 +493,16 @@ class Client(object):
         :param data: sequence of 3-tuples of the format
                      ``(topic, partition, messages)``
         :type data: list, generator, or other iterable
+        :param version: version of message encoding
+        :type version: int
+        :param \*\*kwargs: extra (version-specific) keyword arguments to pass to
+            message encoder
         """
         payloads = []
         for topic, partition, messages in data:
             payload = StructuredBytesIO()
             write_request_header(payload, topic, partition)
-            payload.write(Message.encode(messages))
+            payload.write(Message.encode(messages, version=version, **kwargs))
             payloads.append(payload)
 
         request = StructuredBytesIO()

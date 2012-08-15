@@ -31,6 +31,10 @@ class PartitionOwnedException(SamsaException):
     pass
 
 
+class InvalidVersion(SamsaException):
+    pass
+
+
 # Protocol Client Exceptions
 
 class ProtocolClientException(SamsaException):
