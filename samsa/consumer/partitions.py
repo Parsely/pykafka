@@ -77,6 +77,32 @@ class OwnedPartition(Partition):
     def offset(self):
         return self._current_offset
 
+    def next_message(self, timeout=None):
+        """Retrieve the next message for this partition.
+
+        :param timeout: blog for timeout if integer, or indefinitely if None.
+
+        """
+
+        if not self._fetch_thread.is_alive():
+            # TODO: turn this back into a long running thread if possible
+            self._fetch_thread = self._create_thread()
+        if not timeout:
+            timeout = self.config['consumer_timeout']
+
+        # TODO: deal with Queue.Empty exception
+        message = self._message_queue.get(True, timeout)
+        self._current_offset = message.next_offset
+        return message.payload
+
+    def commit_offset(self):
+        """Commit current offset to zookeeper.
+        """
+        self.cluster.zookeeper.set(self.path, str(self._current_offset))
+
+    def stop(self):
+        self._fetch_thread.join()
+
     def _create_thread(self):
         _fetch_thread = threading.Thread(
             target=self._fetch,
@@ -111,32 +137,6 @@ class OwnedPartition(Partition):
 
         if last_offset:
             self._next_offset = last_offset
-
-    def next_message(self, timeout=None):
-        """Retrieve the next message for this partition.
-
-        :param timeout: blog for timeout if integer, or indefinitely if None.
-
-        """
-
-        if not self._fetch_thread.is_alive():
-            # TODO: turn this back into a long running thread if possible
-            self._fetch_thread = self._create_thread()
-        if not timeout:
-            timeout = self.config['consumer_timeout']
-
-        # TODO: deal with Queue.Empty exception
-        message = self._message_queue.get(True, timeout)
-        self._current_offset = message.next_offset
-        return message.payload
-
-    def commit_offset(self):
-        """Commit current offset to zookeeper.
-        """
-        self.cluster.zookeeper.set(self.path, str(self._current_offset))
-
-    def stop(self):
-        self._fetch_thread.join()
 
     def __del__(self):
         self.stop()
