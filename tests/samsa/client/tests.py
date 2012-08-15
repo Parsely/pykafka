@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import itertools
 import logging
 import random
 import string
@@ -114,16 +115,20 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
         super(ClientIntegrationTestCase, self).setUp()
         self.kafka = Client(host='localhost', port=self.kafka_broker.port)
 
-    def test_produce(self):
+    def test_produce(self, count=1):
         topic = 'topic'
         message = 'hello world'
         consumer = self.consumer(topic)
-        self.kafka.produce(topic, 0, (message,))
+        messages = (message,) * count
+        self.kafka.produce(topic, 0, messages)
 
-        consumed = next(filter_messages(consumer.process.stdout))
-        self.assertEqual(consumed, message)
+        consumed = list(itertools.islice(filter_messages(consumer.process.stdout), count))
+        self.assertEqual(consumed, list(messages))
 
-    def test_multiproduce(self):
+    def test_produce_with_multiple_messages(self):
+        self.test_produce(count=3)
+
+    def test_multiproduce(self, count=1):
         topics = ('topic-a', 'topic-b')
 
         def message_for_topic(topic):
@@ -136,13 +141,17 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
 
         batch = []
         for topic in topics:
-            batch.append((topic, 0, (message_for_topic(topic),)))
+            batch.append((topic, 0, (message_for_topic(topic),) * count))
 
         self.kafka.multiproduce(batch)
 
         for topic, consumer in consumers.items():
-            consumed = next(filter_messages(consumer.process.stdout))
-            self.assertEqual(consumed, message_for_topic(topic))
+            consumed = list(itertools.islice(filter_messages(consumer.process.stdout), count))
+            messages = list((message_for_topic(topic),) * count)
+            self.assertEqual(consumed, messages)
+
+    def test_multiproduce_with_multiple_messages(self):
+        self.test_multiproduce(count=3)
 
     def test_fetch(self):
         # TODO: test error conditions
