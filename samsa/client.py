@@ -27,7 +27,7 @@ from samsa.exceptions import ERROR_CODES
 from samsa.utils import attribute_repr
 from samsa.utils.functional import methodimap
 from samsa.utils.namedstruct import NamedStruct
-from samsa.utils.socket import recvall_into, recv_struct, recv_framed
+from samsa.utils.socket import recv_framed
 from samsa.utils.structuredio import StructuredBytesIO
 
 
