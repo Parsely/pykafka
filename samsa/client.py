@@ -33,61 +33,42 @@ from samsa.utils.structuredio import StructuredBytesIO
 
 logger = logging.getLogger(__name__)
 
-# Message Decoding
+
+# Requests
+
+(REQUEST_TYPE_PRODUCE, REQUEST_TYPE_FETCH, REQUEST_TYPE_MULTIFETCH,
+    REQUEST_TYPE_MULTIPRODUCE, REQUEST_TYPE_OFFSETS) = range(0, 5)
+
+OFFSET_LATEST = -1
+OFFSET_EARLIEST = -2
+
+MessageSetFrameHeader = NamedStruct('MessageSetFrameHeader', (
+    ('i', 'length'),
+))
+
+# Responses
 
 MessageSetHeader = NamedStruct('MessageSetHeader', (
     ('i', 'length'),
     ('h', 'error'),
 ))
 
+ResponseFrameHeader = struct.Struct('!i')
 
-def decode_message_sets(payload, from_offsets):
-    offset = 0
-    for from_offset in from_offsets:
-        (length,) = ResponseFrameHeader.unpack_from(payload, offset=offset)
-        header = ResponseErrorHeader.unpack_from(
-            payload,
-            offset=offset + ResponseFrameHeader.size
-        )
-        if header.error:
-            error_class = ERROR_CODES.get(header.error, -1)
-            raise error_class(error_class.reason)
-        message_set_payload = buffer(payload,
-            offset + (ResponseFrameHeader.size + ResponseErrorHeader.size),
-            length - ResponseErrorHeader.size)
-        yield decode_messages(message_set_payload, from_offset)
-        offset += length + ResponseFrameHeader.size
+ResponseErrorHeader = NamedStruct('ResponseErrorHeader', (
+    ('h', 'error'),
+))
+
+OffsetsResponseHeader = NamedStruct('OffsetsResponseHeader', (
+    ('i', 'count'),
+))
+
+Offset = NamedStruct('Offset', (
+    ('q', 'value'),
+))
 
 
-def decode_messages(payload, from_offset):
-    """
-    Decodes ``Message`` objects from a ``payload`` buffer.
-    """
-    offset = 0
-    while offset < len(payload):
-        header = Message.Header.unpack_from(payload, offset)
-        length = 4 + header.length
-        message = Message(
-            raw=buffer(payload, offset, length),
-            offset=from_offset + offset
-        )
-        if message.valid:
-            yield message
-        else:
-            if len(message) + offset == len(payload):
-                # If this is the last message,
-                # it's OK to drop it if it's truncated.
-                logger.info('Discarding partial message '
-                            '(expected %s bytes, got %s): %s',
-                    length, len(message), message)
-                return
-            else:
-                raise AssertionError(
-                    "Length of %s (%s) does not match it's "
-                    "stated frame size of %s" % (message, len(message), length)
-                )
-        offset += length
-
+# Messages
 
 class Message(object):
     __slots__ = ('_headers', 'raw', 'offset')
@@ -167,6 +148,20 @@ class Message(object):
 
     @classmethod
     def pack_into(cls, bytea, offset, payload, version=0):
+        """
+        Packs a message payload into a buffer.
+
+        :param bytea: buffer to pack the message into
+        :type bytea: bytearray
+        :param offset: offset to start writing at
+        :type offset: int
+        :param payload: message payload
+        :type payload: str
+        :param version: message version to publish ("magic number")
+        :type version: int
+        :returns: total amount of written (in bytes)
+        :rtype: int
+        """
         assert version == 0  # todo
         VersionHeader = cls.VersionHeaders[version]
         length = cls.Header.size + VersionHeader.size + len(payload)
@@ -177,49 +172,81 @@ class Message(object):
         bytea[offset:offset+len(payload)] = payload
         return length
 
+    @classmethod
+    def encode(cls, messages, version=0):
+        """
+        Encodes multiple messages.
 
-(REQUEST_TYPE_PRODUCE, REQUEST_TYPE_FETCH, REQUEST_TYPE_MULTIFETCH,
-    REQUEST_TYPE_MULTIPRODUCE, REQUEST_TYPE_OFFSETS) = range(0, 5)
+        :param messages: messages to publish
+        :type messages: sequence of strs
+        :param version: message version to publish ("magic number")
+        :type version: int
+        :returns: encoded messages
+        :rtype: :class:`samsa.utils.structuredio.StructuredBytesIO`
+        """
+        message_header_length = cls.Header.size + cls.VersionHeaders[version].size
+        length = MessageSetFrameHeader.size + sum(map(len, messages)) + (len(messages) * message_header_length)
+        bytea = bytearray(length)
+        MessageSetFrameHeader.pack_into(bytea, 0, length=length - 4)
+        offset = MessageSetFrameHeader.size
+        for message in messages:
+            written = cls.pack_into(bytea, offset, payload=message, version=version)
+            offset += written
+        return StructuredBytesIO(bytea)
 
-OFFSET_LATEST = -1
-OFFSET_EARLIEST = -2
+
+def decode_message_sets(payload, from_offsets):
+    offset = 0
+    for from_offset in from_offsets:
+        (length,) = ResponseFrameHeader.unpack_from(payload, offset=offset)
+        header = ResponseErrorHeader.unpack_from(
+            payload,
+            offset=offset + ResponseFrameHeader.size
+        )
+        if header.error:
+            error_class = ERROR_CODES.get(header.error, -1)
+            raise error_class(error_class.reason)
+        message_set_payload = buffer(payload,
+            offset + (ResponseFrameHeader.size + ResponseErrorHeader.size),
+            length - ResponseErrorHeader.size)
+        yield decode_messages(message_set_payload, from_offset)
+        offset += length + ResponseFrameHeader.size
+
+
+def decode_messages(payload, from_offset):
+    """
+    Decodes ``Message`` objects from a ``payload`` buffer.
+    """
+    offset = 0
+    while offset < len(payload):
+        header = Message.Header.unpack_from(payload, offset)
+        length = 4 + header.length
+        message = Message(
+            raw=buffer(payload, offset, length),
+            offset=from_offset + offset
+        )
+        if message.valid:
+            yield message
+        else:
+            if len(message) + offset == len(payload):
+                # If this is the last message,
+                # it's OK to drop it if it's truncated.
+                logger.info('Discarding partial message '
+                            '(expected %s bytes, got %s): %s',
+                    length, len(message), message)
+                return
+            else:
+                raise AssertionError(
+                    "Length of %s (%s) does not match it's "
+                    "stated frame size of %s" % (message, len(message), length)
+                )
+        offset += length
 
 
 def write_request_header(request, topic, partition):
     request.frame(2, topic)
     request.pack(4, partition)
     return request
-
-
-MessageSetFrameHeader = NamedStruct('MessageSetFrameHeader', (
-    ('i', 'length'),
-))
-
-def encode_messages(messages, version=0):
-    message_header_length = Message.Header.size + Message.VersionHeaders[version].size
-    length = MessageSetFrameHeader.size + sum(map(len, messages)) + (len(messages) * message_header_length)
-    bytea = bytearray(length)
-    MessageSetFrameHeader.pack_into(bytea, 0, length=length - 4)
-    offset = MessageSetFrameHeader.size
-    for message in messages:
-        written = Message.pack_into(bytea, offset, payload=message, version=version)
-        offset += written
-    return StructuredBytesIO(bytea)
-
-# Client API
-
-ResponseFrameHeader = struct.Struct('!i')
-ResponseErrorHeader = NamedStruct('ResponseErrorHeader', (
-    ('h', 'error'),
-))
-
-OffsetsResponseHeader = NamedStruct('OffsetsResponseHeader', (
-    ('i', 'count'),
-))
-
-Offset = NamedStruct('Offset', (
-    ('q', 'value'),
-))
 
 
 class ResponseFuture(object):
@@ -412,7 +439,7 @@ class Client(object):
         request = StructuredBytesIO()
         request.pack(2, REQUEST_TYPE_PRODUCE)
         write_request_header(request, topic, partition)
-        request.write(encode_messages(messages))
+        request.write(Message.encode(messages))
         return self.handler.request(request, has_response=False)
 
     def multiproduce(self, data):
@@ -432,7 +459,7 @@ class Client(object):
         for topic, partition, messages in data:
             payload = StructuredBytesIO()
             write_request_header(payload, topic, partition)
-            payload.write(encode_messages(messages))
+            payload.write(Message.encode(messages))
             payloads.append(payload)
 
         request = StructuredBytesIO()
