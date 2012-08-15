@@ -69,6 +69,7 @@ class OwnedPartition(Partition):
             self._offset = 0
 
         # the offset at which we should make our next fetch
+        # TODO: give these better names
         self._fetch_offset = self._offset
         self.queue = Queue(self.config['queuedchunks_max'])
         self.fetch_thread = self._create_thread()
@@ -116,10 +117,12 @@ class OwnedPartition(Partition):
         """
 
         if not self.fetch_thread.is_alive():
+            # TODO: turn this back into a long running thread if possible
             self.fetch_thread = self._create_thread()
         if not timeout:
             timeout = self.config['consumer_timeout']
 
+        # TODO: deal with Queue.Empty exception
         message = self.queue.get(True, timeout)
         self._offset = message.next_offset
         return message.payload
