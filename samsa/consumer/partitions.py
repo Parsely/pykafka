@@ -63,25 +63,28 @@ class OwnedPartition(Partition):
         # _offset is cursor to next message we haven't consumed
         try:
             offset, stat = self.cluster.zookeeper.get(self.path)
-            self._offset = int(offset)
+            self._current_offset = int(offset)
         except NoNodeException:
             self.cluster.zookeeper.create(self.path, str(0), makepath=True)
-            self._offset = 0
+            self._current_offset = 0
 
         # the offset at which we should make our next fetch
-        # TODO: give these better names
-        self._fetch_offset = self._offset
-        self.queue = Queue(self.config['queuedchunks_max'])
-        self.fetch_thread = self._create_thread()
+        self._next_offset = self._current_offset
+        self._message_queue = Queue(self.config['queuedchunks_max'])
+        self._fetch_thread = self._create_thread()
+
+    @property
+    def offset(self):
+        return self._current_offset
 
     def _create_thread(self):
-        fetch_thread = threading.Thread(
+        _fetch_thread = threading.Thread(
             target=self._fetch,
             args=(self.config['fetch_size'],)
         )
-        fetch_thread.daemon = True
-        fetch_thread.start()
-        return fetch_thread
+        _fetch_thread.daemon = True
+        _fetch_thread.start()
+        return _fetch_thread
 
     def _fetch(self, size):
         """Fetch up to `size` bytes of new messages and add to queue.
@@ -94,20 +97,20 @@ class OwnedPartition(Partition):
         last_offset = None
 
         messages = super(OwnedPartition, self).fetch(
-            self._fetch_offset,
+            self._next_offset,
             size
         )
 
         for message in messages:
             last_offset = message.next_offset
             logger.info('%s: Received message: %s', self, message)
-            self.queue.put(
+            self._message_queue.put(
                 message, True,
                 self.config['consumer_timeout']
             )
 
         if last_offset:
-            self._fetch_offset = last_offset
+            self._next_offset = last_offset
 
     def next_message(self, timeout=None):
         """Retrieve the next message for this partition.
@@ -116,24 +119,24 @@ class OwnedPartition(Partition):
 
         """
 
-        if not self.fetch_thread.is_alive():
+        if not self._fetch_thread.is_alive():
             # TODO: turn this back into a long running thread if possible
-            self.fetch_thread = self._create_thread()
+            self._fetch_thread = self._create_thread()
         if not timeout:
             timeout = self.config['consumer_timeout']
 
         # TODO: deal with Queue.Empty exception
-        message = self.queue.get(True, timeout)
-        self._offset = message.next_offset
+        message = self._message_queue.get(True, timeout)
+        self._current_offset = message.next_offset
         return message.payload
 
     def commit_offset(self):
         """Commit current offset to zookeeper.
         """
-        self.cluster.zookeeper.set(self.path, str(self._offset))
+        self.cluster.zookeeper.set(self.path, str(self._current_offset))
 
     def stop(self):
-        self.fetch_thread.join()
+        self._fetch_thread.join()
 
     def __del__(self):
         self.stop()
