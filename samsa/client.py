@@ -165,6 +165,18 @@ class Message(object):
     def valid(self):
         return self['checksum'] == crc32(self.payload)
 
+    @classmethod
+    def pack_into(cls, bytea, offset, payload, version=0):
+        assert version == 0  # todo
+        VersionHeader = cls.VersionHeaders[version]
+        length = cls.Header.size + VersionHeader.size + len(payload)
+        cls.Header.pack_into(bytea, offset=offset, length=length - 4, magic=version)
+        offset += cls.Header.size
+        VersionHeader.pack_into(bytea, offset=offset, checksum=crc32(payload))
+        offset += VersionHeader.size
+        bytea[offset:offset+len(payload)] = payload
+        return length
+
 
 (REQUEST_TYPE_PRODUCE, REQUEST_TYPE_FETCH, REQUEST_TYPE_MULTIFETCH,
     REQUEST_TYPE_MULTIPRODUCE, REQUEST_TYPE_OFFSETS) = range(0, 5)
@@ -179,21 +191,20 @@ def write_request_header(request, topic, partition):
     return request
 
 
-def encode_message(content):
-    magic = 0
-    payload = StructuredBytesIO()
-    payload.pack(1, magic)
-    payload.pack(4, crc32(content))
-    payload.write(content)
-    return payload.wrap(4)
+MessageSetFrameHeader = NamedStruct('MessageSetFrameHeader', (
+    ('i', 'length'),
+))
 
-
-def encode_messages(messages):
-    payload = StructuredBytesIO()
+def encode_messages(messages, version=0):
+    message_header_length = Message.Header.size + Message.VersionHeaders[version].size
+    length = MessageSetFrameHeader.size + sum(map(len, messages)) + (len(messages) * message_header_length)
+    bytea = bytearray(length)
+    MessageSetFrameHeader.pack_into(bytea, 0, length=length - 4)
+    offset = MessageSetFrameHeader.size
     for message in messages:
-        payload.write(encode_message(message))
-    return payload.wrap(4)
-
+        written = Message.pack_into(bytea, offset, payload=message, version=version)
+        offset += written
+    return StructuredBytesIO(bytea)
 
 # Client API
 
