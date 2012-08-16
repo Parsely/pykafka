@@ -19,7 +19,7 @@ import unittest2
 from zookeeper import NoNodeException
 
 from samsa.cluster import Cluster
-from samsa.exceptions import NoAvailablePartitions
+from samsa.exceptions import NoAvailablePartitionsError
 from samsa.topics import TopicMap, Topic
 from samsa.test.integration import KafkaIntegrationTestCase
 
@@ -30,7 +30,7 @@ class TopicIntgrationTestCase(KafkaIntegrationTestCase):
 
         self.kafka_broker.stop()
 
-        with self.assertRaises(NoAvailablePartitions):
+        with self.assertRaises(NoAvailablePartitionsError):
             topic.publish('message')
 
 

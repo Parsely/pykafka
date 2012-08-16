@@ -19,7 +19,7 @@ import logging
 from zookeeper import NoNodeException
 
 from samsa.client import Client
-from samsa.exceptions import ImproperlyConfigured
+from samsa.exceptions import ImproperlyConfiguredError
 from samsa.utils import attribute_repr
 from samsa.utils.delayedconfig import (DelayedConfiguration,
     requires_configuration)
@@ -54,7 +54,7 @@ class BrokerMap(DelayedConfiguration):
             broker_ids = self.cluster.zookeeper.get_children(path,
                 watch=self._configure)
         except NoNodeException:
-            raise ImproperlyConfigured('The path "%s" does not exist in your '
+            raise ImproperlyConfiguredError('The path "%s" does not exist in your '
                 'ZooKeeper cluster -- is your Kafka cluster running?' % path)
 
         alive = set()
