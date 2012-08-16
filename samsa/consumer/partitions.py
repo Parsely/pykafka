@@ -19,7 +19,7 @@ import threading
 
 from kazoo.exceptions import NodeExistsException, NoNodeException
 from functools import partial
-from Queue import Queue
+import Queue
 
 from samsa.config import ConsumerConfig
 from samsa.exceptions import PartitionOwnedException
@@ -70,12 +70,15 @@ class OwnedPartition(Partition):
 
         # the offset at which we should make our next fetch
         self._next_offset = self._current_offset
-        self._message_queue = Queue(self.config['queuedchunks_max'])
+        self._message_queue = Queue.Queue(self.config['queuedchunks_max'])
         self._fetch_thread = self._create_thread()
 
     @property
     def offset(self):
         return self._current_offset
+
+    def empty(self):
+        return self._message_queue.empty()
 
     def next_message(self, timeout=None):
         """Retrieve the next message for this partition.
@@ -91,7 +94,10 @@ class OwnedPartition(Partition):
             timeout = self.config['consumer_timeout']
 
         # TODO: deal with Queue.Empty exception
-        message = self._message_queue.get(True, timeout)
+        try:
+            message = self._message_queue.get(True, timeout)
+        except Queue.Empty:
+            return None
         self._current_offset = message.next_offset
         return message.payload
 

@@ -159,7 +159,7 @@ class TestConsumer(KazooTestCase):
         self.assertEquals(len(c.partitions), 1)
         p = list(c.partitions)[0]
 
-        self.assertEquals(p._offset, 3)
+        self.assertEquals(p.offset, 3)
         c.commit_offsets()
 
         d, stat = self.client.get(p.path)
@@ -182,7 +182,7 @@ class TestConsumer(KazooTestCase):
         fetch.return_value = ()
 
         op = OwnedPartition(fake_partition, group)
-        op._offset = offset
+        op._current_offset = offset
         op.commit_offset()
 
         self._register_fake_brokers(1)
@@ -191,9 +191,9 @@ class TestConsumer(KazooTestCase):
 
         self.assertEquals(len(c.partitions), 1)
         p = list(c.partitions)[0]
-        self.assertEquals(p._offset, offset)
+        self.assertEquals(p.offset, offset)
 
-        self.assertRaises(Queue.Empty, p.next_message, 0)
+        self.assertEquals(None, p.next_message(0))
         fetch.assert_called_with(offset, ConsumerConfig.fetch_size)
 
 
@@ -240,7 +240,7 @@ class TestConsumerIntegration(KafkaIntegrationTestCase):
         # wait for one second for :func:`test` to return true or raise an error
         polling_timeout(test, 1)
 
-        old_offset = [p._offset for p in consumer.partitions][0]
+        old_offset = [p.offset for p in consumer.partitions][0]
         # test that the offset of our 1 partition is not 0
         self.assertTrue(old_offset > 0)
         # and that consumer contains no more messages.
@@ -249,7 +249,7 @@ class TestConsumerIntegration(KafkaIntegrationTestCase):
         # repeat and see if offset grows.
         self.kafka.produce(topic, 0, messages)
         polling_timeout(test, 1)
-        self.assertTrue([p._offset for p in consumer.partitions][0] > old_offset)
+        self.assertTrue([p.offset for p in consumer.partitions][0] > old_offset)
 
 
     def test_empty_topic(self):
