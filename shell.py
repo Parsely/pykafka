@@ -17,16 +17,27 @@ limitations under the License.
 #!/usr/bin/env python
 import code
 import logging
+from optparse import OptionParser
 
 from kazoo.client import KazooClient
 
 from samsa.cluster import Cluster
 
+parser = OptionParser()
+parser.add_option('--zookeeper', help='zookeeper hosts', default=None)
+parser.add_option('--log-level', dest='loglevel', help='log level', default='DEBUG')
+
+options, args = parser.parse_args()
+
+zookeeper_kwargs = {}
+if options.zookeeper is not None:
+    zookeeper_kwargs['hosts'] = options.zookeeper
+
 logger = logging.getLogger()
-logger.setLevel(logging.DEBUG)
+logger.setLevel(getattr(logging, options.loglevel.upper()))
 logger.addHandler(logging.StreamHandler())
 
-zookeeper = KazooClient()
+zookeeper = KazooClient(**zookeeper_kwargs)
 zookeeper.connect()
 
 kafka = Cluster(zookeeper)
