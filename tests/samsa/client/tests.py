@@ -23,7 +23,7 @@ from zlib import crc32
 import unittest2
 
 from samsa.client import Client, Message, OFFSET_EARLIEST, OFFSET_LATEST
-from samsa.exceptions import WrongPartition
+from samsa.exceptions import WrongPartitionError
 from samsa.test.integration import KafkaIntegrationTestCase
 
 
@@ -204,7 +204,7 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
         self.assertPassesWithMultipleAttempts(ensure_no_partial_messages, 5)
 
     def test_fetch_wrong_partition(self):
-        with self.assertRaises(WrongPartition):
+        with self.assertRaises(WrongPartitionError):
             self.kafka.fetch('topic', 10, 0, 1024 * 300)
 
     def test_multifetch(self):
