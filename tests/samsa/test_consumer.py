@@ -91,8 +91,8 @@ class TestPartitionOwnerRegistry(KazooTestCase):
         """Test that the reference returned by
         :func:`samsa.consumer.partitions.PartitionOwnerRegistry.get` reflects
         the latest state.
-        """
 
+        """
         partitions = self.por.get()
         self.assertEquals(len(partitions), 0)
 
@@ -120,8 +120,8 @@ class TestConsumer(KazooTestCase):
         Test rebalance
 
         Adjust n_* to see how rebalancing performs.
-        """
 
+        """
         n_partitions = 10
         n_consumers = 3
         self._register_fake_brokers(n_partitions)
@@ -141,8 +141,8 @@ class TestConsumer(KazooTestCase):
     @mock.patch.object(Partition, 'fetch')
     def test_commits_offsets(self, fetch):
         """Test that message offsets are persisted to ZK.
-        """
 
+        """
         self._register_fake_brokers(1)
         t = Topic(self.c, 'testtopic')
 
@@ -168,8 +168,8 @@ class TestConsumer(KazooTestCase):
     @mock.patch.object(Partition, 'fetch')
     def test_consumer_remembers_offset(self, fetch):
         """Test that offsets are successfully retrieved from zk.
-        """
 
+        """
         topic = 'testtopic'
         group = 'testgroup'
         offset = 10
@@ -207,8 +207,8 @@ class TestConsumerIntegration(KafkaIntegrationTestCase):
     def test_consumes(self):
         """Test that :class:`samsa.consumer.Consumer` can consume messages from
         kafka.
-        """
 
+        """
         topic = 'topic'
         messages = ['hello world', 'foobar']
 
@@ -225,6 +225,7 @@ class TestConsumerIntegration(KafkaIntegrationTestCase):
 
             catches exceptions so we can retry while we wait for kafka to
             coallesce.
+
             """
             logger.debug('Running `test`...')
             try:
@@ -254,8 +255,8 @@ class TestConsumerIntegration(KafkaIntegrationTestCase):
 
     def test_empty_topic(self):
         """Test that consuming an empty topic returns an empty list.
-        """
 
+        """
         topic = 'topic'
         t = Topic(self.samsa_cluster, topic)
 

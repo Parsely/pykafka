@@ -45,7 +45,6 @@ class Consumer(object):
         :type group: str.
 
         """
-
         self.config = ConsumerConfig().build()
         self.cluster = cluster
         self.topic = topic
@@ -67,8 +66,8 @@ class Consumer(object):
 
     def _rebalance(self, event=None):
         """Joins a consumer group and claims partitions.
-        """
 
+        """
         logger.info('Rebalancing consumer %s for topic %s.' % (
             self.id, self.topic.name)
         )
@@ -138,8 +137,8 @@ class Consumer(object):
 
     def __iter__(self):
         """Iterate over available messages. Does not return.
-        """
 
+        """
         while True:
             msg = self.next_message(self.config['consumer_timeout'])
             if not msg:
@@ -148,19 +147,22 @@ class Consumer(object):
                 yield msg
 
     def next_message(self, timeout=None):
+        """Get the next message from one of the partitions.
+
+        """
         return random.sample(self.partitions, 1)[0].next_message(timeout)
 
     def commit_offsets(self):
         """Commit the offsets of all messages consumed so far.
-        """
 
+        """
         for partition in self.partitions:
             partition.commit_offset()
 
     def stop_partitions(self):
         """Stop partitions from fetching more threads.
-        """
 
+        """
         self.commit_offsets()
         for partition in self.partitions:
             partition.stop()

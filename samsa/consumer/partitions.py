@@ -46,7 +46,6 @@ class OwnedPartition(Partition):
         :type group: str.
 
         """
-
         super(OwnedPartition, self).__init__(
             partition.cluster, partition.topic,
             partition.broker, partition.number
@@ -60,7 +59,7 @@ class OwnedPartition(Partition):
             self.broker.id, self.number
         )
 
-        # _offset is cursor to next message we haven't consumed
+        # _current_offset is cursor to next message we haven't consumed
         try:
             offset, stat = self.cluster.zookeeper.get(self.path)
             self._current_offset = int(offset)
@@ -86,7 +85,6 @@ class OwnedPartition(Partition):
         :param timeout: blog for timeout if integer, or indefinitely if None.
 
         """
-
         if not self._fetch_thread.is_alive():
             # TODO: turn this back into a long running thread if possible
             self._fetch_thread = self._create_thread()
@@ -103,6 +101,7 @@ class OwnedPartition(Partition):
 
     def commit_offset(self):
         """Commit current offset to zookeeper.
+
         """
         self.cluster.zookeeper.set(self.path, str(self._current_offset))
 
@@ -125,7 +124,6 @@ class OwnedPartition(Partition):
         :type size: int
 
         """
-
         last_offset = None
 
         messages = super(OwnedPartition, self).fetch(
@@ -141,6 +139,7 @@ class OwnedPartition(Partition):
                 self.config['consumer_timeout']
             )
 
+        # If there were any messages, update the next offset to fetch.
         if last_offset:
             self._next_offset = last_offset
 
@@ -165,7 +164,6 @@ class PartitionOwnerRegistry(object):
         :type group: str.
 
         """
-
         self.consumer_id = str(consumer.id)
         self.cluster = cluster
         self.topic = topic
@@ -177,6 +175,7 @@ class PartitionOwnerRegistry(object):
 
     def get(self):
         """Get all owned partitions.
+
         """
         return self._partitions
 
