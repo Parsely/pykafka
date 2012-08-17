@@ -234,7 +234,7 @@ class TestConsumerIntegration(KafkaIntegrationTestCase):
                     messages
                 )
                 return True
-            except (AssertionError, Queue.Empty) as e:
+            except AssertionError as e:
                 logger.exception('Caught exception: %s', e)
                 return False
 
