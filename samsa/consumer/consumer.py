@@ -141,7 +141,11 @@ class Consumer(object):
         """
 
         while True:
-            yield self.next_message(self.config['consumer_timeout'])
+            msg = self.next_message(self.config['consumer_timeout'])
+            if not msg:
+                time.sleep(1)
+            else:
+                yield msg
 
     def next_message(self, timeout=None):
         return random.sample(self.partitions, 1)[0].next_message(timeout)
