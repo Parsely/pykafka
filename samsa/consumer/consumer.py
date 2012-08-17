@@ -127,8 +127,8 @@ class Consumer(object):
                 )
                 break
             except PartitionOwnedError, e:
-                logger.debug("Someone still owns partition %s. Retrying" %
-                        e)
+                logger.debug("Someone still owns partition %s. Retrying"
+                             % e)
                 time.sleep(i ** 2)
                 continue
         else:
