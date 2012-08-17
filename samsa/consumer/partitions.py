@@ -22,7 +22,7 @@ from functools import partial
 import Queue
 
 from samsa.config import ConsumerConfig
-from samsa.exceptions import PartitionOwnedException
+from samsa.exceptions import PartitionOwnedError
 from samsa.partitions import Partition
 
 
@@ -206,7 +206,7 @@ class PartitionOwnerRegistry(object):
                     ephemeral=True
                 )
             except NodeExistsException:
-                raise PartitionOwnedException(p)
+                raise PartitionOwnedError(p)
             self._partitions.add(self.Partition(p))
 
     def _path_from_partition(self, p):

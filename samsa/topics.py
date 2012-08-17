@@ -17,7 +17,7 @@ limitations under the License.
 import logging
 import random
 
-from samsa.exceptions import NoAvailablePartitions
+from samsa.exceptions import NoAvailablePartitionsError
 from samsa.partitioners import random_partitioner
 from samsa.partitions import PartitionMap
 from samsa.consumer import Consumer
@@ -91,7 +91,7 @@ class Topic(object):
         :type key: implementation-specific
         """
         if len(self.partitions) < 1:
-            raise NoAvailablePartitions('No partitions are available to '
+            raise NoAvailablePartitionsError('No partitions are available to '
                 'accept a write for this message. (Is your Kafka broker '
                 'running?)')
         partition = self.partitioner(self.partitions, key)
