@@ -4,10 +4,11 @@ KAFKA_URL = http://mirrors.sonic.net/apache/incubator/kafka/kafka-$(KAFKA_VERSIO
 KAFKA_SRC_TGZ = $(notdir $(KAFKA_URL))
 
 doc:
+	pip install samsa[docs]
 	cd doc/ && make html
 
 lint:
-	pip install -r requirements/lint.txt
+	pip install --use-mirrors samsa[lint]
 	pyflakes ./samsa
 	pyflakes ./tests
 	pep8 ./samsa ./tests

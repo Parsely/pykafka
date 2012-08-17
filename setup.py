@@ -32,6 +32,11 @@ install_requires = [
     'kazoo',
 ]
 
+lint_requires = [
+    'pep8',
+    'pyflakes'
+]
+
 dependency_links = [
     'https://github.com/python-zk/kazoo/zipball/master#egg=kazoo',
 ]
@@ -55,6 +60,12 @@ setup(
     tests_require=tests_require,
     setup_requires=setup_requires,
     dependency_links=dependency_links,
+    extras_require={
+        'test': tests_require,
+        'all': install_requires + tests_require,
+        'docs': ['sphinx'] + tests_require,
+        'lint': lint_requires
+    },
     zip_safe=False,
     test_suite='nose.collector',
 )

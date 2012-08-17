@@ -288,6 +288,16 @@ class ManagedConsumer(ExternalClassRunner):
 
 @attr('integration')
 class KafkaClusterIntegrationTestCase(TestCase, KazooTestHarness):
+    """
+    A test case that allows the bootstrapping of a number of Kafka brokers.
+
+    Brokers are restarted with new log directories for each test method
+    invocation, ensuring that individual tests do not affect the results of
+    others.
+
+    All managed subprocesses (brokers, consumers, producers, etc.) are
+    automatically stopped when the test case is torn down.
+    """
     def setUp(self):
         self.setup_zookeeper()
         self._subprocesses = []
@@ -307,8 +317,12 @@ class KafkaClusterIntegrationTestCase(TestCase, KazooTestHarness):
 
     def setup_kafka_broker(self, *args, **kwargs):
         """
-        Starts a Kafka broker with a sequence generated broker ID and port, and
-        adds it to the cluster.
+        Starts a Kafka broker.
+
+        The broker is started using a sequence generated broker ID and port to
+        avoid conflicts.
+
+        :rtype: :class:`~samsa.test.integration.ManagedBroker`
         """
         broker = ManagedBroker(self.client, self.hosts,
             brokerid=next(self._id_generator),
@@ -332,6 +346,10 @@ class KafkaClusterIntegrationTestCase(TestCase, KazooTestHarness):
 
 @attr('integration')
 class KafkaIntegrationTestCase(KafkaClusterIntegrationTestCase):
+    """
+    A test case that automatically starts a single Kafka broker available as
+    :attr:`kafka_broker` on each test method invocation.
+    """
     def setUp(self):
         super(KafkaIntegrationTestCase, self).setUp()
         self.kafka_broker = self.setup_kafka_broker()
