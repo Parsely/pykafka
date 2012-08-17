@@ -82,7 +82,9 @@ class OwnedPartition(Partition):
     def next_message(self, timeout=None):
         """Retrieve the next message for this partition.
 
-        :param timeout: blog for timeout if integer, or indefinitely if None.
+        Returns None if no new messages and timeout elapses.
+
+        :param timeout: block for timeout if integer, or indefinitely if None.
 
         """
         if not self._fetch_thread.is_alive():
@@ -91,7 +93,6 @@ class OwnedPartition(Partition):
         if not timeout:
             timeout = self.config['consumer_timeout']
 
-        # TODO: deal with Queue.Empty exception
         try:
             message = self._message_queue.get(True, timeout)
         except Queue.Empty:
