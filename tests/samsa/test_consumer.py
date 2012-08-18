@@ -202,8 +202,7 @@ class TestConsumerIntegration(KafkaIntegrationTestCase):
         self.kafka = self.kafka_broker.client
 
     def test_consumes(self):
-        """Test that :class:`samsa.consumer.Consumer` can consume messages from
-        kafka.
+        """Test that we can consume messages from kafka.
 
         """
         topic = 'topic'
