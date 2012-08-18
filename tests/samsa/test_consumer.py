@@ -21,7 +21,6 @@ from itertools import islice
 from kazoo.testing import KazooTestCase
 
 from samsa.test.integration import KafkaIntegrationTestCase, polling_timeout
-from samsa.client import Client
 from samsa.cluster import Cluster
 from samsa.config import ConsumerConfig
 from samsa.topics import Topic
@@ -200,8 +199,7 @@ class TestConsumerIntegration(KafkaIntegrationTestCase):
 
     def setUp(self):
         super(TestConsumerIntegration, self).setUp()
-        self.samsa_cluster = Cluster(self.client)
-        self.kafka = Client(host='localhost', port=self.kafka_broker.port)
+        self.kafka = self.kafka_broker.client
 
     def test_consumes(self):
         """Test that :class:`samsa.consumer.Consumer` can consume messages from
@@ -214,7 +212,7 @@ class TestConsumerIntegration(KafkaIntegrationTestCase):
         # publish `messages` to `topic`
         self.kafka.produce(topic, 0, messages)
 
-        t = Topic(self.samsa_cluster, topic)
+        t = Topic(self.kafka_cluster, topic)
 
         # subscribe to `topic`
         consumer = t.subscribe('group2')
@@ -257,7 +255,7 @@ class TestConsumerIntegration(KafkaIntegrationTestCase):
 
         """
         topic = 'topic'
-        t = Topic(self.samsa_cluster, topic)
+        t = Topic(self.kafka_cluster, topic)
 
         consumer = t.subscribe('group2')
         self.assertTrue(consumer.empty())

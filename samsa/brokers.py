@@ -181,6 +181,6 @@ class Broker(DelayedConfiguration):
         try:
             return self.__client
         except AttributeError:
-            self.__client = Client(self.host, self.port,
-                                   handler=self.cluster.handler)
+            self.__client = Client(self.host, self.cluster.handler,
+                                   port=self.port)
             return self.__client

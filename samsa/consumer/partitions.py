@@ -15,7 +15,6 @@ limitations under the License.
 """
 
 import logging
-import threading
 
 from kazoo.exceptions import NodeExistsException, NoNodeException
 from functools import partial
@@ -110,13 +109,10 @@ class OwnedPartition(Partition):
         self._fetch_thread.join()
 
     def _create_thread(self):
-        _fetch_thread = threading.Thread(
+        return self.cluster.handler.spawn(
             target=self._fetch,
             args=(self.config['fetch_size'],)
         )
-        _fetch_thread.daemon = True
-        _fetch_thread.start()
-        return _fetch_thread
 
     def _fetch(self, size):
         """Fetch up to `size` bytes of new messages and add to queue.

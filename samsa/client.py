@@ -274,14 +274,11 @@ class Client(object):
     :param port: broker port number
     :param timeout: socket timeout
     """
-    def __init__(self, host, port=9092, timeout=None, autoconnect=True,
-                 handler=None):
+    def __init__(self, host, handler, port=9092, timeout=None, autoconnect=True):
         connection = Connection(host, port, timeout)
         if autoconnect:
             connection.connect()
-        if not handler:
-            handler = handlers.ThreadedRequestHandler(connection)
-        self.handler = handler
+        self.handler = handlers.RequestHandler(handler, connection)
         self.handler.start()
 
     __repr__ = attribute_repr('connection')

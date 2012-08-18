@@ -2,15 +2,16 @@ import atexit
 
 from collections import namedtuple
 from Queue import Queue
-from threading import Event, Thread
+import threading
 
 
 class ResponseFuture(object):
     """A samsa response which may have a value at some point."""
 
-    def __init__(self):
+    def __init__(self, handler):
+        self.handler = handler
         self.error = False
-        self._ready = Event()
+        self._ready = handler.Event()
 
     def set_response(self, response):
         """Set response data and trigger get method."""
@@ -34,53 +35,56 @@ class ResponseFuture(object):
         return self.response
 
 
+class Handler(object):
+
+    def spawn(self, target, *args, **kwargs):
+        raise NotImplementedError
+
+
+class ThreadingHandler(Handler):
+
+    Queue = Queue
+    Event = threading.Event
+
+    def spawn(self, target, *args, **kwargs):
+        t = threading.Thread(target=target, *args, **kwargs)
+        t.daemon = True
+        t.start()
+        return t
+
+
 class RequestHandler(object):
-    """Interface for request handlers."""
-
-    def __init__(self, connection):
-        self.connection = connection
-
-    def start(self):
-        """Start the request processor."""
-        raise NotImplementedError
-
-    def stop(self):
-        """Stop the request processor."""
-        raise NotImplementedError
-
-    def request(self):
-        """Construct a new requst
-
-        :returns: :class:`samsa.client.ResponseFuture`
-
-        """
-        raise NotImplementedError
-
-
-class ThreadedRequestHandler(RequestHandler):
     """Uses a worker thread to dispatch requests."""
 
     Task = namedtuple('Task', ['request', 'future'])
 
-    def __init__(self, connection):
-        super(ThreadedRequestHandler, self).__init__(connection)
-        self._requests = Queue()
-        self.ending = Event()
+    def __init__(self, handler, connection):
+        self.handler = handler
+        self.connection = connection
+        self._requests = handler.Queue()
+        self.ending = handler.Event()
         atexit.register(self.stop)
 
     def request(self, request, has_response=True):
+        """Construct a new requst
+
+        :returns: :class:`samsa.handlers.ResponseFuture`
+
+        """
         future = None
         if has_response:
-            future = ResponseFuture()
+            future = ResponseFuture(self.handler)
 
         task = self.Task(request, future)
         self._requests.put(task)
         return future
 
     def start(self):
+        """Start the request processor."""
         self.t = self._start_thread()
 
     def stop(self):
+        """Stop the request processor."""
         self._requests.join()
         self.ending.set()
 
@@ -98,7 +102,4 @@ class ThreadedRequestHandler(RequestHandler):
                 finally:
                     self._requests.task_done()
 
-        t = Thread(target=worker)
-        t.daemon = True
-        t.start()
-        return t
+        return self.handler.spawn(worker)

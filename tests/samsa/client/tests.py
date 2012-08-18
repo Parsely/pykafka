@@ -22,7 +22,7 @@ from zlib import crc32
 
 import unittest2
 
-from samsa.client import Client, Message, OFFSET_EARLIEST, OFFSET_LATEST
+from samsa.client import Message, OFFSET_EARLIEST, OFFSET_LATEST
 from samsa.exceptions import WrongPartitionError
 from samsa.test.integration import KafkaIntegrationTestCase
 
@@ -112,7 +112,7 @@ def filter_messages(stream):
 class ClientIntegrationTestCase(KafkaIntegrationTestCase):
     def setUp(self):
         super(ClientIntegrationTestCase, self).setUp()
-        self.kafka = Client(host='localhost', port=self.kafka_broker.port)
+        self.kafka = self.kafka_broker.client
 
     def test_produce(self):
         topic = 'topic'
