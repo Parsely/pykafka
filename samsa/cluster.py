@@ -27,9 +27,12 @@ class Cluster(object):
 
     :param zookeeper: A ZooKeeper client.
     :type zookeeper: :class:`kazoo.client.Client`
+    :param handler: Async request handler.
+    :type handler: :class:`kazoo.handlers.RequestHandler`
     """
-    def __init__(self, zookeeper):
+    def __init__(self, zookeeper, handler):
         self.zookeeper = zookeeper
+        self.handler = handler
 
         self.brokers = BrokerMap(self)
         self.topics = TopicMap(self)

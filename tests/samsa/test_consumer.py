@@ -16,7 +16,6 @@ limitations under the License.
 
 import logging
 import mock
-import Queue
 
 from itertools import islice
 from kazoo.testing import KazooTestCase
