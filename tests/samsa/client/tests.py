@@ -167,7 +167,12 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
 
             self.offset = message.next_offset
 
-        self.assertPassesWithMultipleAttempts(ensure_valid_response, 5)
+        self.assertPassesWithMultipleAttempts(
+            ensure_valid_response, 5,
+            backoff=lambda attempt, timeout: (
+                timeout * sum(xrange(1, attempt + 1))
+            )
+        )
 
         payloads = ['hello', 'world']
         producer.publish(payloads)
