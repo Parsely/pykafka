@@ -21,6 +21,7 @@ from itertools import islice
 from kazoo.testing import KazooTestCase
 
 from samsa.test.integration import KafkaIntegrationTestCase, polling_timeout
+from samsa.test.case import TestCase
 from samsa.cluster import Cluster
 from samsa.config import ConsumerConfig
 from samsa.topics import Topic
@@ -99,7 +100,7 @@ class TestPartitionOwnerRegistry(KazooTestCase):
 
 
 #@unittest.skip("Consumer has issues.")
-class TestConsumer(KazooTestCase):
+class TestConsumer(KazooTestCase, TestCase):
 
     def setUp(self):
         super(TestConsumer, self).setUp()
@@ -153,7 +154,10 @@ class TestConsumer(KazooTestCase):
             msgs.append(msg)
         fetch.return_value = msgs
 
-        self.assertEquals(c.next_message(10), msgs[0].payload)
+        self.assertPassesWithMultipleAttempts(
+            lambda: self.assertEquals(c.next_message(10), msgs[0].payload)
+            , 5
+        )
         self.assertEquals(len(c.partitions), 1)
         p = list(c.partitions)[0]
 
