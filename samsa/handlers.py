@@ -39,13 +39,13 @@ class ResponseFuture(object):
         self.error = error
         self._ready.set()
 
-    def get(self):
+    def get(self, timeout=None):
         """Block until data is ready and return.
 
         Raises exception if there was an error.
 
         """
-        self._ready.wait()
+        self._ready.wait(timeout)
         if self.error:
             raise self.error
         return self.response
