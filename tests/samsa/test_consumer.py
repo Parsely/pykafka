@@ -154,10 +154,7 @@ class TestConsumer(KazooTestCase, TestCase):
             msgs.append(msg)
         fetch.return_value = msgs
 
-        self.assertPassesWithMultipleAttempts(
-            lambda: self.assertEquals(c.next_message(10), msgs[0].payload)
-            , 5
-        )
+        c.next_message(10)
         self.assertEquals(len(c.partitions), 1)
         p = list(c.partitions)[0]
 
