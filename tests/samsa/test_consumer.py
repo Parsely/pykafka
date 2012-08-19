@@ -154,7 +154,10 @@ class TestConsumer(KazooTestCase, TestCase):
             msgs.append(msg)
         fetch.return_value = msgs
 
-        c.next_message(10)
+        self.assertPassesWithMultipleAttempts(
+            lambda: self.assertTrue(c.next_message(10) is not None),
+            5
+        )
         self.assertEquals(len(c.partitions), 1)
         p = list(c.partitions)[0]
 
