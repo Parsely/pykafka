@@ -33,6 +33,10 @@ class PartitionOwnedError(SamsaException):
 
 # Protocol Client Exceptions
 
+# Assuming ERROR_CODE is specific to the kafka protocol.
+class EmptyResponseError(SamsaException):
+    pass
+
 class ProtocolClientError(SamsaException):
     ERROR_CODE = None
 

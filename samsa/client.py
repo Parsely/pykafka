@@ -20,7 +20,7 @@ import struct
 from zlib import crc32
 
 from samsa import handlers
-from samsa.exceptions import ERROR_CODES
+from samsa.exceptions import EmptyResponseError, ERROR_CODES
 from samsa.utils import attribute_repr
 from samsa.utils.functional import methodimap
 from samsa.utils.namedstruct import NamedStruct
@@ -223,6 +223,7 @@ class Connection(object):
         """
         self._socket = socket.create_connection((self.host, self.port),
             timeout=self.timeout)
+        self._socket.settimeout(self.timeout)
 
     def disconnect(self):
         """
@@ -274,7 +275,7 @@ class Client(object):
     :param port: broker port number
     :param timeout: socket timeout
     """
-    def __init__(self, host, handler, port=9092, timeout=None, autoconnect=True):
+    def __init__(self, host, handler, port=9092, timeout=30, autoconnect=True):
         connection = Connection(host, port, timeout)
         if autoconnect:
             connection.connect()
@@ -351,9 +352,13 @@ class Client(object):
         write_request_header(request, topic, partition)
         request.pack(8, offset)
         request.pack(4, size)
+
         response = self.handler.request(request)
 
-        return decode_messages(response.get(), from_offset=offset)
+        try:
+            return decode_messages(response.get(), from_offset=offset)
+        except EmptyResponseError:
+            return []
 
     def multifetch(self, data):
         """
