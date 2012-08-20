@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+from samsa.handlers import ThreadingHandler
 from samsa.brokers import BrokerMap
 from samsa.topics import TopicMap
 
@@ -27,9 +28,15 @@ class Cluster(object):
 
     :param zookeeper: A ZooKeeper client.
     :type zookeeper: :class:`kazoo.client.Client`
+    :param handler: Async handler.
+    :type handler: :class:`kazoo.handlers.Handler`
     """
-    def __init__(self, zookeeper):
+    def __init__(self, zookeeper, handler=None):
         self.zookeeper = zookeeper
+
+        if not handler:
+            handler = ThreadingHandler()
+        self.handler = handler
 
         self.brokers = BrokerMap(self)
         self.topics = TopicMap(self)

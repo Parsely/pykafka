@@ -14,16 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import atexit
 import logging
 import socket
 import struct
-from collections import namedtuple
-from Queue import Queue
-from threading import Event, Thread
 from zlib import crc32
 
-from samsa.exceptions import ERROR_CODES
+from samsa import handlers
+from samsa.exceptions import SocketDisconnectedError, ERROR_CODES
 from samsa.utils import attribute_repr
 from samsa.utils.functional import methodimap
 from samsa.utils.namedstruct import NamedStruct
@@ -211,105 +208,6 @@ Offset = NamedStruct('Offset', (
 ))
 
 
-class ResponseFuture(object):
-    """A samsa response which may have a value at some point."""
-
-    def __init__(self):
-        self.error = False
-        self._ready = Event()
-
-    def set_response(self, response):
-        """Set response data and trigger get method."""
-        self.response = response
-        self._ready.set()
-
-    def set_error(self, error):
-        """Set error and trigger get method."""
-        self.error = error
-        self._ready.set()
-
-    def get(self):
-        """Block until data is ready and return.
-
-        Raises exception if there was an error.
-
-        """
-        self._ready.wait()
-        if self.error:
-            raise self.error
-        return self.response
-
-
-class RequestHandler(object):
-    """Interface for request handlers."""
-
-    def __init__(self, connection):
-        self.connection = connection
-
-    def start(self):
-        """Start the request processor."""
-        raise NotImplementedError
-
-    def stop(self):
-        """Stop the request processor."""
-        raise NotImplementedError
-
-    def request(self):
-        """Construct a new requst
-
-        :returns: :class:`samsa.client.ResponseFuture`
-
-        """
-        raise NotImplementedError
-
-
-class ThreadedRequestHandler(RequestHandler):
-    """Uses a worker thread to dispatch requests."""
-
-    Task = namedtuple('Task', ['request', 'future'])
-
-    def __init__(self, connection):
-        super(ThreadedRequestHandler, self).__init__(connection)
-        self._requests = Queue()
-        self.ending = Event()
-        atexit.register(self.stop)
-
-    def request(self, request, has_response=True):
-        future = None
-        if has_response:
-            future = ResponseFuture()
-
-        task = self.Task(request, future)
-        self._requests.put(task)
-        return future
-
-    def start(self):
-        self.t = self._start_thread()
-
-    def stop(self):
-        self._requests.join()
-        self.ending.set()
-
-    def _start_thread(self):
-        def worker():
-            while not self.ending.is_set():
-                task = self._requests.get()
-                try:
-                    self.connection.request(task.request)
-                    if task.future:
-                        self.connection.response(task.future)
-                except Exception, e:
-                    if task.future:
-                        task.future.set_error(e)
-                finally:
-                    self._requests.task_done()
-
-        t = Thread(target=worker)
-        t.daemon = True
-        t.start()
-        return t
-
-
 class Connection(object):
     """A socket connection to Kafka."""
 
@@ -355,10 +253,15 @@ class Connection(object):
         """Wait for a response and assign to future.
 
         :param future: Where to assign response data.
-        :type future: :class:`samsa.client.ResponseFuture`
+        :type future: :class:`samsa.handlers.ResponseFuture`
 
         """
-        response = recv_framed(self._socket, ResponseFrameHeader)
+        try:
+            response = recv_framed(self._socket, ResponseFrameHeader)
+        except SocketDisconnectedError:
+            self.disconnect()
+            raise
+
         header = ResponseErrorHeader.unpack_from(buffer(response))
         if header.error:
             exception_class = ERROR_CODES.get(header.error, -1)
@@ -376,11 +279,11 @@ class Client(object):
     :param port: broker port number
     :param timeout: socket timeout
     """
-    def __init__(self, host, port=9092, timeout=None, autoconnect=True):
+    def __init__(self, host, handler, port=9092, timeout=30, autoconnect=True):
         connection = Connection(host, port, timeout)
         if autoconnect:
             connection.connect()
-        self.handler = ThreadedRequestHandler(connection)
+        self.handler = handlers.RequestHandler(handler, connection)
         self.handler.start()
 
     __repr__ = attribute_repr('connection')
@@ -453,9 +356,13 @@ class Client(object):
         write_request_header(request, topic, partition)
         request.pack(8, offset)
         request.pack(4, size)
+
         response = self.handler.request(request)
 
-        return decode_messages(response.get(), from_offset=offset)
+        try:
+            return decode_messages(response.get(), from_offset=offset)
+        except SocketDisconnectedError:
+            return []
 
     def multifetch(self, data):
         """

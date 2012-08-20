@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+# TODO: Replace all this by using class ctors and method arguments with
+# appropriate defaults. Document in the code.
 
 class Config(object):
 
@@ -37,9 +39,10 @@ class Config(object):
 
 
 class ConsumerConfig(Config):
+    # All times in seconds
 
     # controls the socket timeout for network requests
-    socket_timeout_ms = 30000
+    socket_timeout = 30
 
     # controls the socket receive buffer for network requests
     socket_buffersize = 64 * 1024
@@ -51,7 +54,8 @@ class ConsumerConfig(Config):
     # This parameter avoids repeatedly polling a broker node which has no new
     # data. We will backoff every time we get an empty set from the broker for
     # this time period
-    backoff_increment_ms = 1000
+    # TODO: implement this.
+    backoff_increment = 1
 
     # the high level consumer buffers the messages fetched from the server
     # internally in blocking queues. This parameter controls the size of those
@@ -63,7 +67,7 @@ class ConsumerConfig(Config):
     autocommit_enable = True
 
     # is the frequency that the consumed offsets are committed to zookeeper.
-    autocommit_interval_ms = 10000
+    autocommit_interval = 10
 
     # smallest: automatically reset the offset to the smallest offset available
     # on the broker.
@@ -76,7 +80,7 @@ class ConsumerConfig(Config):
     # message is available for consumption. By setting the value to a positive
     # integer, a timeout exception is thrown to the consumer if no message is
     # available for consumption after the specified timeout value.
-    consumer_timeout_ms = -1
+    consumer_timeout = 4
 
     # max number of retries during rebalance
     rebalance_retries_max = 4
