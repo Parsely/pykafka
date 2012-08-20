@@ -14,16 +14,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import itertools
 import logging
 import random
 import string
 import struct
+import sys
 from zlib import crc32
 
 import unittest2
 
-from samsa.client import Message, OFFSET_EARLIEST, OFFSET_LATEST
-from samsa.exceptions import WrongPartitionError
+from samsa.client import (Client, Message, OFFSET_EARLIEST, OFFSET_LATEST,
+    COMPRESSION_TYPE_GZIP)
+from samsa.exceptions import InvalidVersionError, WrongPartitionError
 from samsa.test.integration import KafkaIntegrationTestCase
 
 
@@ -114,16 +117,35 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
         super(ClientIntegrationTestCase, self).setUp()
         self.kafka = self.kafka_broker.client
 
-    def test_produce(self):
+    def test_produce(self, count=1, **kwargs):
         topic = 'topic'
         message = 'hello world'
         consumer = self.consumer(topic)
-        self.kafka.produce(topic, 0, (message,))
+        messages = (message,) * count
+        self.kafka.produce(topic, 0, messages, **kwargs)
 
-        consumed = next(filter_messages(consumer.process.stdout))
-        self.assertEqual(consumed, message)
+        consumed = list(itertools.islice(filter_messages(consumer.process.stdout), count))
+        self.assertEqual(consumed, list(messages))
 
-    def test_multiproduce(self):
+    def test_produce_with_multiple_messages(self):
+        self.test_produce(count=3)
+
+    def test_produce_version_1_no_compression(self):
+        self.test_produce(version=1)
+
+    def test_produce_invalid_compression(self):
+        with self.assertRaises(ValueError):
+            self.test_produce(version=1, compression=sys.maxint)
+
+    def test_produce_invalid_version_for_compression(self):
+        with self.assertRaises(ValueError):
+            self.test_produce(version=0, compression=COMPRESSION_TYPE_GZIP)
+
+    def test_produce_invalid_version(self):
+        with self.assertRaises(InvalidVersionError):
+            self.kafka.produce('topic', 0, ('hello world',), version=sys.maxint)
+
+    def test_multiproduce(self, count=1, **kwargs):
         topics = ('topic-a', 'topic-b')
 
         def message_for_topic(topic):
@@ -136,13 +158,26 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
 
         batch = []
         for topic in topics:
-            batch.append((topic, 0, (message_for_topic(topic),)))
+            batch.append((topic, 0, (message_for_topic(topic),) * count))
 
-        self.kafka.multiproduce(batch)
+        self.kafka.multiproduce(batch, **kwargs)
 
         for topic, consumer in consumers.items():
-            consumed = next(filter_messages(consumer.process.stdout))
-            self.assertEqual(consumed, message_for_topic(topic))
+            consumed = list(itertools.islice(filter_messages(consumer.process.stdout), count))
+            messages = list((message_for_topic(topic),) * count)
+            self.assertEqual(consumed, messages)
+
+    def test_multiproduce_with_multiple_messages(self):
+        self.test_multiproduce(count=3)
+
+    def test_multiproduce_version_1_no_compression(self):
+        self.test_multiproduce(version=1)
+
+    def test_multiproduce_invalid_version(self):
+        with self.assertRaises(InvalidVersionError):
+            self.kafka.multiproduce((
+                ('topic', 0, ('hello world',)),
+            ), version=sys.maxint)
 
     def test_fetch(self):
         # TODO: test error conditions
