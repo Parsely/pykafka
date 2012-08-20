@@ -14,17 +14,26 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import logging
+
 from kazoo.exceptions import NodeExistsException, NoNodeException
 from functools import partial
+import Queue
 
+from samsa.config import ConsumerConfig
 from samsa.exceptions import PartitionOwnedError
 from samsa.partitions import Partition
 
 
+logger = logging.getLogger(__name__)
+
+
 class OwnedPartition(Partition):
+
     """Represents a partition as a consumer group sees it.
 
     Manages offset tracking and message fetching.
+
     """
 
     def __init__(self, partition, group):
@@ -36,46 +45,108 @@ class OwnedPartition(Partition):
         :type group: str.
 
         """
-
         super(OwnedPartition, self).__init__(
             partition.cluster, partition.topic,
             partition.broker, partition.number
         )
+
+        self.config = ConsumerConfig().build()
+
         self.group = group
         self.path = "/consumers/%s/offsets/%s/%s-%s" % (
             self.group, self.topic.name,
             self.broker.id, self.number
         )
 
+        # _current_offset is cursor to next message we haven't consumed
         try:
             offset, stat = self.cluster.zookeeper.get(self.path)
-            self.offset = int(offset)
+            self._current_offset = int(offset)
         except NoNodeException:
             self.cluster.zookeeper.create(self.path, str(0), makepath=True)
-            self.offset = 0
+            self._current_offset = 0
 
-    def fetch(self, size):
-        """Fetch up to `size` bytes of new messages.
+        # the offset at which we should make our next fetch
+        self._next_offset = self._current_offset
+        self._message_queue = Queue.Queue(self.config['queuedchunks_max'])
+        self._fetch_thread = None
 
-        :param size: size in bytes of new messages to fetch.
-        :type size: int
-        :returns: generator -- message iterator.
+    @property
+    def offset(self):
+        return self._current_offset
+
+    def empty(self):
+        return self._message_queue.empty()
+
+    def next_message(self, timeout=None):
+        """Retrieve the next message for this partition.
+
+        Returns None if no new messages and timeout elapses.
+
+        :param timeout: block for timeout if integer, or indefinitely if None.
 
         """
+        if not self._fetch_thread or not self._fetch_thread.is_alive():
+            # TODO: turn this back into a long running thread if possible
+            self._fetch_thread = self._create_thread()
+        if not timeout:
+            timeout = self.config['consumer_timeout']
 
-        messages = super(OwnedPartition, self).fetch(self.offset, size)
-        for message in messages:
-            self.offset = message.next_offset
-            yield str(message.payload)
+        try:
+            message = self._message_queue.get(True, timeout)
+        except Queue.Empty:
+            return None
+        self._current_offset = message.next_offset
+        return message.payload
 
     def commit_offset(self):
         """Commit current offset to zookeeper.
-        """
 
-        self.cluster.zookeeper.set(self.path, str(self.offset))
+        """
+        self.cluster.zookeeper.set(self.path, str(self._current_offset))
+
+    def stop(self):
+        if self._fetch_thread:
+            self._fetch_thread.join()
+
+    def _create_thread(self):
+        return self.cluster.handler.spawn(
+            target=self._fetch,
+            args=(self.config['fetch_size'],)
+        )
+
+    def _fetch(self, size):
+        """Fetch up to `size` bytes of new messages and add to queue.
+
+        :param size: size in bytes of new messages to fetch.
+        :type size: int
+
+        """
+        last_offset = None
+
+        messages = super(OwnedPartition, self).fetch(
+            self._next_offset,
+            size
+        )
+
+        for message in messages:
+            last_offset = message.next_offset
+            logger.info('%s: Received message: %s', self, message)
+            self._message_queue.put(
+                message, True,
+                self.config['consumer_timeout']
+            )
+
+        # If there were any messages, update the next offset to fetch.
+        if last_offset:
+            self._next_offset = last_offset
+
+    def __del__(self):
+        self.stop()
 
 
 class PartitionOwnerRegistry(object):
+
     """Manages the Partition Owner Registry for a particular Consumer.
     """
 
@@ -91,7 +162,6 @@ class PartitionOwnerRegistry(object):
         :type group: str.
 
         """
-
         self.consumer_id = str(consumer.id)
         self.cluster = cluster
         self.topic = topic
@@ -103,18 +173,17 @@ class PartitionOwnerRegistry(object):
 
     def get(self):
         """Get all owned partitions.
-        """
 
+        """
         return self._partitions
 
     def remove(self, partitions):
         """Remove `partitions` from the registry.
 
         :param partitions: partitions to remove.
-        :type partitions: iterable.
+        :type partitions: iterable of :class:`samsa.partitions.Partition`.
 
         """
-
         for p in partitions:
             assert p in self._partitions
             self.cluster.zookeeper.delete(self._path_from_partition(p))
@@ -124,25 +193,18 @@ class PartitionOwnerRegistry(object):
         """Add `partitions` to the registry.
 
         :param partitions: partitions to add.
-        :type partitions: iterable.
+        :type partitions: iterable of :class:`samsa.partitions.Partition`.
 
         """
-
         for p in partitions:
             try:
                 self.cluster.zookeeper.create(
-                    self._path_from_partition(p), self.consumer_id, ephemeral=True
+                    self._path_from_partition(p), self.consumer_id,
+                    ephemeral=True
                 )
             except NodeExistsException:
                 raise PartitionOwnedError(p)
-            self._partitions.add(p)
+            self._partitions.add(self.Partition(p))
 
     def _path_from_partition(self, p):
         return "%s/%s-%s" % (self.path, p.broker.id, p.number)
-
-    def _partition_from_name(self, name):
-        """name as it appears as a znode. <broker id>-<partition number>."""
-        broker_id, partition_id = name.split('-')
-        broker = self.cluster.brokers[int(broker_id)]
-        p = Partition(self.cluster, self.topic, broker, partition_id)
-        return self.Partition(p)

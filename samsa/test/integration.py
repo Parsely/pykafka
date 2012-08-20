@@ -27,6 +27,8 @@ import time
 from kazoo.testing import KazooTestHarness
 from nose.plugins.attrib import attr
 
+from samsa import handlers
+from samsa.client import Client
 from samsa.cluster import Cluster
 from samsa.test.case import TestCase
 from samsa.utils.functional import methodmap
@@ -204,6 +206,7 @@ class ManagedBroker(ExternalClassRunner):
 
         self.configuration_file = write_property_file(self.configuration)
         self.args = [self.configuration_file.name]
+        self._client = None
 
     def start(self, timeout=None):
         if timeout is None:
@@ -230,6 +233,13 @@ class ManagedBroker(ExternalClassRunner):
         logger.debug('Shutting down Kafka broker...')
         super(ManagedBroker, self).stop(*args, **kwargs)
         # TODO: Remove configuration, log dir
+
+    @property
+    def client(self):
+        assert self.is_running()
+        if not self._client:
+            self._client = Client('localhost', handlers.ThreadingHandler(), port=self.port)
+        return self._client
 
 
 class ManagedProducer(ExternalClassRunner):
