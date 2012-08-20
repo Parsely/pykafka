@@ -20,7 +20,7 @@ import struct
 from zlib import crc32
 
 from samsa import handlers
-from samsa.exceptions import EmptyResponseError, ERROR_CODES
+from samsa.exceptions import SocketDisconnectedError, ERROR_CODES
 from samsa.utils import attribute_repr
 from samsa.utils.functional import methodimap
 from samsa.utils.namedstruct import NamedStruct
@@ -223,7 +223,6 @@ class Connection(object):
         """
         self._socket = socket.create_connection((self.host, self.port),
             timeout=self.timeout)
-        self._socket.settimeout(self.timeout)
 
     def disconnect(self):
         """
@@ -257,7 +256,12 @@ class Connection(object):
         :type future: :class:`samsa.handlers.ResponseFuture`
 
         """
-        response = recv_framed(self._socket, ResponseFrameHeader)
+        try:
+            response = recv_framed(self._socket, ResponseFrameHeader)
+        except SocketDisconnectedError:
+            self.disconnect()
+            raise
+
         header = ResponseErrorHeader.unpack_from(buffer(response))
         if header.error:
             exception_class = ERROR_CODES.get(header.error, -1)
@@ -357,7 +361,7 @@ class Client(object):
 
         try:
             return decode_messages(response.get(), from_offset=offset)
-        except EmptyResponseError:
+        except SocketDisconnectedError:
             return []
 
     def multifetch(self, data):
