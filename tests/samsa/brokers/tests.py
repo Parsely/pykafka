@@ -20,7 +20,7 @@ from zookeeper import NoNodeException
 
 from samsa.brokers import BrokerMap, Broker
 from samsa.cluster import Cluster
-from samsa.exceptions import ImproperlyConfigured
+from samsa.exceptions import ImproperlyConfiguredError
 
 
 class BrokerMapTest(unittest2.TestCase):
@@ -32,7 +32,7 @@ class BrokerMapTest(unittest2.TestCase):
         self.cluster.zookeeper.get_children.side_effect = NoNodeException
 
         brokers = BrokerMap(self.cluster)
-        with self.assertRaises(ImproperlyConfigured):
+        with self.assertRaises(ImproperlyConfiguredError):
             brokers.get(0)
 
     def test_initial_configuration(self):

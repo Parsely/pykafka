@@ -23,11 +23,11 @@ from Queue import Queue
 from threading import Event, Thread
 from zlib import crc32
 
-from samsa.exceptions import ERROR_CODES, InvalidVersion
+from samsa.exceptions import ERROR_CODES, InvalidVersionError
 from samsa.utils import attribute_repr
 from samsa.utils.functional import methodimap
 from samsa.utils.namedstruct import NamedStruct
-from samsa.utils.socket import recvall_into, recv_struct, recv_framed
+from samsa.utils.socket import recv_framed
 from samsa.utils.structuredio import StructuredBytesIO
 
 
@@ -79,7 +79,7 @@ Offset = NamedStruct('Offset', (
 
 class VersionHeaderMap(dict):
     def __missing__(self, key):
-        raise InvalidVersion('%s is not a valid version identifier' % key)
+        raise InvalidVersionError('%s is not a valid version identifier' % key)
 
 
 class Message(object):

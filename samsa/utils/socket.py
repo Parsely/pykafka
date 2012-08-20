@@ -41,4 +41,3 @@ def recv_framed(socket, framestruct):
     """
     (size,) = recv_struct(socket, framestruct)
     return recvall_into(socket, bytearray(size))
-

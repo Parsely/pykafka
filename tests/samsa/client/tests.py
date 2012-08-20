@@ -26,7 +26,7 @@ import unittest2
 
 from samsa.client import (Client, Message, OFFSET_EARLIEST, OFFSET_LATEST,
     COMPRESSION_TYPE_GZIP)
-from samsa.exceptions import InvalidVersion, WrongPartition
+from samsa.exceptions import InvalidVersionError, WrongPartitionError
 from samsa.test.integration import KafkaIntegrationTestCase
 
 
@@ -142,7 +142,7 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
             self.test_produce(version=0, compression=COMPRESSION_TYPE_GZIP)
 
     def test_produce_invalid_version(self):
-        with self.assertRaises(InvalidVersion):
+        with self.assertRaises(InvalidVersionError):
             self.kafka.produce('topic', 0, ('hello world',), version=sys.maxint)
 
     def test_multiproduce(self, count=1, **kwargs):
@@ -174,7 +174,7 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
         self.test_multiproduce(version=1)
 
     def test_multiproduce_invalid_version(self):
-        with self.assertRaises(InvalidVersion):
+        with self.assertRaises(InvalidVersionError):
             self.kafka.multiproduce((
                 ('topic', 0, ('hello world',)),
             ), version=sys.maxint)
@@ -239,7 +239,7 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
         self.assertPassesWithMultipleAttempts(ensure_no_partial_messages, 5)
 
     def test_fetch_wrong_partition(self):
-        with self.assertRaises(WrongPartition):
+        with self.assertRaises(WrongPartitionError):
             self.kafka.fetch('topic', 10, 0, 1024 * 300)
 
     def test_multifetch(self):

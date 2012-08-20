@@ -11,7 +11,7 @@ notifications:
 
 before_install:
     - sudo apt-get install -qq zookeeper libev-dev
-    - make kafka
+    - make kafka > /dev/null
     - sudo mv kafka /usr/local/kafka
 
 install:

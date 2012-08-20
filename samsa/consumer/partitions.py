@@ -17,7 +17,7 @@ limitations under the License.
 from kazoo.exceptions import NodeExistsException, NoNodeException
 from functools import partial
 
-from samsa.exceptions import PartitionOwnedException
+from samsa.exceptions import PartitionOwnedError
 from samsa.partitions import Partition
 
 
@@ -134,7 +134,7 @@ class PartitionOwnerRegistry(object):
                     self._path_from_partition(p), self.consumer_id, ephemeral=True
                 )
             except NodeExistsException:
-                raise PartitionOwnedException(p)
+                raise PartitionOwnedError(p)
             self._partitions.add(p)
 
     def _path_from_partition(self, p):

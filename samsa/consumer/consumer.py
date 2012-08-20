@@ -24,7 +24,7 @@ from uuid import uuid4
 
 from samsa.config import ConsumerConfig
 from samsa.consumer.partitions import PartitionOwnerRegistry
-from samsa.exceptions import SamsaException, PartitionOwnedException, ImproperlyConfigured
+from samsa.exceptions import SamsaException, PartitionOwnedError, ImproperlyConfiguredError
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +76,7 @@ class Consumer(object):
         try:
             zk.get_children(broker_path, watch=self._rebalance)
         except NoNodeException:
-            raise ImproperlyConfigured('The broker_path "%s" does not exist in your '
+            raise ImproperlyConfiguredError('The broker_path "%s" does not exist in your '
                 'ZooKeeper cluster -- is your Kafka cluster running?' % broker_path)
 
         # 3. all consumers in the same group as Ci that consume topic T
@@ -128,7 +128,7 @@ class Consumer(object):
                     new_partitions - self.partitions
                 )
                 break
-            except PartitionOwnedException, e:
+            except PartitionOwnedError, e:
                 logger.debug("Someone still owns partition %s. Retrying" %
                         e)
                 time.sleep(i ** 2)
