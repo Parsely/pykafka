@@ -69,7 +69,7 @@ class OwnedPartition(Partition):
         # the offset at which we should make our next fetch
         self._next_offset = self._current_offset
         self._message_queue = Queue.Queue(self.config['queuedchunks_max'])
-        self._fetch_thread = self._create_thread()
+        self._fetch_thread = None
 
     @property
     def offset(self):
@@ -86,7 +86,7 @@ class OwnedPartition(Partition):
         :param timeout: block for timeout if integer, or indefinitely if None.
 
         """
-        if not self._fetch_thread.is_alive():
+        if not self._fetch_thread or not self._fetch_thread.is_alive():
             # TODO: turn this back into a long running thread if possible
             self._fetch_thread = self._create_thread()
         if not timeout:
@@ -106,7 +106,8 @@ class OwnedPartition(Partition):
         self.cluster.zookeeper.set(self.path, str(self._current_offset))
 
     def stop(self):
-        self._fetch_thread.join()
+        if self._fetch_thread:
+            self._fetch_thread.join()
 
     def _create_thread(self):
         return self.cluster.handler.spawn(

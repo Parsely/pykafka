@@ -63,11 +63,6 @@ class TestPartitionOwnerRegistry(KazooTestCase):
                 Partition(self.c, self.topic, broker, i)
             )
 
-    def run(self, *args, **kwargs):
-        # Creating owned partitions should not cause them to start consuming.
-        with mock.patch.object(OwnedPartition, '_create_thread'):
-            return super(TestPartitionOwnerRegistry, self).run(*args, **kwargs)
-
     def test_crd(self):
         """Test partition *c*reate, *r*ead, and *d*elete.
         """
