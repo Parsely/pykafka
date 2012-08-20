@@ -14,16 +14,22 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import logging
 import mock
 
+from itertools import islice
 from kazoo.testing import KazooTestCase
 
 from samsa.test.integration import KafkaIntegrationTestCase, polling_timeout
-from samsa.client import Client
+from samsa.test.case import TestCase
 from samsa.cluster import Cluster
+from samsa.config import ConsumerConfig
 from samsa.topics import Topic
 from samsa.partitions import Partition
 from samsa.consumer.partitions import PartitionOwnerRegistry, OwnedPartition
+
+
+logger = logging.getLogger(__name__)
 
 
 class TestPartitionOwnerRegistry(KazooTestCase):
@@ -79,8 +85,8 @@ class TestPartitionOwnerRegistry(KazooTestCase):
         """Test that the reference returned by
         :func:`samsa.consumer.partitions.PartitionOwnerRegistry.get` reflects
         the latest state.
-        """
 
+        """
         partitions = self.por.get()
         self.assertEquals(len(partitions), 0)
 
@@ -88,7 +94,8 @@ class TestPartitionOwnerRegistry(KazooTestCase):
         self.assertEquals(len(partitions), len(self.partitions))
 
 
-class TestConsumer(KazooTestCase):
+#@unittest.skip("Consumer has issues.")
+class TestConsumer(KazooTestCase, TestCase):
 
     def setUp(self):
         super(TestConsumer, self).setUp()
@@ -98,16 +105,17 @@ class TestConsumer(KazooTestCase):
         self.client.ensure_path("/brokers/ids")
         for i in xrange(n):
             path = "/brokers/ids/%d" % i
-            data = "127.0.0.1"
+            data = "creator:127.0.0.1:%s" % (9092 + i)
             self.client.create(path, data)
 
-    def test_assigns_partitions(self):
+    @mock.patch.object(OwnedPartition, '_fetch')
+    def test_assigns_partitions(self, *args):
         """
         Test rebalance
 
         Adjust n_* to see how rebalancing performs.
-        """
 
+        """
         n_partitions = 10
         n_consumers = 3
         self._register_fake_brokers(n_partitions)
@@ -127,25 +135,29 @@ class TestConsumer(KazooTestCase):
     @mock.patch.object(Partition, 'fetch')
     def test_commits_offsets(self, fetch):
         """Test that message offsets are persisted to ZK.
-        """
 
+        """
         self._register_fake_brokers(1)
         t = Topic(self.c, 'testtopic')
 
         c = t.subscribe('group')
-        msg = mock.Mock()
-        msg.next_offset = 3
-        msg.payload = '123'
-        fetch.return_value = [msg]
+        msgs = []
+        for i in xrange(1, 10):
+            msg = mock.Mock()
+            msg.next_offset = 3 * i
+            msg.payload = str(i) * 3
+            msgs.append(msg)
+        fetch.return_value = msgs
 
-        i = list(c)
-        c.commit_offsets()
-
-        self.assertEquals(i, ['123'])
+        self.assertPassesWithMultipleAttempts(
+            lambda: self.assertTrue(c.next_message(10) is not None),
+            5
+        )
         self.assertEquals(len(c.partitions), 1)
         p = list(c.partitions)[0]
 
         self.assertEquals(p.offset, 3)
+        c.commit_offsets()
 
         d, stat = self.client.get(p.path)
         self.assertEquals(d, '3')
@@ -153,8 +165,8 @@ class TestConsumer(KazooTestCase):
     @mock.patch.object(Partition, 'fetch')
     def test_consumer_remembers_offset(self, fetch):
         """Test that offsets are successfully retrieved from zk.
-        """
 
+        """
         topic = 'testtopic'
         group = 'testgroup'
         offset = 10
@@ -167,7 +179,7 @@ class TestConsumer(KazooTestCase):
         fetch.return_value = ()
 
         op = OwnedPartition(fake_partition, group)
-        op.offset = offset
+        op._current_offset = offset
         op.commit_offset()
 
         self._register_fake_brokers(1)
@@ -178,29 +190,27 @@ class TestConsumer(KazooTestCase):
         p = list(c.partitions)[0]
         self.assertEquals(p.offset, offset)
 
-        self.assertEquals(list(p.fetch(100)), [])
-        fetch.assert_called_with(offset, 100)
+        self.assertEquals(None, p.next_message(0))
+        fetch.assert_called_with(offset, ConsumerConfig.fetch_size)
 
 
 class TestConsumerIntegration(KafkaIntegrationTestCase):
 
     def setUp(self):
         super(TestConsumerIntegration, self).setUp()
-        self.samsa_cluster = Cluster(self.client)
-        self.kafka = Client(host='localhost', port=self.kafka_broker.port)
+        self.kafka = self.kafka_broker.client
 
     def test_consumes(self):
-        """Test that :class:`samsa.consumer.Consumer` can consume messages from
-        kafka.
-        """
+        """Test that we can consume messages from kafka.
 
+        """
         topic = 'topic'
         messages = ['hello world', 'foobar']
 
         # publish `messages` to `topic`
         self.kafka.produce(topic, 0, messages)
 
-        t = Topic(self.samsa_cluster, topic)
+        t = Topic(self.kafka_cluster, topic)
 
         # subscribe to `topic`
         consumer = t.subscribe('group2')
@@ -210,11 +220,17 @@ class TestConsumerIntegration(KafkaIntegrationTestCase):
 
             catches exceptions so we can retry while we wait for kafka to
             coallesce.
+
             """
+            logger.debug('Running `test`...')
             try:
-                self.assertEquals(list(consumer), messages)
+                self.assertEquals(
+                    list(islice(consumer, 0, len(messages))),
+                    messages
+                )
                 return True
-            except AssertionError:
+            except AssertionError as e:
+                logger.exception('Caught exception: %s', e)
                 return False
 
         # wait for one second for :func:`test` to return true or raise an error
@@ -224,7 +240,7 @@ class TestConsumerIntegration(KafkaIntegrationTestCase):
         # test that the offset of our 1 partition is not 0
         self.assertTrue(old_offset > 0)
         # and that consumer contains no more messages.
-        self.assertEquals(list(consumer), [])
+        self.assertTrue(consumer.empty())
 
         # repeat and see if offset grows.
         self.kafka.produce(topic, 0, messages)
@@ -234,10 +250,10 @@ class TestConsumerIntegration(KafkaIntegrationTestCase):
 
     def test_empty_topic(self):
         """Test that consuming an empty topic returns an empty list.
-        """
 
+        """
         topic = 'topic'
-        t = Topic(self.samsa_cluster, topic)
+        t = Topic(self.kafka_cluster, topic)
 
         consumer = t.subscribe('group2')
-        self.assertEquals(list(consumer), [])
+        self.assertTrue(consumer.empty())

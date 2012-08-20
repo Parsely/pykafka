@@ -16,6 +16,7 @@ limitations under the License.
 
 import logging
 import itertools
+import random
 import socket
 import time
 
@@ -24,7 +25,8 @@ from uuid import uuid4
 
 from samsa.config import ConsumerConfig
 from samsa.consumer.partitions import PartitionOwnerRegistry
-from samsa.exceptions import SamsaException, PartitionOwnedError, ImproperlyConfiguredError
+from samsa.exceptions import (SamsaException, PartitionOwnedError,
+                              ImproperlyConfiguredError)
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +45,6 @@ class Consumer(object):
         :type group: str.
 
         """
-
         self.config = ConsumerConfig().build()
         self.cluster = cluster
         self.topic = topic
@@ -65,8 +66,8 @@ class Consumer(object):
 
     def _rebalance(self, event=None):
         """Joins a consumer group and claims partitions.
-        """
 
+        """
         logger.info('Rebalancing consumer %s for topic %s.' % (
             self.id, self.topic.name)
         )
@@ -76,8 +77,10 @@ class Consumer(object):
         try:
             zk.get_children(broker_path, watch=self._rebalance)
         except NoNodeException:
-            raise ImproperlyConfiguredError('The broker_path "%s" does not exist in your '
-                'ZooKeeper cluster -- is your Kafka cluster running?' % broker_path)
+            raise ImproperlyConfiguredError(
+                'The broker_path "%s" does not exist in your '
+                'ZooKeeper cluster -- is your Kafka cluster running?'
+                % broker_path)
 
         # 3. all consumers in the same group as Ci that consume topic T
         consumer_ids = zk.get_children(self.id_path, watch=self._rebalance)
@@ -104,15 +107,9 @@ class Consumer(object):
             start + num_parts
         )
 
-        # cast partitions to owned partitions.
-        new_partitions = itertools.imap(
-            self.partition_owner_registry.Partition,
-            new_partitions
-        )
-
         new_partitions = set(new_partitions)
 
-        self.commit_offsets()
+        self.stop_partitions()
 
         # 8. remove current entries from the partition owner registry
         self.partition_owner_registry.remove(
@@ -122,36 +119,52 @@ class Consumer(object):
         # 9. add newly assigned partitions to the partition owner registry
         for i in xrange(self.config['rebalance_retries_max']):
             try:
-                # N.B. self.partitions will always reflect the most current view of
-                # owned partitions. Therefor retrying this method will progress.
+                # N.B. self.partitions will always reflect the most current
+                # view of owned partitions. Therefor retrying this method
+                # will progress.
                 self.partition_owner_registry.add(
                     new_partitions - self.partitions
                 )
                 break
             except PartitionOwnedError, e:
-                logger.debug("Someone still owns partition %s. Retrying" %
-                        e)
+                logger.debug("Someone still owns partition %s. Retrying"
+                             % e)
                 time.sleep(i ** 2)
                 continue
         else:
             raise SamsaException("Couldn't acquire partitions.")
 
-
     def __iter__(self):
-        """Returns an iterator of messages.
-        """
+        """Iterate over available messages. Does not return.
 
-        # fetch size is the kafka default.
-        return itertools.chain.from_iterable(
-                itertools.imap(
-                lambda p: p.fetch(self.config['fetch_size']),
-                self.partitions
-            )
-        )
+        """
+        while True:
+            msg = self.next_message(self.config['consumer_timeout'])
+            if not msg:
+                time.sleep(1)
+            else:
+                yield msg
+
+    def next_message(self, timeout=None):
+        """Get the next message from one of the partitions.
+
+        """
+        return random.sample(self.partitions, 1)[0].next_message(timeout)
 
     def commit_offsets(self):
         """Commit the offsets of all messages consumed so far.
-        """
 
+        """
         for partition in self.partitions:
             partition.commit_offset()
+
+    def stop_partitions(self):
+        """Stop partitions from fetching more threads.
+
+        """
+        self.commit_offsets()
+        for partition in self.partitions:
+            partition.stop()
+
+    def empty(self):
+        return all([p.empty() for p in self.partitions])
