@@ -19,43 +19,43 @@ class SamsaException(Exception):
     pass
 
 
-class ImproperlyConfigured(SamsaException):
+class ImproperlyConfiguredError(SamsaException):
     pass
 
 
-class NoAvailablePartitions(SamsaException):
+class NoAvailablePartitionsError(SamsaException):
     pass
 
 
-class PartitionOwnedException(SamsaException):
+class PartitionOwnedError(SamsaException):
     pass
 
 
 # Protocol Client Exceptions
 
-class ProtocolClientException(SamsaException):
+class ProtocolClientError(SamsaException):
     ERROR_CODE = None
 
 
-class UnknownError(ProtocolClientException):
+class UnknownError(ProtocolClientError):
     ERROR_CODE = -1
 
 
-class OffsetOutOfRange(ProtocolClientException):
+class OffsetOutOfRangeError(ProtocolClientError):
     ERROR_CODE = 1
 
 
-class InvalidMessage(ProtocolClientException):
+class InvalidMessageError(ProtocolClientError):
     ERROR_CODE = 2
 
 
-class WrongPartition(ProtocolClientException):
+class WrongPartitionError(ProtocolClientError):
     ERROR_CODE = 3
 
 
-class InvalidFetchSize(ProtocolClientException):
+class InvalidFetchSizeError(ProtocolClientError):
     ERROR_CODE = 4
 
 
 ERROR_CODES = dict((exc.ERROR_CODE, exc) for exc in (UnknownError,
-    OffsetOutOfRange, InvalidMessage, WrongPartition, InvalidMessage))
+    OffsetOutOfRangeError, InvalidMessageError, WrongPartitionError, InvalidMessageError))
