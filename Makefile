@@ -20,7 +20,7 @@ integration:
 	python setup.py nosetests --attr=integration
 
 test:
-	python setup.py test
+	python setup.py nosetests
 
 $(KAFKA_SRC_TGZ):
 	curl -O $(KAFKA_URL)

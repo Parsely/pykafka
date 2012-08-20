@@ -115,7 +115,7 @@ def filter_messages(stream):
 class ClientIntegrationTestCase(KafkaIntegrationTestCase):
     def setUp(self):
         super(ClientIntegrationTestCase, self).setUp()
-        self.kafka = Client(host='localhost', port=self.kafka_broker.port)
+        self.kafka = self.kafka_broker.client
 
     def test_produce(self, count=1, **kwargs):
         topic = 'topic'
@@ -202,7 +202,12 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
 
             self.offset = message.next_offset
 
-        self.assertPassesWithMultipleAttempts(ensure_valid_response, 5)
+        self.assertPassesWithMultipleAttempts(
+            ensure_valid_response, 5,
+            backoff=lambda attempt, timeout: (
+                timeout * sum(xrange(1, attempt + 1))
+            )
+        )
 
         payloads = ['hello', 'world']
         producer.publish(payloads)

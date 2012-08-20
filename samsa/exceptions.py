@@ -37,7 +37,11 @@ class InvalidVersionError(SamsaException):
 
 # Protocol Client Exceptions
 
+class SocketDisconnectedError(SamsaException):
+    pass
+
 class ProtocolClientError(SamsaException):
+    # ERROR_CODE as specified by the protocol.
     ERROR_CODE = None
 
 

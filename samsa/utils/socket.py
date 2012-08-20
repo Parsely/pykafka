@@ -1,3 +1,6 @@
+from samsa.exceptions import SocketDisconnectedError
+
+
 def recvall_into(socket, bytea):
     """
     Reads enough data from the socket to fill the provided bytearray (modifies
@@ -15,6 +18,8 @@ def recvall_into(socket, bytea):
     while offset < size:
         remaining = size - offset
         chunk = socket.recv(remaining)
+        if not len(chunk):
+            raise SocketDisconnectedError
         bytea[offset:(offset + len(chunk))] = chunk
         offset += len(chunk)
     return bytea
