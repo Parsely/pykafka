@@ -12,7 +12,7 @@ class Partitioner(object):
     """
     The base class for custom class-based partitioners.
     """
-    def __call__(self, partitions, key):
+    def __call__(self, partitions, key=None):
         raise NotImplementedError('Subclasses must define their own '
             ' partitioner implementation')
 
@@ -30,11 +30,11 @@ class HashingPartitioner(Partitioner):
     until all brokers have accepted a write to that topic and have declared how
     many partitions that they are actually serving.
 
-    :param hash: hash function (defaults to :func:`hash`), should return an
+    :param hash_func: hash function (defaults to :func:`hash`), should return an
         `int`. If hash randomization (Python 2.7) is enabled, a custom hashing
         function should be defined that is consistent between interpreter
         restarts.
-    :type hash: function
+    :type hash_func: function
     """
     def __init__(self, hash_func=hash):
         self.hash_func = hash_func
