@@ -46,7 +46,7 @@ class HashingPartitioner(Partitioner):
             :class:`samsa.partitions.PartitionMap`
         :param key: key used for routing
         :type key: any hashable type if using the default :func:`hash`
-            implementation, any valid value for your custom has function
+            implementation, any valid value for your custom hash function
         :returns: a partition
         :rtype: :class:`samsa.partitions.Partition`
         """
