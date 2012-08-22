@@ -21,6 +21,6 @@ install:
     - python setup.py develop
     - pip install --use-mirrors samsa[test]
 
-env: ZOOKEEPER_PATH=/usr/share/java KAFKA_PATH=/usr/local/kafka KAFKA_START_TIMEOUT=10
+env: ZOOKEEPER_PATH=/usr/share/java KAFKA_PATH=/usr/local/kafka KAFKA_START_TIMEOUT=20
 
 script: make test
