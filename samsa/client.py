@@ -362,6 +362,10 @@ class Client(object):
 
     __repr__ = attribute_repr('connection')
 
+    def disconnect(self):
+        self.handler.stop()
+        self.connection.disconnect()
+
     # Protocol Implementation
 
     def produce(self, topic, partition, messages, version=DEFAULT_VERSION, **kwargs):
