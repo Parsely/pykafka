@@ -365,9 +365,9 @@ class Client(object):
     """
     def __init__(self, host, handler, port=9092, timeout=30, autoconnect=True):
         self.connection = Connection(host, port, timeout)
+        self.handler = handlers.RequestHandler(handler, self.connection)
         if autoconnect:
             self.connect()
-        self.handler = handlers.RequestHandler(handler, self.connection)
 
     def connect(self):
         self.connection.connect()
