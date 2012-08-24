@@ -291,6 +291,16 @@ class Connection(object):
         self.timeout = timeout
         self._socket = None
 
+    def __del__(self):
+        self.disconnect()
+
+    @property
+    def connected(self):
+        """
+        Do we think the socket is open.
+        """
+        return self._socket is not None
+
     def connect(self):
         """
         Connect to the broker.
@@ -354,17 +364,20 @@ class Client(object):
     :param timeout: socket timeout
     """
     def __init__(self, host, handler, port=9092, timeout=30, autoconnect=True):
-        connection = Connection(host, port, timeout)
+        self.connection = Connection(host, port, timeout)
         if autoconnect:
-            connection.connect()
-        self.handler = handlers.RequestHandler(handler, connection)
-        self.handler.start()
+            self.connect()
+        self.handler = handlers.RequestHandler(handler, self.connection)
 
-    __repr__ = attribute_repr('connection')
+    def connect(self):
+        self.connection.connect()
+        self.handler.start()
 
     def disconnect(self):
         self.handler.stop()
         self.connection.disconnect()
+
+    __repr__ = attribute_repr('connection')
 
     # Protocol Implementation
 
