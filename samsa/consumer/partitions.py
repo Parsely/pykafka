@@ -122,24 +122,17 @@ class OwnedPartition(Partition):
         :type size: int
 
         """
-        last_offset = None
-
         messages = super(OwnedPartition, self).fetch(
             self._next_offset,
             size
         )
 
         for message in messages:
-            last_offset = message.next_offset
+            self._next_offset = message.next_offset
             logger.info('%s: Received message: %s', self, message)
             self._message_queue.put(
-                message, True,
-                self.config['consumer_timeout']
+                message, True
             )
-
-        # If there were any messages, update the next offset to fetch.
-        if last_offset:
-            self._next_offset = last_offset
 
     def __del__(self):
         self.stop()
