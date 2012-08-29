@@ -34,6 +34,6 @@ Testing Samsa Itself
 To run all tests, run ``make test`` or ``python setup.py test``. To use the
 Nose test runner CLI, you can also use ``python setup.py nosetests``.
 
-To run only integration or unit tests, run either ``make unit`` or
+To run only unit or integration tests, run either ``make unit`` or
 ``make integration``, respectively. You can also use the presence of the
 ``integration`` attribute tag on test cases as a filter when testing with Nose.
