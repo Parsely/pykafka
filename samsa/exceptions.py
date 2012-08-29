@@ -40,6 +40,7 @@ class InvalidVersionError(SamsaException):
 class SocketDisconnectedError(SamsaException):
     pass
 
+
 class ProtocolClientError(SamsaException):
     # ERROR_CODE as specified by the protocol.
     ERROR_CODE = None
@@ -65,5 +66,6 @@ class InvalidFetchSizeError(ProtocolClientError):
     ERROR_CODE = 4
 
 
-ERROR_CODES = dict((exc.ERROR_CODE, exc) for exc in (UnknownError,
-    OffsetOutOfRangeError, InvalidMessageError, WrongPartitionError, InvalidMessageError))
+ERROR_CODES = dict((exc.ERROR_CODE, exc) for exc in (
+    UnknownError, OffsetOutOfRangeError, InvalidMessageError,
+    WrongPartitionError, InvalidMessageError))

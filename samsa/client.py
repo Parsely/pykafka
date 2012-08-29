@@ -45,7 +45,10 @@ DEFAULT_VERSION = 0
 COMPRESSION_TYPE_NONE = 0
 COMPRESSION_TYPE_GZIP = 1
 COMPRESSION_TYPE_SNAPPY = 2
-COMPRESSION_TYPES = (COMPRESSION_TYPE_NONE, COMPRESSION_TYPE_GZIP, COMPRESSION_TYPE_SNAPPY)
+COMPRESSION_TYPES = (
+    COMPRESSION_TYPE_NONE, COMPRESSION_TYPE_GZIP,
+    COMPRESSION_TYPE_SNAPPY
+)
 
 MessageSetFrameHeader = NamedStruct('MessageSetFrameHeader', (
     ('i', 'length'),
@@ -169,17 +172,22 @@ class Message(object):
         :type payload: str
         :param version: message version to publish ("magic number")
         :type version: int
-        :param compression: which compression format to use (only for version 1)
+        :param compression: which compression format to use
+                            (only for version 1)
         :type compression: int
         :returns: total amount of written (in bytes)
         :rtype: int
         """
         if version < 1:
             if compression is not None:
-                raise ValueError('Compression is not supported on version %s' % version)
+                raise ValueError(
+                    'Compression is not supported on version %s' % version
+                )
         elif compression is not None:
             if compression not in COMPRESSION_TYPES:
-                raise ValueError('%s is not a valid compression type' % compression)
+                raise ValueError(
+                    '%s is not a valid compression type' % compression
+                )
             elif compression is not COMPRESSION_TYPE_NONE:
                 raise NotImplementedError  # TODO
         else:
@@ -189,18 +197,24 @@ class Message(object):
 
         # Write generic message header.
         length = cls.Header.size + VersionHeader.size + len(payload)
-        cls.Header.pack_into(bytea, offset=offset, length=length - 4, magic=version)
+        cls.Header.pack_into(
+            bytea, offset=offset,
+            length=length - 4, magic=version
+        )
         offset += cls.Header.size
 
         # Write versioned message header.
         version_kwargs = {}
         if compression is not None:
             version_kwargs['compression'] = compression
-        VersionHeader.pack_into(bytea, offset=offset, checksum=crc32(payload), **version_kwargs)
+        VersionHeader.pack_into(
+            bytea, offset=offset,
+            checksum=crc32(payload), **version_kwargs
+        )
         offset += VersionHeader.size
 
         # Write message payload.
-        bytea[offset:offset+len(payload)] = payload
+        bytea[offset:offset + len(payload)] = payload
 
         return length
 
@@ -217,13 +231,23 @@ class Message(object):
         :returns: encoded messages
         :rtype: :class:`samsa.utils.structuredio.StructuredBytesIO`
         """
-        message_header_length = cls.Header.size + cls.VersionHeaders[version].size
-        length = MessageSetFrameHeader.size + sum(map(len, messages)) + (len(messages) * message_header_length)
+        message_header_length = (
+            cls.Header.size +
+            cls.VersionHeaders[version].size
+        )
+        length = (
+            MessageSetFrameHeader.size +
+            sum(map(len, messages)) +
+            (len(messages) * message_header_length)
+        )
         bytea = bytearray(length)
         MessageSetFrameHeader.pack_into(bytea, 0, length=length - 4)
         offset = MessageSetFrameHeader.size
         for message in messages:
-            written = cls.pack_into(bytea, offset, payload=message, version=version, **kwargs)
+            written = cls.pack_into(
+                bytea, offset,
+                payload=message, version=version, **kwargs
+            )
             offset += written
         return StructuredBytesIO(bytea)
 
@@ -305,8 +329,10 @@ class Connection(object):
         """
         Connect to the broker.
         """
-        self._socket = socket.create_connection((self.host, self.port),
-            timeout=self.timeout)
+        self._socket = socket.create_connection(
+            (self.host, self.port),
+            timeout=self.timeout
+        )
 
     def disconnect(self):
         """
@@ -381,7 +407,8 @@ class Client(object):
 
     # Protocol Implementation
 
-    def produce(self, topic, partition, messages, version=DEFAULT_VERSION, **kwargs):
+    def produce(self, topic, partition, messages,
+                version=DEFAULT_VERSION, **kwargs):
         """
         Sends messages to the broker on a single topic/partition combination.
 
@@ -393,8 +420,8 @@ class Client(object):
         :type messages: list, generator, or other iterable of strings
         :param version: version of message encoding
         :type version: int
-        :param \*\*kwargs: extra (version-specific) keyword arguments to pass to
-            message encoder
+        :param \*\*kwargs: extra (version-specific) keyword arguments
+                           to pass to message encoder
         """
         request = StructuredBytesIO()
         request.pack(2, REQUEST_TYPE_PRODUCE)
@@ -416,8 +443,8 @@ class Client(object):
         :type data: list, generator, or other iterable
         :param version: version of message encoding
         :type version: int
-        :param \*\*kwargs: extra (version-specific) keyword arguments to pass to
-            message encoder
+        :param \*\*kwargs: extra (version-specific) keyword arguments
+                           to pass to message encoder
         """
         payloads = []
         for topic, partition, messages in data:

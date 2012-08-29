@@ -54,7 +54,8 @@ class BrokerMap(DelayedConfiguration):
             broker_ids = self.cluster.zookeeper.get_children(path,
                 watch=self._configure)
         except NoNodeException:
-            raise ImproperlyConfiguredError('The path "%s" does not exist in your '
+            raise ImproperlyConfiguredError(
+                'The path "%s" does not exist in your '
                 'ZooKeeper cluster -- is your Kafka cluster running?' % path)
 
         alive = set()

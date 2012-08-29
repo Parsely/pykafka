@@ -238,7 +238,10 @@ class ManagedBroker(ExternalClassRunner):
     def client(self):
         assert self.is_running()
         if not self._client:
-            self._client = Client('localhost', handlers.ThreadingHandler(), port=self.port)
+            self._client = Client(
+                'localhost', handlers.ThreadingHandler(),
+                port=self.port
+            )
         return self._client
 
 

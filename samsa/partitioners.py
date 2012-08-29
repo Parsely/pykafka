@@ -46,10 +46,10 @@ class HashingPartitioner(Partitioner):
     until all brokers have accepted a write to that topic and have declared how
     many partitions that they are actually serving.
 
-    :param hash_func: hash function (defaults to :func:`hash`), should return an
-        `int`. If hash randomization (Python 2.7) is enabled, a custom hashing
-        function should be defined that is consistent between interpreter
-        restarts.
+    :param hash_func: hash function (defaults to :func:`hash`), should return
+        an `int`. If hash randomization (Python 2.7) is enabled, a custom
+        hashing function should be defined that is consistent between
+        interpreter restarts.
     :type hash_func: function
     """
     def __init__(self, hash_func=hash):
@@ -67,7 +67,9 @@ class HashingPartitioner(Partitioner):
         :rtype: :class:`samsa.partitions.Partition`
         """
         if key is None:
-            raise ValueError('key cannot be `None` when using hashing partitioner')
+            raise ValueError(
+                'key cannot be `None` when using hashing partitioner'
+            )
         partitions = list(partitions)
         return partitions[abs(self.hash_func(key)) % len(partitions)]
 
