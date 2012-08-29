@@ -4,13 +4,15 @@ samsa
 
 |travis-ci|_
 
-.. |travis-ci| image:: https://magnum.travis-ci.com/disqus/samsa.png?branch=master
-.. _travis-ci: https://magnum.travis-ci.com/disqus/samsa
+.. |travis-ci| image:: http://travis-ci.org/disqus/samsa.png?branch=master
+.. _travis-ci: http://travis-ci.org/#!/disqus/samsa
 
     One morning, as Gregor Samsa was waking up from anxious dreams, he
     discovered that in bed he had been changed into a monstrous verminous bug.
 
 Samsa is a cluster-aware Kafka protocol client and routing library for Python.
+
+It's currently under development, but is being used internally to some success.
 
 ************
 Introduction
