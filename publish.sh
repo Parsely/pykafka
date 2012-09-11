@@ -1,12 +1,6 @@
 #!/bin/bash
 
 
-function error () {
-    echo $1 1>&2
-    exit -1
-}
-
-
 VERSION=$(python -c "import samsa; print samsa.__version__")
 
 echo "creating tag $VERSION"
@@ -21,4 +15,4 @@ if [ -f MANIFEST ]; then
 fi
 
 echo "uploading package."
-python setup.py sdist upload -r disqus
+python setup.py sdist upload
