@@ -19,7 +19,7 @@ import functools
 import itertools
 import logging
 
-from zookeeper import NoNodeException
+from kazoo.exceptions import NoNodeException
 
 from samsa.utils import attribute_repr
 from samsa.utils.delayedconfig import (DelayedConfiguration,
@@ -51,8 +51,8 @@ class PartitionMap(DelayedConfiguration):
         logger.info('Looking up brokers for %s...', self)
 
         try:
-            broker_ids = self.cluster.zookeeper.get_children(path,
-                watch=self._configure)
+            broker_ids = self.cluster.zookeeper.get_children(
+                path, watch=self._configure)
         except NoNodeException:
             if self.cluster.zookeeper.exists(path, watch=self._configure) \
                     is not None:

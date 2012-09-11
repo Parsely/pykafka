@@ -16,7 +16,7 @@ limitations under the License.
 
 import mock
 import unittest2
-from zookeeper import NoNodeException
+from kazoo.exceptions import NoNodeException
 
 from samsa.cluster import Cluster
 from samsa.exceptions import NoAvailablePartitionsError
