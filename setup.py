@@ -21,6 +21,11 @@ from setuptools import setup, find_packages
 
 from samsa import __version__
 
+try:
+    import multiprocessing
+except ImportError:
+    pass
+
 install_requires = [
     'zc-zookeeper-static',
     'kazoo==0.3',
