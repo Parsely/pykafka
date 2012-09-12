@@ -28,3 +28,5 @@ zookeeper:
 	curl -O $(ZOOKEEPER_URL)
 	tar xvf $(ZOOKEEPER_TGZ)
 	mv $(ZOOKEEPER_FULL) zookeeper
+
+.PHONY: clean
