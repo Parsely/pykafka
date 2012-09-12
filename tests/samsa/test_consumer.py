@@ -94,7 +94,6 @@ class TestPartitionOwnerRegistry(KazooTestCase):
         self.assertEquals(len(partitions), len(self.partitions))
 
 
-#@unittest.skip("Consumer has issues.")
 class TestConsumer(KazooTestCase, TestCase):
 
     def setUp(self):

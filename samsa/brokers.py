@@ -16,7 +16,7 @@ limitations under the License.
 
 import logging
 
-from zookeeper import NoNodeException
+from kazoo.exceptions import NoNodeException
 
 from samsa.client import Client
 from samsa.exceptions import ImproperlyConfiguredError
