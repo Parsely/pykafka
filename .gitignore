@@ -3,5 +3,3 @@
 *.py[co]
 build/
 dist/
-kafka/
-zookeeper/
