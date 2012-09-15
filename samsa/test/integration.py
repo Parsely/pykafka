@@ -167,7 +167,7 @@ class ExternalClassRunner(object):
 
         logger.debug('Sending SIGTERM to %s...', self.process)
 
-        self.process.terminate()
+        self.process.kill()
         # Can block, but we're reading from the pipe so it should be fine.
         self.process.wait()
 
