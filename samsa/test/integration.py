@@ -168,13 +168,8 @@ class ExternalClassRunner(object):
         logger.debug('Sending SIGTERM to %s...', self.process)
 
         self.process.terminate()
-        try:
-            polling_timeout(lambda: not self.is_running(), timeout)
-            logger.debug('%s exited cleanly', self.process)
-        except TimeoutError:
-            logger.info('%s did not exit within %s timeout, sending '
-                'SIGKILL...', timeout, self.process)
-            self.process.kill()
+        # Can block, but we're reading from the pipe so it should be fine.
+        self.process.wait()
 
 
 class ManagedBroker(ExternalClassRunner):
