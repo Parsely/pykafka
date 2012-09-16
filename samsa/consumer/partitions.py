@@ -89,8 +89,6 @@ class OwnedPartition(Partition):
         if not self._fetch_thread or not self._fetch_thread.is_alive():
             # TODO: turn this back into a long running thread if possible
             self._fetch_thread = self._create_thread()
-        if not timeout:
-            timeout = self.config['consumer_timeout']
 
         try:
             message = self._message_queue.get(True, timeout)
