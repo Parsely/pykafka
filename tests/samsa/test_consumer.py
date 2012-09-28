@@ -36,10 +36,10 @@ class TestPartitionOwnerRegistry(KazooTestCase):
     """Test the methods of :class:`samsa.consumer.PartitionOwnerRegistry`.
     """
 
-    def setUp(self):
+    @mock.patch('samsa.cluster.BrokerMap')
+    def setUp(self, bm):
         super(TestPartitionOwnerRegistry, self).setUp()
         self.c = Cluster(self.client)
-        self.c.brokers = mock.MagicMock()
         broker = mock.Mock()
         broker.id = 1
         self.c.brokers.__getitem__.return_value = broker
@@ -98,10 +98,10 @@ class TestConsumer(KazooTestCase, TestCase):
 
     def setUp(self):
         super(TestConsumer, self).setUp()
+        self.client.ensure_path("/brokers/ids")
         self.c = Cluster(self.client)
 
     def _register_fake_brokers(self, n=1):
-        self.client.ensure_path("/brokers/ids")
         for i in xrange(n):
             path = "/brokers/ids/%d" % i
             data = "creator:127.0.0.1:%s" % (9092 + i)

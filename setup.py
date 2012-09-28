@@ -27,7 +27,7 @@ except ImportError:
     pass
 
 install_requires = [
-    'kazoo==0.5',
+    'kazoo==0.6',
 ]
 
 lint_requires = [

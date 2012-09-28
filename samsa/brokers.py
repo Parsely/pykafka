@@ -17,6 +17,7 @@ limitations under the License.
 import logging
 
 from kazoo.recipe.watchers import DataWatch, ChildrenWatch
+from kazoo.exceptions import NoNodeException
 
 from samsa.client import Client
 from samsa.exceptions import ImproperlyConfiguredError
@@ -37,10 +38,16 @@ class BrokerMap(object):
         self.__brokers = {}
 
         self._node_path = '/brokers/ids'
-        self._broker_watch = ChildrenWatch(
-            self.cluster.zookeeper,
-            self._node_path, self._configure
-        )
+        try:
+            self._broker_watch = ChildrenWatch(
+                self.cluster.zookeeper,
+                self._node_path, self._configure
+            )
+        except NoNodeException:
+            raise ImproperlyConfiguredError(
+                'The path "%s" does not exist in your '
+                'ZooKeeper cluster -- is your Kafka cluster running?' %
+                self._node_path)
 
     def _configure(self, broker_ids):
         """
@@ -51,12 +58,6 @@ class BrokerMap(object):
         # avoid any race conditions between cluster/application startup?
         logger.info('Refreshing broker configuration from %s...',
             self.cluster.zookeeper)
-
-        if not broker_ids:
-            raise ImproperlyConfiguredError(
-                'The path "%s" does not exist in your '
-                'ZooKeeper cluster -- is your Kafka cluster running?' %
-                self._node_path)
 
         alive = set()
         for broker_id in map(int, broker_ids):
@@ -141,7 +142,7 @@ class Broker(object):
         self._node_path = '/brokers/ids/%s' % self.id
         self._config_watcher = DataWatch(
             self.cluster.zookeeper,
-            self.node_path, self._configure
+            self._node_path, self._configure
         )
 
     __repr__ = attribute_repr('id')
