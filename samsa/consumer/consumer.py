@@ -20,6 +20,7 @@ import random
 import socket
 import time
 
+from kazoo.recipe.watchers import ChildrenWatch
 from kazoo.exceptions import NoNodeException
 from uuid import uuid4
 
@@ -57,14 +58,33 @@ class Consumer(object):
             self, cluster, topic, group)
         self.partitions = self.partition_owner_registry.get()
 
+        # register ourselves with zookeeper
         path = '%s/%s' % (self.id_path, self.id)
         self.cluster.zookeeper.create(
             path, self.topic.name, ephemeral=True, makepath=True
         )
 
-        self._rebalance()
+        broker_path = '/brokers/ids'
+        try:
+            # Notified when broker membership changes.
+            self._broker_watcher = ChildrenWatch(
+                self.cluster.zookeeper, broker_path,
+                self._brokers_changed
+            )
+        except NoNodeException:
+            raise ImproperlyConfiguredError(
+                'The broker_path "%s" does not exist in your '
+                'ZooKeeper cluster -- is your Kafka cluster running?'
+                % broker_path)
 
-    def _rebalance(self, event=None):
+    def _brokers_changed(self, brokers):
+        # Notified when new consumers join our group.
+        self._consumer_watcher = ChildrenWatch(
+            self.cluster.zookeeper, self.id_path,
+            self._rebalance
+        )
+
+    def _rebalance(self, consumer_ids):
         """Joins a consumer group and claims partitions.
 
         """
@@ -72,21 +92,11 @@ class Consumer(object):
             self.id, self.topic.name)
         )
 
-        zk = self.cluster.zookeeper
-        broker_path = '/brokers/ids'
-        try:
-            zk.get_children(broker_path, watch=self._rebalance)
-        except NoNodeException:
-            raise ImproperlyConfiguredError(
-                'The broker_path "%s" does not exist in your '
-                'ZooKeeper cluster -- is your Kafka cluster running?'
-                % broker_path)
-
-        # 3. all consumers in the same group as Ci that consume topic T
-        consumer_ids = zk.get_children(self.id_path, watch=self._rebalance)
         participants = []
         for id_ in consumer_ids:
-            topic, stat = zk.get("%s/%s" % (self.id_path, id_))
+            topic, stat = self.cluster.zookeeper.get(
+                "%s/%s" % (self.id_path, id_)
+            )
             if topic == self.topic.name:
                 participants.append(id_)
         # 5.
