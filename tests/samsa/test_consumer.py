@@ -19,6 +19,7 @@ import mock
 
 from itertools import islice
 from kazoo.testing import KazooTestCase
+from threading import Event
 
 from samsa.test.integration import KafkaIntegrationTestCase, polling_timeout
 from samsa.test.case import TestCase
@@ -169,13 +170,17 @@ class TestConsumer(KazooTestCase, TestCase):
         topic = 'testtopic'
         group = 'testgroup'
         offset = 10
+        ev = Event()
 
         fake_partition = mock.Mock()
         fake_partition.cluster = self.c
         fake_partition.topic.name = topic
         fake_partition.broker.id = 0
         fake_partition.number = 0
-        fetch.return_value = ()
+        def fake_fetch(*args, **kwargs):
+            ev.set()
+            return ()
+        fetch.side_effect = fake_fetch
 
         op = OwnedPartition(fake_partition, group)
         op._current_offset = offset
@@ -190,6 +195,7 @@ class TestConsumer(KazooTestCase, TestCase):
         self.assertEquals(p.offset, offset)
 
         self.assertEquals(None, p.next_message(0))
+        ev.wait(1)
         fetch.assert_called_with(offset, ConsumerConfig.fetch_size)
 
 
