@@ -76,6 +76,8 @@ class OwnedPartition(Partition):
         return self._current_offset
 
     def empty(self):
+        """True if there are no messages."""
+
         return self._message_queue.empty()
 
     def next_message(self, timeout=None):
@@ -98,12 +100,13 @@ class OwnedPartition(Partition):
         return message.payload
 
     def commit_offset(self):
-        """Commit current offset to zookeeper.
+        """Commit current offset to zookeeper."""
 
-        """
         self.cluster.zookeeper.set(self.path, str(self._current_offset))
 
     def stop(self):
+        """Stop the fetch thread."""
+
         if self._fetch_thread:
             self._fetch_thread.join()
 
