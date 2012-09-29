@@ -59,9 +59,9 @@ class Consumer(object):
         self.partitions = self.partition_owner_registry.get()
 
         # register ourselves with zookeeper
-        path = '%s/%s' % (self.id_path, self.id)
+        consumer_path = '%s/%s' % (self.id_path, self.id)
         self.cluster.zookeeper.create(
-            path, self.topic.name, ephemeral=True, makepath=True
+            consumer_path, self.topic.name, ephemeral=True, makepath=True
         )
 
         broker_path = '/brokers/ids'
