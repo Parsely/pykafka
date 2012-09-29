@@ -16,7 +16,6 @@ limitations under the License.
 
 import mock
 import unittest2
-from kazoo.exceptions import NoNodeException
 
 from samsa import brokers
 from samsa.cluster import Cluster
@@ -38,7 +37,8 @@ class TopicIntgrationTestCase(KafkaIntegrationTestCase):
 class TopicMapTest(unittest2.TestCase):
     def test_get_topic(self):
         topics = TopicMap(cluster=mock.Mock())
-        topic = topics.get('topic-1')
+        with mock.patch('samsa.partitions.DataWatch'):
+            topic = topics.get('topic-1')
         self.assertIsInstance(topic, Topic)
 
         # Retrieving the topic again should return the same object instance.
