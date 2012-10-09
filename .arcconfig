@@ -1,0 +1,14 @@
+{
+  "project_id": "samsa",
+  "conduit_uri" : "http://phabricator.local.disqus.net/",
+  "arcanist_configuration": "DisqusConfiguration",
+  "copyright_holder": "Disqus, Inc.",
+  "immutable_history": false,
+  "differential.field-selector": "DisqusDifferentialFieldSelector",
+  "unit_engine": "DisqusUnitTestEngine",
+  "lint_engine": "ComprehensiveLintEngine",
+  "lint.pep8.options": "--ignore=W391,W292,W293,E501,E225",
+  "phutil_libraries": {
+      "disqus": "/usr/local/include/php/libdisqus/src"
+  }
+}
