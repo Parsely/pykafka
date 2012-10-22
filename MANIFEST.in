@@ -1,0 +1,1 @@
+include samsa/test/kafka-run-class.sh
