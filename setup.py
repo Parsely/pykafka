@@ -61,4 +61,5 @@ setup(
     },
     zip_safe=False,
     test_suite='nose.collector',
+    include_package_data=True,
 )

@@ -1,5 +1,6 @@
-*.sw*
 *.egg*
 *.py[co]
+*.sw*
+.tox/
 build/
 dist/
