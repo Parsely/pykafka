@@ -91,7 +91,7 @@ def write_property_file(properties):
 class ExternalClassRunner(object):
     args = []
     kwargs = {}
-    executable = os.path.join(os.path.dirname(__file__), 'kafka-run-class.sh')
+    script = os.path.join(os.path.dirname(__file__), 'kafka-run-class.sh')
 
     stop_timeout = 3
 
@@ -113,7 +113,7 @@ class ExternalClassRunner(object):
             write_property_file(self.LOGGING_CONFIGURATION)
 
     def start(self):
-        args = [self.executable, self.cls] + self.args
+        args = ['/bin/sh', self.script, self.cls] + self.args
 
         kwargs = self.kwargs.copy()
         kwargs['env'] = kwargs.get('env', os.environ).copy()
