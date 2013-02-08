@@ -276,12 +276,19 @@ def decode_messages(payload, from_offset):
     """
     offset = 0
     while offset < len(payload):
-        header = Message.Header.unpack_from(payload, offset)
-        length = 4 + header.length
-        message = Message(
-            raw=buffer(payload, offset, length),
-            offset=from_offset + offset
-        )
+        try:
+            header = Message.Header.unpack_from(payload, offset)
+            length = 4 + header.length
+            message = Message(
+                raw=buffer(payload, offset, length),
+                offset=from_offset + offset
+            )
+        except struct.error:
+            # Thrown if payload ends in the middle of a header
+            logger.info('Unable to create message from payload remadiner '
+                        '%i bytes left: %s',
+                    len(payload) - offset, payload[offset:])
+            return
         if message.valid:
             yield message
         else:
