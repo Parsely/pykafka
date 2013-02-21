@@ -139,7 +139,7 @@ class OwnedPartition(Partition):
 
         for message in messages:
             self._next_offset = message.next_offset
-            logger.info('%s: Received message: %s', self, message)
+            logger.info('%s: Received message: %s', self, message.encode('ascii', "ignore"))
             self._message_queue.put(
                 message, True
             )
