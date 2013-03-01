@@ -285,7 +285,7 @@ def decode_messages(payload, from_offset):
             )
         except struct.error:
             # Thrown if payload ends in the middle of a header
-            logger.info('Unable to create message from payload remadiner '
+            logger.debug('Unable to create message from payload remadiner '
                         '%i bytes left: %s',
                     len(payload) - offset, payload[offset:])
             return
@@ -295,7 +295,7 @@ def decode_messages(payload, from_offset):
             if len(message) + offset == len(payload):
                 # If this is the last message,
                 # it's OK to drop it if it's truncated.
-                logger.info('Discarding partial message '
+                logger.debug('Discarding partial message '
                             '(expected %s bytes, got %s): %s',
                     length, len(message), message)
                 return
