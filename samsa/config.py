@@ -90,4 +90,4 @@ class ConsumerConfig(Config):
     # This exists because a quick restart of a consumer will try to connect
     # before the dead one times out. The default of 5 ensures we can outwait
     # that and connect asap.
-    consumer_retries_max = 5
+    consumer_retries_max = 4

@@ -65,15 +65,15 @@ class Consumer(object):
 
         Ensures we don't add more participants than partitions
         """
-        for i in xrange(self.config['consumer_retries_max']):
+        for i in xrange(self.config['consumer_retries_max'] or 1):
             time.sleep(i**2) # first run is 0, ensures we sleep before retry
 
             participants = self._get_others()
             if len(self.topic.partitions) > len(participants):
                 break # some room to spare
             else:
-                logger.info('More consumers than partitions. '
-                            'Waiting %is to retry' % (i+1)**2)
+                logger.debug("More consumers than partitions. "
+                             "Waiting %is to retry" % (i+1) ** 2)
         else:
             raise SamsaException("Couldn't acquire partition. "
                                  "More consumers than partitions.")
@@ -140,7 +140,8 @@ class Consumer(object):
         )
 
         # 9. add newly assigned partitions to the partition owner registry
-        for i in xrange(self.config['rebalance_retries_max']):
+        for i in xrange(self.config['rebalance_retries_max'] or 1):
+            time.sleep(i ** 2) # first run is 0, so this is ok
             try:
                 # N.B. self.partitions will always reflect the most current
                 # view of owned partitions. Therefor retrying this method
@@ -150,9 +151,8 @@ class Consumer(object):
                 )
                 break
             except PartitionOwnedError, e:
-                logger.debug("Someone still owns partition %s. Retrying"
-                             % e)
-                time.sleep(i ** 2)
+                logger.debug("Someone still owns partition %s. "
+                             "Retrying in %is" % (e, (i+1) ** 2))
                 continue
         else:
             raise SamsaException("Couldn't acquire partitions.")
