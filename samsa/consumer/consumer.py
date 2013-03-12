@@ -57,12 +57,34 @@ class Consumer(object):
             self, cluster, topic, group)
         self.partitions = self.partition_owner_registry.get()
 
+        self._add_self()
+        self._rebalance()
+
+    def _add_self(self):
+        """Add this consumer to the zookeeper participants.
+
+        Ensures we don't add more participants than partitions
+        """
+        participants = self._get_others()
+        if len(participants) >= len(self.topic.partitions):
+            raise SamsaException("Couldn't acquire partition. "
+                                 "More consumers than partitions.")
+
         path = '%s/%s' % (self.id_path, self.id)
         self.cluster.zookeeper.create(
-            path, self.topic.name, ephemeral=True, makepath=True
-        )
+            path, self.topic.name, ephemeral=True, makepath=True)
 
-        self._rebalance()
+    def _get_others(self, watch=None):
+        """Get a the other consumers of this topic"""
+        zk = self.cluster.zookeeper
+        consumer_ids = zk.get_children(self.id_path, watch=watch)
+        participants = []
+        for id_ in consumer_ids:
+            topic, stat = zk.get("%s/%s" % (self.id_path, id_))
+            if topic == self.topic.name:
+                participants.append(id_)
+        participants.sort()
+        return participants
 
     def _rebalance(self, event=None):
         """Joins a consumer group and claims partitions.
@@ -83,14 +105,7 @@ class Consumer(object):
                 % broker_path)
 
         # 3. all consumers in the same group as Ci that consume topic T
-        consumer_ids = zk.get_children(self.id_path, watch=self._rebalance)
-        participants = []
-        for id_ in consumer_ids:
-            topic, stat = zk.get("%s/%s" % (self.id_path, id_))
-            if topic == self.topic.name:
-                participants.append(id_)
-        # 5.
-        participants.sort()
+        participants = self._get_others(watch=self._rebalance)
 
         # 6.
         i = participants.index(self.id)
