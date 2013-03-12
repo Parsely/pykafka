@@ -65,8 +65,16 @@ class Consumer(object):
 
         Ensures we don't add more participants than partitions
         """
-        participants = self._get_others()
-        if len(participants) >= len(self.topic.partitions):
+        for i in xrange(self.config['consumer_retries_max']):
+            time.sleep(i**2) # first run is 0, ensures we sleep before retry
+
+            participants = self._get_others()
+            if len(self.topic.partitions) > len(participants):
+                break # some room to spare
+            else:
+                logger.info('More consumers than partitions. '
+                            'Waiting %is to retry' % (i+1)**2)
+        else:
             raise SamsaException("Couldn't acquire partition. "
                                  "More consumers than partitions.")
 
