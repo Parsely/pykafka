@@ -85,7 +85,12 @@ class Consumer(object):
     def _get_others(self, watch=None):
         """Get a the other consumers of this topic"""
         zk = self.cluster.zookeeper
-        consumer_ids = zk.get_children(self.id_path, watch=watch)
+        try:
+            consumer_ids = zk.get_children(self.id_path, watch=watch)
+        except NoNodeException:
+            logger.debug("Consumer group doesn't exist. No participants to find")
+            return []
+
         participants = []
         for id_ in consumer_ids:
             topic, stat = zk.get("%s/%s" % (self.id_path, id_))
