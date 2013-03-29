@@ -30,8 +30,9 @@ def requires_configuration(method):
     @functools.wraps(method)
     def wrapped(self, *args, **kwargs):
         if not self._configured:
-            logger.debug('%s requires configuration before %s may be invoked',
-                self, method)
+            logger.debug('%s requires configuration before %s may be invoked. '
+                         'Configuring now.',
+                         self, method)
             self._configured = True
             self._configure()
         return method(self, *args, **kwargs)
