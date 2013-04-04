@@ -100,6 +100,10 @@ class TestConsumer(KazooTestCase, TestCase):
         super(TestConsumer, self).setUp()
         self.c = Cluster(self.client)
 
+    def tearDown(self):
+        self.client.stop() # stops watches that call _rebalance
+        super(TestConsumer, self).tearDown()
+
     def _register_fake_brokers(self, n=1):
         self.client.ensure_path("/brokers/ids")
         for i in xrange(n):
@@ -256,3 +260,46 @@ class TestConsumerIntegration(KafkaIntegrationTestCase):
 
         consumer = t.subscribe('group2')
         self.assertTrue(consumer.empty())
+
+
+    def test_fetch_invalid_offset(self):
+        """Test that fetching rolled-over offset skips to lowest valid offset.
+
+        Bad offsets happen when kafka logs are rolled over automatically.
+        This could happen when a consumer is offline for a long time and
+        zookeeper has an old offset stored. It could also happen with a
+        consumer near the end of a log that's being rolled over and its
+        previous spot no longer exists.
+        """
+        topic = 'topic'
+        messages = ['hello world', 'foobar']
+
+        # publish `messages` to `topic`
+        self.kafka.produce(topic, 0, messages)
+
+        t = Topic(self.kafka_cluster, topic)
+
+        # get the consumer and set the offset to -1
+        consumer = t.subscribe('group2')
+        list(consumer.partitions)[0]._next_offset = -1
+
+        def test():
+            """Test that `consumer` can see `messages`.
+
+            catches exceptions so we can retry while we wait for kafka to
+            coallesce.
+
+            """
+            logger.debug('Running `test`...')
+            try:
+                self.assertEquals(
+                    list(islice(consumer, 0, len(messages))),
+                    messages
+                )
+                return True
+            except AssertionError as e:
+                logger.exception('Caught exception: %s', e)
+                return False
+
+        # wait for one second for :func:`test` to return true or raise an error
+        polling_timeout(test, 1)

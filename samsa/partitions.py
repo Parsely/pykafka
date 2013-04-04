@@ -21,13 +21,14 @@ import logging
 
 from kazoo.exceptions import NoNodeException
 
+from samsa.client import OFFSET_EARLIEST
+from samsa.exceptions import OffsetOutOfRangeError
 from samsa.utils import attribute_repr
 from samsa.utils.delayedconfig import (DelayedConfiguration,
     requires_configuration)
 
 
 logger = logging.getLogger(__name__)
-
 
 class PartitionMap(DelayedConfiguration):
     """
@@ -224,8 +225,22 @@ class Partition(object):
             messages)
 
     def fetch(self, offset, size):
-        return self.broker.client.fetch(self.topic.name, self.number, offset,
-            size)
+        try:
+            return self.broker.client.fetch(self.topic.name, self.number, offset,
+                size)
+        except OffsetOutOfRangeError, ex:
+            # is this before the earliest offset available?
+            earliest = self.broker.client.offsets(self.topic.name, self.number,
+                                                  OFFSET_EARLIEST, 1)[0]
+            if offset < earliest:
+                logger.warning('Requested offset %i is no longer available. '
+                               'Fast-forwarding to OFFSET_EARLIEST (%i)',
+                               offset, earliest)
+                return self.broker.client.fetch(self.topic.name, self.number,
+                                                earliest, size)
+            else:
+                # no? then we can't do anything
+                raise
 
     def __hash__(self):
         return hash((self.topic, self.broker.id, self.number))

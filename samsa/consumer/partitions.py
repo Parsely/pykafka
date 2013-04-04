@@ -20,7 +20,6 @@ from kazoo.exceptions import NodeExistsException, NoNodeException
 from functools import partial
 import Queue
 
-from samsa.client import OFFSET_EARLIEST
 from samsa.config import ConsumerConfig
 from samsa.exceptions import PartitionOwnedError
 from samsa.partitions import Partition
@@ -59,21 +58,13 @@ class OwnedPartition(Partition):
             self.broker.id, self.number
         )
 
-        # What does zookeeper think our current offset is?
+        # _current_offset is cursor to next message we haven't consumed
         try:
-            zk_offset, stat = self.cluster.zookeeper.get(self.path)
-            zk_offset = int(zk_offset)
+            offset, stat = self.cluster.zookeeper.get(self.path)
+            self._current_offset = int(offset)
         except NoNodeException:
-            self.cluster.zookeeper.create(self.path, str(0), makepath=True)
-            zk_offset = 0
-
-        # The partition can get trimmed, so check it's still in kafka
-        kafka_min_offset = self.broker.client.offsets(self.topic.name,
-                                                      self.number,
-                                                      OFFSET_EARLIEST,
-                                                      1)[0]
-
-        self._current_offset = max(zk_offset, kafka_min_offset)
+            self._current_offset= 0
+            self.cluster.zookeeper.ensure_path(self.path)
 
         # the offset at which we should make our next fetch
         self._next_offset = self._current_offset
