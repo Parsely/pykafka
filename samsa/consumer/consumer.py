@@ -25,8 +25,8 @@ from uuid import uuid4
 
 from samsa.config import ConsumerConfig
 from samsa.consumer.partitions import PartitionOwnerRegistry
-from samsa.exceptions import (SamsaException, PartitionOwnedError,
-                              ImproperlyConfiguredError)
+from samsa.exceptions import (SamsaException, NoAvailablePartitionsError,
+                              PartitionOwnedError, ImproperlyConfiguredError)
 
 logger = logging.getLogger(__name__)
 
@@ -75,8 +75,8 @@ class Consumer(object):
                 logger.debug("More consumers than partitions. "
                              "Waiting %is to retry" % (i+1) ** 2)
         else:
-            raise SamsaException("Couldn't acquire partition. "
-                                 "More consumers than partitions.")
+            raise NoAvailablePartitionsError("Couldn't acquire partition. "
+                                             "More consumers than partitions.")
 
         path = '%s/%s' % (self.id_path, self.id)
         self.cluster.zookeeper.create(

@@ -20,6 +20,7 @@ import mock
 from itertools import islice
 from kazoo.testing import KazooTestCase
 
+from samsa.exceptions import NoAvailablePartitionsError
 from samsa.test.integration import KafkaIntegrationTestCase, polling_timeout
 from samsa.test.case import TestCase
 from samsa.cluster import Cluster
@@ -195,6 +196,19 @@ class TestConsumer(KazooTestCase, TestCase):
 
         self.assertEquals(None, p.next_message(0))
         fetch.assert_called_with(offset, ConsumerConfig.fetch_size)
+
+    @mock.patch.object(Partition, 'fetch')
+    def test_too_many_consumers(self, *args):
+        """Test graceful failure when # of consumers exceeds partitions
+
+        """
+        n_partitions = 1
+        n_consumers = 2
+        self._register_fake_brokers(n_partitions)
+        t = Topic(self.c, 'testtopic')
+
+        with self.assertRaises(NoAvailablePartitionsError):
+            consumers = [t.subscribe('group1') for i in xrange(n_consumers)]
 
 
 class TestConsumerIntegration(KafkaIntegrationTestCase):
