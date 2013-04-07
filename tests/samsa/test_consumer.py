@@ -16,8 +16,13 @@ limitations under the License.
 
 import logging
 import mock
+import sys
+import time
+import traceback
+import threading
+import Queue
 
-from itertools import islice
+from itertools import cycle, islice
 from kazoo.testing import KazooTestCase
 
 from samsa.exceptions import NoAvailablePartitionsError
@@ -25,6 +30,7 @@ from samsa.test.integration import KafkaIntegrationTestCase, polling_timeout
 from samsa.test.case import TestCase
 from samsa.cluster import Cluster
 from samsa.config import ConsumerConfig
+from samsa.consumer import Consumer
 from samsa.topics import Topic
 from samsa.partitions import Partition
 from samsa.consumer.partitions import PartitionOwnerRegistry, OwnedPartition
@@ -105,12 +111,14 @@ class TestConsumer(KazooTestCase, TestCase):
         self.client.stop() # stops watches that call _rebalance
         super(TestConsumer, self).tearDown()
 
-    def _register_fake_brokers(self, n=1):
-        self.client.ensure_path("/brokers/ids")
+    def _register_fake_brokers(self, n=1, client=None):
+        if not client:
+            client = self.client
+        client.ensure_path("/brokers/ids")
         for i in xrange(n):
             path = "/brokers/ids/%d" % i
             data = "creator:127.0.0.1:%s" % (9092 + i)
-            self.client.create(path, data)
+            client.create(path, data)
 
     @mock.patch.object(OwnedPartition, '_fetch')
     def test_assigns_partitions(self, *args):
@@ -196,6 +204,54 @@ class TestConsumer(KazooTestCase, TestCase):
 
         self.assertEquals(None, p.next_message(0))
         fetch.assert_called_with(offset, ConsumerConfig.fetch_size)
+
+    @mock.patch.object(Partition, 'fetch')
+    def test_multiclient_rebalance(self, *args):
+        """Test rebalancing with many connected clients
+
+        This test is primarily good at ferreting out concurrency bugs
+        and therefore doesn't test one specific thing, since such
+        bugs are fundamentally hard to trap.
+
+        To test, it simulates 10 consumer connecting over time, rebalancing,
+        and eventually disconnecting one by one. In order to accomplish
+        this, it creates a separate kazoo client for each consumer. This
+        is required because otherwise there is too much thread contention
+        over the single kazoo client. Some callbacks won't happen until
+        much too late because there aren't enough threads to go around.
+
+        """
+        n_partitions = 10
+        n_consumers = 10
+        t = Topic(self.c, 'testtopic')
+
+        # with self.client, new clients don't see the brokers -- unsure why
+        from kazoo.client import KazooClient
+        zk_hosts = ','.join(
+                ['%s:%s' % (h,p) for h,p in self.client.hosts.hosts])
+        zkclient = KazooClient(hosts=zk_hosts)
+        zkclient.start()
+        self._register_fake_brokers(n_partitions, client=zkclient)
+
+        # bring up consumers
+        consumers = []
+        for i in xrange(n_consumers):
+            newclient = KazooClient(hosts=zk_hosts)
+            newclient.start()
+            cluster = Cluster(newclient)
+            topic = Topic(cluster, 'testtopic')
+            consumers.append((newclient, topic.subscribe('group1')))
+            time.sleep(1)
+
+        time.sleep(5) # let things settle
+
+        # bring down consumers
+        for client,consumer in consumers:
+            consumer.stop_partitions()
+            client.stop()
+            time.sleep(2) # a little more time so we don't kill during rebalance
+
+        newclient.stop()
 
     @mock.patch.object(Partition, 'fetch')
     def test_too_many_consumers(self, *args):

@@ -93,11 +93,59 @@ class Consumer(object):
 
         participants = []
         for id_ in consumer_ids:
-            topic, stat = zk.get("%s/%s" % (self.id_path, id_))
-            if topic == self.topic.name:
-                participants.append(id_)
+            try:
+                topic, stat = zk.get("%s/%s" % (self.id_path, id_))
+                if topic == self.topic.name:
+                    participants.append(id_)
+            except NoNodeException:
+                pass # disappeared between ``get_children`` and ``get``
         participants.sort()
         return participants
+
+    def _decide_partitions(self, participants):
+        """Use consumers and partitions to determined owned partitions
+
+        Give a set of subscribed consumers, every individual consumer should
+        be able to figure out the same distribution of available partitions.
+
+        It's very, very important this gives the same result on all machines,
+        so things like participant and partition lists are always sorted.
+
+        The algorithm is to distribute blocks of partitions based on
+        how many participants there are. If there are partitions remaining,
+        the last R participants get one extra, where R is the remainder.
+        """
+        # Freeze and sort partitions so we always have the same results
+        p_to_str = lambda p: '-'.join(
+            [p.topic.name, str(p.broker.id), str(p.number)]
+        )
+        all_partitions = list(self.topic.partitions)
+        all_partitions.sort(key=p_to_str)
+
+        # get start point, # of partitions, and remainder
+        idx = participants.index(self.id)
+        parts_per_consumer = len(all_partitions) / len(participants)
+        remainder_ppc = len(all_partitions) % len(participants)
+
+        start = parts_per_consumer * idx + min(idx, remainder_ppc)
+        num_parts = parts_per_consumer + (0 if (idx + 1 > remainder_ppc) else 1)
+
+        # assign partitions from i*N to (i+1)*N - 1 to consumer Ci
+        new_partitions = itertools.islice(
+            all_partitions,
+            start,
+            start + num_parts
+        )
+        new_partitions = set(new_partitions)
+        logger.debug(
+            'Rebalancing to %s based on %i participants %s and partitions %s',
+            [p_to_str(p) for p in new_partitions],
+            len(participants), str(participants),
+            [p_to_str(p) for p in all_partitions]
+        )
+        return new_partitions
+
+
 
     def _rebalance(self, event=None):
         """Joins a consumer group and claims partitions.
@@ -117,47 +165,30 @@ class Consumer(object):
                 'ZooKeeper cluster -- is your Kafka cluster running?'
                 % broker_path)
 
-        # 3. all consumers in the same group as Ci that consume topic T
-        participants = self._get_others(watch=self._rebalance)
-
-        # 6.
-        i = participants.index(self.id)
-        parts_per_consumer = len(self.topic.partitions) / len(participants)
-        remainder_ppc = len(self.topic.partitions) % len(participants)
-
-        start = parts_per_consumer * i + min(i, remainder_ppc)
-        num_parts = parts_per_consumer + (0 if (i + 1 > remainder_ppc) else 1)
-
-        # 7. assign partitions from i*N to (i+1)*N - 1 to consumer Ci
-        new_partitions = itertools.islice(
-            self.topic.partitions,
-            start,
-            start + num_parts
-        )
-
-        new_partitions = set(new_partitions)
-
+        # stop reading until post-rebalance
         self.stop_partitions()
 
-        # 8. remove current entries from the partition owner registry
-        self.partition_owner_registry.remove(
-            self.partitions - new_partitions
-        )
-
-        # 9. add newly assigned partitions to the partition owner registry
         for i in xrange(self.config['rebalance_retries_max'] or 1):
-            time.sleep(i ** 2) # first run is 0, so this is ok
+            if i > 0:
+                logger.debug("Retrying in %is" % ((i+1) ** 2))
+                time.sleep(i ** 2)
+
+            # Find owned partitions and remove old ones. Always
+            # re-decide ownership after waiting since new consumers
+            # may have joined while sleeping
+            participants = self._get_others(watch=self._rebalance)
+            new_partitions = self._decide_partitions(participants)
+            self.partition_owner_registry.remove(
+                self.partitions - new_partitions
+            )
+
             try:
-                # N.B. self.partitions will always reflect the most current
-                # view of owned partitions. Therefor retrying this method
-                # will progress.
                 self.partition_owner_registry.add(
                     new_partitions - self.partitions
                 )
                 break
             except PartitionOwnedError, e:
-                logger.debug("Someone still owns partition %s. "
-                             "Retrying in %is" % (e, (i+1) ** 2))
+                logger.debug("Someone still owns partition %s.", e)
                 continue
         else:
             raise SamsaException("Couldn't acquire partitions.")
@@ -183,7 +214,8 @@ class Consumer(object):
         """Commit the offsets of all messages consumed so far.
 
         """
-        for partition in self.partitions:
+        partitions = list(self.partitions) # freeze in case of rebalance
+        for partition in partitions:
             partition.commit_offset()
 
     def stop_partitions(self):
@@ -191,7 +223,8 @@ class Consumer(object):
 
         """
         self.commit_offsets()
-        for partition in self.partitions:
+        partitions = list(self.partitions) # freeze in case of rebalance
+        for partition in partitions:
             partition.stop()
 
     def empty(self):
