@@ -208,6 +208,9 @@ class Consumer(object):
         """Get the next message from one of the partitions.
 
         """
+        if len(self.partitions) == 0:
+            log.info('No partitions to read from. Rebalance ongoing?')
+            return None
         return random.sample(self.partitions, 1)[0].next_message(timeout)
 
     def commit_offsets(self):
