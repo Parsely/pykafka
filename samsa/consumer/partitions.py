@@ -61,9 +61,9 @@ class OwnedPartition(Partition):
         # _current_offset is cursor to next message we haven't consumed
         try:
             offset, stat = self.cluster.zookeeper.get(self.path)
-            self._current_offset = int(offset)
+            self._current_offset = int(offset) if offset else 0
         except NoNodeException:
-            self._current_offset= 0
+            self._current_offset = 0
             self.cluster.zookeeper.ensure_path(self.path)
 
         # the offset at which we should make our next fetch
