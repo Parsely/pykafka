@@ -24,6 +24,7 @@ import Queue
 
 from itertools import cycle, islice
 from kazoo.testing import KazooTestCase
+from threading import Event
 
 from samsa.exceptions import NoAvailablePartitionsError
 from samsa.test.integration import KafkaIntegrationTestCase, polling_timeout
@@ -43,10 +44,10 @@ class TestPartitionOwnerRegistry(KazooTestCase):
     """Test the methods of :class:`samsa.consumer.PartitionOwnerRegistry`.
     """
 
-    def setUp(self):
+    @mock.patch('samsa.cluster.BrokerMap')
+    def setUp(self, bm):
         super(TestPartitionOwnerRegistry, self).setUp()
         self.c = Cluster(self.client)
-        self.c.brokers = mock.MagicMock()
         broker = mock.Mock()
         broker.id = 1
         self.c.brokers.__getitem__.return_value = broker
@@ -105,6 +106,7 @@ class TestConsumer(KazooTestCase, TestCase):
 
     def setUp(self):
         super(TestConsumer, self).setUp()
+        self.client.ensure_path("/brokers/ids")
         self.c = Cluster(self.client)
 
     def tearDown(self):
@@ -182,13 +184,17 @@ class TestConsumer(KazooTestCase, TestCase):
         topic = 'testtopic'
         group = 'testgroup'
         offset = 10
+        ev = Event()
 
         fake_partition = mock.Mock()
         fake_partition.cluster = self.c
         fake_partition.topic.name = topic
         fake_partition.broker.id = 0
         fake_partition.number = 0
-        fetch.return_value = ()
+        def fake_fetch(*args, **kwargs):
+            ev.set()
+            return ()
+        fetch.side_effect = fake_fetch
 
         op = OwnedPartition(fake_partition, group)
         op._current_offset = offset
@@ -203,6 +209,7 @@ class TestConsumer(KazooTestCase, TestCase):
         self.assertEquals(p.offset, offset)
 
         self.assertEquals(None, p.next_message(0))
+        ev.wait(1)
         fetch.assert_called_with(offset, ConsumerConfig.fetch_size)
 
     @mock.patch.object(Partition, 'fetch')

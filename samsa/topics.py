@@ -15,7 +15,6 @@ limitations under the License.
 """
 
 import logging
-import random
 
 from samsa.exceptions import NoAvailablePartitionsError
 from samsa.partitioners import random_partitioner

@@ -20,6 +20,7 @@ import random
 import socket
 import time
 
+from kazoo.recipe.watchers import ChildrenWatch
 from kazoo.exceptions import NoNodeException
 from uuid import uuid4
 
@@ -58,7 +59,6 @@ class Consumer(object):
         self.partitions = self.partition_owner_registry.get()
 
         self._add_self()
-        self._rebalance()
 
     def _add_self(self):
         """Add this consumer to the zookeeper participants.
@@ -68,7 +68,7 @@ class Consumer(object):
         for i in xrange(self.config['consumer_retries_max'] or 1):
             time.sleep(i**2) # first run is 0, ensures we sleep before retry
 
-            participants = self._get_others()
+            participants = self._get_participants()
             if len(self.topic.partitions) > len(participants):
                 break # some room to spare
             else:
@@ -82,14 +82,41 @@ class Consumer(object):
         self.cluster.zookeeper.create(
             path, self.topic.name, ephemeral=True, makepath=True)
 
-    def _get_others(self, watch=None):
-        """Get a the other consumers of this topic"""
-        zk = self.cluster.zookeeper
+        broker_path = '/brokers/ids'
         try:
-            consumer_ids = zk.get_children(self.id_path, watch=watch)
+            # Notifies when broker membership changes.
+            self._broker_watcher = ChildrenWatch(
+                self.cluster.zookeeper, broker_path,
+                self._brokers_changed
+            )
         except NoNodeException:
-            logger.debug("Consumer group doesn't exist. No participants to find")
-            return []
+            raise ImproperlyConfiguredError(
+                'The broker_path "%s" does not exist in your '
+                'ZooKeeper cluster -- is your Kafka cluster running?'
+                % broker_path)
+
+
+    def _brokers_changed(self, brokers):
+        # Notified when new consumers join our group.
+        self._consumer_watcher = ChildrenWatch(
+            self.cluster.zookeeper, self.id_path,
+            self._rebalance
+        )
+
+
+    def _get_participants(self, consumer_ids=None):
+        """Get a the other consumers of this topic
+
+        :param consumer_ids: List of consumer_ids (from ChildrenWatch)
+        """
+        zk = self.cluster.zookeeper
+        if not consumer_ids:
+            try:
+                consumer_ids = zk.get_children(self.id_path)
+            except NoNodeException:
+                logger.debug("Consumer group doesn't exist. "
+                             "No participants to find")
+                return []
 
         participants = []
         for id_ in consumer_ids:
@@ -101,6 +128,7 @@ class Consumer(object):
                 pass # disappeared between ``get_children`` and ``get``
         participants.sort()
         return participants
+
 
     def _decide_partitions(self, participants):
         """Use consumers and partitions to determined owned partitions
@@ -147,7 +175,7 @@ class Consumer(object):
 
 
 
-    def _rebalance(self, event=None):
+    def _rebalance(self, consumer_ids):
         """Joins a consumer group and claims partitions.
 
         """
@@ -155,29 +183,21 @@ class Consumer(object):
             self.id, self.topic.name)
         )
 
-        zk = self.cluster.zookeeper
-        broker_path = '/brokers/ids'
-        try:
-            zk.get_children(broker_path, watch=self._rebalance)
-        except NoNodeException:
-            raise ImproperlyConfiguredError(
-                'The broker_path "%s" does not exist in your '
-                'ZooKeeper cluster -- is your Kafka cluster running?'
-                % broker_path)
-
         # stop reading until post-rebalance
         self.stop_partitions()
+
+        participants = self._get_participants(consumer_ids=consumer_ids)
+        new_partitions = self._decide_partitions(participants)
 
         for i in xrange(self.config['rebalance_retries_max'] or 1):
             if i > 0:
                 logger.debug("Retrying in %is" % ((i+1) ** 2))
                 time.sleep(i ** 2)
+                # Make sure nothing's changed while we waited
+                participants = self._get_participants()
+                new_partitions = self._decide_partitions(participants)
 
-            # Find owned partitions and remove old ones. Always
-            # re-decide ownership after waiting since new consumers
-            # may have joined while sleeping
-            participants = self._get_others(watch=self._rebalance)
-            new_partitions = self._decide_partitions(participants)
+            # Remove old partitions and acquire new ones.
             self.partition_owner_registry.remove(
                 self.partitions - new_partitions
             )

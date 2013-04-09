@@ -319,8 +319,6 @@ class KafkaClusterIntegrationTestCase(TestCase, KazooTestHarness):
         self._port_generator = itertools.ifilter(is_port_available,
             itertools.count(9092))
 
-        self.kafka_cluster = Cluster(self.client)
-
     def tearDown(self):
         for process in self._subprocesses:
             if process.is_running():
@@ -366,3 +364,4 @@ class KafkaIntegrationTestCase(KafkaClusterIntegrationTestCase):
     def setUp(self):
         super(KafkaIntegrationTestCase, self).setUp()
         self.kafka_broker = self.setup_kafka_broker()
+        self.kafka_cluster = Cluster(self.client)
