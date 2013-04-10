@@ -228,7 +228,17 @@ class Consumer(object):
         if len(self.partitions) == 0:
             log.info('No partitions to read from. Rebalance ongoing?')
             return None
-        return random.sample(self.partitions, 1)[0].next_message(timeout)
+        # HACK: There has to be a better way to do this. Need to fix ASAP.
+        expiry = (time.time() + timeout) if timeout else None
+        wait = min(0.1, timeout or 0.1)
+        partitions = list(self.partitions)
+        random.shuffle(partitions)
+        while expiry is None or time.time() < expiry:
+            for partition in itertools.chain(partitions):
+                msg = partition.next_message(timeout=0.001) # don't wait around
+                if msg:
+                    return msg
+            time.sleep(wait)
 
     def commit_offsets(self):
         """Commit the offsets of all messages consumed so far.
