@@ -71,6 +71,11 @@ class OwnedPartition(Partition):
         self._message_queue = Queue.Queue(self.config['queuedchunks_max'])
         self._fetch_thread = None
 
+        # Rebalancing and consuming happen on different threads, so the
+        # partition needs to stop. Otherwise the consumer will spawn
+        # fetch threads while we're trying to remove it
+        self._stopped = False
+
     @property
     def offset(self):
         return self._current_offset
@@ -88,6 +93,9 @@ class OwnedPartition(Partition):
         :param timeout: block for timeout if integer, or indefinitely if None.
 
         """
+        if self._stopped:
+            return None
+
         if not self._fetch_thread or not self._fetch_thread.is_alive():
             # TODO: turn this back into a long running thread if possible
             self._fetch_thread = self._create_thread()
@@ -107,6 +115,18 @@ class OwnedPartition(Partition):
     def stop(self):
         """Stop the fetch thread."""
 
+        self._stopped = True
+        # HACK: empty the message queue. this will free up a deadlocked
+        # fetch thread, which happens when the message queue is full, the
+        # thread is waiting to put a new item on, and the consumer isn't
+        # consuming. Yes, this happens.
+        # TODO: Replace the fetch thread implementation with one that can
+        # be gracefully interrupted and told to die
+        while not self._message_queue.empty():
+            try:
+                self._message_queue.get()
+            except Queue.Empty:
+                break # just in case other threads are consuming
         if self._fetch_thread:
             self._fetch_thread.join()
 
@@ -129,8 +149,9 @@ class OwnedPartition(Partition):
         )
 
         for message in messages:
+            if self._stopped:
+                break
             self._next_offset = message.next_offset
-            #logger.info('%s: Received message: %s', self, message)
             self._message_queue.put(
                 message, True
             )

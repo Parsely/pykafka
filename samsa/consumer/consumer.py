@@ -183,9 +183,6 @@ class Consumer(object):
             self.id, self.topic.name)
         )
 
-        # stop reading until post-rebalance
-        self.stop_partitions()
-
         participants = self._get_participants(consumer_ids=consumer_ids)
         new_partitions = self._decide_partitions(participants)
 
@@ -198,9 +195,9 @@ class Consumer(object):
                 new_partitions = self._decide_partitions(participants)
 
             # Remove old partitions and acquire new ones.
-            self.partition_owner_registry.remove(
-                self.partitions - new_partitions
-            )
+            old_partitions = self.partitions - new_partitions
+            self.stop_partitions(partitions=old_partitions)
+            self.partition_owner_registry.remove(old_partitions)
 
             try:
                 self.partition_owner_registry.add(
@@ -241,14 +238,17 @@ class Consumer(object):
         for partition in partitions:
             partition.commit_offset()
 
-    def stop_partitions(self):
+    def stop_partitions(self, partitions=None):
         """Stop partitions from fetching more threads.
 
+        :param partitions: Partitions to remove. (default: self.partitions)
+
         """
-        self.commit_offsets()
-        partitions = list(self.partitions) # freeze in case of rebalance
+        if not partitions:
+            partitions = list(self.partitions) # freeze in case of rebalance
         for partition in partitions:
             partition.stop()
+            partition.commit_offset()
 
     def empty(self):
         return all([p.empty() for p in self.partitions])
