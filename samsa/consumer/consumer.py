@@ -231,9 +231,9 @@ class Consumer(object):
         # HACK: There has to be a better way to do this. Need to fix ASAP.
         expiry = (time.time() + timeout) if timeout else None
         wait = min(0.1, timeout or 0.1)
-        partitions = list(self.partitions)
-        random.shuffle(partitions)
         while expiry is None or time.time() < expiry:
+            partitions = list(self.partitions)
+            random.shuffle(partitions)
             for partition in itertools.chain(partitions):
                 msg = partition.next_message(timeout=0.001) # don't wait around
                 if msg:
