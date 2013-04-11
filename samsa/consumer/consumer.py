@@ -234,7 +234,7 @@ class Consumer(object):
         while expiry is None or time.time() < expiry:
             partitions = list(self.partitions)
             random.shuffle(partitions)
-            for partition in itertools.chain(partitions):
+            for partition in partitions:
                 msg = partition.next_message(timeout=0.001) # don't wait around
                 if msg:
                     return msg
@@ -254,7 +254,7 @@ class Consumer(object):
         :param partitions: Partitions to remove. (default: self.partitions)
 
         """
-        if not partitions:
+        if partitions is None:
             partitions = list(self.partitions) # freeze in case of rebalance
         for partition in partitions:
             partition.stop()
