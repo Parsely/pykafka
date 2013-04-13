@@ -58,7 +58,12 @@ class Consumer(object):
             self, cluster, topic, group)
         self.partitions = self.partition_owner_registry.get()
 
+        # Keep track of the partition being read and how much has been read
+        self._current_partition = None
+        self._current_read_ct = 0
+
         self._add_self()
+
 
     def _add_self(self):
         """Add this consumer to the zookeeper participants.
@@ -97,7 +102,12 @@ class Consumer(object):
 
 
     def _brokers_changed(self, brokers):
-        # Notified when new consumers join our group.
+        """Notified when new brokers join or leave
+
+        If the broker map changes, we need to trigger
+        a rebalance.
+
+        """
         self._consumer_watcher = ChildrenWatch(
             self.cluster.zookeeper, self.id_path,
             self._rebalance
@@ -174,7 +184,6 @@ class Consumer(object):
         return new_partitions
 
 
-
     def _rebalance(self, consumer_ids):
         """Joins a consumer group and claims partitions.
 
@@ -210,35 +219,51 @@ class Consumer(object):
         else:
             raise SamsaException("Couldn't acquire partitions.")
 
+
     def __iter__(self):
-        """Iterate over available messages. Does not return.
+        """Iterator for next_message. Blocks until a message arrives
 
         """
         while True:
-            msg = self.next_message(self.config['consumer_timeout'])
-            if not msg:
-                time.sleep(1)
-            else:
-                yield msg
+            yield self.next_message()
 
-    def next_message(self, timeout=None):
+
+    def next_message(self, block=True, timeout=None):
         """Get the next message from one of the partitions.
 
+        This works by picking a partition, reading a bunch of messages
+        from it, and then switching to the next partition with messages
+        ready. To configure how many are read at a time, use the
+        setting reads_per_partition.
+
+        Returns None if no messages are ready and timeout expires
+
+        :param block: Whether to block while waiting for a message
+        :param timeout: How long to wait, in seconds, if blocking
+
         """
-        if len(self.partitions) == 0:
-            log.info('No partitions to read from. Rebalance ongoing?')
-            return None
-        # HACK: There has to be a better way to do this. Need to fix ASAP.
-        expiry = (time.time() + timeout) if timeout else None
-        wait = min(0.1, timeout or 0.1)
-        while expiry is None or time.time() < expiry:
-            partitions = list(self.partitions)
-            random.shuffle(partitions)
-            for partition in partitions:
-                msg = partition.next_message(timeout=0.001) # don't wait around
-                if msg:
-                    return msg
-            time.sleep(wait)
+        while True:
+            if not self._current_partition or self._current_partition.empty():
+                # Nothing else blocks, so only this needs a timeout
+                self._current_partition = self.partition_owner_registry.get_ready_partition(
+                    block=block, timeout=timeout
+                )
+                if not self._current_partition:
+                    return None # Nothing ready to read
+
+            message = self._current_partition.next_message(block=False)
+            self._current_read_ct += 1
+            rpp = self.config['reads_per_partition']
+
+            if message is None or self._current_read_ct > rpp:
+                # Queue is either empty or its time to switch
+                self._current_partition = None
+                self._current_read_ct = 0
+                if message is None:
+                    continue # empty -- need a new partition
+
+            return message
+
 
     def commit_offsets(self):
         """Commit the offsets of all messages consumed so far.
@@ -247,6 +272,7 @@ class Consumer(object):
         partitions = list(self.partitions) # freeze in case of rebalance
         for partition in partitions:
             partition.commit_offset()
+
 
     def stop_partitions(self, partitions=None):
         """Stop partitions from fetching more threads.
@@ -259,6 +285,7 @@ class Consumer(object):
         for partition in partitions:
             partition.stop()
             partition.commit_offset()
+
 
     def empty(self):
         return all([p.empty() for p in self.partitions])

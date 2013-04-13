@@ -45,7 +45,7 @@ class TestPartitionOwnerRegistry(KazooTestCase):
     """
 
     @mock.patch('samsa.cluster.BrokerMap')
-    def setUp(self, bm):
+    def setUp(self, bm, *args):
         super(TestPartitionOwnerRegistry, self).setUp()
         self.c = Cluster(self.client)
         broker = mock.Mock()
@@ -53,7 +53,7 @@ class TestPartitionOwnerRegistry(KazooTestCase):
         self.c.brokers.__getitem__.return_value = broker
 
         self.consumer = mock.Mock()
-        self.consumer.id  = 1234
+        self.consumer.id  = '1234'
         self.topic = mock.Mock()
         self.topic.name = 'topic'
 
@@ -68,10 +68,11 @@ class TestPartitionOwnerRegistry(KazooTestCase):
         self.partitions = []
         for i in xrange(5):
             self.partitions.append(
-                Partition(self.c, self.topic, broker, i)
+                OwnedPartition(Partition(self.c, self.topic, broker, i), 'group')
             )
 
-    def test_crd(self):
+    @mock.patch.object(OwnedPartition, 'start')
+    def test_crd(self, *args):
         """Test partition *c*reate, *r*ead, and *d*elete.
         """
 
@@ -89,7 +90,8 @@ class TestPartitionOwnerRegistry(KazooTestCase):
             set(self.partitions[1:3])
         )
 
-    def test_grows(self):
+    @mock.patch.object(OwnedPartition, 'start')
+    def test_grows(self, *args):
         """Test that the reference returned by
         :func:`samsa.consumer.partitions.PartitionOwnerRegistry.get` reflects
         the latest state.
@@ -122,7 +124,7 @@ class TestConsumer(KazooTestCase, TestCase):
             data = "creator:127.0.0.1:%s" % (9092 + i)
             client.create(path, data)
 
-    @mock.patch.object(OwnedPartition, '_fetch')
+    @mock.patch.object(OwnedPartition, 'start')
     def test_assigns_partitions(self, *args):
         """
         Test rebalance
@@ -175,6 +177,7 @@ class TestConsumer(KazooTestCase, TestCase):
 
         d, stat = self.client.get(p.path)
         self.assertEquals(d, '3')
+        c.stop_partitions()
 
     @mock.patch.object(Partition, 'fetch')
     def test_consumer_remembers_offset(self, fetch):
@@ -211,8 +214,10 @@ class TestConsumer(KazooTestCase, TestCase):
         self.assertEquals(None, p.next_message(0))
         ev.wait(1)
         fetch.assert_called_with(offset, ConsumerConfig.fetch_size)
+        c.stop_partitions()
 
-    @mock.patch.object(Partition, 'fetch')
+
+    @mock.patch.object(OwnedPartition, 'start')
     def test_multiclient_rebalance(self, *args):
         """Test rebalancing with many connected clients
 
@@ -260,7 +265,7 @@ class TestConsumer(KazooTestCase, TestCase):
 
         newclient.stop()
 
-    @mock.patch.object(Partition, 'fetch')
+    @mock.patch.object(OwnedPartition, 'start')
     def test_too_many_consumers(self, *args):
         """Test graceful failure when # of consumers exceeds partitions
 
@@ -326,6 +331,7 @@ class TestConsumerIntegration(KafkaIntegrationTestCase):
         self.kafka.produce(topic, 0, messages)
         polling_timeout(test, 1)
         self.assertTrue([p.offset for p in consumer.partitions][0] > old_offset)
+        consumer.stop_partitions()
 
 
     def test_empty_topic(self):
@@ -337,6 +343,7 @@ class TestConsumerIntegration(KafkaIntegrationTestCase):
 
         consumer = t.subscribe('group2')
         self.assertTrue(consumer.empty())
+        consumer.stop_partitions()
 
 
     def test_fetch_invalid_offset(self):
@@ -380,3 +387,4 @@ class TestConsumerIntegration(KafkaIntegrationTestCase):
 
         # wait for one second for :func:`test` to return true or raise an error
         polling_timeout(test, 1)
+        consumer.stop_partitions()
