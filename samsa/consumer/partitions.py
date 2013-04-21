@@ -174,7 +174,6 @@ class OwnedPartition(Partition):
 
         """
         self._running = False
-        self._monitor_thread = None
 
     def __del__(self):
         self.stop()

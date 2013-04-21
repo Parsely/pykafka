@@ -175,7 +175,7 @@ class Consumer(object):
             start + num_parts
         )
         new_partitions = set(new_partitions)
-        logger.debug(
+        logger.info(
             'Rebalancing to %s based on %i participants %s and partitions %s',
             [p_to_str(p) for p in new_partitions],
             len(participants), str(participants),
