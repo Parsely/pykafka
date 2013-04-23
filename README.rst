@@ -4,7 +4,7 @@ samsa
 
 |travis-ci|_
 
-.. |travis-ci| image:: http://travis-ci.org/disqus/samsa.png?branch=master
+.. |travis-ci| image:: https://travis-ci.org/disqus/samsa.png?branch=master
 .. _travis-ci: http://travis-ci.org/#!/disqus/samsa
 
     One morning, as Gregor Samsa was waking up from anxious dreams, he
@@ -73,7 +73,7 @@ Creating a Cluster
     >>> from kazoo.client import KazooClient
     >>> from samsa.cluster import Cluster
     >>> zookeeper = KazooClient()
-    >>> zookeeper.connect()
+    >>> zookeeper.start()
     >>> cluster = Cluster(zookeeper)
 
 Brokers
