@@ -62,6 +62,16 @@ class Consumer(object):
         self._current_partition = None
         self._current_read_ct = 0
 
+        # Watches
+        # TODO: This is a *ton* of watches, some of which are duplicated
+        #       elsewhere. This should be cleaned up and all watches put
+        #       in a single zookeeper connector, like in the Scala driver.
+        self._broker_watcher = None
+        self._consumer_watcher = None
+        self._topic_watcher = None
+        self._topics_watcher = None
+        self._rebalancing = True # To stop rebalance while setting watches
+
         self._add_self()
 
 
@@ -87,9 +97,10 @@ class Consumer(object):
         self.cluster.zookeeper.create(
             path, self.topic.name, ephemeral=True, makepath=True)
 
+        # Set all our watches and then rebalance
+        self._rebalancing = False
         broker_path = '/brokers/ids'
         try:
-            # Notifies when broker membership changes.
             self._broker_watcher = ChildrenWatch(
                 self.cluster.zookeeper, broker_path,
                 self._brokers_changed
@@ -100,19 +111,60 @@ class Consumer(object):
                 'ZooKeeper cluster -- is your Kafka cluster running?'
                 % broker_path)
 
+        topics_path = '/brokers/topics'
+        self._topics_watcher = ChildrenWatch(
+            self.cluster.zookeeper,
+            '/brokers/topics',
+            self._topics_changed
+        )
+        self._rebalancing = True
 
-    def _brokers_changed(self, brokers):
-        """Notified when new brokers join or leave
-
-        If the broker map changes, we need to trigger
-        a rebalance.
-
-        """
+        # Final watch will trigger rebalance
         self._consumer_watcher = ChildrenWatch(
             self.cluster.zookeeper, self.id_path,
-            self._rebalance
+            self._consumers_changed
         )
 
+
+    def _brokers_changed(self, brokers):
+        """Watcher for consumer group changes"""
+        if not self._rebalancing:
+            return
+        logger.info("Rebalance triggered by /brokers/ids change")
+        self._rebalance(self.cluster.zookeeper.get_children(self.id_path))
+
+
+    def _consumers_changed(self, consumer_ids):
+        """Watcher for consumer group changes
+
+        """
+        if not self._rebalancing:
+            return
+        logger.info("Rebalance triggered by %s change" % self.id_path)
+        self._rebalance(consumer_ids)
+
+
+    def _topic_changed(self, broker_ids):
+        """Watcher for brokers/partition count for a topic
+
+        """
+        if not self._rebalancing:
+            return
+        topic_path = '/brokers/topics/%s' % self.topic.name
+        logger.info("Rebalance triggered by %s change" % topic_path)
+        self._rebalance(self.cluster.zookeeper.get_children(self.id_path))
+
+    def _topics_changed(self, topics):
+        """Watch for the topic we want to show up, then stop watch
+
+        """
+        if self.topic.name in topics:
+            self._topic_watcher = ChildrenWatch(
+                self.cluster.zookeeper,
+                '/brokers/topics/%s' % self.topic.name,
+                self._topic_changed
+            )
+            return False # stop watch
 
     def _get_participants(self, consumer_ids=None):
         """Get a the other consumers of this topic

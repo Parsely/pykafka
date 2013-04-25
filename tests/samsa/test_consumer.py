@@ -39,7 +39,6 @@ from samsa.consumer.partitions import PartitionOwnerRegistry, OwnedPartition
 
 logger = logging.getLogger(__name__)
 
-
 class TestPartitionOwnerRegistry(KazooTestCase):
     """Test the methods of :class:`samsa.consumer.PartitionOwnerRegistry`.
     """
@@ -109,6 +108,7 @@ class TestConsumer(KazooTestCase, TestCase):
     def setUp(self):
         super(TestConsumer, self).setUp()
         self.client.ensure_path("/brokers/ids")
+        self.client.ensure_path('/brokers/topics')
         self.c = Cluster(self.client)
 
     def tearDown(self):
@@ -116,13 +116,29 @@ class TestConsumer(KazooTestCase, TestCase):
         super(TestConsumer, self).tearDown()
 
     def _register_fake_brokers(self, n=1, client=None):
-        if not client:
+        if client is None:
             client = self.client
         client.ensure_path("/brokers/ids")
         for i in xrange(n):
-            path = "/brokers/ids/%d" % i
             data = "creator:127.0.0.1:%s" % (9092 + i)
-            client.create(path, data)
+            self._register_fake_broker(i, data, client=client)
+
+    def _register_fake_broker(self, name, data, client=None):
+        if client is None:
+            client = self.client
+        path = "/brokers/ids/%s" % name
+        client.create(path, data)
+
+    def _register_fake_partitions(self, topic, n_partitions=1, brokers=None, client=None):
+        """Register fake partitions. Specify broker list or use None to create for all"""
+        if client is None:
+            client = self.client
+        brokers = brokers or client.get_children("/brokers/ids")
+        for broker in brokers:
+            client.ensure_path("/brokers/topics/%s" % topic)
+            part_path = "/brokers/topics/%s/%s" % (topic, broker)
+            client.create(part_path, str(n_partitions))
+
 
     @mock.patch.object(OwnedPartition, 'start')
     def test_assigns_partitions(self, *args):
@@ -147,6 +163,30 @@ class TestConsumer(KazooTestCase, TestCase):
         self.assertEquals(len(partitions), n_partitions)
         # test that every partitions is represented.
         self.assertEquals(len(set(partitions)), n_partitions)
+
+
+    @mock.patch.object(OwnedPartition, 'start')
+    def test_broker_addition(self, rebalance):
+        """Test adding a broker, and ensure all partitions are discovered
+
+        Testing this makes sure all the relevant zookeeper watches are
+        functioning and rebalancing is happening when partitions or brokers
+        are added or removed
+        """
+        t = Topic(self.c, 'testtopic')
+
+        self._register_fake_broker(0, "creator:127.0.0.1:9092")
+        self._register_fake_partitions('testtopic', n_partitions=2)
+
+        consumer = t.subscribe('group1')
+
+        self._register_fake_broker(1, "creator:127.0.0.1:9093")
+        self._register_fake_partitions('testtopic', n_partitions=2, brokers=['1'])
+
+        time.sleep(1) # let watches resolve
+        self.assertEqual(len(t.partitions), 4)
+        self.assertEqual(len(consumer.partitions), 4)
+
 
     @mock.patch.object(Partition, 'fetch')
     def test_commits_offsets(self, fetch):
@@ -244,6 +284,7 @@ class TestConsumer(KazooTestCase, TestCase):
         zkclient = KazooClient(hosts=zk_hosts)
         zkclient.start()
         self._register_fake_brokers(n_partitions, client=zkclient)
+        zkclient.ensure_path('/brokers/topics')
 
         # bring up consumers
         consumers = []
@@ -284,6 +325,8 @@ class TestConsumerIntegration(KafkaIntegrationTestCase):
     def setUp(self):
         super(TestConsumerIntegration, self).setUp()
         self.kafka = self.kafka_broker.client
+        self.client.ensure_path('/brokers/topics') # can be slow to create
+
 
     def test_consumes(self):
         """Test that we can consume messages from kafka.
