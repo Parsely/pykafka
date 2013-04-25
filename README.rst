@@ -4,8 +4,8 @@ samsa
 
 |travis-ci|_
 
-.. |travis-ci| image:: https://travis-ci.org/disqus/samsa.png?branch=master
-.. _travis-ci: http://travis-ci.org/#!/disqus/samsa
+.. |travis-ci| image:: https://travis-ci.org/getsamsa/samsa.png?branch=master
+.. _travis-ci: https://travis-ci.org/getsamsa/samsa
 
     One morning, as Gregor Samsa was waking up from anxious dreams, he
     discovered that in bed he had been changed into a monstrous verminous bug.
