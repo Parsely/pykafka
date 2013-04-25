@@ -228,9 +228,11 @@ class Consumer(object):
         )
         new_partitions = set(new_partitions)
         logger.info(
-            'Rebalancing to %s based on %i participants %s and partitions %s',
+            'Rebalancing %i participants for %i partitions. '
+            'My Partitions: %s -- Consumers: %s --- All Partitions: %s',
+            len(participants), len(all_partitions),
             [p_to_str(p) for p in new_partitions],
-            len(participants), str(participants),
+            str(participants),
             [p_to_str(p) for p in all_partitions]
         )
         return new_partitions
