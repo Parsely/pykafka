@@ -202,6 +202,7 @@ class ManagedBroker(ExternalClassRunner):
             'zk.connect': hosts,
             'brokerid': self.brokerid,
             'num.partitions': self.partitions,
+            'hostname': '127.0.0.1', # travis-ci will try to make this ipv6
             'port': self.port,
         })
 
