@@ -17,6 +17,7 @@ limitations under the License.
 
 import errno
 import itertools
+import kazoo.handlers.threading
 import logging
 import os
 import socket
@@ -314,7 +315,13 @@ class KafkaClusterIntegrationTestCase(TestCase, KazooTestHarness):
     automatically stopped when the test case is torn down.
     """
     def setUp(self):
-        self.setup_zookeeper()
+        try:
+            self.setup_zookeeper()
+        except kazoo.handlers.threading.TimeoutError:
+            logging.warning('Zookeeper failed to start. Trying again.')
+            if self.cluster[0].running:
+                self.cluster.stop()
+            self.setup_zookeeper() # try again if travis-ci is being slow
         self._subprocesses = []
 
         self._id_generator = itertools.count(0)
