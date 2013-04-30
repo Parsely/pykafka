@@ -1,5 +1,6 @@
 __license__ = """
 Copyright 2012 DISQUS
+Copyright 2013 Parse.ly, Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -28,29 +29,31 @@ class BrokerMapTest(unittest2.TestCase):
         self.cluster = mock.Mock(spec=Cluster)
         self.cluster.zookeeper = mock.Mock()
 
-    def test_configuration_no_node(self):
-        self.cluster.zookeeper.get_children.side_effect = NoNodeException
+    @mock.patch('samsa.brokers.ChildrenWatch')
+    def test_configuration_no_node(self, cw):
+        cw.side_effect = NoNodeException
 
-        brokers = BrokerMap(self.cluster)
         with self.assertRaises(ImproperlyConfiguredError):
-            brokers.get(0)
+            BrokerMap(self.cluster)
 
-    def test_initial_configuration(self):
+    @mock.patch('samsa.brokers.ChildrenWatch')
+    def test_initial_configuration(self, cw):
         nodes = ['0', '1', '2', '5']
-        self.cluster.zookeeper.get_children.return_value = nodes
 
-        brokers = BrokerMap(self.cluster)
+        with mock.patch('samsa.brokers.DataWatch'):
+            brokers = BrokerMap(self.cluster)
+            brokers._configure(nodes)
         self.assertEqual(len(brokers), len(nodes))
         self.assertEqual(brokers.keys(), map(int, nodes))
         self.assertTrue(all(isinstance(value, Broker) for value
             in brokers.values()))
 
-        self.assertEqual(self.cluster.zookeeper.get_children.call_count, 1)
-
-    def test_update_configuration(self):
+    @mock.patch('samsa.brokers.ChildrenWatch')
+    @mock.patch('samsa.brokers.DataWatch')
+    def test_update_configuration(self, w1, w2):
         nodes = ['0', '1']
-        self.cluster.zookeeper.get_children.return_value = nodes
         brokers = BrokerMap(self.cluster)
+        brokers._configure(nodes)
         self.assertEqual(len(brokers), len(nodes))
 
         broker = brokers.get(1)
@@ -58,7 +61,7 @@ class BrokerMapTest(unittest2.TestCase):
         # Emulate a broker entering the pool.
         nodes = ['0', '1', '2']
         self.cluster.zookeeper.get_children.return_value = nodes
-        brokers._configure(event=mock.Mock())
+        brokers._configure(nodes)
         self.assertEqual(len(brokers), len(nodes))
 
         self.assertIs(broker, brokers.get(1))
@@ -66,8 +69,7 @@ class BrokerMapTest(unittest2.TestCase):
 
         # Emulate a broker leaving the pool.
         nodes = ['0', '2']
-        self.cluster.zookeeper.get_children.return_value = nodes
-        brokers._configure(event=mock.Mock())
+        brokers._configure(nodes)
         self.assertEqual(len(brokers), len(nodes))
 
         self.assertTrue(broker.is_dead)
@@ -84,15 +86,19 @@ class BrokerTest(unittest2.TestCase):
         host = 'kafka-1.local'
         port = 9093
         template = '%(host)s-1342221875610:%(host)s:%(port)s'
-        self.cluster.zookeeper.get.return_value = (template % {
-            'host': host,
-            'port': port,
-        }, mock.Mock())
 
-        broker = Broker(self.cluster, id_='1')
+        with mock.patch('samsa.brokers.DataWatch'):
+            broker = Broker(self.cluster, id_='1')
+
+        broker._configure(
+            template % {
+                'host': host,
+                'port': port,
+            },
+            mock.Mock()
+        )
+
         self.assertEqual(broker.id, 1)
-        self.assertEqual(self.cluster.zookeeper.get.call_count, 0)
 
         self.assertEqual(broker.host, host)
         self.assertEqual(broker.port, port)
-        self.assertEqual(self.cluster.zookeeper.get.call_count, 1)

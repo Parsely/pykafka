@@ -1,5 +1,6 @@
 __license__ = """
 Copyright 2012 DISQUS
+Copyright 2013 Parse.ly, Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -30,8 +31,9 @@ def requires_configuration(method):
     @functools.wraps(method)
     def wrapped(self, *args, **kwargs):
         if not self._configured:
-            logger.debug('%s requires configuration before %s may be invoked',
-                self, method)
+            logger.debug('%s requires configuration before %s may be invoked. '
+                         'Configuring now.',
+                         self, method)
             self._configured = True
             self._configure()
         return method(self, *args, **kwargs)

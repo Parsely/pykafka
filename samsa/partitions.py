@@ -1,5 +1,6 @@
 __license__ = """
 Copyright 2012 DISQUS
+Copyright 2013 Parse.ly, Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,8 +20,10 @@ import functools
 import itertools
 import logging
 
-from kazoo.exceptions import NoNodeException
+from kazoo.recipe.watchers import ChildrenWatch, DataWatch
 
+from samsa.client import OFFSET_EARLIEST
+from samsa.exceptions import OffsetOutOfRangeError
 from samsa.utils import attribute_repr
 from samsa.utils.delayedconfig import (DelayedConfiguration,
     requires_configuration)
@@ -28,8 +31,7 @@ from samsa.utils.delayedconfig import (DelayedConfiguration,
 
 logger = logging.getLogger(__name__)
 
-
-class PartitionMap(DelayedConfiguration):
+class PartitionMap(object):
     """
     Manages the partitions associated with a topic on a per-broker basis.
 
@@ -44,20 +46,23 @@ class PartitionMap(DelayedConfiguration):
 
         self.__brokers = {}
 
+        self.topic_path = '/brokers/topics/%s' % self.topic.name
+        self._topic_watcher = DataWatch(
+            self.cluster.zookeeper, self.topic_path,
+            self._topic_changed, allow_missing_node=True
+        )
+
     __repr__ = attribute_repr('topic')
 
-    def _configure(self, event=None):
-        path = '/brokers/topics/%s' % self.topic.name
-        logger.info('Looking up brokers for %s...', self)
+    def _topic_changed(self, data, stat):
+        if stat:
+            self._topic_child_watcher = ChildrenWatch(
+                self.cluster.zookeeper, self.topic_path,
+                self._configure
+            )
 
-        try:
-            broker_ids = self.cluster.zookeeper.get_children(
-                path, watch=self._configure)
-        except NoNodeException:
-            if self.cluster.zookeeper.exists(path, watch=self._configure) \
-                    is not None:
-                self._configure()
-            broker_ids = []
+    def _configure(self, broker_ids):
+        logger.info('Looking up brokers for %s...', self)
 
         brokers = map(self.cluster.brokers.get, map(int, broker_ids))
 
@@ -93,7 +98,14 @@ class PartitionMap(DelayedConfiguration):
         return itertools.chain(self.actual, self.virtual)
 
     @property
-    @requires_configuration
+    def _partition_sets(self):
+        """
+        Returns a list of :class:`samsa.partitions.PartitionSet`.
+
+        """
+        return self.__brokers.values()
+
+    @property
     def actual(self):
         """
         Returns an iterator containing all of the partitions for this topic
@@ -103,7 +115,6 @@ class PartitionMap(DelayedConfiguration):
             self.__brokers.values()))
 
     @property
-    @requires_configuration
     def virtual(self):
         """
         Returns an iterator containing "virtual" partitions for this topic.
@@ -126,7 +137,7 @@ class PartitionMap(DelayedConfiguration):
             uninitialized_brokers))
 
 
-class PartitionSet(DelayedConfiguration):
+class PartitionSet(object):
     """
     Manages the partitions for a topic on a single broker.
 
@@ -147,11 +158,6 @@ class PartitionSet(DelayedConfiguration):
         self.broker = broker
         self.virtual = virtual
 
-        self.__count = None
-
-    __repr__ = attribute_repr('topic', 'broker', 'virtual')
-
-    def _configure(self, event=None):
         # TODO: At some point it might be wise to enable a "hint" size for
         # virtual partitions -- this way if brokers are serving a large number
         # of partitions, we can still maintain a reasonably even distribution
@@ -159,31 +165,34 @@ class PartitionSet(DelayedConfiguration):
         # dynamic/less homogenous environments, however, since there's no good
         # way to track down a failure on a produce request to an invalid
         # partition.
-        if self.virtual:
-            count = 1
-        else:
-            node = '/brokers/topics/%s/%s' % (self.topic.name, self.broker.id)
+        self.__count = 1
 
-            # If the node does not exist, this means this broker has not gotten
-            # any writes for this partition yet. We can assume that the broker
-            # is handling at least one partition for this topic, and update
-            # when we have more information by setting an exists watch on the
-            # node path.
-            try:
-                data, stat = self.cluster.zookeeper.get(node)
-                count = int(data)
-                logger.info('Found %s partitions for %s', count, self)
-            except NoNodeException:
-                if self.cluster.zookeeper.exists(node, watch=self._configure) \
-                        is not None:
-                    return self._configure()
-                count = 1
-                logger.info('%s is not registered in ZooKeeper, falling back '
-                    'to %s virtual partition(s)', self, count)
+        path = '/brokers/topics/%s/%s' % (self.topic.name, self.broker.id)
+        if not self.virtual:
+            self._partition_watcher = DataWatch(
+                self.cluster.zookeeper, path,
+                self._configure, allow_missing_node=True
+            )
+
+    __repr__ = attribute_repr('topic', 'broker', 'virtual')
+
+    def _configure(self, data, stat):
+
+        # If the node does not exist, this means this broker has not gotten
+        # any writes for this partition yet. We can assume that the broker
+        # is handling at least one partition for this topic, and update
+        # when we have more information by setting an exists watch on the
+        # node path.
+        if data:
+            count = int(data)
+            logger.info('Found %s partitions for %s', count, self)
+        else:
+            count = 1
+            logger.info('%s is not registered in ZooKeeper, falling back '
+                'to %s virtual partition(s)', self, count)
 
         self.__count = count
 
-    @requires_configuration
     def __len__(self):
         """
         Returns the total number of partitions available within this partition
@@ -224,8 +233,22 @@ class Partition(object):
             messages)
 
     def fetch(self, offset, size):
-        return self.broker.client.fetch(self.topic.name, self.number, offset,
-            size)
+        try:
+            return self.broker.client.fetch(self.topic.name, self.number, offset,
+                size)
+        except OffsetOutOfRangeError, ex:
+            # is this before the earliest offset available?
+            earliest = self.broker.client.offsets(self.topic.name, self.number,
+                                                  OFFSET_EARLIEST, 1)[0]
+            if offset < earliest:
+                logger.warning('Requested offset %i is no longer available. '
+                               'Fast-forwarding to OFFSET_EARLIEST (%i)',
+                               offset, earliest)
+                return self.broker.client.fetch(self.topic.name, self.number,
+                                                earliest, size)
+            else:
+                # no? then we can't do anything
+                raise
 
     def __hash__(self):
         return hash((self.topic, self.broker.id, self.number))

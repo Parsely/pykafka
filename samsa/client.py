@@ -1,5 +1,6 @@
 __license__ = """
 Copyright 2012 DISQUS
+Copyright 2013 Parse.ly, Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -276,19 +277,26 @@ def decode_messages(payload, from_offset):
     """
     offset = 0
     while offset < len(payload):
-        header = Message.Header.unpack_from(payload, offset)
-        length = 4 + header.length
-        message = Message(
-            raw=buffer(payload, offset, length),
-            offset=from_offset + offset
-        )
+        try:
+            header = Message.Header.unpack_from(payload, offset)
+            length = 4 + header.length
+            message = Message(
+                raw=buffer(payload, offset, length),
+                offset=from_offset + offset
+            )
+        except struct.error:
+            # Thrown if payload ends in the middle of a header
+            logger.debug('Unable to create message from payload remadiner '
+                        '%i bytes left: %s',
+                    len(payload) - offset, payload[offset:])
+            return
         if message.valid:
             yield message
         else:
             if len(message) + offset == len(payload):
                 # If this is the last message,
                 # it's OK to drop it if it's truncated.
-                logger.info('Discarding partial message '
+                logger.debug('Discarding partial message '
                             '(expected %s bytes, got %s): %s',
                     length, len(message), message)
                 return

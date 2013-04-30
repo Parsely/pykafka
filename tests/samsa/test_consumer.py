@@ -1,5 +1,6 @@
 __license__ = """
 Copyright 2012 DISQUS
+Copyright 2013 Parse.ly, Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,14 +17,22 @@ limitations under the License.
 
 import logging
 import mock
+import sys
+import time
+import traceback
+import threading
+import Queue
 
-from itertools import islice
+from itertools import cycle, islice
 from kazoo.testing import KazooTestCase
+from threading import Event
 
+from samsa.exceptions import NoAvailablePartitionsError
 from samsa.test.integration import KafkaIntegrationTestCase, polling_timeout
 from samsa.test.case import TestCase
 from samsa.cluster import Cluster
 from samsa.config import ConsumerConfig
+from samsa.consumer import Consumer
 from samsa.topics import Topic
 from samsa.partitions import Partition
 from samsa.consumer.partitions import PartitionOwnerRegistry, OwnedPartition
@@ -31,21 +40,20 @@ from samsa.consumer.partitions import PartitionOwnerRegistry, OwnedPartition
 
 logger = logging.getLogger(__name__)
 
-
 class TestPartitionOwnerRegistry(KazooTestCase):
     """Test the methods of :class:`samsa.consumer.PartitionOwnerRegistry`.
     """
 
-    def setUp(self):
+    @mock.patch('samsa.cluster.BrokerMap')
+    def setUp(self, bm, *args):
         super(TestPartitionOwnerRegistry, self).setUp()
         self.c = Cluster(self.client)
-        self.c.brokers = mock.MagicMock()
         broker = mock.Mock()
         broker.id = 1
         self.c.brokers.__getitem__.return_value = broker
 
         self.consumer = mock.Mock()
-        self.consumer.id  = 1234
+        self.consumer.id  = '1234'
         self.topic = mock.Mock()
         self.topic.name = 'topic'
 
@@ -60,10 +68,11 @@ class TestPartitionOwnerRegistry(KazooTestCase):
         self.partitions = []
         for i in xrange(5):
             self.partitions.append(
-                Partition(self.c, self.topic, broker, i)
+                OwnedPartition(Partition(self.c, self.topic, broker, i), 'group')
             )
 
-    def test_crd(self):
+    @mock.patch.object(OwnedPartition, 'start')
+    def test_crd(self, *args):
         """Test partition *c*reate, *r*ead, and *d*elete.
         """
 
@@ -81,7 +90,8 @@ class TestPartitionOwnerRegistry(KazooTestCase):
             set(self.partitions[1:3])
         )
 
-    def test_grows(self):
+    @mock.patch.object(OwnedPartition, 'start')
+    def test_grows(self, *args):
         """Test that the reference returned by
         :func:`samsa.consumer.partitions.PartitionOwnerRegistry.get` reflects
         the latest state.
@@ -98,16 +108,40 @@ class TestConsumer(KazooTestCase, TestCase):
 
     def setUp(self):
         super(TestConsumer, self).setUp()
+        self.client.ensure_path("/brokers/ids")
+        self.client.ensure_path('/brokers/topics')
         self.c = Cluster(self.client)
 
-    def _register_fake_brokers(self, n=1):
-        self.client.ensure_path("/brokers/ids")
-        for i in xrange(n):
-            path = "/brokers/ids/%d" % i
-            data = "creator:127.0.0.1:%s" % (9092 + i)
-            self.client.create(path, data)
+    def tearDown(self):
+        self.client.stop() # stops watches that call _rebalance
+        super(TestConsumer, self).tearDown()
 
-    @mock.patch.object(OwnedPartition, '_fetch')
+    def _register_fake_brokers(self, n=1, client=None):
+        if client is None:
+            client = self.client
+        client.ensure_path("/brokers/ids")
+        for i in xrange(n):
+            data = "creator:127.0.0.1:%s" % (9092 + i)
+            self._register_fake_broker(i, data, client=client)
+
+    def _register_fake_broker(self, name, data, client=None):
+        if client is None:
+            client = self.client
+        path = "/brokers/ids/%s" % name
+        client.create(path, data)
+
+    def _register_fake_partitions(self, topic, n_partitions=1, brokers=None, client=None):
+        """Register fake partitions. Specify broker list or use None to create for all"""
+        if client is None:
+            client = self.client
+        brokers = brokers or client.get_children("/brokers/ids")
+        for broker in brokers:
+            client.ensure_path("/brokers/topics/%s" % topic)
+            part_path = "/brokers/topics/%s/%s" % (topic, broker)
+            client.create(part_path, str(n_partitions))
+
+
+    @mock.patch.object(OwnedPartition, 'start')
     def test_assigns_partitions(self, *args):
         """
         Test rebalance
@@ -130,6 +164,30 @@ class TestConsumer(KazooTestCase, TestCase):
         self.assertEquals(len(partitions), n_partitions)
         # test that every partitions is represented.
         self.assertEquals(len(set(partitions)), n_partitions)
+
+
+    @mock.patch.object(OwnedPartition, 'start')
+    def test_broker_addition(self, rebalance):
+        """Test adding a broker, and ensure all partitions are discovered
+
+        Testing this makes sure all the relevant zookeeper watches are
+        functioning and rebalancing is happening when partitions or brokers
+        are added or removed
+        """
+        t = Topic(self.c, 'testtopic')
+
+        self._register_fake_broker(0, "creator:127.0.0.1:9092")
+        self._register_fake_partitions('testtopic', n_partitions=2)
+
+        consumer = t.subscribe('group1')
+
+        self._register_fake_broker(1, "creator:127.0.0.1:9093")
+        self._register_fake_partitions('testtopic', n_partitions=2, brokers=['1'])
+
+        time.sleep(1) # let watches resolve
+        self.assertEqual(len(t.partitions), 4)
+        self.assertEqual(len(consumer.partitions), 4)
+
 
     @mock.patch.object(Partition, 'fetch')
     def test_commits_offsets(self, fetch):
@@ -160,6 +218,7 @@ class TestConsumer(KazooTestCase, TestCase):
 
         d, stat = self.client.get(p.path)
         self.assertEquals(d, '3')
+        c.stop_partitions()
 
     @mock.patch.object(Partition, 'fetch')
     def test_consumer_remembers_offset(self, fetch):
@@ -169,13 +228,17 @@ class TestConsumer(KazooTestCase, TestCase):
         topic = 'testtopic'
         group = 'testgroup'
         offset = 10
+        ev = Event()
 
         fake_partition = mock.Mock()
         fake_partition.cluster = self.c
         fake_partition.topic.name = topic
         fake_partition.broker.id = 0
         fake_partition.number = 0
-        fetch.return_value = ()
+        def fake_fetch(*args, **kwargs):
+            ev.set()
+            return ()
+        fetch.side_effect = fake_fetch
 
         op = OwnedPartition(fake_partition, group)
         op._current_offset = offset
@@ -190,7 +253,72 @@ class TestConsumer(KazooTestCase, TestCase):
         self.assertEquals(p.offset, offset)
 
         self.assertEquals(None, p.next_message(0))
+        ev.wait(1)
         fetch.assert_called_with(offset, ConsumerConfig.fetch_size)
+        c.stop_partitions()
+
+
+    @mock.patch.object(OwnedPartition, 'start')
+    def test_multiclient_rebalance(self, *args):
+        """Test rebalancing with many connected clients
+
+        This test is primarily good at ferreting out concurrency bugs
+        and therefore doesn't test one specific thing, since such
+        bugs are fundamentally hard to trap.
+
+        To test, it simulates 10 consumer connecting over time, rebalancing,
+        and eventually disconnecting one by one. In order to accomplish
+        this, it creates a separate kazoo client for each consumer. This
+        is required because otherwise there is too much thread contention
+        over the single kazoo client. Some callbacks won't happen until
+        much too late because there aren't enough threads to go around.
+
+        """
+        n_partitions = 10
+        n_consumers = 10
+        t = Topic(self.c, 'testtopic')
+
+        # with self.client, new clients don't see the brokers -- unsure why
+        from kazoo.client import KazooClient
+        zk_hosts = ','.join(
+                ['%s:%s' % (h,p) for h,p in self.client.hosts.hosts])
+        zkclient = KazooClient(hosts=zk_hosts)
+        zkclient.start()
+        self._register_fake_brokers(n_partitions, client=zkclient)
+        zkclient.ensure_path('/brokers/topics')
+
+        # bring up consumers
+        consumers = []
+        for i in xrange(n_consumers):
+            newclient = KazooClient(hosts=zk_hosts)
+            newclient.start()
+            cluster = Cluster(newclient)
+            topic = Topic(cluster, 'testtopic')
+            consumers.append((newclient, topic.subscribe('group1')))
+            time.sleep(1)
+
+        time.sleep(5) # let things settle
+
+        # bring down consumers
+        for client,consumer in consumers:
+            consumer.stop_partitions()
+            client.stop()
+            time.sleep(2) # a little more time so we don't kill during rebalance
+
+        newclient.stop()
+
+    @mock.patch.object(OwnedPartition, 'start')
+    def test_too_many_consumers(self, *args):
+        """Test graceful failure when # of consumers exceeds partitions
+
+        """
+        n_partitions = 1
+        n_consumers = 2
+        self._register_fake_brokers(n_partitions)
+        t = Topic(self.c, 'testtopic')
+
+        with self.assertRaises(NoAvailablePartitionsError):
+            consumers = [t.subscribe('group1') for i in xrange(n_consumers)]
 
 
 class TestConsumerIntegration(KafkaIntegrationTestCase):
@@ -198,6 +326,8 @@ class TestConsumerIntegration(KafkaIntegrationTestCase):
     def setUp(self):
         super(TestConsumerIntegration, self).setUp()
         self.kafka = self.kafka_broker.client
+        self.client.ensure_path('/brokers/topics') # can be slow to create
+
 
     def test_consumes(self):
         """Test that we can consume messages from kafka.
@@ -245,6 +375,7 @@ class TestConsumerIntegration(KafkaIntegrationTestCase):
         self.kafka.produce(topic, 0, messages)
         polling_timeout(test, 1)
         self.assertTrue([p.offset for p in consumer.partitions][0] > old_offset)
+        consumer.stop_partitions()
 
 
     def test_empty_topic(self):
@@ -256,3 +387,48 @@ class TestConsumerIntegration(KafkaIntegrationTestCase):
 
         consumer = t.subscribe('group2')
         self.assertTrue(consumer.empty())
+        consumer.stop_partitions()
+
+
+    def test_fetch_invalid_offset(self):
+        """Test that fetching rolled-over offset skips to lowest valid offset.
+
+        Bad offsets happen when kafka logs are rolled over automatically.
+        This could happen when a consumer is offline for a long time and
+        zookeeper has an old offset stored. It could also happen with a
+        consumer near the end of a log that's being rolled over and its
+        previous spot no longer exists.
+        """
+        topic = 'topic'
+        messages = ['hello world', 'foobar']
+
+        # publish `messages` to `topic`
+        self.kafka.produce(topic, 0, messages)
+
+        t = Topic(self.kafka_cluster, topic)
+
+        # get the consumer and set the offset to -1
+        consumer = t.subscribe('group2')
+        list(consumer.partitions)[0]._next_offset = -1
+
+        def test():
+            """Test that `consumer` can see `messages`.
+
+            catches exceptions so we can retry while we wait for kafka to
+            coallesce.
+
+            """
+            logger.debug('Running `test`...')
+            try:
+                self.assertEquals(
+                    list(islice(consumer, 0, len(messages))),
+                    messages
+                )
+                return True
+            except AssertionError as e:
+                logger.exception('Caught exception: %s', e)
+                return False
+
+        # wait for one second for :func:`test` to return true or raise an error
+        polling_timeout(test, 1)
+        consumer.stop_partitions()

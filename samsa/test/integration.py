@@ -1,5 +1,6 @@
 __license__ = """
 Copyright 2012 DISQUS
+Copyright 2013 Parse.ly, Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,6 +17,7 @@ limitations under the License.
 
 import errno
 import itertools
+import kazoo.handlers.threading
 import logging
 import os
 import socket
@@ -201,6 +203,7 @@ class ManagedBroker(ExternalClassRunner):
             'zk.connect': hosts,
             'brokerid': self.brokerid,
             'num.partitions': self.partitions,
+            'hostname': '127.0.0.1', # travis-ci will try to make this ipv6
             'port': self.port,
         })
 
@@ -312,14 +315,18 @@ class KafkaClusterIntegrationTestCase(TestCase, KazooTestHarness):
     automatically stopped when the test case is torn down.
     """
     def setUp(self):
-        self.setup_zookeeper()
+        try:
+            self.setup_zookeeper()
+        except kazoo.handlers.threading.TimeoutError:
+            logging.warning('Zookeeper failed to start. Trying again.')
+            if self.cluster[0].running:
+                self.cluster.stop()
+            self.setup_zookeeper() # try again if travis-ci is being slow
         self._subprocesses = []
 
         self._id_generator = itertools.count(0)
         self._port_generator = itertools.ifilter(is_port_available,
             itertools.count(9092))
-
-        self.kafka_cluster = Cluster(self.client)
 
     def tearDown(self):
         for process in self._subprocesses:
@@ -366,3 +373,4 @@ class KafkaIntegrationTestCase(KafkaClusterIntegrationTestCase):
     def setUp(self):
         super(KafkaIntegrationTestCase, self).setUp()
         self.kafka_broker = self.setup_kafka_broker()
+        self.kafka_cluster = Cluster(self.client)

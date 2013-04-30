@@ -1,5 +1,6 @@
 __license__ = """
 Copyright 2012 DISQUS
+Copyright 2013 Parse.ly, Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,19 +17,18 @@ limitations under the License.
 
 import logging
 
+from kazoo.recipe.watchers import DataWatch, ChildrenWatch
 from kazoo.exceptions import NoNodeException
 
 from samsa.client import Client
 from samsa.exceptions import ImproperlyConfiguredError
 from samsa.utils import attribute_repr
-from samsa.utils.delayedconfig import (DelayedConfiguration,
-    requires_configuration)
 
 
 logger = logging.getLogger(__name__)
 
 
-class BrokerMap(DelayedConfiguration):
+class BrokerMap(object):
     """
     Represents the topology of all brokers within a Kafka cluster.
     """
@@ -38,25 +38,27 @@ class BrokerMap(DelayedConfiguration):
         # The internal cache of all brokers available within the cluster.
         self.__brokers = {}
 
-    def _configure(self, event=None):
+        self._node_path = '/brokers/ids'
+        try:
+            self._broker_watch = ChildrenWatch(
+                self.cluster.zookeeper,
+                self._node_path, self._configure
+            )
+        except NoNodeException:
+            raise ImproperlyConfiguredError(
+                'The path "%s" does not exist in your '
+                'ZooKeeper cluster -- is your Kafka cluster running?' %
+                self._node_path)
+
+    def _configure(self, broker_ids):
         """
-        Configures the broker mapping and monitors for state changes, updating
-        the internal mapping when the cluster topology changes.
+        Configures the broker mapping.
         """
         # TODO: If this fails, would it make more sense to open a watch on the
         # key, and just return that there are no brokers that are alive, to
         # avoid any race conditions between cluster/application startup?
-        path = '/brokers/ids'
         logger.info('Refreshing broker configuration from %s...',
             self.cluster.zookeeper)
-
-        try:
-            broker_ids = self.cluster.zookeeper.get_children(path,
-                watch=self._configure)
-        except NoNodeException:
-            raise ImproperlyConfiguredError(
-                'The path "%s" does not exist in your '
-                'ZooKeeper cluster -- is your Kafka cluster running?' % path)
 
         alive = set()
         for broker_id in map(int, broker_ids):
@@ -75,14 +77,12 @@ class BrokerMap(DelayedConfiguration):
 
     # TODO: Add all proxies to appropriate `dict` interface.
 
-    @requires_configuration
     def __len__(self):
         """
         Returns the number of all active brokers.
         """
         return len(self.__brokers)
 
-    @requires_configuration
     def __iter__(self):
         """
         Returns an iterator containing all of the broker IDs within the
@@ -96,21 +96,18 @@ class BrokerMap(DelayedConfiguration):
         """
         return self.get(id_)
 
-    @requires_configuration
     def get(self, id_):
         """
         Returns a broker by it's broker ID.
         """
         return self.__brokers[id_]
 
-    @requires_configuration
     def keys(self):
         """
         Returns a list of all broker IDs within the cluster.
         """
         return self.__brokers.keys()
 
-    @requires_configuration
     def values(self):
         """
         Returns a list of every :class:`~samsa.brokers.Broker` within the
@@ -118,7 +115,6 @@ class BrokerMap(DelayedConfiguration):
         """
         return self.__brokers.values()
 
-    @requires_configuration
     def items(self):
         """
         Returns a list of 2-tuples of the format ``(id, broker)``, where
@@ -127,7 +123,7 @@ class BrokerMap(DelayedConfiguration):
         return self.__brokers.items()
 
 
-class Broker(DelayedConfiguration):
+class Broker(object):
     """
     A Kafka broker.
 
@@ -144,20 +140,23 @@ class Broker(DelayedConfiguration):
 
         self.is_dead = False
 
+        self._node_path = '/brokers/ids/%s' % self.id
+        self._config_watcher = DataWatch(
+            self.cluster.zookeeper,
+            self._node_path, self._configure
+        )
+
     __repr__ = attribute_repr('id')
 
-    def _configure(self, event=None):
+    def _configure(self, data, stat):
         """
         Configures a broker based on it's state in ZooKeeper.
         """
-        logger.info('Fetching broker data for %s...', self)
-        node = '/brokers/ids/%s' % self.id
-        data, stat = self.cluster.zookeeper.get(node, watch=self._configure)
+        logger.debug('Retrieved broker data for %s...', self)
         creator, self.__host, port = data.split(':')
         self.__port = int(port)
 
     @property
-    @requires_configuration
     def host(self):
         """
         The host that the broker is available at.
@@ -165,7 +164,6 @@ class Broker(DelayedConfiguration):
         return self.__host
 
     @property
-    @requires_configuration
     def port(self):
         """
         The port that the broker is available at.

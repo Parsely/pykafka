@@ -1,5 +1,6 @@
 __license__ = """
 Copyright 2012 DISQUS
+Copyright 2013 Parse.ly, Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,12 +17,12 @@ limitations under the License.
 
 import mock
 import unittest2
-from kazoo.exceptions import NoNodeException
 
+from samsa import brokers
 from samsa.cluster import Cluster
 from samsa.exceptions import NoAvailablePartitionsError
-from samsa.topics import TopicMap, Topic
 from samsa.test.integration import KafkaIntegrationTestCase
+from samsa.topics import TopicMap, Topic
 
 
 class TopicIntgrationTestCase(KafkaIntegrationTestCase):
@@ -37,7 +38,8 @@ class TopicIntgrationTestCase(KafkaIntegrationTestCase):
 class TopicMapTest(unittest2.TestCase):
     def test_get_topic(self):
         topics = TopicMap(cluster=mock.Mock())
-        topic = topics.get('topic-1')
+        with mock.patch('samsa.partitions.DataWatch'):
+            topic = topics.get('topic-1')
         self.assertIsInstance(topic, Topic)
 
         # Retrieving the topic again should return the same object instance.
@@ -45,30 +47,26 @@ class TopicMapTest(unittest2.TestCase):
 
 
 class PartitionMapTest(unittest2.TestCase):
+
     def setUp(self):
-        self.cluster = Cluster(zookeeper=mock.Mock())
+        self.cluster = mock.Mock(spec=Cluster)
+        self.cluster.zookeeper = mock.Mock()
 
-    def test_configuration_no_node(self):
-        def get(node, *args, **kwargs):
-            if node.startswith('/brokers/ids'):
-                return ('::', mock.Mock())
-            else:
-                raise NoNodeException
+    @mock.patch('samsa.brokers.ChildrenWatch')
+    def test_configuration_no_node(self, cw):
+        """Test that we get al the brokers. TODO"""
 
-        def get_children(node, *args, **kwargs):
-            if node.startswith('/brokers/ids'):
-                return ['0', '1', '2']
-            else:
-                raise NoNodeException
+        broker_map = brokers.BrokerMap(self.cluster)
+        self.cluster.brokers = broker_map
+        with mock.patch('samsa.brokers.DataWatch'):
+            broker_map._configure(['0', '1', '2'])
+        with mock.patch('samsa.partitions.DataWatch'):
+            topic = Topic(self.cluster, 'topic')
 
-        self.cluster.zookeeper.get = get
-        self.cluster.zookeeper.get_children = get_children
-        self.cluster.zookeeper.exists.return_value = None
+        self.assertEqual(len(topic.partitions), len(broker_map))
 
-        topic = self.cluster.topics.get('topic')
-        self.assertEqual(len(topic.partitions), len(self.cluster.brokers))
-
-    def test_configuration_with_nodes(self):
+    @mock.patch('samsa.brokers.ChildrenWatch')
+    def test_configuration_with_nodes(self, cw):
         nodes = {
             '0': '5',
             '1': '2',
@@ -77,10 +75,23 @@ class PartitionMapTest(unittest2.TestCase):
 
         def get_node_data(path):
             id = path.rsplit('/', 1)[-1]
-            return (nodes[str(id)], mock.Mock())
+            return nodes[str(id)]
 
-        self.cluster.zookeeper.get_children.return_value = nodes.keys()
-        self.cluster.zookeeper.get = get_node_data
+        broker_map = brokers.BrokerMap(self.cluster)
+        self.cluster.brokers = broker_map
+        with mock.patch('samsa.brokers.DataWatch'):
+            # Tell the BrokerMap which brokers it's managing.
+            broker_map._configure(nodes.keys())
 
-        topic = self.cluster.topics.get('topic')
+        with mock.patch('samsa.partitions.DataWatch'):
+            topic = Topic(self.cluster, 'topic')
+            # Tell the PartitionMap which brokers it knows of.
+            topic.partitions._configure(nodes.keys())
+            # Tell each PartitionSet how many partitions it's managing.
+            for partition in topic.partitions._partition_sets:
+                partition._configure(
+                    nodes[str(partition.broker.id)],
+                    mock.Mock()
+                )
+
         self.assertEqual(len(topic.partitions), sum(map(int, nodes.values())))

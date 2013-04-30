@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 """
 Copyright 2012 DISQUS
+Copyright 2013 Parse.ly, Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -37,6 +38,10 @@ lint_requires = [
 
 tests_require = ['mock', 'nose', 'unittest2']
 
+dependency_links = [
+    'https://github.com/python-zk/kazoo/tarball/master#egg=kazoo-0.7dev'
+]
+
 setup_requires = []
 if 'nosetests' in sys.argv[1:]:
     setup_requires.append('nose')
@@ -59,6 +64,7 @@ setup(
         'docs': ['sphinx'] + tests_require,
         'lint': lint_requires
     },
+    dependency_links=dependency_links,
     zip_safe=False,
     test_suite='nose.collector',
     include_package_data=True,

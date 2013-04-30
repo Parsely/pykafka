@@ -1,5 +1,6 @@
 __license__ = """
 Copyright 2012 DISQUS
+Copyright 2013 Parse.ly, Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -77,11 +78,17 @@ class ConsumerConfig(Config):
     # anything else: throw an exception to the consumer.
     autooffset_reset = 'smallest'
 
-    # By default, this value is -1 and a consumer blocks indefinitely if no new
-    # message is available for consumption. By setting the value to a positive
-    # integer, a timeout exception is thrown to the consumer if no message is
-    # available for consumption after the specified timeout value.
-    consumer_timeout = 4
-
     # max number of retries during rebalance
     rebalance_retries_max = 4
+
+    # max number of times to connect as consumer
+    # This exists because a quick restart of a consumer will try to connect
+    # before the dead one times out. The default of 5 ensures we can outwait
+    # that and connect asap.
+    consumer_retries_max = 4
+
+    # Number of messages to read from a single partition before
+    # moving to the next one with waiting messages. Setting to 1 will
+    # round-robin partitions, but can be slow. Default is the same as
+    # queuedchunks_max (100)
+    reads_per_partition = 100
