@@ -37,7 +37,7 @@ lint_requires = [
 ]
 
 tests_require = ['mock', 'nose', 'unittest2']
-
+dependency_links = []
 setup_requires = []
 if 'nosetests' in sys.argv[1:]:
     setup_requires.append('nose')
