@@ -11,8 +11,11 @@ samsa
     discovered that in bed he had been changed into a monstrous verminous bug.
 
 Samsa is a cluster-aware Kafka protocol client and routing library for Python.
+It implements version `0.7 of the protocol`.
 
 It's currently under development, but is being used internally to some success.
+
+.. _0.7: https://cwiki.apache.org/KAFKA/wire-format.html
 
 ************
 Introduction
