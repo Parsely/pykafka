@@ -276,29 +276,44 @@ def decode_messages(payload, from_offset):
     Decodes ``Message`` objects from a ``payload`` buffer.
     """
     offset = 0
+    recovering = False # recovering from bad offset error
     while offset < len(payload):
+        message = None
         try:
             header = Message.Header.unpack_from(payload, offset)
             length = 4 + header.length
-            message = Message(
-                raw=buffer(payload, offset, length),
-                offset=from_offset + offset
-            )
+            if length > 0:
+                message = Message(
+                    raw=buffer(payload, offset, length),
+                    offset=from_offset + offset
+                )
         except struct.error:
-            # Thrown if payload ends in the middle of a header
-            logger.debug('Unable to create message from payload remadiner '
-                        '%i bytes left: %s',
-                    len(payload) - offset, payload[offset:])
-            return
-        if message.valid:
+            if not recovering:
+                # Thrown if payload ends in the middle of a header
+                logger.debug('Unable to create message from payload remainder '
+                             '%i bytes left: %s',
+                             len(payload) - offset, payload[offset:])
+                return
+        except InvalidVersionError, ex:
+            if not recovering: # enter recovery mode to find next valid message
+                recovering = True
+                exception = ex
+                logger.warning('Invalid version or corrupted offset found. '
+                               'Attempting recovery.')
+        if message and message.valid:
+            recovering = False
             yield message
-        else:
+        elif recovering:
+            # bump offset and try again
+            offset += 1
+            continue
+        elif message is not None:
             if len(message) + offset == len(payload):
                 # If this is the last message,
                 # it's OK to drop it if it's truncated.
                 logger.debug('Discarding partial message '
                             '(expected %s bytes, got %s): %s',
-                    length, len(message), message)
+                            length, len(message), message)
                 return
             else:
                 raise AssertionError(
@@ -306,6 +321,10 @@ def decode_messages(payload, from_offset):
                     "stated frame size of %s" % (message, len(message), length)
                 )
         offset += length
+
+    # Finally, if we can't recover, raise the original exception
+    if recovering:
+        raise exception
 
 
 def write_request_header(request, topic, partition):

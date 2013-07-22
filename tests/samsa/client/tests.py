@@ -85,7 +85,7 @@ class MessageTestCase(unittest2.TestCase):
             encoded = ''.join([
                 struct.pack('!bbi', magic, compression, checksum), payload])
             framed = buffer(''.join([struct.pack('!i', len(encoded)),
-                encoded]))
+                                     encoded]))
             return Message(framed)
 
         message = make_message(self.payload)
@@ -314,3 +314,27 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
         offsets = self.kafka.offsets('topic', 0, OFFSET_LATEST, 1)
         self.assertEqual(len(offsets), 1)
         self.assertEqual(offsets[0], 0)
+
+    def test_bad_offset(self):
+        """Test recovering from a bad offset stored in Zookeeper"""
+        topic = 'topic'
+        payload = 'hello world'
+        size = 1024 * 300
+
+        producer = self.producer(topic)
+        producer.publish([payload]*5)
+
+        # We don't have 100% recovery, so test at offsets that work
+        offsets = ((0,5), (2,4), (8,4), (25,3), (46,2), (67,1))
+        def ensure_recovery():
+            for offset,len_ in offsets:
+                messages = list(self.kafka.fetch(topic, 0, offset, size))
+                self.assertEqual(len(messages), len_)
+                continue
+
+        self.assertPassesWithMultipleAttempts(
+            ensure_recovery, 5,
+            backoff=lambda attempt, timeout: (
+                timeout * sum(xrange(1, attempt + 1))
+            )
+        )
