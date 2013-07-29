@@ -32,6 +32,9 @@ class Cluster(object):
     :type handler: :class:`kazoo.handlers.Handler`
     """
     def __init__(self, zookeeper, handler=None):
+        if not zookeeper.connected:
+            raise Exception("Zookeeper must be connected before use.")
+
         self.zookeeper = zookeeper
 
         if not handler:
