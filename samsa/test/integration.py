@@ -335,12 +335,12 @@ class KafkaIntegrationTestCase(TestCase, KazooTestHarness):
 
     def tearDown(self):
         """Reset zookeeper and Kafka if needed"""
-        if self.kafka_broker and self.kafka_broker.is_running():
-            self.kafka_broker.stop()
         self.client.stop()
-        self.teardown_zookeeper()
         for process in itertools.chain(self._consumers, self._producers):
             process.stop()
+        if self.kafka_broker and self.kafka_broker.is_running():
+            self.kafka_broker.stop()
+        self.teardown_zookeeper()
 
     @classmethod
     def start_broker(cls, zk_client, zk_hosts, brokerid=0):
@@ -401,9 +401,9 @@ class FasterKafkaIntegrationTestCase(KafkaIntegrationTestCase):
 
     @classmethod
     def tearDownClass(cls):
+        cls.client.stop()
         if cls.kafka_broker and cls.kafka_broker.is_running():
             cls.kafka_broker.stop()
-        cls.client.stop()
         cls.zk_harness.teardown_zookeeper()
 
     def setUp(self):
