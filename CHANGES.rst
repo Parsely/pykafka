@@ -1,6 +1,30 @@
 Changelog
 =========
 
+
+0.3.8 (2013-07-30)
+------------------
+
+Features
+********
+
+- `Topic.latest_offsets` and `Partition.latest_offset` convenience functions
+
+- Test cases are now significantly faster, but still deadlocking in Travis-CI
+
+Bug Handling
+************
+
+- Issue #93: deal with case where kazoo is passed in not-connected
+
+- Issue #91: offsets can get corrupted
+
+- Handle race condition where zookeeper gave None for broker information
+  after it had been removed
+
+- Pin kazoo to v1.1 because 1.2 is broken in PYPI
+
+
 0.3.6 (2013-04-30)
 ------------------
 
