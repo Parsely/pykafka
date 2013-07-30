@@ -25,6 +25,7 @@ import subprocess
 import tempfile
 import threading
 import time
+import uuid
 
 from kazoo.testing import KazooTestHarness
 from nose.plugins.attrib import attr
@@ -303,7 +304,7 @@ class ManagedConsumer(ExternalClassRunner):
 
 
 @attr('integration')
-class KafkaClusterIntegrationTestCase(TestCase, KazooTestHarness):
+class KafkaIntegrationTestCase(TestCase, KazooTestHarness):
     """
     A test case that allows the bootstrapping of a number of Kafka brokers.
 
@@ -314,7 +315,9 @@ class KafkaClusterIntegrationTestCase(TestCase, KazooTestHarness):
     All managed subprocesses (brokers, consumers, producers, etc.) are
     automatically stopped when the test case is torn down.
     """
+
     def setUp(self):
+        """Set up kafka and zookeeper."""
         try:
             self.setup_zookeeper()
         except kazoo.handlers.threading.TimeoutError:
@@ -322,55 +325,93 @@ class KafkaClusterIntegrationTestCase(TestCase, KazooTestHarness):
             if self.cluster[0].running:
                 self.cluster.stop()
             self.setup_zookeeper() # try again if travis-ci is being slow
-        self._subprocesses = []
 
-        self._id_generator = itertools.count(0)
-        self._port_generator = itertools.ifilter(is_port_available,
-            itertools.count(9092))
+        # Keep track of processes started
+        self._consumers = []
+        self._producers = []
+
+        self.kafka_broker = self.start_broker(self.client, self.hosts)
+        self.kafka_cluster = Cluster(self.client)
 
     def tearDown(self):
-        for process in self._subprocesses:
-            if process.is_running():
-                process.stop()
-
+        """Reset zookeeper and Kafka if needed"""
+        if self.kafka_broker and self.kafka_broker.is_running():
+            self.kafka_broker.stop()
+        self.client.stop()
         self.teardown_zookeeper()
+        for process in itertools.chain(self._consumers, self._producers):
+            process.stop()
 
-    def setup_kafka_broker(self, *args, **kwargs):
-        """
-        Starts a Kafka broker.
-
-        The broker is started using a sequence generated broker ID and port to
-        avoid conflicts.
-
-        :rtype: :class:`~samsa.test.integration.ManagedBroker`
-        """
-        broker = ManagedBroker(self.client, self.hosts,
-            brokerid=next(self._id_generator),
-            port=next(self._port_generator), *args, **kwargs)
+    @classmethod
+    def start_broker(cls, zk_client, zk_hosts, brokerid=0):
+        ports = itertools.ifilter(
+            is_port_available, itertools.count(9092)
+        )
+        broker = ManagedBroker(
+            zk_client,
+            zk_hosts,
+            brokerid=brokerid,
+            port=next(ports),
+        )
         broker.start()
-        self._subprocesses.append(broker)
         return broker
 
     def consumer(self, *args, **kwargs):
         consumer = ManagedConsumer(self.hosts, *args, **kwargs)
         consumer.start()
-        self._subprocesses.append(consumer)
+        self._consumers.append(consumer)
         return consumer
 
     def producer(self, *args, **kwargs):
         producer = ManagedProducer(self.hosts, *args, **kwargs)
         producer.start()
-        self._subprocesses.append(producer)
+        self._producers.append(producer)
         return producer
 
+    def get_topic(self):
+        """Get a random topic to use for testing."""
+        topic = str(uuid.uuid4())
+        return self.kafka_cluster.topics[topic]
 
-@attr('integration')
-class KafkaIntegrationTestCase(KafkaClusterIntegrationTestCase):
+
+class FasterKafkaIntegrationTestCase(KafkaIntegrationTestCase):
+    """A faster test case that doesn't restart Kafka between tests.
+
+    To use this class, use `self.get_topic()` instead of hard-coding
+    the topic name. This lets the same broker be used for all tests
+    without having to worry about collisions between tests.
+
+    This exists because kafka can't delete topics, requiring a full
+    restart between test cases. This is very slow and not strictly
+    necessary for most tests.
+
+    If your test *needs* the broker to restart between cases, or you're
+    testing the broker going down, etc, then use `KafkaIntegrationTestCase`.
+    However, for most tests, this is the class you want.
     """
-    A test case that automatically starts a single Kafka broker available as
-    :attr:`kafka_broker` on each test method invocation.
-    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.zk_harness = KazooTestHarness()
+        cls.zk_harness.setup_zookeeper()
+        cls.client = cls.zk_harness.client
+        cls.hosts = cls.zk_harness.hosts
+        cls.kafka_broker = cls.start_broker(cls.client, cls.hosts)
+        cls.kafka_cluster = Cluster(cls.client)
+
+    @classmethod
+    def tearDownClass(cls):
+        if cls.kafka_broker and cls.kafka_broker.is_running():
+            cls.kafka_broker.stop()
+        cls.client.stop()
+        cls.zk_harness.teardown_zookeeper()
+
     def setUp(self):
-        super(KafkaIntegrationTestCase, self).setUp()
-        self.kafka_broker = self.setup_kafka_broker()
-        self.kafka_cluster = Cluster(self.client)
+        # Keep track of processes started
+        self._consumers = []
+        self._producers = []
+
+    def tearDown(self):
+        """Only need to stop consumer/producer processes"""
+        for process in itertools.chain(self._consumers, self._producers):
+            process.stop()

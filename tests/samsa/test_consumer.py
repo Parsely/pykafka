@@ -29,6 +29,7 @@ from threading import Event
 
 from samsa.exceptions import NoAvailablePartitionsError
 from samsa.test.integration import KafkaIntegrationTestCase, polling_timeout
+from samsa.test.integration import FasterKafkaIntegrationTestCase, polling_timeout
 from samsa.test.case import TestCase
 from samsa.cluster import Cluster
 from samsa.config import ConsumerConfig
@@ -321,7 +322,7 @@ class TestConsumer(KazooTestCase, TestCase):
             consumers = [t.subscribe('group1') for i in xrange(n_consumers)]
 
 
-class TestConsumerIntegration(KafkaIntegrationTestCase):
+class TestConsumerIntegration(FasterKafkaIntegrationTestCase):
 
     def setUp(self):
         super(TestConsumerIntegration, self).setUp()
@@ -333,15 +334,15 @@ class TestConsumerIntegration(KafkaIntegrationTestCase):
         """Test that we can consume messages from kafka.
 
         """
-        topic = 'topic'
+        topic = self.get_topic().name
         messages = ['hello world', 'foobar']
 
-        # publish `messages` to `topic`
+        # publish `messages` to topic
         self.kafka.produce(topic, 0, messages)
 
         t = Topic(self.kafka_cluster, topic)
 
-        # subscribe to `topic`
+        # subscribe to topic
         consumer = t.subscribe('group2')
 
         def test():
@@ -382,7 +383,7 @@ class TestConsumerIntegration(KafkaIntegrationTestCase):
         """Test that consuming an empty topic returns an empty list.
 
         """
-        topic = 'topic'
+        topic = self.get_topic().name
         t = Topic(self.kafka_cluster, topic)
 
         consumer = t.subscribe('group2')
@@ -399,10 +400,10 @@ class TestConsumerIntegration(KafkaIntegrationTestCase):
         consumer near the end of a log that's being rolled over and its
         previous spot no longer exists.
         """
-        topic = 'topic'
+        topic = self.get_topic().name
         messages = ['hello world', 'foobar']
 
-        # publish `messages` to `topic`
+        # publish `messages` to topic
         self.kafka.produce(topic, 0, messages)
 
         t = Topic(self.kafka_cluster, topic)
