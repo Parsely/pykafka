@@ -27,6 +27,7 @@ import unittest2
 from samsa.client import (Client, Message, OFFSET_EARLIEST, OFFSET_LATEST,
     COMPRESSION_TYPE_GZIP)
 from samsa.exceptions import InvalidVersionError, WrongPartitionError
+from samsa.test.integration import FasterKafkaIntegrationTestCase
 from samsa.test.integration import KafkaIntegrationTestCase
 
 
@@ -118,7 +119,7 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
         self.kafka = self.kafka_broker.client
 
     def test_produce(self, count=1, **kwargs):
-        topic = 'topic'
+        topic = self.get_topic().name
         message = 'hello world'
         consumer = self.consumer(topic)
         messages = (message,) * count
@@ -146,7 +147,7 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
             self.kafka.produce('topic', 0, ('hello world',), version=sys.maxint)
 
     def test_multiproduce(self, count=1, **kwargs):
-        topics = ('topic-a', 'topic-b')
+        topics = (self.get_topic().name, self.get_topic().name)
 
         def message_for_topic(topic):
             return 'hello to topic %s' % topic
@@ -174,14 +175,15 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
         self.test_multiproduce(version=1)
 
     def test_multiproduce_invalid_version(self):
+        topic = self.get_topic().name
         with self.assertRaises(InvalidVersionError):
             self.kafka.multiproduce((
-                ('topic', 0, ('hello world',)),
+                (topic, 0, ('hello world',)),
             ), version=sys.maxint)
 
     def test_fetch(self):
         # TODO: test error conditions
-        topic = 'topic'
+        topic = self.get_topic().name
         payload = 'hello world'
         size = 1024 * 300
 
@@ -222,7 +224,7 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
         self.assertPassesWithMultipleAttempts(ensure_valid_response_again, 5)
 
     def test_fetch_sizing(self):
-        topic = 'topic'
+        topic = self.get_topic().name
         partition = 0
         payload = ''.join(random.choice(string.ascii_letters) for _
             in xrange(0, 300))
@@ -244,12 +246,14 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
         self.assertPassesWithMultipleAttempts(ensure_no_partial_messages, 5)
 
     def test_fetch_wrong_partition(self):
+        topic = self.get_topic().name
         with self.assertRaises(WrongPartitionError):
-            self.kafka.fetch('topic', 10, 0, 1024 * 300)
+            self.kafka.fetch(topic, 10, 0, 1024 * 300)
 
     def test_multifetch(self):
         # TODO: test error conditions
-        topics = ('topic-a', 'topic-b')
+        # In this case, sorting matters because of how data comes back
+        topics = (self.get_topic().name, self.get_topic().name)
         size = 1024 * 300
 
         def payload_for_topic(topic):
@@ -288,9 +292,9 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
 
         batches = []
         num_messages = 2
-        for topic, producer in producers.items():
+        for topic in topics:
             payloads = [payload_for_topic(topic)] * num_messages
-            producer.publish(payloads)
+            producers[topic].publish(payloads)
             batches.append((topic, 0, self.next_offsets[topic], size))
 
         def ensure_valid_response_again():
@@ -307,11 +311,13 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
         self.assertPassesWithMultipleAttempts(ensure_valid_response_again, 5)
 
     def test_offsets(self):
-        offsets = self.kafka.offsets('topic', 0, OFFSET_EARLIEST, 1)
+        topic = self.get_topic().name
+
+        offsets = self.kafka.offsets(topic, 0, OFFSET_EARLIEST, 1)
         self.assertEqual(len(offsets), 1)
         self.assertEqual(offsets[0], 0)
 
-        offsets = self.kafka.offsets('topic', 0, OFFSET_LATEST, 1)
+        offsets = self.kafka.offsets(topic, 0, OFFSET_LATEST, 1)
         self.assertEqual(len(offsets), 1)
         self.assertEqual(offsets[0], 0)
 

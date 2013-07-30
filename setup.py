@@ -28,7 +28,7 @@ except ImportError:
     pass
 
 install_requires = [
-    'kazoo'
+    'kazoo<1.2' # TODO: Remove once they fix the pip upload
 ]
 
 lint_requires = [

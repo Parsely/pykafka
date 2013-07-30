@@ -152,9 +152,13 @@ class Broker(object):
         """
         Configures a broker based on it's state in ZooKeeper.
         """
-        logger.debug('Retrieved broker data for %s...', self)
-        creator, self.__host, port = data.split(':')
-        self.__port = int(port)
+        logger.info('Retrieved broker data for %s...', self)
+        if data is None:
+            logger.info('Broker data field was empty. Assuming it was dead.')
+            self.__host = self.__port = None
+        else:
+            creator, self.__host, port = data.split(':')
+            self.__port = int(port)
 
     @property
     def host(self):
