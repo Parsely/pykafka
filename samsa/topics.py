@@ -81,6 +81,11 @@ class Topic(object):
 
     __repr__ = attribute_repr('name')
 
+    def latest_offsets(self):
+        return [(p.broker.id, p.latest_offset())
+                for p
+                in self.partitions]
+
     def publish(self, data, key=None):
         """
         Publishes one or more messages to a random partition of this topic.

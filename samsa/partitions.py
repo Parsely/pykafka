@@ -22,7 +22,7 @@ import logging
 
 from kazoo.recipe.watchers import ChildrenWatch, DataWatch
 
-from samsa.client import OFFSET_EARLIEST
+from samsa.client import OFFSET_EARLIEST, OFFSET_LATEST
 from samsa.exceptions import OffsetOutOfRangeError
 from samsa.utils import attribute_repr
 from samsa.utils.delayedconfig import (DelayedConfiguration,
@@ -217,6 +217,11 @@ class Partition(object):
         self.number = int(number)
 
     __repr__ = attribute_repr('topic', 'broker', 'number')
+
+    def latest_offset(self):
+        return self.broker.client.offsets(
+            self.topic.name, self.number, OFFSET_LATEST, 1
+        )[0]
 
     def publish(self, data):
         """

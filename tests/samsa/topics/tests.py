@@ -21,18 +21,26 @@ import unittest2
 from samsa import brokers
 from samsa.cluster import Cluster
 from samsa.exceptions import NoAvailablePartitionsError
-from samsa.test.integration import KafkaIntegrationTestCase
+from samsa.test.integration import FasterKafkaIntegrationTestCase
 from samsa.topics import TopicMap, Topic
 
 
-class TopicIntgrationTestCase(KafkaIntegrationTestCase):
+class TopicIntgrationTestCase(FasterKafkaIntegrationTestCase):
     def test_no_partitions(self):
+        # Kill the broker and try to publish something
         topic = self.kafka_cluster.topics['topic']
-
         self.kafka_broker.stop()
-
         with self.assertRaises(NoAvailablePartitionsError):
             topic.publish('message')
+
+        # Restart it afterwards, we're on a shared broker
+        self.kafka_broker = self.start_broker(self.client, self.hosts)
+
+    def test_get_latest_offsets(self):
+        topic = self.get_topic()
+        self.assertEqual(topic.latest_offsets(), [(0, 0)])
+        topic.publish(['hello!'])
+        self.assertEqual(topic.latest_offsets(), [(0, 15)])
 
 
 class TopicMapTest(unittest2.TestCase):
