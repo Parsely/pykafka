@@ -68,4 +68,4 @@ class InvalidFetchSizeError(ProtocolClientError):
 
 ERROR_CODES = dict((exc.ERROR_CODE, exc) for exc in (
     UnknownError, OffsetOutOfRangeError, InvalidMessageError,
-    WrongPartitionError, InvalidMessageError))
+    WrongPartitionError, InvalidFetchSizeError))
