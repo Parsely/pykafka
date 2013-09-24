@@ -23,8 +23,9 @@ from kazoo.exceptions import NodeExistsException, NoNodeException
 from functools import partial
 import Queue
 
+from samsa.client import OFFSET_EARLIEST, OFFSET_LATEST
 from samsa.config import ConsumerConfig
-from samsa.exceptions import PartitionOwnedError
+from samsa.exceptions import OffsetOutOfRangeError, PartitionOwnedError
 from samsa.partitions import Partition
 
 
@@ -98,11 +99,30 @@ class OwnedPartition(Partition):
                 return
 
             # Fetch more messages
-            messages = super(OwnedPartition, self).fetch(
-                self._next_offset,
-                self.config['fetch_size']
-            )
-            messages = deque(messages) # so we can requeue on Queue.Full
+            try:
+                messages = super(OwnedPartition, self).fetch(
+                    self._next_offset,
+                    self.config['fetch_size']
+                )
+                messages = deque(messages) # so we can requeue on Queue.Full
+            except OffsetOutOfRangeError, ex:
+                msg = 'Offset %i is out of range. Resetting to %%s (%%d)' % self._next_offset
+                reset = self.config['autooffset_reset']
+                if reset == 'nearest': # resolve which way this is going
+                    if self._next_offset < self.earliest_offset():
+                        reset = 'earliest'
+                    else:
+                        reset = 'latest'
+                if reset == 'earliest':
+                    self._next_offset = self.earliest_offset()
+                    logger.warning(msg, 'OFFSET_EARLIEST', self._next_offset)
+                    continue
+                elif reset == 'latest':
+                    self._next_offset = self.latest_offset()
+                    logger.warning(msg, 'OFFSET_LATEST', self._next_offset)
+                    continue
+                else:
+                    raise # no reset match? send it up to the consumer
 
             if len(messages) == 0:
                 # No messages ready. Cool off a bit.

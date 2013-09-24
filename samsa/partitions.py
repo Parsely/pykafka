@@ -218,6 +218,11 @@ class Partition(object):
 
     __repr__ = attribute_repr('topic', 'broker', 'number')
 
+    def earliest_offset(self):
+        return self.broker.client.offsets(
+            self.topic.name, self.number, OFFSET_EARLIEST, 1
+        )[0]
+
     def latest_offset(self):
         return self.broker.client.offsets(
             self.topic.name, self.number, OFFSET_LATEST, 1
@@ -238,22 +243,9 @@ class Partition(object):
             messages)
 
     def fetch(self, offset, size):
-        try:
-            return self.broker.client.fetch(self.topic.name, self.number, offset,
-                size)
-        except OffsetOutOfRangeError, ex:
-            # is this before the earliest offset available?
-            earliest = self.broker.client.offsets(self.topic.name, self.number,
-                                                  OFFSET_EARLIEST, 1)[0]
-            if offset < earliest:
-                logger.warning('Requested offset %i is no longer available. '
-                               'Fast-forwarding to OFFSET_EARLIEST (%i)',
-                               offset, earliest)
-                return self.broker.client.fetch(self.topic.name, self.number,
-                                                earliest, size)
-            else:
-                # no? then we can't do anything
-                raise
+        return self.broker.client.fetch(
+            self.topic.name, self.number, offset, size
+        )
 
     def __hash__(self):
         return hash((self.topic, self.broker.id, self.number))

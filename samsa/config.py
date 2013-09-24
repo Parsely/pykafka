@@ -70,12 +70,11 @@ class ConsumerConfig(Config):
     # is the frequency that the consumed offsets are committed to zookeeper.
     autocommit_interval = 10
 
-    # smallest: automatically reset the offset to the smallest offset available
-    # on the broker.
-    # largest: automatically reset the offset to the largest offset available
-    # on the broker.
+    # earliest: automatically reset the offset to the first offset available
+    # latest: automatically reset the offset to the last offset available
+    # nearest: if request offset is above latest, go latest, otherwise earliest
     # anything else: throw an exception to the consumer.
-    autooffset_reset = 'smallest'
+    autooffset_reset = 'nearest'
 
     # max number of retries during rebalance
     rebalance_retries_max = 4
