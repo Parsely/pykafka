@@ -300,7 +300,12 @@ def decode_messages(payload, from_offset):
                 exception = ex
                 logger.warning('Invalid version or corrupted offset found. '
                                'Attempting recovery.')
+                logger.info('from_offset: %d\toffset: %d', from_offset, offset)
+                logger.info('payload: %s', payload)
         if message and message.valid:
+            if recovering:
+                logger.info('successfully recovered at: (%d + offset)', from_offset, offset)
+                logger.info('recovered message length: %d', length)
             recovering = False
             yield message
         elif recovering:
