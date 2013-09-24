@@ -92,6 +92,7 @@ class OwnedPartition(Partition):
         Runs as a long-lived thread that will keep the internal queue full.
 
         """
+        backoff = 0
         while True:
             if not self._running:
                 return
@@ -101,10 +102,19 @@ class OwnedPartition(Partition):
                 self._next_offset,
                 self.config['fetch_size']
             )
+            messages = deque(messages) # so we can requeue on Queue.Full
+
+            if len(messages) == 0:
+                # No messages ready. Cool off a bit.
+                backoff += self.config['backoff_increment']
+                logger.debug('No messages ready. Sleeping for %ds', backoff)
+                time.sleep(backoff)
+                continue
+            else:
+                backoff = 0 # reset
 
             # Iterate over the list and try to put into _message_queue
             # but be sure to check _running even when blocking
-            messages = deque(messages)
             while len(messages) > 0:
                 message = messages.popleft() # deque adds items left-to-right
                 if not self._running:

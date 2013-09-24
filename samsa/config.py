@@ -56,7 +56,6 @@ class ConsumerConfig(Config):
     # This parameter avoids repeatedly polling a broker node which has no new
     # data. We will backoff every time we get an empty set from the broker for
     # this time period
-    # TODO: implement this.
     backoff_increment = 1
 
     # the high level consumer buffers the messages fetched from the server
