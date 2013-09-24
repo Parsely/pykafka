@@ -24,7 +24,6 @@ from functools import partial
 import Queue
 
 from samsa.client import OFFSET_EARLIEST, OFFSET_LATEST
-from samsa.config import ConsumerConfig
 from samsa.exceptions import OffsetOutOfRangeError, PartitionOwnedError
 from samsa.partitions import Partition
 
@@ -41,21 +40,32 @@ class OwnedPartition(Partition):
 
     """
 
-    def __init__(self, partition, group):
+    def __init__(self,
+                 partition,
+                 group,
+                 backoff_increment=1,
+                 fetch_size=307200,
+                 offset_reset='nearest'):
         """Initialize with a partition and consumer group.
 
         :param partition: Partition to initialize with.
         :type partition: :class:`samsa.partitions.Partition`.
         :param group: Group that owns this partition.
         :type group: str.
-
+        :param backoff_increment: How fast to incrementally backoff when a
+                                  partition has no messages to read.
+        :param fetch_size: Default fetch size (in bytes) to get from Kafka
+        :param offset_reset: Where to reset when an OffsetOutOfRange happens
         """
         super(OwnedPartition, self).__init__(
             partition.cluster, partition.topic,
             partition.broker, partition.number
         )
 
-        self.config = ConsumerConfig().build()
+        self.backoff_increment = backoff_increment
+        self.fetch_size = fetch_size
+        self.offset_reset = offset_reset
+
         self.group = group
         self.path = "/consumers/%s/offsets/%s/%s-%s" % (
             self.group, self.topic.name,
@@ -72,7 +82,7 @@ class OwnedPartition(Partition):
 
         # the next offset to fetch --  initially the same as current
         self._next_offset = self._current_offset
-        self._message_queue = Queue.Queue(self.config['queuedchunks_max'])
+        self._message_queue = Queue.Queue(100) # Don't want this unbounded
 
         # Fetch and monitor threads
         self._monitor_interval = 1 #: Time between monitoring checks
@@ -102,12 +112,12 @@ class OwnedPartition(Partition):
             try:
                 messages = super(OwnedPartition, self).fetch(
                     self._next_offset,
-                    self.config['fetch_size']
+                    self.fetch_size
                 )
                 messages = deque(messages) # so we can requeue on Queue.Full
             except OffsetOutOfRangeError, ex:
                 msg = 'Offset %i is out of range. Resetting to %%s (%%d)' % self._next_offset
-                reset = self.config['autooffset_reset']
+                reset = self.offset_reset
                 if reset == 'nearest': # resolve which way this is going
                     if self._next_offset < self.earliest_offset():
                         reset = 'earliest'
@@ -126,7 +136,7 @@ class OwnedPartition(Partition):
 
             if len(messages) == 0:
                 # No messages ready. Cool off a bit.
-                backoff += self.config['backoff_increment']
+                backoff += self.backoff_increment
                 logger.debug('No messages ready. Sleeping for %ds', backoff)
                 time.sleep(backoff)
                 continue
@@ -226,7 +236,15 @@ class PartitionOwnerRegistry(object):
 
     """
 
-    def __init__(self, consumer, cluster, topic, group):
+    def __init__(self,
+                 consumer,
+                 cluster,
+                 topic,
+                 group,
+                 backoff_increment=1,
+                 fetch_size=307200,
+                 offset_reset='nearest',
+                 ):
         """
         :param consumer: consumer which owns these partitions.
         :type consumer: :class:`samsa.consumer.Consumer`.
@@ -236,13 +254,20 @@ class PartitionOwnerRegistry(object):
         :type topic: :class:`samsa.topics.Topic`.
         :param group: The group the partitions belong to.
         :type group: str.
-
+        :param backoff_increment: How fast to incrementally backoff when a
+                                  partition has no messages to read.
+        :param fetch_size: Default fetch size (in bytes) to get from Kafka
+        :param offset_reset: Where to reset when an OffsetOutOfRange happens
         """
         self.consumer = consumer
         self.cluster = cluster
         self.topic = topic
 
-        self.Partition = partial(OwnedPartition, group=group)
+        self.Partition = partial(OwnedPartition,
+                                 group=group,
+                                 backoff_increment=backoff_increment,
+                                 fetch_size=fetch_size,
+                                 offset_reset=offset_reset)
         self.path = '/consumers/%s/owners/%s' % (group, topic.name)
         self.cluster.zookeeper.ensure_path(self.path)
         self._partitions = set([])

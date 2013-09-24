@@ -102,12 +102,33 @@ class Topic(object):
         partition = self.partitioner(self.partitions, key)
         return partition.publish(data)
 
-    def subscribe(self, group):
+    def subscribe(self,
+                  group,
+                  backoff_increment=1,
+                  connect_retries=4,
+                  fetch_size=307200,
+                  offset_reset='nearest',
+                  rebalance_retries=4,
+                  ):
         """
         Returns a new consumer that can be used for reading from this topic.
 
-        :param group: the name of the consumer group this consumer belongs to
-        :type group: ``str``
+        Para for each config
+
+        :param group: The consumer group to join.
+        :param backoff_increment: How fast to incrementally backoff when a
+                                  partition has no messages to read.
+        :param connect_retries: Retries before giving up on connecting
+        :param fetch_size: Default fetch size (in bytes) to get from Kafka
+        :param offset_reset: Where to reset when an OffsetOutOfRange happens
+        :param rebalance_retries: Retries before giving up on rebalance
         :rtype: :class:`samsa.consumer.consumer.Consumer`
         """
-        return Consumer(self.cluster, self, group)
+        return Consumer(self.cluster,
+                        self,
+                        group,
+                        backoff_increment=backoff_increment,
+                        connect_retries=connect_retries,
+                        fetch_size=fetch_size,
+                        offset_reset=offset_reset,
+                        rebalance_retries=rebalance_retries)
