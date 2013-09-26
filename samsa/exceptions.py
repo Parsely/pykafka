@@ -34,6 +34,9 @@ class PartitionOwnedError(SamsaException):
 class InvalidVersionError(SamsaException):
     pass
 
+class MessageTooLargeError(SamsaException):
+    pass
+
 
 # Protocol Client Exceptions
 

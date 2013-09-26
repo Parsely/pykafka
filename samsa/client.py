@@ -22,7 +22,7 @@ from zlib import crc32
 
 from samsa import handlers
 from samsa.exceptions import (ERROR_CODES, InvalidVersionError,
-    SocketDisconnectedError)
+    SocketDisconnectedError, MessageTooLargeError)
 from samsa.utils import attribute_repr
 from samsa.utils.functional import methodimap
 from samsa.utils.namedstruct import NamedStruct
@@ -313,7 +313,12 @@ def decode_messages(payload, from_offset):
             offset += 1
             continue
         elif message is not None:
-            if len(message) + offset == len(payload):
+            if length > len(message):
+                if length > len(payload):
+                    raise MessageTooLargeError(
+                        'Message len %d is larger than payload len (%d)' % (
+                        length, len(payload))
+                    )
                 # If this is the last message,
                 # it's OK to drop it if it's truncated.
                 logger.debug('Discarding partial message '
@@ -518,9 +523,13 @@ class Client(object):
         response = self.handler.request(request)
 
         try:
-            return decode_messages(response.get(), from_offset=offset)
+            # N.B. Using generator here makes dealing with decode errors hard
+            return list(decode_messages(response.get(), from_offset=offset))
         except SocketDisconnectedError:
             return []
+        except MessageTooLargeError:
+            # Try again, but larger!
+            return self.fetch(topic, partition, offset, size*1.5)
 
     def multifetch(self, data):
         """
