@@ -246,6 +246,8 @@ class PartitionOwnerRegistry(object):
                  offset_reset='nearest',
                  ):
         """
+        For more info see: samsa.topics.Topic.subscribe
+
         :param consumer: consumer which owns these partitions.
         :type consumer: :class:`samsa.consumer.Consumer`.
         :param cluster:

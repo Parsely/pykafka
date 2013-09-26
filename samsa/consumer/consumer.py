@@ -47,6 +47,8 @@ class Consumer(object):
                  rebalance_retries=4,
                  ):
         """
+        For more info see: samsa.topics.Topic.subscribe
+
         :param cluster:
         :type cluster: :class:`samsa.cluster.Cluster`.
         :param topic: The topic to consume messages from.
@@ -60,10 +62,7 @@ class Consumer(object):
         :param rebalance_retries: Retries before giving up on rebalance
         :rtype: :class:`samsa.consumer.consumer.Consumer`
         """
-        self.backoff_increment = backoff_increment
         self.connect_retries = connect_retries
-        self.fetch_size = fetch_size
-        self.offset_reset = offset_reset
         self.rebalance_retries = rebalance_retries
 
         self.cluster = cluster
