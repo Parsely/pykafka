@@ -85,7 +85,8 @@ class VersionHeaderMap(dict):
 
 
 class Message(object):
-    __slots__ = ('_headers', 'raw', 'offset')
+    __slots__ = ('_headers', '_payload', '_raw',
+                 '_offset', '_len', '_valid')
 
     Header = NamedStruct('Header', (
         ('i', 'length'),
@@ -103,22 +104,32 @@ class Message(object):
     })
 
     def __init__(self, raw, offset=0):
-        self.raw = raw
-        self.offset = offset
-
+        # Process headers
         self._headers = []
-        header = self.Header.unpack_from(self.raw)
+        header = self.Header.unpack_from(raw)
         self._headers.append(header)
-
         versioned_header = self.VersionHeaders[header.magic].unpack_from(
-            self.raw, offset=self.Header.size
+            raw, offset=self.Header.size
         )
         self._headers.append(versioned_header)
+
+        # Some values used as read-only properties so we don't recalc every time
+        self._raw = raw
+        self._offset = offset
+        self._len = len(self._raw)
+
+        # Get the payload without a memory copy
+        start = self.Header.size + self.VersionHeaders[self['magic']].size
+        self._payload = buffer(raw, start, self._len-start)
+        #self._payload = self.raw[self._payload_start:]
+
+        self._valid = self['checksum'] == crc32(self.payload)
+
 
     __repr__ = attribute_repr('raw', 'offset')
 
     def __len__(self):
-        return len(self.raw)
+        return self._len
 
     def __str__(self):
         return str(self.payload)
@@ -148,17 +159,24 @@ class Message(object):
             return default
 
     @property
+    def offset(self):
+        return self._offset
+
+    @property
     def next_offset(self):
-        return self.offset + len(self)
+        return self._offset + self._len
 
     @property
     def payload(self):
-        start = self.Header.size + self.VersionHeaders[self['magic']].size
-        return self.raw[start:]
+        return self._payload
+
+    @property
+    def raw(self):
+        return self._raw
 
     @property
     def valid(self):
-        return self['checksum'] == crc32(self.payload)
+        return self._valid
 
     @classmethod
     def pack_into(cls, bytea, offset, payload, version, compression=None):
