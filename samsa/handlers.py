@@ -15,10 +15,10 @@ limitations under the License.
 """
 
 import atexit
+import threading
+import Queue
 
 from collections import namedtuple
-from Queue import Queue
-import threading
 
 
 class ResponseFuture(object):
@@ -61,8 +61,13 @@ class Handler(object):
 # implementation agnostic.
 class ThreadingHandler(Handler):
 
-    Queue = Queue
+    QueueEmptyError = Queue.Empty
+    Queue = Queue.Queue
     Event = threading.Event
+
+    def get_semaphore(self, count=0):
+        """Get a semaphore (doesn't work as cls attribute)"""
+        return threading.Semaphore(count)
 
     def spawn(self, target, *args, **kwargs):
         t = threading.Thread(target=target, *args, **kwargs)

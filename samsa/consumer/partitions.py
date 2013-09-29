@@ -21,7 +21,6 @@ import time
 from collections import deque
 from kazoo.exceptions import NodeExistsException, NoNodeException
 from functools import partial
-import Queue
 
 from samsa.client import OFFSET_EARLIEST, OFFSET_LATEST
 from samsa.exceptions import OffsetOutOfRangeError, PartitionOwnedError
@@ -34,15 +33,17 @@ logger = logging.getLogger(__name__)
 class OwnedPartition(Partition):
     """Represents a partition as a consumer group sees it.
 
-    Each partition owns a long-lived fetch thread that keeps
-    and internal message queue full. It also has a simple
-    monitor thread restart the fetch thread if it crashes
+    Runs a long-lived fetcher thread that will fill a message queue
+    with sets of messages from the Kafka server.
 
+    Iterables of messages are used instead of individual messages to reduce
+    thread contention for the central Queue.
     """
 
     def __init__(self,
                  partition,
                  group,
+                 message_set_queue,
                  backoff_increment=1,
                  fetch_size=307200,
                  offset_reset='nearest'):
@@ -56,6 +57,7 @@ class OwnedPartition(Partition):
                                   partition has no messages to read.
         :param fetch_size: Default fetch size (in bytes) to get from Kafka
         :param offset_reset: Where to reset when an OffsetOutOfRange happens
+        :param message_set_queue: The Queue to fill with message sets.
         """
         super(OwnedPartition, self).__init__(
             partition.cluster, partition.topic,
@@ -67,6 +69,7 @@ class OwnedPartition(Partition):
         self.offset_reset = offset_reset
 
         self.group = group
+        self.message_set_queue = message_set_queue
         self.path = "/consumers/%s/offsets/%s/%s-%s" % (
             self.group, self.topic.name,
             self.broker.id, self.number
@@ -82,26 +85,24 @@ class OwnedPartition(Partition):
 
         # the next offset to fetch --  initially the same as current
         self._next_offset = self._current_offset
-        self._message_queue = Queue.Queue(100) # Don't want this unbounded
 
+        # Limit how many message sets we'll queue up
+        self.queued_message_sets = self.cluster.handler.get_semaphore(10)
         # Fetch and monitor threads
-        self._monitor_interval = 1 #: Time between monitoring checks
         self._monitor_thread = None #: Monitors the fetch thread
         self._fetch_thread = None #: Keep the partition queue full
-
         # Flag to stop returning messages or fetching more
         self._running = False
-
 
     @property
     def offset(self):
         return self._current_offset
 
-    def _fetch(self):
+
+    def _start_fetch(self):
         """Entry point for the fetch thread
 
         Runs as a long-lived thread that will keep the internal queue full.
-
         """
         backoff = 0
         while True:
@@ -114,7 +115,6 @@ class OwnedPartition(Partition):
                     self._next_offset,
                     self.fetch_size
                 )
-                messages = deque(messages) # so we can requeue on Queue.Full
             except OffsetOutOfRangeError, ex:
                 msg = 'Offset %i is out of range. Resetting to %%s (%%d)' % self._next_offset
                 reset = self.offset_reset
@@ -134,8 +134,8 @@ class OwnedPartition(Partition):
                 else:
                     raise # no reset match? send it up to the consumer
 
+            # If there are no messages read, back off a bit
             if len(messages) == 0:
-                # No messages ready. Cool off a bit.
                 backoff += self.backoff_increment
                 logger.debug('No messages ready. Sleeping for %ds', backoff)
                 time.sleep(backoff)
@@ -143,77 +143,31 @@ class OwnedPartition(Partition):
             else:
                 backoff = 0 # reset
 
-            # Iterate over the list and try to put into _message_queue
-            # but be sure to check _running even when blocking
-            while len(messages) > 0:
-                message = messages.popleft() # deque adds items left-to-right
-                if not self._running:
-                    return # thread death
-                try:
-                    self._message_queue.put(
-                        message,
-                        block=True,
-                        timeout=self._monitor_interval
-                    )
-                    self._next_offset = message.next_offset
-                except Queue.Full:
-                    # Put it back, check _running and then try again
-                    messages.appendleft(message)
+            # Is there room in the waiting queue?
+            self.queued_message_sets.acquire()
+            self.message_set_queue.put(self._message_set_iter(messages))
 
-    def _monitor(self):
-        """Makes sure that the fetch thread restarts on crash
+            # Next place to fetch from
+            self._next_offset = messages[-1].next_offset
 
-        """
-        while True:
-            if not self._running:
-                return
-            if not self._fetch_thread or not self._fetch_thread.is_alive():
-                self._fetch_thread = self.cluster.handler.spawn(target=self._fetch)
-            time.sleep(self._monitor_interval)
-
-    def empty(self):
-        """True if there are no messages.
-
-        """
-        return self._message_queue.empty()
-
-    def next_message(self, block=True, timeout=None):
-        """Retrieve the next message for this partition.
-
-        Returns None if the partition is stopped, or there are no messages
-        within the timeout (or when not blocking)
-
-        :param block: whether to block at all
-        :param timeout: block for timeout if integer, or indefinitely if None.
-
-        """
-        if not self._running:
-            return None
-
-        try:
-            message = self._message_queue.get(block=block, timeout=timeout)
+    def _message_set_iter(self, messages):
+        # time to get more messages
+        self.queued_message_sets.release()
+        for message in messages:
             self._current_offset = message.next_offset
-            return message.payload
-        except Queue.Empty:
-            return None
+            yield self, message
 
     def commit_offset(self):
-        """Commit current offset to zookeeper.
-
-        """
+        """Commit an offset for the partition to zookeeper"""
         self.cluster.zookeeper.set(self.path, str(self._current_offset))
 
     def start(self):
-        """Start the fetch thread
-
-        """
+        """Start fetching and filling the provided queue"""
         self._running = True
-        self._monitor_thread = self.cluster.handler.spawn(target=self._monitor)
+        self._fetch_thread = self.cluster.handler.spawn(target=self._start_fetch)
 
     def stop(self):
-        """Stop the fetch thread.
-
-        """
+        """Stop the fetch thread"""
         self._running = False
 
     def __del__(self):
@@ -221,19 +175,11 @@ class OwnedPartition(Partition):
 
 
 class PartitionOwnerRegistry(object):
-    """Manages the Partition Owner Registry for a particular Consumer.
+    """Manages the set of partitions a consumer reads from.
 
-    This also helps manage access to the owned partitions. The Registry
-    provides the ``get_ready_partition`` method that will give a consumer
-    the next partition that has messages ready to be read. Using this,
-    a consumer can iterate over active partitions without ever having to
-    block while waiting on a less active one.
-
-    Using the ready partition functionality, it's possible to multiplex
-    between available partitions in a lock-free, highly available manner.
-    To improve throughput, ideally a client would read several message from
-    any given partition before moving on to the next.
-
+    This also handles multiplexing between the individual partitions
+    that are reading from Kafka. It does this using an internal message
+    set Queue that is filled by the OwnedPartitions.
     """
 
     def __init__(self,
@@ -265,21 +211,24 @@ class PartitionOwnerRegistry(object):
         self.cluster = cluster
         self.topic = topic
 
+        self._message_queue = self.cluster.handler.Queue()
         self.Partition = partial(OwnedPartition,
                                  group=group,
                                  backoff_increment=backoff_increment,
                                  fetch_size=fetch_size,
+                                 message_set_queue=self._message_queue,
                                  offset_reset=offset_reset)
         self.path = '/consumers/%s/owners/%s' % (group, topic.name)
         self.cluster.zookeeper.ensure_path(self.path)
         self._partitions = set([])
-        self._ready_queue = Queue.Queue()
+        self._current_message_set = None
         self._watch_interval = 0.5
 
-    def get(self):
-        """Get all owned partitions.
+    def _path_from_partition(self, p):
+        return "%s/%s-%s" % (self.path, p.broker.id, p.number)
 
-        """
+    def get(self):
+        """Get all owned partitions"""
         return self._partitions
 
     def remove(self, partitions):
@@ -287,47 +236,12 @@ class PartitionOwnerRegistry(object):
 
         :param partitions: partitions to remove.
         :type partitions: iterable of :class:`samsa.partitions.Partition`.
-
         """
         for p in partitions:
             assert p in self._partitions
             p.stop() # TODO: Fix stop so it happens here instead of in consumer
             self.cluster.zookeeper.delete(self._path_from_partition(p))
             self._partitions.remove(p)
-
-    def get_ready_partition(self, block=True, timeout=None):
-        """Get the next partition with messages to read
-
-        Returns None if none are available and nonblocking or timeout expires
-
-        """
-        # N.B.: Immediately setting the dequeued event means the watch
-        # thread will unblock, see there are pending messages, and requeue
-        # the partition. If a partition is exhausted during its read, then
-        # it'll be empty the next time it's dequeued.
-        #
-        # This is by design. By not waiting to requeue the partition
-        # there's no need to keep track of when it starts and stops usage.
-        # That cuts down on monitoring overhead, reduces potential bugs due
-        # to not letting go of the partition, and most importantly means
-        # we can do the entire thing lock-free, using only Events.
-        #
-        # Also note the immediate-requeue only happens once. After that,
-        # the watch thread will block until more messages are fetched.
-        while True:
-            try:
-                partition, dequeued  = self._ready_queue.get(
-                    block=block, timeout=timeout
-                )
-                dequeued.set()
-            except Queue.Empty:
-                return None
-
-            # only return active partitions that still have messages
-            if partition not in self._partitions or partition.empty():
-                continue
-
-            return partition
 
     def add(self, partitions):
         """Add `partitions` to the registry.
@@ -349,47 +263,21 @@ class PartitionOwnerRegistry(object):
             partition = self.Partition(p)
             partition.start()
             self._partitions.add(partition)
-            self.cluster.handler.spawn(
-                target=self._watch_partition, args=[partition]
-            )
 
-    def _path_from_partition(self, p):
-        return "%s/%s-%s" % (self.path, p.broker.id, p.number)
-
-    def _watch_partition(self, partition):
-        """Watch the partition and put it in the ready_queue when it has data
-
-        This watch thread (and ready queue) are how we can implement the
-        partition multiplexing without lock-free and with very fast data
-        availability
-
-        """
-        # N.B.: Everything in the main loop needs a timeout so it
-        # can check for partition membership. Otherwise it never dies.
-        import threading # TODO: Obv incompatible with gevent.
-        dequeued = threading.Event()
-        dequeued.set()
+    def next_message(self, block=True, timeout=None):
+        # Don't exit until we have something
         while True:
-            if partition not in self._partitions:
-                return
+            if not self._current_message_set:
+                try:
+                    self._current_message_set = self._message_queue.get(
+                        block=block, timeout=timeout
+                    )
+                except self.cluster.handler.QueueEmptyError:
+                    return None
 
-            # Wait for it to be removed from the queue
-            dequeued.wait(self._watch_interval)
-            if not dequeued.is_set():
-                continue
-
-            # Wait for messages. Use of not_empty is from Queue.get source
-            # TODO: Also very incompatible with gevent
-            queue = partition._message_queue
-            queue.not_empty.acquire()
             try:
-                if queue._qsize() == 0:
-                    queue.not_empty.wait(self._watch_interval)
-                if queue._qsize() == 0:
-                    continue # check partition membership
-            finally:
-                queue.not_empty.release()
-
-            # ``.clear`` before ``.put`` avoids a race condition
-            dequeued.clear()
-            self._ready_queue.put((partition, dequeued))
+                partition, message = self._current_message_set.next()
+                if partition in self._partitions:
+                    return message.payload
+            except StopIteration:
+                self._current_message_set = None

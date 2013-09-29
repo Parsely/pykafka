@@ -118,10 +118,9 @@ class Message(object):
         self._offset = offset
         self._len = len(self._raw)
 
-        # Get the payload without a memory copy
+        # Get the payload as a byte array
         start = self.Header.size + self.VersionHeaders[self['magic']].size
-        self._payload = buffer(raw, start, self._len-start)
-        #self._payload = self.raw[self._payload_start:]
+        self._payload = self._raw[start:]
 
         self._valid = self['checksum'] == crc32(self.payload)
 

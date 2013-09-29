@@ -315,27 +315,7 @@ class Consumer(object):
         :param timeout: How long to wait, in seconds, if blocking
 
         """
-        while True:
-            if not self._current_partition or self._current_partition.empty():
-                # Nothing else blocks, so only this needs a timeout
-                self._current_partition = self.partition_owner_registry.get_ready_partition(
-                    block=block, timeout=timeout
-                )
-                if not self._current_partition:
-                    return None # Nothing ready to read
-
-            message = self._current_partition.next_message(block=False)
-            self._current_read_ct += 1
-            rpp = 100 # TODO: Should this be configurable?
-
-            if message is None or self._current_read_ct > rpp:
-                # Queue is either empty or its time to switch
-                self._current_partition = None
-                self._current_read_ct = 0
-                if message is None:
-                    continue # empty -- need a new partition
-
-            return message
+        return self.partition_owner_registry.next_message(block=block, timeout=timeout)
 
 
     def commit_offsets(self):
