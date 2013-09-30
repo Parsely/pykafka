@@ -98,7 +98,6 @@ class OwnedPartition(Partition):
     def offset(self):
         return self._current_offset
 
-
     def _start_fetch(self):
         """Entry point for the fetch thread
 
@@ -157,6 +156,15 @@ class OwnedPartition(Partition):
             self._current_offset = message.next_offset
             yield self, message
 
+    def _monitor(self):
+        """Makes sure that the fetch thread restarts on crash"""
+        while True:
+            if not self._running:
+                return
+            if not self._fetch_thread or not self._fetch_thread.is_alive():
+                self._fetch_thread = self.cluster.handler.spawn(target=self._start_fetch)
+            time.sleep(1)
+
     def commit_offset(self):
         """Commit an offset for the partition to zookeeper"""
         self.cluster.zookeeper.set(self.path, str(self._current_offset))
@@ -164,7 +172,7 @@ class OwnedPartition(Partition):
     def start(self):
         """Start fetching and filling the provided queue"""
         self._running = True
-        self._fetch_thread = self.cluster.handler.spawn(target=self._start_fetch)
+        self._monitor_thread = self.cluster.handler.spawn(target=self._monitor)
 
     def stop(self):
         """Stop the fetch thread"""
