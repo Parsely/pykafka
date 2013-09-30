@@ -322,7 +322,7 @@ def decode_messages(payload, from_offset):
                 logger.info('payload: %s', payload)
         if message and message.valid:
             if recovering:
-                logger.info('successfully recovered at: (%d + offset)', from_offset, offset)
+                logger.info('successfully recovered at: (%d + %d)', from_offset, offset)
                 logger.info('recovered message length: %d', length)
             recovering = False
             yield message
