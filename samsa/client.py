@@ -294,12 +294,13 @@ def decode_messages(payload, from_offset):
     """
     offset = 0
     recovering = False # recovering from bad offset error
-    while offset < len(payload):
+    payload_len = len(payload) # don't recalc all the time
+    while offset < payload_len:
         message = None
         try:
             header = Message.Header.unpack_from(payload, offset)
             length = 4 + header.length
-            if length > 0:
+            if length > 0 and offset+length <= payload_len:
                 message = Message(
                     raw=buffer(payload, offset, length),
                     offset=from_offset + offset
