@@ -300,7 +300,7 @@ def decode_messages(payload, from_offset):
         try:
             header = Message.Header.unpack_from(payload, offset)
             length = 4 + header.length
-            if length > 0 and offset+length <= payload_len:
+            if length > 0:
                 message = Message(
                     raw=buffer(payload, offset, length),
                     offset=from_offset + offset
