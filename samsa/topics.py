@@ -102,12 +102,53 @@ class Topic(object):
         partition = self.partitioner(self.partitions, key)
         return partition.publish(data)
 
-    def subscribe(self, group):
+    def subscribe(self,
+                  group,
+                  backoff_increment=1,
+                  connect_retries=4,
+                  fetch_size=307200,
+                  offset_reset='nearest',
+                  rebalance_retries=4,
+                  ):
         """
         Returns a new consumer that can be used for reading from this topic.
 
-        :param group: the name of the consumer group this consumer belongs to
-        :type group: ``str``
+        `backoff_increment` is used to progressively back off asking a partition
+        for messages when there aren't any ready. Incrementally increases wait
+        time in seconds.
+
+        `offset_reset` is used to determine where to reset a partition's offset
+        in the event of an OffsetOutOfRangeError. Valid values are:
+
+        "earliest": Go to the earliest message in the partition
+        "latest": Go to the latest message in the partition
+        "nearest": If requested offset is before the earliest, go there,
+                   otherwise, go to the latest message in the partition.
+
+        `rebalance_retries` and `connect_retries` affect the number of times
+        to try acquiring partitions before giving up.
+
+        When samsa restarts, there can be a bit of lag before
+        Zookeeper realizes the old client is dead and releases the partitions
+        it was consuming. Setting this means samsa will wait a bit and try to
+        acquire partitions again before throwing an error. In the case of
+        rebalancing, sometimes it takes a bit for a consumer to release the
+        partition they're reading, and this helps account for that.
+
+        :param group: The consumer group to join.
+        :param backoff_increment: How fast to incrementally backoff when a
+                                  partition has no messages to read.
+        :param connect_retries: Retries before giving up on connecting
+        :param fetch_size: Default fetch size (in bytes) to get from Kafka
+        :param offset_reset: Where to reset when an OffsetOutOfRange happens
+        :param rebalance_retries: Retries before giving up on rebalance
         :rtype: :class:`samsa.consumer.consumer.Consumer`
         """
-        return Consumer(self.cluster, self, group)
+        return Consumer(self.cluster,
+                        self,
+                        group,
+                        backoff_increment=backoff_increment,
+                        connect_retries=connect_retries,
+                        fetch_size=fetch_size,
+                        offset_reset=offset_reset,
+                        rebalance_retries=rebalance_retries)

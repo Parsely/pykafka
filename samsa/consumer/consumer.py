@@ -25,7 +25,6 @@ from kazoo.recipe.watchers import ChildrenWatch
 from kazoo.exceptions import NoNodeException
 from uuid import uuid4
 
-from samsa.config import ConsumerConfig
 from samsa.consumer.partitions import PartitionOwnerRegistry
 from samsa.exceptions import (SamsaException, NoAvailablePartitionsError,
                               PartitionOwnedError, ImproperlyConfiguredError)
@@ -37,17 +36,35 @@ class Consumer(object):
     """Primary API for consuming kazoo messages as a group.
     """
 
-    def __init__(self, cluster, topic, group):
+    def __init__(self,
+                 cluster,
+                 topic,
+                 group,
+                 backoff_increment=1,
+                 connect_retries=4,
+                 fetch_size=307200,
+                 offset_reset='nearest',
+                 rebalance_retries=4,
+                 ):
         """
+        For more info see: samsa.topics.Topic.subscribe
+
         :param cluster:
         :type cluster: :class:`samsa.cluster.Cluster`.
         :param topic: The topic to consume messages from.
         :type topic: :class:`samsa.topics.Topic`.
         :param group: The consumer group to join.
-        :type group: str.
-
+        :param backoff_increment: How fast to incrementally backoff when a
+                                  partition has no messages to read.
+        :param connect_retries: Retries before giving up on connecting
+        :param fetch_size: Default fetch size (in bytes) to get from Kafka
+        :param offset_reset: Where to reset when an OffsetOutOfRange happens
+        :param rebalance_retries: Retries before giving up on rebalance
+        :rtype: :class:`samsa.consumer.consumer.Consumer`
         """
-        self.config = ConsumerConfig().build()
+        self.connect_retries = connect_retries
+        self.rebalance_retries = rebalance_retries
+
         self.cluster = cluster
         self.topic = topic
         self.group = group
@@ -56,7 +73,8 @@ class Consumer(object):
         self.id_path = '/consumers/%s/ids' % self.group
 
         self.partition_owner_registry = PartitionOwnerRegistry(
-            self, cluster, topic, group)
+            self, cluster, topic, group, backoff_increment=backoff_increment,
+            fetch_size=fetch_size, offset_reset=offset_reset)
         self.partitions = self.partition_owner_registry.get()
 
         # Keep track of the partition being read and how much has been read
@@ -81,7 +99,7 @@ class Consumer(object):
 
         Ensures we don't add more participants than partitions
         """
-        for i in xrange(self.config['consumer_retries_max'] or 1):
+        for i in xrange(self.connect_retries):
             time.sleep(i**2) # first run is 0, ensures we sleep before retry
 
             participants = self._get_participants()
@@ -250,7 +268,7 @@ class Consumer(object):
         participants = self._get_participants(consumer_ids=consumer_ids)
         new_partitions = self._decide_partitions(participants)
 
-        for i in xrange(self.config['rebalance_retries_max'] or 1):
+        for i in xrange(self.rebalance_retries):
             if i > 0:
                 logger.debug("Retrying in %is" % ((i+1) ** 2))
                 time.sleep(i ** 2)
@@ -297,27 +315,7 @@ class Consumer(object):
         :param timeout: How long to wait, in seconds, if blocking
 
         """
-        while True:
-            if not self._current_partition or self._current_partition.empty():
-                # Nothing else blocks, so only this needs a timeout
-                self._current_partition = self.partition_owner_registry.get_ready_partition(
-                    block=block, timeout=timeout
-                )
-                if not self._current_partition:
-                    return None # Nothing ready to read
-
-            message = self._current_partition.next_message(block=False)
-            self._current_read_ct += 1
-            rpp = self.config['reads_per_partition']
-
-            if message is None or self._current_read_ct > rpp:
-                # Queue is either empty or its time to switch
-                self._current_partition = None
-                self._current_read_ct = 0
-                if message is None:
-                    continue # empty -- need a new partition
-
-            return message
+        return self.partition_owner_registry.next_message(block=block, timeout=timeout)
 
 
     def commit_offsets(self):

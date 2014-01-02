@@ -223,28 +223,6 @@ class ClientIntegrationTestCase(KafkaIntegrationTestCase):
 
         self.assertPassesWithMultipleAttempts(ensure_valid_response_again, 5)
 
-    def test_fetch_sizing(self):
-        topic = self.get_topic().name
-        partition = 0
-        payload = ''.join(random.choice(string.ascii_letters) for _
-            in xrange(0, 300))
-
-        producer = self.producer(topic)
-        producer.publish([payload])
-
-        def ensure_no_partial_messages():
-            size = len(payload) // 2
-            messages = list(self.kafka.fetch(topic, partition, 0, size))
-            self.assertEqual(len(messages), 0)
-
-            messages = list(self.kafka.fetch(topic, partition, 0, 1024 * 300))
-            self.assertEqual(len(messages), 1)
-            message = messages[0]
-            self.assertTrue(message.valid)
-            self.assertEqual(message.payload, payload)
-
-        self.assertPassesWithMultipleAttempts(ensure_no_partial_messages, 5)
-
     def test_fetch_wrong_partition(self):
         topic = self.get_topic().name
         with self.assertRaises(WrongPartitionError):
