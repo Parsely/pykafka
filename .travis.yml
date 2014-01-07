@@ -6,8 +6,6 @@ python:
 
 notifications:
   email:
-    - mwhooker@disqus.com
-    - ted@disqus.com
     - keith@parsely.com
   irc: "irc.freenode.org#samsa"
 
