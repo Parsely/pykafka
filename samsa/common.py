@@ -6,7 +6,7 @@ import struct
 
 from zlib import crc32
 
-from samsa.utils import Serializable, attribute_repr, unpack_from
+from samsa.utils import Serializable, attribute_repr, compression, unpack_from
 
 logger = logging.getLogger(__name__)
 
@@ -225,10 +225,6 @@ class Topic(object):
                         offset_reset=offset_reset,
                         rebalance_retries=rebalance_retries)
 
-class Compression(object):
-    NONE = 0
-    GZIP = 1
-    SNAPPY = 2
 
 class Message(Serializable):
     """Representation of a Kafka Message
@@ -246,7 +242,7 @@ class Message(Serializable):
     """
     MAGIC = 0
 
-    def __init__(self, value, partition_key=None, compression=Compression.NONE, offset=-1):
+    def __init__(self, value, partition_key=None, compression=compression.NONE, offset=-1):
         self.compression = compression
         self.partition_key = partition_key
         self.value = value

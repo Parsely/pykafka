@@ -1,11 +1,11 @@
 # - coding: utf-8 -
 """Protocol implementation for Kafka 0.8
 
-TODO: Note about how bytearray sizing is calculated
 NOTE: msg size = int32; str = len + int16
 
-TODO: Note about versioning in the future
+TODO: Note about how bytearray sizing is calculated
 
+TODO: Note about versioning in the future
 TODO: Error code checking *everywhere*
 
 """
@@ -16,12 +16,14 @@ import struct
 
 from collections import defaultdict, namedtuple
 from samsa.common import (
-    Cluster, Broker, Message, Partition, PartitionMetadata, Topic
+    Broker, Cluster, Message, Partition, PartitionMetadata, Topic
 )
-from samsa.utils import Serializable
+from samsa.utils import Serializable, compression
+
 
 def raise_error(err_code):
     raise Exception("Not wholly implemented yet! Err code: %s" % err_code)
+
 
 class Request(Serializable):
     HEADER_LEN= 19
@@ -91,8 +93,10 @@ class MessageSet(Serializable):
       Offset => int64
       MessageSize => int32
     """
-    def __init__(self, messages=None):
-        self.messages = messages or []
+    def __init__(self, compression=compression.NONE, messages=None):
+        self.compression = compression
+        self._messages = messages or []
+        self._compressed = None # compressed Message if using compression
 
     def __len__(self):
         """Returns serialized length of MessageSet.
@@ -102,7 +106,39 @@ class MessageSet(Serializable):
         requests/responses using MessageSets need that size, though, so
         be careful when using this.
         """
-        return (8+4)*len(self.messages) + sum(len(m) for m in self.messages)
+        if self.compression == compression.NONE:
+            messages = self._messages
+        else:
+            # The only way to get __len__ of compressed is to compress. Store
+            # that so we don't have to do it twice
+            if self._compressed is None:
+                self._compressed = self._get_compressed()
+            messages = [self._compressed]
+        return (8+4)*len(messages) + sum(len(m) for m in messages)
+
+    @property
+    def messages(self):
+        # Make sure accessing messages directly clears cached compressed data
+        self._compressed = None
+        return self._messages
+
+    def _get_compressed(self):
+        """Get a compressed representation of all current messages.
+
+        Returns a Message object with correct headers set and compressed
+        data in the value field.
+        """
+        assert self.compression != compression.NONE
+        tmp_mset = MessageSet(messages=self._messages)
+        uncompressed = bytearray(len(tmp_mset))
+        tmp_mset.pack_into(uncompressed, 0)
+        if self.compression == compression.GZIP:
+            compressed = compression.encode_gzip(buffer(uncompressed))
+        elif self.compression == compression.SNAPPY:
+            compressed = compression.encode_snappy(buffer(uncompressed))
+        else:
+            raise TypeError("Unknown compression: %s" % self.compression)
+        return Message(compressed, compression=self.compression)
 
     @classmethod
     def decode(cls, buff):
@@ -120,7 +156,14 @@ class MessageSet(Serializable):
         return MessageSet(messages=messages)
 
     def pack_into(self, buff, offset):
-        for message in self.messages:
+        if self.compression == compression.NONE:
+            messages = self._messages
+        else:
+            if self._compressed is None:
+                self._compressed = self._get_compressed()
+            messages = [self._compressed]
+
+        for message in messages:
             mlen = len(message)
             struct.pack_into('!qi', buff, offset, -1, mlen)
             offset += 12
@@ -216,8 +259,8 @@ class ProduceRequest(Request):
       Partition => int32
       MessageSetSize => int32
     """
-    def __init__(self,  required_acks=1, timeout=1000):
-        self._msets = defaultdict(lambda: defaultdict(MessageSet))
+    def __init__(self,  compression=compression.NONE, required_acks=1, timeout=10000):
+        self._msets = defaultdict(lambda: defaultdict(lambda: MessageSet(compression=compression)))
         self.required_acks = required_acks
         self.timeout = timeout
 
@@ -235,7 +278,7 @@ class ProduceRequest(Request):
         return 0
 
     def add_messages(self, messages, topic_name, partition_num):
-        self._msets[topic_name][partition_num].messages += messages
+        self._msets[topic_name][partition_num].messages.extend(messages)
 
     def get_bytes(self):
         output = bytearray(len(self))
@@ -354,13 +397,31 @@ class FetchResponse(Response):
         self.topics = {}
         for (topic,partitions) in response[0]:
             for partition in partitions:
-                message_set = MessageSet.decode(partition[3])
                 self.topics[topic] = FetchPartitionResponse(
-                    partition[2], message_set.messages
+                    partition[2], self._unpack_message_set(partition[3]),
                 )
 
+    def _unpack_message_set(self, buff):
+        """MessageSets can be nested. Get just the Messages out of it."""
+        output = []
+        message_set = MessageSet.decode(buff)
+        for message in message_set.messages:
+            if message.compression == compression.NONE:
+                output.append(message)
+            elif message.compression == compression.GZIP:
+                decompressed = compression.decode_gzip(message.value)
+                output += self._unpack_message_set(decompressed)
+            elif message.compression == compression.SNAPPY:
+                # Kafka is sending incompatible headers. Strip it off.
+                decompressed = compression.decode_snappy(message.value[20:])
+                output += self._unpack_message_set(decompressed)
+        return output
 
-# Offset API
+
+
+##
+## Offset API
+##
 
 class OffsetRequest(Request):
     """An offset request
