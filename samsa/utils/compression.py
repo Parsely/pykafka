@@ -1,3 +1,19 @@
+__license__ = """
+Copyright 2014 Parse.ly, Inc.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
+
 import gzip
 import logging
 
@@ -15,6 +31,7 @@ GZIP = 1
 SNAPPY = 2
 
 def encode_gzip(buff):
+    """Encode a buffer using gzip"""
     sio = StringIO()
     f = gzip.GzipFile(fileobj=sio, mode="w")
     f.write(buff)
@@ -25,6 +42,7 @@ def encode_gzip(buff):
     return output
 
 def decode_gzip(buff):
+    """Decode a gzip buffer"""
     sio = StringIO(buff)
     f = gzip.GzipFile(fileobj=sio, mode='r')
     output = f.read()
@@ -33,10 +51,14 @@ def decode_gzip(buff):
     return output
 
 def encode_snappy(buff):
-    assert snappy is not None
+    """Encode a buffer using Snappy"""
+    if snappy is None:
+        raise ImportError("Please instally python-snappy")
     output = snappy.compress(buff)
     return snappy.compress(buff)
 
 def decode_snappy(buff):
-    assert snappy is not None
+    """Decode a buffer using Snappy"""
+    if snappy is None:
+        raise ImportError("Please instally python-snappy")
     return snappy.decompress(buff)

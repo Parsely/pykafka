@@ -1,14 +1,44 @@
 # - coding: utf-8 -
 """Protocol implementation for Kafka 0.8
 
-NOTE: msg size = int32; str = len + int16
+The implementation has been done with an attempt to minimize memory
+allocations in order to improve performance. With the exception of
+compressed messages, we can calculate the size of the entire message
+to send and do only a single allocation.
 
-TODO: Note about how bytearray sizing is calculated
+Each message is encoded as either a Request or Response:
 
-TODO: Note about versioning in the future
-TODO: Error code checking *everywhere*
+RequestOrResponse => Size (RequestMessage | ResponseMessage)
+  Size => int32
 
+RequestMessage => ApiKey ApiVersion CorrelationId ClientId RequestMessage
+  ApiKey => int16
+  ApiVersion => int16
+  CorrelationId => int32
+  ClientId => string
+  RequestMessage => MetadataRequest | ProduceRequest | FetchRequest | OffsetRequest | OffsetCommitRequest | OffsetFetchRequest
+
+Response => CorrelationId ResponseMessage
+  CorrelationId => int32
+  ResponseMessage => MetadataResponse | ProduceResponse | FetchResponse | OffsetResponse | OffsetCommitResponse | OffsetFetchResponse
 """
+
+__license__ = """
+Copyright 2014 Parse.ly, Inc.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
+
 import logging
 import collections
 import itertools
@@ -26,7 +56,8 @@ def raise_error(err_code):
 
 
 class Request(Serializable):
-    HEADER_LEN= 19
+    """Base class for all Requests. Handles writing header information"""
+    HEADER_LEN= 19 # constant for all messages
     CLIENT_ID = 'samsa'
 
     def _write_header(self, buff, api_version=0, correlation_id=0):
@@ -45,11 +76,16 @@ class Request(Serializable):
         raise NotImplementedError()
 
     def get_bytes(self):
-        """Serialize to a message to send to Kafka"""
+        """Serialize the message
+
+        :returns: Serialized message
+        :rtype: :class:`bytearray`
+        """
         raise NotImplementedError()
 
 
 class Response(object):
+    """Base class for Response objects."""
     def _unpack(self, fmt_list, buff, offset, count=1):
         # TODO: Replace with calls to utils.unpack_from
         items = []
@@ -92,14 +128,22 @@ class MessageSet(Serializable):
     MessageSet => [Offset MessageSize Message]
       Offset => int64
       MessageSize => int32
+
+    :ivar messages: The list of messages currently in the MessageSet
+    :ivar compression: compression to use for the messages
     """
     def __init__(self, compression=compression.NONE, messages=None):
+        """Create a new MessageSet
+
+        :param compression: Compression to use on the messages
+        :param messages: An initial list of messages for the set
+        """
         self.compression = compression
         self._messages = messages or []
         self._compressed = None # compressed Message if using compression
 
     def __len__(self):
-        """Returns serialized length of MessageSet.
+        """Length of the serialized message, in bytes
 
         We don't put the MessageSetSize in front of the serialization
         because that's *technically* not part of the MessageSet. Most
@@ -142,6 +186,7 @@ class MessageSet(Serializable):
 
     @classmethod
     def decode(cls, buff):
+        """Decode a serialized MessageSet."""
         messages = []
         offset = 0
         while offset < len(buff):
@@ -156,6 +201,13 @@ class MessageSet(Serializable):
         return MessageSet(messages=messages)
 
     def pack_into(self, buff, offset):
+        """Serialize and write to ``buff`` starting at offset ``offset``.
+
+        Intentionally follows the pattern of ``struct.pack_into``
+
+        :param buff: The buffer to write into
+        :param offset: The offset to start the write at
+        """
         if self.compression == compression.NONE:
             messages = self._messages
         else:
@@ -182,16 +234,27 @@ class MetadataRequest(Request):
       TopicName => string
     """
     def __init__(self, topics=[]):
+        """Create a new MetadatRequest
+
+        :param topics: Topics to query. Leave empty for all available topics.
+        """
         self.topics = topics
 
     def __len__(self):
+        """Length of the serialized message, in bytes"""
         return self.HEADER_LEN + 4 + sum(len(t)+2 for t in self.topics)
 
     @property
     def API_KEY(self):
+        """API_KEY for this request, from the Kafka docs"""
         return 3
 
     def get_bytes(self):
+        """Serialize the message
+
+        :returns: Serialized message
+        :rtype: :class:`bytearray`
+        """
         output = bytearray(len(self))
         self._write_header(output)
         struct.pack_into('!i', output, self.HEADER_LEN, len(self.topics))
@@ -201,6 +264,7 @@ class MetadataRequest(Request):
             struct.pack_into('!h%ds' % tlen, output, offset, tlen, t)
             offset += 2 + tlen
         return output
+
 
 class MetadataResponse(Response):
     """Response from MetadataRequest
@@ -224,6 +288,11 @@ class MetadataResponse(Response):
       Isr => [int32]
     """
     def __init__(self, buff):
+        """Deserialize into a new Response
+
+        :param buff: Serialized message
+        :type buff: :class:`bytearray`
+        """
         fmt = [['iSi'], ['hS', ['hii', ['i'], ['i']]]]
         response,_ = self._unpack(fmt, buff, 0)
         broker_info, topic_info = response[0]
@@ -260,11 +329,27 @@ class ProduceRequest(Request):
       MessageSetSize => int32
     """
     def __init__(self,  compression=compression.NONE, required_acks=1, timeout=10000):
+        """Create a new ProduceRequest
+
+        ``required_acks`` determines how many acknowledgement the server waits
+        for before returning. This is useful for ensuring the replication factor
+        of published messages. The behavior is:
+
+            -1: Block until all servers acknowledge
+            0: No waiting -- server doesn't even respond to the Produce request
+            1: Wait for this server to write to the local log and then return
+            2+: Wait for N servers to acknowledge
+
+        :param compression: Compression to use for messages
+        :param required_acks: see docstring
+        :param timeout: timeout (in ms) to wait for the required acks
+        """
         self._msets = defaultdict(lambda: defaultdict(lambda: MessageSet(compression=compression)))
         self.required_acks = required_acks
         self.timeout = timeout
 
     def __len__(self):
+        """Length of the serialized message, in bytes"""
         size = self.HEADER_LEN + 2+4+4 # acks + timeout + len(topics)
         for topic,parts in self._msets.iteritems():
             # topic name
@@ -275,12 +360,24 @@ class ProduceRequest(Request):
 
     @property
     def API_KEY(self):
+        """API_KEY for this request, from the Kafka docs"""
         return 0
 
     def add_messages(self, messages, topic_name, partition_num):
+        """Add a list of :class:`samsa.common.Message` to the waiting request
+
+        :param messages: an iterable of :class:`samsa.common.Message` to add
+        :param topic_name: the name of the topic to publish to
+        :param partition_num: the partition number to publish to
+        """
         self._msets[topic_name][partition_num].messages.extend(messages)
 
     def get_bytes(self):
+        """Serialize the message
+
+        :returns: Serialized message
+        :rtype: :class:`bytearray`
+        """
         output = bytearray(len(self))
         self._write_header(output)
         offset = self.HEADER_LEN
@@ -310,6 +407,11 @@ class ProduceResponse(Response):
       Offset => int64
     """
     def __init__(self, buff):
+        """Deserialize into a new Response
+
+        :param buff: Serialized message
+        :type buff: :class:`bytearray`
+        """
         # TODO: Handle having produced to a non-existent topic (in client)
         fmt = [['S', ['ihq']]]
         response,_ = self._unpack(fmt, buff, 0)
@@ -335,14 +437,34 @@ class FetchRequest(Request):
       MaxBytes => int32
     """
     def __init__(self, timeout=1000, min_bytes=1024):
+        """Create a new fetch request
+
+        Kafka 0.8 uses long polling for fetch requests, which is different
+        from 0.7x. Instead of polling and waiting, we can now set a timeout
+        to wait and a minimum number of bytes to be collected before it
+        returns. This way we can block effectively and also ensure good network
+        throughput by having fewer, large transfers instead of many small ones
+        every time a byte is written to the log.
+
+        :param timeout: Max time to wait (in ms) for a response from the server
+        :param min_bytes: Minimum bytes to collect before returning
+        """
         self.timeout = timeout
         self.min_bytes = min_bytes
         self._topics = defaultdict(dict)
 
     def add_fetch(self, topic_name, partition_num, offset, max_bytes=307200):
+        """Add a topic/partition/offset to the requesti
+
+        :param topic_name: The topic to fetch from
+        :param partition_num: The partition to fetch from
+        :param offset: The offset to start reading data from
+        :param max_bytes: The maximum number of bytes to return in the response
+        """
         self._topics[topic_name][partition_num] = (offset, max_bytes)
 
     def __len__(self):
+        """Length of the serialized message, in bytes"""
         # replica + max wait + min bytes + len(topics)
         size = self.HEADER_LEN + 4+4+4+4
         for topic,parts in self._topics.iteritems():
@@ -354,9 +476,15 @@ class FetchRequest(Request):
 
     @property
     def API_KEY(self):
+        """API_KEY for this request, from the Kafka docs"""
         return 1
 
     def get_bytes(self):
+        """Serialize the message
+
+        :returns: Serialized message
+        :rtype: :class:`bytearray`
+        """
         output = bytearray(len(self))
         self._write_header(output)
         offset = self.HEADER_LEN
@@ -375,7 +503,13 @@ class FetchRequest(Request):
 
 
 class FetchPartitionResponse(object):
+    """Partition information that's part of a FetchResponse"""
     def __init__(self, max_offset, messages):
+        """Create a new FetchPartitionResponse
+
+        :param max_offset: The offset at the end of this partition
+        :param messages: Messages in the response
+        """
         self.max_offset = max_offset
         self.messages = messages
 
@@ -391,6 +525,11 @@ class FetchResponse(Response):
       MessageSetSize => int32
     """
     def __init__(self, buff):
+        """Deserialize into a new Response
+
+        :param buff: Serialized message
+        :type buff: :class:`bytearray`
+        """
         fmt = [['S', ['ihqM']]]
         response,_ = self._unpack(fmt, buff, 0)
         errors = []
@@ -434,9 +573,11 @@ class OffsetRequest(Request):
       MaxNumberOfOffsets => int32
     """
     def __init__(self):
+        """Create a new offset request"""
         self._topics = defaultdict(dict)
 
     def __len__(self):
+        """Length of the serialized message, in bytes"""
         # Header + replicaId + len(topics)
         size = self.HEADER_LEN + 4+4
         for topic,parts in self._topics.iteritems():
@@ -447,13 +588,29 @@ class OffsetRequest(Request):
         return size
 
     def add_topic(self, topic_name, partition_num, offsets_before, max_offsets=1):
+        """Add a topic/partition to get offset information for
+
+        :param topic_name: Name of the topic to look up
+        :param partition_num: Number of the partition to look up
+        :param offsets_before: Retrieve offset information for messages before
+                               this timestamp (ms). -1 will retrieve the latest
+                               offsets and -2 will retrieve the earliest
+                               available offset. If -2,only 1 offset is returned
+        :param max_offsets: How many offsets to return
+        """
         self._topics[topic_name][partition_num] = (offsets_before, max_offsets)
 
     @property
     def API_KEY(self):
+        """API_KEY for this request, from the Kafka docs"""
         return 2
 
     def get_bytes(self):
+        """Serialize the message
+
+        :returns: Serialized message
+        :rtype: :class:`bytearray`
+        """
         output = bytearray(len(self))
         self._write_header(output)
         offset = self.HEADER_LEN
@@ -480,6 +637,11 @@ class OffsetResponse(Response):
       Offset => int64
     """
     def __init__(self, buff):
+        """Deserialize into a new Response
+
+        :param buff: Serialized message
+        :type buff: :class:`bytearray`
+        """
         fmt = [ ['S', ['ih', ['q']]] ]
         response,_ = self._unpack(fmt, buff, 0)
 

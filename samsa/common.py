@@ -70,6 +70,7 @@ class Broker(object):
         """Establish a connection to the Broker, creating a Client"""
         raise NotImplementedError()
 
+
 class PartitionMetadata(object):
     """Metadata used to create a Partition when setting up a topic
 
@@ -264,6 +265,13 @@ class Message(Serializable):
         return Message(val, partition_key=key, compression=attr, offset=msg_offset)
 
     def pack_into(self, buff, offset):
+        """Serialize and write to ``buff`` starting at offset ``offset``.
+
+        Intentionally follows the pattern of ``struct.pack_into``
+
+        :param buff: The buffer to write into
+        :param offset: The offset to start the write at
+        """
         if self.partition_key is None:
             fmt = '!BBii%ds' % len(self.value)
             args = (self.MAGIC, self.compression, -1,
