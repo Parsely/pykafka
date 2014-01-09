@@ -50,9 +50,7 @@ import json
 import struct
 
 from collections import defaultdict, namedtuple
-from samsa.common import (
-    Broker, Cluster, Message, Partition, PartitionMetadata, Topic
-)
+from samsa.common import Broker, Cluster, Message, Partition, Topic
 from samsa.utils import Serializable, compression, struct_helpers
 from samsa.exceptions import ERROR_CODES
 
@@ -298,9 +296,7 @@ class MetadataResponse(Response):
             for (p_err, id_, leader, replicas, isr) in partitions:
                 if p_err != 0:
                     self.raise_error(p_err, response)
-                partition_metas.append(
-                    PartitionMetadata(id_, leader, replicas, isr)
-                )
+                partition_metas.append((id_, leader, replicas, isr))
             self.topics[name] = Topic(name, partition_metas, self.brokers)
 
     def to_cluster(self):

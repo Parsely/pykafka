@@ -72,18 +72,6 @@ class Broker(object):
         raise NotImplementedError()
 
 
-class PartitionMetadata(object):
-    """Metadata used to create a Partition when setting up a topic
-
-    TODO: Note about why order of operations requires this
-    """
-    def __init__(self, id_, leader, replicas, isr):
-        self.id = id_
-        self.leader = leader
-        self.replicas = replicas
-        self.isr = isr
-
-
 class Partition(object):
     def __init__(self, topic, id_, leader, replicas, isr):
         self.id = id_
@@ -147,9 +135,9 @@ class Topic(object):
     def __init__(self, name, partition_metas, brokers):
         self.name = name
         self.partitions = {
-            pm.id: Partition(self, pm.id, brokers[pm.leader],
-                             [brokers[id_] for id_ in pm.replicas],
-                             [brokers[id_] for id_ in pm.isr])
+            pm[0]: Partition(self, pm[0], brokers[pm[1]],
+                             [brokers[id_] for id_ in pm[2]],
+                             [brokers[id_] for id_ in pm[3]])
             for pm in partition_metas
         }
 
