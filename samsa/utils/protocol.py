@@ -6,6 +6,10 @@ allocations in order to improve performance. With the exception of
 compressed messages, we can calculate the size of the entire message
 to send and do only a single allocation.
 
+For Reference:
+
+https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol
+
 Each message is encoded as either a Request or Response:
 
 RequestOrResponse => Size (RequestMessage | ResponseMessage)
@@ -42,6 +46,7 @@ limitations under the License.
 import logging
 import collections
 import itertools
+import json
 import struct
 
 from collections import defaultdict, namedtuple
@@ -49,10 +54,8 @@ from samsa.common import (
     Broker, Cluster, Message, Partition, PartitionMetadata, Topic
 )
 from samsa.utils import Serializable, compression, struct_helpers
+from samsa.exceptions import ERROR_CODES
 
-
-def raise_error(err_code):
-    raise Exception("Not wholly implemented yet! Err code: %s" % err_code)
 
 
 class Request(Serializable):
@@ -86,7 +89,20 @@ class Request(Serializable):
 
 class Response(object):
     """Base class for Response objects."""
-    pass
+    def raise_error(self, err_code, response):
+        """Raise an error based on the Kafka error code
+
+        The full response info is json encoded and added to the
+        exception for reference.
+
+        :param err_code: The error code from Kafka
+        :param response: The unpacked raw data from the response
+        """
+        clsname = str(self.__class__).split('.')[-1].split("'")[0]
+        raise ERROR_CODES[err_code](
+            'Response Type: "%s"\tResponse: %s' % (
+                clsname, response))
+
 
 
 class MessageSet(Serializable):
@@ -268,19 +284,23 @@ class MetadataResponse(Response):
         """
         fmt = '[iSi] [hS [hii [i] [i] ] ]'
         response = struct_helpers.unpack_from(fmt, buff, 0)
-        broker_info, topic_info = response
+        broker_info, topics = response
 
         self.brokers = {}
         for (node_id, host, port) in broker_info:
             self.brokers[node_id] = Broker(node_id, host, port)
 
         self.topics = {}
-        for err, name, partitions in topic_info:
-            # TODO: Be sure to check error codes in partitions too
-            partition_metas = [
-                PartitionMetadata(id_, leader, replicas, isr)
-                for (_, id_, leader, replicas, isr) in partitions
-            ]
+        for (err, name, partitions) in topics:
+            if err != 0:
+                self.raise_error(err, response)
+            partition_metas = []
+            for (p_err, id_, leader, replicas, isr) in partitions:
+                if p_err != 0:
+                    self.raise_error(p_err, response)
+                partition_metas.append(
+                    PartitionMetadata(id_, leader, replicas, isr)
+                )
             self.topics[name] = Topic(name, partition_metas, self.brokers)
 
     def to_cluster(self):
@@ -390,7 +410,11 @@ class ProduceResponse(Response):
         response = struct_helpers.unpack_from(fmt, buff, 0)
         self.topics = {}
         for (topic,partitions) in response:
-            self.topics[topic] = {p[0]: p[2] for p in partitions if p[1] == 0}
+            self.topics[topic] = {}
+            for partition in partitions:
+                if partition[1] != 0:
+                    self.raise_error(partition[1], response)
+                self.topics[topic][partition[0]] = partition[2]
 
 
 ##
@@ -509,6 +533,8 @@ class FetchResponse(Response):
         self.topics = {}
         for (topic,partitions) in response:
             for partition in partitions:
+                if partition[1] != 0:
+                    self.raise_error(partition[1], response)
                 self.topics[topic] = FetchPartitionResponse(
                     partition[2], self._unpack_message_set(partition[3]),
                 )
@@ -615,11 +641,13 @@ class OffsetResponse(Response):
         :param buff: Serialized message
         :type buff: :class:`bytearray`
         """
-        fmt = '[S [ih [q] ] ]' #[ ['S', ['ih', ['q']]] ]
+        fmt = '[S [ih [q] ] ]'
         response = struct_helpers.unpack_from(fmt, buff, 0)
 
         self.topics = {}
         for topic_name, partitions in response:
             self.topics[topic_name] = {}
             for partition in partitions:
+                if partition[1] != 0:
+                    self.raise_error(partition[1], response)
                 self.topics[topic_name][partition[0]] = partition[2]

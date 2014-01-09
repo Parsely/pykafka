@@ -18,18 +18,14 @@ limitations under the License.
 class SamsaException(Exception):
     pass
 
-
 class ImproperlyConfiguredError(SamsaException):
     pass
-
 
 class NoAvailablePartitionsError(SamsaException):
     pass
 
-
 class PartitionOwnedError(SamsaException):
     pass
-
 
 class InvalidVersionError(SamsaException):
     pass
@@ -37,38 +33,71 @@ class InvalidVersionError(SamsaException):
 class MessageTooLargeError(SamsaException):
     pass
 
-
-# Protocol Client Exceptions
-
 class SocketDisconnectedError(SamsaException):
     pass
 
 
-class ProtocolClientError(SamsaException):
-    # ERROR_CODE as specified by the protocol.
-    ERROR_CODE = None
 
+##
+## Protocol Client Exceptions
+## https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol#AGuideToTheKafkaProtocol-ErrorCodes
+##
+
+class ProtocolClientError(SamsaException):
+    ERROR_CODE = None
 
 class UnknownError(ProtocolClientError):
     ERROR_CODE = -1
 
-
 class OffsetOutOfRangeError(ProtocolClientError):
     ERROR_CODE = 1
-
 
 class InvalidMessageError(ProtocolClientError):
     ERROR_CODE = 2
 
-
-class WrongPartitionError(ProtocolClientError):
+class UnknownTopicOrPartition(ProtocolClientError):
     ERROR_CODE = 3
 
-
-class InvalidFetchSizeError(ProtocolClientError):
+class InvalidMessageSize(ProtocolClientError):
     ERROR_CODE = 4
 
+class LeaderNotAvailable(ProtocolClientError):
+    ERROR_CODE = 5
 
-ERROR_CODES = dict((exc.ERROR_CODE, exc) for exc in (
-    UnknownError, OffsetOutOfRangeError, InvalidMessageError,
-    WrongPartitionError, InvalidFetchSizeError))
+class NotLeaderForPartition(ProtocolClientError):
+    ERROR_CODE = 6
+
+class RequestTimedOut(ProtocolClientError):
+    ERROR_CODE = 7
+
+class BrokerNotAvailable(ProtocolClientError):
+    ERROR_CODE = 8
+
+class ReplicaNotAvailable(ProtocolClientError):
+    ERROR_CODE = 9
+
+class MessageSizeTooLarge(ProtocolClientError):
+    ERROR_CODE = 10
+
+class StaleControllerEpoch(ProtocolClientError):
+    ERROR_CODE = 11
+
+class OffsetMetadataTooLarge(ProtocolClientError):
+    ERROR_CODE = 12
+
+ERROR_CODES = dict(
+    (exc.ERROR_CODE, exc)
+    for exc in (UnknownError,
+                OffsetOutOfRangeError,
+                InvalidMessageError,
+                UnknownTopicOrPartition,
+                InvalidMessageSize,
+                LeaderNotAvailable,
+                NotLeaderForPartition,
+                RequestTimedOut,
+                BrokerNotAvailable,
+                ReplicaNotAvailable,
+                MessageSizeTooLarge,
+                StaleControllerEpoch,
+                OffsetMetadataTooLarge)
+    )
