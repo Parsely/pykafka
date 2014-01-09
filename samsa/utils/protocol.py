@@ -48,7 +48,7 @@ from collections import defaultdict, namedtuple
 from samsa.common import (
     Broker, Cluster, Message, Partition, PartitionMetadata, Topic
 )
-from samsa.utils import Serializable, compression
+from samsa.utils import Serializable, compression, struct_helpers
 
 
 def raise_error(err_code):
@@ -86,34 +86,7 @@ class Request(Serializable):
 
 class Response(object):
     """Base class for Response objects."""
-    def _unpack(self, fmt_list, buff, offset, count=1):
-        # TODO: Replace with calls to utils.unpack_from
-        items = []
-        for i in xrange(count):
-            item = []
-            for fmt in fmt_list:
-                if type(fmt) == list:
-                    count = struct.unpack_from('!i', buff, offset)[0]
-                    offset += 4
-                    subitems,offset = self._unpack(fmt, buff, offset, count=count)
-                    item.append(subitems)
-                else:
-                    for ch in fmt:
-                        if ch == 'S':
-                            ch = '%ds' % struct.unpack_from('!h', buff, offset)
-                            offset += 2
-                        elif ch == 'M':
-                            # TODO: should result in buffer, cause this is just bytes
-                            ch = '%ds' % struct.unpack_from('!i', buff, offset)
-                            offset += 4
-                        unpacked = struct.unpack_from('!'+ch, buff, offset)
-                        offset += struct.calcsize(ch)
-                        item.append(unpacked[0])
-            if len(item) == 1:
-                items.append(item[0])
-            else:
-                items.append(tuple(item))
-        return items,offset
+    pass
 
 
 class MessageSet(Serializable):
@@ -293,9 +266,9 @@ class MetadataResponse(Response):
         :param buff: Serialized message
         :type buff: :class:`bytearray`
         """
-        fmt = [['iSi'], ['hS', ['hii', ['i'], ['i']]]]
-        response,_ = self._unpack(fmt, buff, 0)
-        broker_info, topic_info = response[0]
+        fmt = '[iSi] [hS [hii [i] [i] ] ]'
+        response = struct_helpers.unpack_from(fmt, buff, 0)
+        broker_info, topic_info = response
 
         self.brokers = {}
         for (node_id, host, port) in broker_info:
@@ -413,10 +386,10 @@ class ProduceResponse(Response):
         :type buff: :class:`bytearray`
         """
         # TODO: Handle having produced to a non-existent topic (in client)
-        fmt = [['S', ['ihq']]]
-        response,_ = self._unpack(fmt, buff, 0)
+        fmt = '[S [ihq] ]'
+        response = struct_helpers.unpack_from(fmt, buff, 0)
         self.topics = {}
-        for (topic,partitions) in response[0]:
+        for (topic,partitions) in response:
             self.topics[topic] = {p[0]: p[2] for p in partitions if p[1] == 0}
 
 
@@ -530,11 +503,11 @@ class FetchResponse(Response):
         :param buff: Serialized message
         :type buff: :class:`bytearray`
         """
-        fmt = [['S', ['ihqM']]]
-        response,_ = self._unpack(fmt, buff, 0)
+        fmt = '[S [ihqY] ]'
+        response = struct_helpers.unpack_from(fmt, buff, 0)
         errors = []
         self.topics = {}
-        for (topic,partitions) in response[0]:
+        for (topic,partitions) in response:
             for partition in partitions:
                 self.topics[topic] = FetchPartitionResponse(
                     partition[2], self._unpack_message_set(partition[3]),
@@ -642,11 +615,11 @@ class OffsetResponse(Response):
         :param buff: Serialized message
         :type buff: :class:`bytearray`
         """
-        fmt = [ ['S', ['ih', ['q']]] ]
-        response,_ = self._unpack(fmt, buff, 0)
+        fmt = '[S [ih [q] ] ]' #[ ['S', ['ih', ['q']]] ]
+        response = struct_helpers.unpack_from(fmt, buff, 0)
 
         self.topics = {}
-        for topic_name, partitions in response[0]:
+        for topic_name, partitions in response:
             self.topics[topic_name] = {}
             for partition in partitions:
                 self.topics[topic_name][partition[0]] = partition[2]

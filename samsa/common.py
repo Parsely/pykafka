@@ -6,7 +6,8 @@ import struct
 
 from zlib import crc32
 
-from samsa.utils import Serializable, attribute_repr, compression, unpack_from
+from samsa.utils import Serializable, attribute_repr, compression
+from samsa.utils.struct_helpers import unpack_from
 
 logger = logging.getLogger(__name__)
 
@@ -259,7 +260,7 @@ class Message(Serializable):
     def decode(self, buff, msg_offset=-1):
         fmt = 'iBBYY'
         response = unpack_from(fmt, buff, 0)
-        crc,_,attr,key,val = response[0]
+        crc,_,attr,key,val = response
         crc_check = crc32(buff[4:])
         # TODO: Handle CRC failure
         return Message(val, partition_key=key, compression=attr, offset=msg_offset)
