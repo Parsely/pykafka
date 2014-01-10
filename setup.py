@@ -36,7 +36,7 @@ lint_requires = [
     'pyflakes'
 ]
 
-tests_require = ['mock', 'nose', 'unittest2']
+tests_require = ['mock', 'nose', 'unittest2', 'python-snappy']
 dependency_links = []
 setup_requires = []
 if 'nosetests' in sys.argv[1:]:

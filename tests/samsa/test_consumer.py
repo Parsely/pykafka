@@ -33,7 +33,6 @@ from samsa.test.integration import KafkaIntegrationTestCase, polling_timeout
 from samsa.test.integration import FasterKafkaIntegrationTestCase, polling_timeout
 from samsa.test.case import TestCase
 from samsa.cluster import Cluster
-from samsa.config import ConsumerConfig
 from samsa.consumer import Consumer
 from samsa.topics import Topic
 from samsa.partitions import Partition

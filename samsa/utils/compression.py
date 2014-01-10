@@ -60,5 +60,5 @@ def encode_snappy(buff):
 def decode_snappy(buff):
     """Decode a buffer using Snappy"""
     if snappy is None:
-        raise ImportError("Please instally python-snappy")
+        raise ImportError("Please install python-snappy")
     return snappy.decompress(buff)

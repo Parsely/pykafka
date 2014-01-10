@@ -17,7 +17,6 @@ limitations under the License.
 from unittest import TestCase
 
 from nose.plugins.attrib import attr
-from samsa.config import ConsumerConfig
 
 
 @attr('fixme')
