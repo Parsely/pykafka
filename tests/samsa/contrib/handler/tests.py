@@ -1,9 +1,11 @@
 import logging
 
+from nose.plugins.attrib import attr
 from samsa.contrib.handler import KafkaHandler
 from samsa.test.integration import KafkaIntegrationTestCase
 
 
+@attr('fixme')
 class KafkaHandlerTestCase(KafkaIntegrationTestCase):
     def setUp(self, *args, **kwargs):
         super(KafkaHandlerTestCase, self).setUp(*args, **kwargs)

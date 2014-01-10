@@ -10,9 +10,10 @@ notifications:
   irc: "irc.freenode.org#samsa"
 
 before_install:
-    - sudo apt-get install -qq zookeeper libev-dev libsnappy-dev
-    - make -C vendor kafka > /dev/null
-    - sudo mv vendor/kafka /usr/local/kafka
+    - sudo apt-get install -qq libev-dev libsnappy-dev
+    #- sudo apt-get install -qq zookeeper libev-dev libsnappy-dev
+    #- make -C vendor kafka > /dev/null
+    #- sudo mv vendor/kafka /usr/local/kafka
 
 install:
     - python setup.py develop

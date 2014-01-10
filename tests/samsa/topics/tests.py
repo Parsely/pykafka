@@ -18,6 +18,7 @@ limitations under the License.
 import mock
 import unittest2
 
+from nose.plugins.attrib import attr
 from samsa import brokers
 from samsa.cluster import Cluster
 from samsa.exceptions import NoAvailablePartitionsError
@@ -25,6 +26,7 @@ from samsa.test.integration import FasterKafkaIntegrationTestCase
 from samsa.topics import TopicMap, Topic
 
 
+@attr('fixme')
 class TopicIntgrationTestCase(FasterKafkaIntegrationTestCase):
     def test_no_partitions(self):
         # Kill the broker and try to publish something
@@ -43,6 +45,7 @@ class TopicIntgrationTestCase(FasterKafkaIntegrationTestCase):
         self.assertEqual(topic.latest_offsets(), [(0, 15)])
 
 
+@attr('fixme')
 class TopicMapTest(unittest2.TestCase):
     def test_get_topic(self):
         topics = TopicMap(cluster=mock.Mock())
@@ -54,6 +57,7 @@ class TopicMapTest(unittest2.TestCase):
         self.assertIs(topic, topics.get('topic-1'))
 
 
+@attr('fixme')
 class PartitionMapTest(unittest2.TestCase):
 
     def setUp(self):

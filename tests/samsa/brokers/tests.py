@@ -18,12 +18,14 @@ limitations under the License.
 import mock
 import unittest2
 from kazoo.exceptions import NoNodeException
+from nose.plugins.attrib import attr
 
 from samsa.brokers import BrokerMap, Broker
 from samsa.cluster import Cluster
 from samsa.exceptions import ImproperlyConfiguredError
 
 
+@attr('fixme')
 class BrokerMapTest(unittest2.TestCase):
     def setUp(self):
         self.cluster = mock.Mock(spec=Cluster)
@@ -77,6 +79,7 @@ class BrokerMapTest(unittest2.TestCase):
             brokers.get(1)
 
 
+@attr('fixme')
 class BrokerTest(unittest2.TestCase):
     def setUp(self):
         self.cluster = mock.Mock(spec=Cluster)

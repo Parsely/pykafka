@@ -25,7 +25,7 @@ class StructHelpersTests(unittest.TestCase):
             b'\x00\x00\x00\x04\x00\x00\x00\x01\x00\x00\x00\x02\x00\x00\x00\x03\x00\x00\x00\x04'
         )
         # A 1-length tuple with a 4-length tuple as the element
-        self.assertEqual(output, (((1,),(2,),(3,),(4,),),) )
+        self.assertEqual(output, [1, 2, 3, 4])
 
 if __name__ == '__main__':
     unittest.main()

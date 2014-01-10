@@ -19,9 +19,11 @@ import mock
 import unittest
 
 from kazoo.client import KazooClient
+from nose.plugins.attrib import attr
 
 logger = logging.getLogger(__name__)
 
+@attr('fixme')
 class TestCluster(unittest.TestCase):
     """Test the methods of :class:`samsa.cluster.Cluster`."""
 

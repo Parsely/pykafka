@@ -16,15 +16,18 @@ limitations under the License.
 
 from unittest import TestCase
 
+from nose.plugins.attrib import attr
 from samsa.config import ConsumerConfig
 
 
+@attr('fixme')
 class Configured(object):
 
     def __init__(self, **kwargs):
         self.config = ConsumerConfig.build(kwargs)
 
 
+@attr('fixme')
 class TestConfig(TestCase):
 
     def test_default(self):
