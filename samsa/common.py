@@ -1,33 +1,26 @@
 # - coding: utf-8 -
+
 # TODO: Check all __repr__
+# TODO: __slots__ where appropriate
+# TODO: Use weak refs to avoid reference cycles?
 
 import logging
 import struct
 
+from collections import defaultdict
 from zlib import crc32
 
+from samsa.connection import BrokerConnection
+from samsa.handlers import RequestHandler
+from samsa.partitioners import random_partitioner
 from samsa.utils import Serializable, attribute_repr, compression
-from samsa.utils.struct_helpers import unpack_from
+from samsa.utils.protocol import (
+    FetchRequest, FetchResponse, MetadataRequest, MetadataResponse,
+    OFFSET_EARLIEST, OFFSET_LATEST, OffsetRequest, OffsetResponse,
+    ProduceRequest, ProduceResponse, PartitionOffsetRequest,
+)
 
 logger = logging.getLogger(__name__)
-
-class Cluster(object):
-    """A Kafka cluster.
-
-    :ivar brokers: The :class:`samsa.brokers.BrokerMap` for this cluster.
-    :ivar topics: The :class:`samsa.topics.TopicMap` for this cluster.
-    """
-    def __init__(self, brokers, topics):
-        # TODO: Saving so I remember to copy to new entry point
-        #if not zookeeper.connected:
-        #    raise Exception("Zookeeper must be connected before use.")
-        #self.zookeeper = zookeeper
-        #if not handler:
-        #    handler = ThreadingHandler()
-        #self.handler = handler
-        self.brokers = brokers
-        self.topics = topics
-
 
 class Broker(object):
     """A Kafka broker.
@@ -36,13 +29,21 @@ class Broker(object):
     :type cluster: :class:`samsa.cluster.Cluster`
     :param id_: Kafka broker ID
     """
-    def __init__(self, id_, host, port):
+    def __init__(self, id_, host, port, handler, timeout):
+        self._connected = False
         self._id = int(id_)
         self._host = host
         self._port = port
-        self._client = None
+        self._handler = handler
+        self._reqhandler = None
+        self._timeout = timeout
+        self.client = None
 
     __repr__ = attribute_repr('id')
+
+    @property
+    def connected(self):
+        return self._connected
 
     @property
     def id(self):
@@ -60,16 +61,43 @@ class Broker(object):
         return self._port
 
     @property
-    def client(self):
-        """The :class:`samsa.client.Client` object for this broker.
+    def handler(self):
+        """The :class:`samsa.handlers.RequestHandler` for this broker.
 
-        Only one client is created per broker instance.
+        Only one handler is created per broker instance.
         """
-        return self._client
+        return self._reqhandler
 
     def connect(self):
         """Establish a connection to the Broker, creating a Client"""
-        raise NotImplementedError()
+        conn = BrokerConnection(self.host, self.port)
+        conn.connect(self._timeout)
+        self._reqhandler = RequestHandler(self._handler, conn)
+        self._reqhandler.start()
+        self._connected = True
+
+    def fetch(self, topic_sets, timeout=1000, min_bytes=1024):
+        pass
+
+    def produce(self,
+                message_sets,
+                compression=compression.NONE,
+                required_acks=1,
+                timeout=10000):
+        pass
+
+    def request_offsets(self, topic_partition_requests):
+        """Request offset information for a set of topic/partitions"""
+        if not self.connected:
+            self.connect()
+        future = self.handler.request(OffsetRequest(topic_partition_requests))
+        return future.get(OffsetResponse)
+
+    def request_metadata(self, topics=[]):
+        if not self.connected:
+            self.connect()
+        future = self.handler.request(MetadataRequest(topics=topics))
+        return future.get(MetadataResponse)
 
 
 class Partition(object):
@@ -82,15 +110,20 @@ class Partition(object):
 
     __repr__ = attribute_repr('topic', 'broker', 'number')
 
-    def earliest_offset(self):
-        return self.broker.client.offsets(
-            self.topic.name, self.number, OFFSET_EARLIEST, 1
-        )[0]
+    def fetch_offsets(self, offsets_before, max_offsets=1):
+        request = PartitionOffsetRequest(
+            self.topic.name, self.id, offsets_before, max_offsets
+        )
+        res = self.leader.request_offsets([request])
+        return res.topics[self.topic.name]
 
     def latest_offset(self):
-        return self.broker.client.offsets(
-            self.topic.name, self.number, OFFSET_LATEST, 1
-        )[0]
+        """Get the latest offset for this partition."""
+        return self.fetch_offsets(OFFSET_LATEST)
+
+    def earliest_offset(self):
+        """Get the earliest offset for this partition."""
+        return self.fetch_offsets(OFFSET_EARLIEST)
 
     def publish(self, data):
         """
@@ -122,46 +155,51 @@ class Partition(object):
 
 
 class Topic(object):
-    """A topic within a Kafka cluster.
-
-    :param cluster: The cluster that this topic is associated with.
-    :type cluster: :class:`samsa.cluster.Cluster`
-    :param name: The name of this topic.
-    :param partitioner: callable that takes two arguments, ``partitions`` and
-        ``key`` and returns a single :class:`~samsa.partitions.Partition`
-        instance to publish the message to.
-    :type partitioner: any callable type
-    """
-    def __init__(self, name, partition_metas, brokers):
+    """A topic within a Kafka cluster"""
+    def __init__(self, name):
+        self.client = None
         self.name = name
-        self.partitions = {
-            pm[0]: Partition(self, pm[0], brokers[pm[1]],
-                             [brokers[id_] for id_ in pm[2]],
-                             [brokers[id_] for id_ in pm[3]])
-            for pm in partition_metas
-        }
+        self.partitions = {}
 
     __repr__ = attribute_repr('name')
 
-    def latest_offsets(self):
-        return [(p.broker.id, p.latest_offset())
-                for p
-                in self.partitions]
+    def fetch_offsets(self, offsets_before, max_offsets=1):
+        requests = defaultdict(list) # one request for each broker
+        for part in self.partitions.itervalues():
+            requests[part.leader].append(PartitionOffsetRequest(
+                self.name, part.id, offsets_before, max_offsets
+            ))
+        output = {}
+        for broker,reqs in requests.iteritems():
+            res = broker.request_offsets(reqs)
+            output.update(res.topics[self.name])
+        return output
 
-    def publish(self, data, key=None):
-        """
-        Publishes one or more messages to a random partition of this topic.
+    def latest_offsets(self):
+        """Get the latest offset for each partition of this topic."""
+        return self.fetch_offsets(OFFSET_LATEST)
+
+    def earliest_offsets(self):
+        """Get the earliest offset for each partition of this topic."""
+        return self.fetch_offsets(OFFSET_EARLIEST)
+
+    def publish(self, data, partitioner=random_partitioner, partition_key=None):
+        """Publish one or more messages to a partition of this topic.
 
         :param data: message(s) to be sent to the broker.
         :type data: ``str`` or sequence of ``str``.
-        :param key: a key to be used for semantic partitioning
-        :type key: implementation-specific
+        :param partitioner: callable that takes two arguments, ``partitions``
+            and ``key`` and returns a single :class:`~samsa.common.Partition`
+            instance to publish the message to.
+        :type partitioner: any callable
+        :param partition_key: a key to be used for semantic partitioning
+        :type partition_key: implementation-specific
         """
         if len(self.partitions) < 1:
             raise NoAvailablePartitionsError('No partitions are available to '
                 'accept a write for this message. (Is your Kafka broker '
                 'running?)')
-        partition = self.partitioner(self.partitions, key)
+        partition = partitioner(self.partitions, partition_key)
         return partition.publish(data)
 
     def subscribe(self,
@@ -214,63 +252,3 @@ class Topic(object):
                         fetch_size=fetch_size,
                         offset_reset=offset_reset,
                         rebalance_retries=rebalance_retries)
-
-
-class Message(Serializable):
-    """Representation of a Kafka Message
-
-    NOTE: Compression is handled in the protocol because
-          of the way Kafka embeds compressed MessageSets within
-          Messages
-
-    Message => Crc MagicByte Attributes Key Value
-      Crc => int32
-      MagicByte => int8
-      Attributes => int8
-      Key => bytes
-      Value => bytes
-    """
-    MAGIC = 0
-
-    def __init__(self, value, partition_key=None, compression=compression.NONE, offset=-1):
-        self.compression = compression
-        self.partition_key = partition_key
-        self.value = value
-        self.offset = offset
-
-    def __len__(self):
-        size = 4+1+1+4+4+len(self.value)
-        if self.partition_key is not None:
-            size += len(self.partition_key)
-        return size
-
-    @classmethod
-    def decode(self, buff, msg_offset=-1):
-        fmt = 'iBBYY'
-        response = unpack_from(fmt, buff, 0)
-        crc,_,attr,key,val = response
-        crc_check = crc32(buff[4:])
-        # TODO: Handle CRC failure
-        return Message(val, partition_key=key, compression=attr, offset=msg_offset)
-
-    def pack_into(self, buff, offset):
-        """Serialize and write to ``buff`` starting at offset ``offset``.
-
-        Intentionally follows the pattern of ``struct.pack_into``
-
-        :param buff: The buffer to write into
-        :param offset: The offset to start the write at
-        """
-        if self.partition_key is None:
-            fmt = '!BBii%ds' % len(self.value)
-            args = (self.MAGIC, self.compression, -1,
-                    len(self.value), self.value)
-        else:
-            fmt = '!BBi%dsi%ds' % (len(self.partition_key), len(self.value))
-            args = (self.MAGIC, self.compression,
-                    len(self.partition_key), self.partition_key,
-                    len(self.value), self.value)
-        struct.pack_into(fmt, buff, offset+4, *args)
-        fmt_size = struct.calcsize(fmt)
-        crc = crc32(buffer(buff[offset+4:offset+4+fmt_size]))
-        struct.pack_into('!i', buff, offset, crc)

@@ -39,7 +39,7 @@ class ResponseFuture(object):
         self.error = error
         self._ready.set()
 
-    def get(self, timeout=None):
+    def get(self, response_cls=None, timeout=None):
         """Block until data is ready and return.
 
         Raises exception if there was an error.
@@ -48,7 +48,10 @@ class ResponseFuture(object):
         self._ready.wait(timeout)
         if self.error:
             raise self.error
-        return self.response
+        if response_cls:
+            return response_cls(self.response)
+        else:
+            return self.response
 
 
 class Handler(object):
@@ -60,7 +63,6 @@ class Handler(object):
 # Could be possible to use the Kazoo handlers. Our RequestHandler is already
 # implementation agnostic.
 class ThreadingHandler(Handler):
-
     QueueEmptyError = Queue.Empty
     Queue = Queue.Queue
     Event = threading.Event
@@ -92,7 +94,6 @@ class RequestHandler(object):
         """Construct a new requst
 
         :returns: :class:`samsa.handlers.ResponseFuture`
-
         """
         future = None
         if has_response:
@@ -118,11 +119,11 @@ class RequestHandler(object):
                 try:
                     self.connection.request(task.request)
                     if task.future:
-                        self.connection.response(task.future)
+                        res = self.connection.response()
+                        task.future.set_response(res)
                 except Exception, e:
                     if task.future:
                         task.future.set_error(e)
                 finally:
                     self._requests.task_done()
-
         return self.handler.spawn(worker)

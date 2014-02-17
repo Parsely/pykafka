@@ -46,14 +46,14 @@ limitations under the License.
 import logging
 import collections
 import itertools
-import json
 import struct
 
 from collections import defaultdict, namedtuple
-from samsa.common import Broker, Cluster, Message, Partition, Topic
 from samsa.utils import Serializable, compression, struct_helpers
 from samsa.exceptions import ERROR_CODES
 
+OFFSET_EARLIEST = -2
+OFFSET_LATEST = -1
 
 
 class Request(Serializable):
@@ -90,9 +90,6 @@ class Response(object):
     def raise_error(self, err_code, response):
         """Raise an error based on the Kafka error code
 
-        The full response info is json encoded and added to the
-        exception for reference.
-
         :param err_code: The error code from Kafka
         :param response: The unpacked raw data from the response
         """
@@ -101,6 +98,65 @@ class Response(object):
             'Response Type: "%s"\tResponse: %s' % (
                 clsname, response))
 
+
+class Message(Serializable):
+    """Representation of a Kafka Message
+
+    NOTE: Compression is handled in the protocol because
+          of the way Kafka embeds compressed MessageSets within
+          Messages
+
+    Message => Crc MagicByte Attributes Key Value
+      Crc => int32
+      MagicByte => int8
+      Attributes => int8
+      Key => bytes
+      Value => bytes
+    """
+    MAGIC = 0
+
+    def __init__(self, value, partition_key=None, compression=compression.NONE, offset=-1):
+        self.compression = compression
+        self.partition_key = partition_key
+        self.value = value
+        self.offset = offset
+
+    def __len__(self):
+        size = 4+1+1+4+4+len(self.value)
+        if self.partition_key is not None:
+            size += len(self.partition_key)
+        return size
+
+    @classmethod
+    def decode(self, buff, msg_offset=-1):
+        fmt = 'iBBYY'
+        response = unpack_from(fmt, buff, 0)
+        crc,_,attr,key,val = response
+        crc_check = crc32(buff[4:])
+        # TODO: Handle CRC failure
+        return Message(val, partition_key=key, compression=attr, offset=msg_offset)
+
+    def pack_into(self, buff, offset):
+        """Serialize and write to ``buff`` starting at offset ``offset``.
+
+        Intentionally follows the pattern of ``struct.pack_into``
+
+        :param buff: The buffer to write into
+        :param offset: The offset to start the write at
+        """
+        if self.partition_key is None:
+            fmt = '!BBii%ds' % len(self.value)
+            args = (self.MAGIC, self.compression, -1,
+                    len(self.value), self.value)
+        else:
+            fmt = '!BBi%dsi%ds' % (len(self.partition_key), len(self.value))
+            args = (self.MAGIC, self.compression,
+                    len(self.partition_key), self.partition_key,
+                    len(self.value), self.value)
+        struct.pack_into(fmt, buff, offset+4, *args)
+        fmt_size = struct.calcsize(fmt)
+        crc = crc32(buffer(buff[offset+4:offset+4+fmt_size]))
+        struct.pack_into('!i', buff, offset, crc)
 
 
 class MessageSet(Serializable):
@@ -181,6 +237,7 @@ class MessageSet(Serializable):
             msg_offset,size = struct.unpack_from('!qi', buff, offset)
             offset += 12
             # TODO: Check we have all the requisite bytes
+            # TODO: Handle messages larger than ``max_bytes``
             message = Message.decode(buff[offset:offset+size], msg_offset)
             #print '[%d] (%s) %s' % (message.offset, message.partition_key, message.value)
             messages.append(message)
@@ -253,12 +310,14 @@ class MetadataRequest(Request):
         return output
 
 
+BrokerMetadata = namedtuple('BrokerMetadata', ['id', 'host', 'port'])
+TopicMetadata = namedtuple('TopicMetadata', ['name', 'partitions'])
+PartitionMetadata = namedtuple('PartitionMetadata',
+                               ['id', 'leader', 'replicas', 'isr'])
+
+
 class MetadataResponse(Response):
     """Response from MetadataRequest
-
-    The response contains only the topics and brokers received. Putting it into
-    a Cluster is separate because it's possible to have a MetadataRequest that's
-    only looking at some topics.
 
     MetadataResponse => [Broker][TopicMetadata]
       Broker => NodeId Host Port
@@ -285,23 +344,19 @@ class MetadataResponse(Response):
         broker_info, topics = response
 
         self.brokers = {}
-        for (node_id, host, port) in broker_info:
-            self.brokers[node_id] = Broker(node_id, host, port)
+        for (id_, host, port) in broker_info:
+            self.brokers[id_] = BrokerMetadata(id_, host, port)
 
         self.topics = {}
         for (err, name, partitions) in topics:
             if err != 0:
                 self.raise_error(err, response)
-            partition_metas = []
+            part_metas = {}
             for (p_err, id_, leader, replicas, isr) in partitions:
                 if p_err != 0:
                     self.raise_error(p_err, response)
-                partition_metas.append((id_, leader, replicas, isr))
-            self.topics[name] = Topic(name, partition_metas, self.brokers)
-
-    def to_cluster(self):
-        """Return a Cluster based on the Response"""
-        return Cluster(self.brokers, self.topics)
+                part_metas[id_] = PartitionMetadata(id_, leader, replicas, isr)
+            self.topics[name] = TopicMetadata(name, part_metas)
 
 
 ##
@@ -557,6 +612,23 @@ class FetchResponse(Response):
 ## Offset API
 ##
 
+_PartitionOffsetRequest = namedtuple('PartitionOffsetRequest',
+    ['topic', 'partition', 'offsets_before', 'max_offsets']
+)
+class PartitionOffsetRequest(_PartitionOffsetRequest):
+    """Offset request for a specific topic/partition
+
+    :param topic_name: Name of the topic to look up
+    :param partition_num: Number of the partition to look up
+    :param offsets_before: Retrieve offset information for messages before
+                           this timestamp (ms). -1 will retrieve the latest
+                           offsets and -2 will retrieve the earliest
+                           available offset. If -2,only 1 offset is returned
+    :param max_offsets: How many offsets to return
+    """
+    pass
+
+
 class OffsetRequest(Request):
     """An offset request
 
@@ -567,9 +639,12 @@ class OffsetRequest(Request):
       Time => int64
       MaxNumberOfOffsets => int32
     """
-    def __init__(self):
+    def __init__(self, partition_requests):
         """Create a new offset request"""
         self._topics = defaultdict(dict)
+        for t in partition_requests:
+            self._topics[t.topic][t.partition] = (t.offsets_before,
+                                                  t.max_offsets)
 
     def __len__(self):
         """Length of the serialized message, in bytes"""
@@ -581,19 +656,6 @@ class OffsetRequest(Request):
             # partition + fetch offset + max bytes => for each partition
             size += (4+8+4) * len(parts)
         return size
-
-    def add_topic(self, topic_name, partition_num, offsets_before, max_offsets=1):
-        """Add a topic/partition to get offset information for
-
-        :param topic_name: Name of the topic to look up
-        :param partition_num: Number of the partition to look up
-        :param offsets_before: Retrieve offset information for messages before
-                               this timestamp (ms). -1 will retrieve the latest
-                               offsets and -2 will retrieve the earliest
-                               available offset. If -2,only 1 offset is returned
-        :param max_offsets: How many offsets to return
-        """
-        self._topics[topic_name][partition_num] = (offsets_before, max_offsets)
 
     @property
     def API_KEY(self):

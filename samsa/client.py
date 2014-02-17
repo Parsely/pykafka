@@ -1,6 +1,6 @@
 __license__ = """
 Copyright 2012 DISQUS
-Copyright 2013 Parse.ly, Inc.
+Copyright 2013,2014 Parse.ly, Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,608 +15,167 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import itertools
+import json
 import logging
-import socket
-import struct
-from zlib import crc32
 
+from kazoo.exceptions import NoNodeException
 from samsa import handlers
-from samsa.exceptions import (ERROR_CODES, InvalidVersionError,
-    SocketDisconnectedError, MessageTooLargeError)
-from samsa.utils import attribute_repr
-from samsa.utils.functional import methodimap
-from samsa.utils.namedstruct import NamedStruct
-from samsa.utils.socket import recv_framed
-from samsa.utils.structuredio import StructuredBytesIO
+from samsa.common import Broker, Topic, Partition
+from samsa.connection import BrokerConnection
+from samsa.exceptions import ImproperlyConfiguredError
+from samsa.utils.protocol import MetadataRequest, MetadataResponse
+from zlib import crc32
 
 
 logger = logging.getLogger(__name__)
 
+class SamsaClient(object):
+    """Main entry point for a Kafka cluster
 
-# Requests
+    Notes:
+        * Reconfiguring at any time is hard to coordinate. Updating
+          the cluster should only happen on user actions?
 
-(REQUEST_TYPE_PRODUCE, REQUEST_TYPE_FETCH, REQUEST_TYPE_MULTIFETCH,
-    REQUEST_TYPE_MULTIPRODUCE, REQUEST_TYPE_OFFSETS) = range(0, 5)
+    :ivar brokers: The :class:`samsa.common.Broker` map for this cluster.
+    :ivar topics: The :class:`samsa.common.Topic` map for this cluster.
+    """
+    def __init__(self, zookeeper, handler=None, timeout=30):
+        """Create a connection to a Kafka cluster
 
-OFFSET_LATEST = -1
-OFFSET_EARLIEST = -2
+        :param zookeeper: A zookeeper client.
+        :type zookeeper: :class:`kazoo.client.Client`
+        :param handler: Async handler.
+        :type handler: :class:`samsa.handlers.Handler`
+        """
+        if not zookeeper.connected:
+            raise Exception("Zookeeper must be connected before use.")
+        self.zookeeper = zookeeper
+        self.handler = handler or handlers.ThreadingHandler()
+        self.topics = self.brokers = None
+        self._timeout = timeout
+        self.brokers = {}
+        self.topics = {}
+        self.update_cluster()
 
-DEFAULT_VERSION = 0
+    def _discover_brokers(self):
+        """Get the list of brokers from Zookeeper.
 
-COMPRESSION_TYPE_NONE = 0
-COMPRESSION_TYPE_GZIP = 1
-COMPRESSION_TYPE_SNAPPY = 2
-COMPRESSION_TYPES = (
-    COMPRESSION_TYPE_NONE, COMPRESSION_TYPE_GZIP,
-    COMPRESSION_TYPE_SNAPPY
-)
+        :returns: list of `(host, port)` for each broker.
+        """
+        id_path = '/brokers/ids'
+        output = []
+        try:
+            broker_ids = self.zookeeper.get_children(id_path)
+            for id_ in broker_ids:
+                data = json.loads(
+                    self.zookeeper.get('%s/%s' % (id_path, id_))[0]
+                )
+                output.append(Broker(id_, data['host'], data['port'],
+                                     self.handler, self._timeout))
+        except NoNodeException:
+            raise ImproperlyConfiguredError(
+                'The path "%s" does not exist in your '
+                'ZooKeeper cluster -- is your Kafka cluster running?' %
+                id_path)
+        return output
 
-MessageSetFrameHeader = NamedStruct('MessageSetFrameHeader', (
-    ('i', 'length'),
-))
-
-# Responses
-
-MessageSetHeader = NamedStruct('MessageSetHeader', (
-    ('i', 'length'),
-    ('h', 'error'),
-))
-
-ResponseFrameHeader = struct.Struct('!i')
-
-ResponseErrorHeader = NamedStruct('ResponseErrorHeader', (
-    ('h', 'error'),
-))
-
-OffsetsResponseHeader = NamedStruct('OffsetsResponseHeader', (
-    ('i', 'count'),
-))
-
-Offset = NamedStruct('Offset', (
-    ('q', 'value'),
-))
-
-
-# Messages
-
-class VersionHeaderMap(dict):
-    def __missing__(self, key):
-        raise InvalidVersionError('%s is not a valid version identifier' % key)
-
-
-class Message(object):
-    __slots__ = ('_headers', '_payload', '_raw',
-                 '_offset', '_len', '_valid')
-
-    Header = NamedStruct('Header', (
-        ('i', 'length'),
-        ('b', 'magic'),
-    ))
-
-    VersionHeaders = VersionHeaderMap({
-        0: NamedStruct('Header', (
-            ('i', 'checksum'),
-        )),
-        1: NamedStruct('HeaderWithCompression', (
-            ('b', 'compression'),
-            ('i', 'checksum'),
-        )),
-    })
-
-    def __init__(self, raw, offset=0):
-        # Process headers
-        self._headers = []
-        header = self.Header.unpack_from(raw)
-        self._headers.append(header)
-        versioned_header = self.VersionHeaders[header.magic].unpack_from(
-            raw, offset=self.Header.size
-        )
-        self._headers.append(versioned_header)
-
-        # Some values used as read-only properties so we don't recalc every time
-        self._raw = raw
-        self._offset = offset
-        self._len = len(self._raw)
-
-        # Get the payload as a byte array
-        start = self.Header.size + self.VersionHeaders[self['magic']].size
-        self._payload = self._raw[start:]
-
-        self._valid = self['checksum'] == crc32(self.payload)
-
-
-    __repr__ = attribute_repr('raw', 'offset')
-
-    def __len__(self):
-        return self._len
-
-    def __str__(self):
-        return str(self.payload)
-
-    def __getitem__(self, name):
-        for header in self._headers:
+    def _get_metadata(self):
+        """Get fresh cluster metadata from a broker"""
+        if self.brokers:
+            brokers = self.brokers.values()
+        else:
+            brokers = self._discover_brokers()
+        for broker in brokers:
             try:
-                return getattr(header, name)
-            except AttributeError:
-                pass
-        else:
-            raise AttributeError('%s does not have a field named "%s".' % (
-                repr(self), name)
-            )
+                return broker.request_metadata()
+            except Exception, e:
+                logger.warning('Unable to connect to broker %s:%s',
+                               broker.host, broker.port)
+        raise Exception('Unable to connect to a broker to fetch metadata.')
 
-    @property
-    def headers(self):
-        return reduce(
-            lambda x, y: dict(x, **y),
-            methodimap('_asdict', self._headers), {}
-        )
-
-    def get(self, name, default=None):
-        try:
-            return self[name]
-        except AttributeError:
-            return default
-
-    @property
-    def offset(self):
-        return self._offset
-
-    @property
-    def next_offset(self):
-        return self._offset + self._len
-
-    @property
-    def payload(self):
-        return self._payload
-
-    @property
-    def raw(self):
-        return self._raw
-
-    @property
-    def valid(self):
-        return self._valid
-
-    @classmethod
-    def pack_into(cls, bytea, offset, payload, version, compression=None):
-        """
-        Packs a message payload into a buffer.
-
-        :param bytea: buffer to pack the message into
-        :type bytea: bytearray
-        :param offset: offset to start writing at
-        :type offset: int
-        :param payload: message payload
-        :type payload: str
-        :param version: message version to publish ("magic number")
-        :type version: int
-        :param compression: which compression format to use
-                            (only for version 1)
-        :type compression: int
-        :returns: total amount of written (in bytes)
-        :rtype: int
-        """
-        if version < 1:
-            if compression is not None:
-                raise ValueError(
-                    'Compression is not supported on version %s' % version
-                )
-        elif compression is not None:
-            if compression not in COMPRESSION_TYPES:
-                raise ValueError(
-                    '%s is not a valid compression type' % compression
-                )
-            elif compression is not COMPRESSION_TYPE_NONE:
-                raise NotImplementedError  # TODO
-        else:
-            compression = COMPRESSION_TYPE_NONE
-
-        VersionHeader = cls.VersionHeaders[version]
-
-        # Write generic message header.
-        length = cls.Header.size + VersionHeader.size + len(payload)
-        cls.Header.pack_into(
-            bytea, offset=offset,
-            length=length - 4, magic=version
-        )
-        offset += cls.Header.size
-
-        # Write versioned message header.
-        version_kwargs = {}
-        if compression is not None:
-            version_kwargs['compression'] = compression
-        VersionHeader.pack_into(
-            bytea, offset=offset,
-            checksum=crc32(payload), **version_kwargs
-        )
-        offset += VersionHeader.size
-
-        # Write message payload.
-        bytea[offset:offset + len(payload)] = payload
-
-        return length
-
-    @classmethod
-    def encode(cls, messages, version, **kwargs):
-        """
-        Encodes multiple messages.
-
-        :param messages: messages to publish
-        :type messages: sequence of strs
-        :param version: message version to publish ("magic number")
-        :type version: int
-        :param \*\*kwargs: extra arguments to pass to :meth:`.pack_into`
-        :returns: encoded messages
-        :rtype: :class:`samsa.utils.structuredio.StructuredBytesIO`
-        """
-        message_header_length = (
-            cls.Header.size +
-            cls.VersionHeaders[version].size
-        )
-        length = (
-            MessageSetFrameHeader.size +
-            sum(map(len, messages)) +
-            (len(messages) * message_header_length)
-        )
-        bytea = bytearray(length)
-        MessageSetFrameHeader.pack_into(bytea, 0, length=length - 4)
-        offset = MessageSetFrameHeader.size
-        for message in messages:
-            written = cls.pack_into(
-                bytea, offset,
-                payload=message, version=version, **kwargs
-            )
-            offset += written
-        return StructuredBytesIO(bytea)
-
-
-def decode_message_sets(payload, from_offsets):
-    offset = 0
-    for from_offset in from_offsets:
-        (length,) = ResponseFrameHeader.unpack_from(payload, offset=offset)
-        header = ResponseErrorHeader.unpack_from(
-            payload,
-            offset=offset + ResponseFrameHeader.size
-        )
-        if header.error:
-            error_class = ERROR_CODES.get(header.error, -1)
-            raise error_class(error_class.reason)
-        message_set_payload = buffer(payload,
-            offset + (ResponseFrameHeader.size + ResponseErrorHeader.size),
-            length - ResponseErrorHeader.size)
-        yield decode_messages(message_set_payload, from_offset)
-        offset += length + ResponseFrameHeader.size
-
-
-def decode_messages(payload, from_offset):
-    """
-    Decodes ``Message`` objects from a ``payload`` buffer.
-    """
-    offset = 0
-    recovering = False # recovering from bad offset error
-    payload_len = len(payload) # don't recalc all the time
-    while offset < payload_len:
-        message = None
-        try:
-            header = Message.Header.unpack_from(payload, offset)
-            length = 4 + header.length
-            if length > 0:
-                message = Message(
-                    raw=buffer(payload, offset, length),
-                    offset=from_offset + offset
-                )
-        except struct.error:
-            if not recovering:
-                # Thrown if payload ends in the middle of a header
-                logger.debug('Unable to create message from payload remainder '
-                             '%i bytes left: %s',
-                             len(payload) - offset, payload[offset:])
-                return
-        except InvalidVersionError, ex:
-            if not recovering: # enter recovery mode to find next valid message
-                recovering = True
-                exception = ex
-                logger.warning('Invalid version or corrupted offset found. '
-                               'Attempting recovery.')
-                logger.info('from_offset: %d\toffset: %d', from_offset, offset)
-                logger.info('payload: %s', payload)
-        if message and message.valid:
-            if recovering:
-                logger.info('successfully recovered at: (%d + %d)', from_offset, offset)
-                logger.info('recovered message length: %d', length)
-            recovering = False
-            yield message
-        elif recovering:
-            # bump offset and try again
-            offset += 1
-            continue
-        elif message is not None:
-            if length > len(message):
-                if length > len(payload):
-                    raise MessageTooLargeError(
-                        'Message len %d is larger than payload len (%d)' % (
-                        length, len(payload))
-                    )
-                # If this is the last message,
-                # it's OK to drop it if it's truncated.
-                logger.debug('Discarding partial message '
-                            '(expected %s bytes, got %s): %s',
-                            length, len(message), message)
-                return
+    def _update_brokers(self, broker_metadata):
+        # Remove old brokers
+        removed = set(self.brokers.keys()) - set(broker_metadata.keys())
+        for id_ in removed:
+            logger.info('Removing broker %s', self.brokers[id_])
+            self.brokers.pop(id_)
+        # Add/update current brokers
+        for id_,meta in broker_metadata.iteritems():
+            if id_ not in self.brokers:
+                self.brokers[id_] = Broker(meta.id, meta.host, meta.port,
+                                           self.handler, self._timeout)
+                logger.info('Adding new broker %s', self.brokers[id_])
             else:
-                raise AssertionError(
-                    "Length of %s (%s) does not match it's "
-                    "stated frame size of %s" % (message, len(message), length)
-                )
-        offset += length
+                broker = self.brokers[id_]
+                if meta.host == broker.host and meta.port == broker.port:
+                    continue # no changes
+                if broker.connected:
+                    broker.disconnect()
+                logger.info('Updating broker %s', broker)
+                broker.host = meta.host
+                broker.port = meta.port
+                logger.info('Updated broker to %s', broker)
 
-    # Finally, if we can't recover, raise the original exception
-    if recovering:
-        raise exception
+    def _update_topics(self, topic_metadata):
+        # Remove old topics
+        removed = set(self.topics.keys()) - set(topic_metadata.keys())
+        for name in removed:
+            logger.info('Removing topic %s', self.topic[name])
+            self.topics.pop(name)
+        # Add/update partition information
+        for name,meta in topic_metadata.iteritems():
+            if name not in self.topics:
+                self.topics[name] = Topic(name)
+                logger.info('Adding topic %s', self.topics[name])
+            # Partitions always need to be updated, even on add
+            self._update_partitions(self.topics[name], meta.partitions)
 
-
-def write_request_header(request, topic, partition):
-    request.frame(2, topic)
-    request.pack(4, partition)
-    return request
-
-
-class Connection(object):
-    """A socket connection to Kafka."""
-
-    def __init__(self, host, port, timeout):
-        self.host = host
-        self.port = port
-        self.timeout = timeout
-        self._socket = None
-
-    def __del__(self):
-        self.disconnect()
-
-    @property
-    def connected(self):
-        """
-        Do we think the socket is open.
-        """
-        return self._socket is not None
-
-    def connect(self):
-        """
-        Connect to the broker.
-        """
-        self._socket = socket.create_connection(
-            (self.host, self.port),
-            timeout=self.timeout
+    def _update_partitions(self, topic, partition_metadata):
+        # Remove old partitions
+        removed = set(topic.partitions.keys()) - set(partition_metadata.keys())
+        for id_ in removed:
+            logger.info('Removing partiton %s', topic.partitons[id_])
+            self.brokers.pop(id_)
+        # Make sure any brokers referenced are known
+        all_brokers = itertools.chain.from_iterable(
+            [meta.id,]+meta.isr+meta.replicas
+            for meta in partition_metadata.itervalues()
         )
+        if any(b not in self.brokers for b in all_brokers):
+            raise Exception('TODO: Type this exception')
+        # Add/update current partitions
+        for id_,meta in partition_metadata.iteritems():
+            if meta.id not in topic.partitions:
+                topic.partitions[meta.id] = Partition(
+                    topic, meta.id, self.brokers[meta.leader],
+                    [self.brokers[b] for b in meta.replicas],
+                    [self.brokers[b] for b in meta.isr]
+                )
+                logger.info('Adding partition %s', topic.partitions[meta.id])
+            partition = topic.partitions[id_]
+            # Check leader
+            if meta.leader != partition.leader.id:
+                logger.info('Updating leader for %s', partition)
+                partition.leader = self.brokers[meta.leader]
+            # Check replica and In-Sync-Replicas lists
+            if sorted(r.id for r in partition.replicas) != sorted(meta.replicas):
+                logger.info('Updating replicas list for %s', partition)
+                partition.replicas = [self.brokers[b] for b in meta.replicas]
+            if sorted(i.id for i in partition.isr) != sorted(meta.isr):
+                logger.info('Updating in sync replicas list for %s', partition)
+                partition.isr = [self.brokers[b] for b in meta.isr]
 
-    def disconnect(self):
+
+    def update_cluster(self):
+        """Update known brokers and topics
+
+        We actually want to update this all in place, rather than paving over
+        previously known topics/partitions with new information. We do this
+        so that a topic can call ``self.client.update()`` to find new partition
+        leaders. If we replaced ``self.topics`` with a new dict, then that
+        partition info wouldn't be updated and that topic would be orphaned.
         """
-        Disconnect from the Kafka broker.
-        """
-        try:
-            self._socket.close()
-        except IOError:
-            pass
-        finally:
-            self._socket = None
-
-    def reconnect(self):
-        self.disconnect()
-        self.connect()
-
-    def request(self, request):
-        """Make a request using the data in `request`.
-
-        :param request: Request data.
-        :type request: :class:`samsa.utils.structuredio.StructuredBytesIO`
-
-        """
-        # TODO: Retry/reconnect on failure?
-        self._socket.sendall(str(request.wrap(4)))
-
-    def response(self, future):
-        """Wait for a response and assign to future.
-
-        :param future: Where to assign response data.
-        :type future: :class:`samsa.handlers.ResponseFuture`
-
-        """
-        try:
-            response = recv_framed(self._socket, ResponseFrameHeader)
-        except SocketDisconnectedError:
-            self.disconnect()
-            raise
-
-        header = ResponseErrorHeader.unpack_from(buffer(response))
-        if header.error:
-            exception_class = ERROR_CODES.get(header.error, -1)
-            # TODO: Add better error messaging.
-            future.set_error(exception_class)
-        else:
-            future.set_response(buffer(response, ResponseErrorHeader.size))
-
-
-class Client(object):
-    """
-    Low-level Kafka protocol client.
-
-    :param host: broker host
-    :param port: broker port number
-    :param timeout: socket timeout
-    """
-    def __init__(self, host, handler, port=9092, timeout=30, autoconnect=True):
-        self.connection = Connection(host, port, timeout)
-        self.handler = handlers.RequestHandler(handler, self.connection)
-        if autoconnect:
-            self.connect()
-
-    def connect(self):
-        self.connection.connect()
-        self.handler.start()
-
-    def disconnect(self):
-        self.handler.stop()
-        self.connection.disconnect()
-
-    __repr__ = attribute_repr('connection')
-
-    # Protocol Implementation
-
-    def produce(self, topic, partition, messages,
-                version=DEFAULT_VERSION, **kwargs):
-        """
-        Sends messages to the broker on a single topic/partition combination.
-
-        >>> client.produce('topic', 0, ('message',))
-
-        :param topic: topic name
-        :param partition: partition ID
-        :param messages: the messages to be sent
-        :type messages: list, generator, or other iterable of strings
-        :param version: version of message encoding
-        :type version: int
-        :param \*\*kwargs: extra (version-specific) keyword arguments
-                           to pass to message encoder
-        """
-        request = StructuredBytesIO()
-        request.pack(2, REQUEST_TYPE_PRODUCE)
-        write_request_header(request, topic, partition)
-        request.write(Message.encode(messages, version=version, **kwargs))
-        return self.handler.request(request, has_response=False)
-
-    def multiproduce(self, data, version=DEFAULT_VERSION, **kwargs):
-        """
-        Sends messages to the broker on multiple topics and/or partitions.
-
-        >>> client.produce((
-        ...    ('topic-1', 0, ('message',)),
-        ...    ('topic-2', 0, ('message', 'message',)),
-        ... ))
-
-        :param data: sequence of 3-tuples of the format
-                     ``(topic, partition, messages)``
-        :type data: list, generator, or other iterable
-        :param version: version of message encoding
-        :type version: int
-        :param \*\*kwargs: extra (version-specific) keyword arguments
-                           to pass to message encoder
-        """
-        payloads = []
-        for topic, partition, messages in data:
-            payload = StructuredBytesIO()
-            write_request_header(payload, topic, partition)
-            payload.write(Message.encode(messages, version=version, **kwargs))
-            payloads.append(payload)
-
-        request = StructuredBytesIO()
-        request.pack(2, REQUEST_TYPE_MULTIPRODUCE)
-        request.pack(2, len(payloads))
-        for payload in payloads:
-            request.write(payload)
-        return self.handler.request(request, has_response=False)
-
-    def fetch(self, topic, partition, offset, size):
-        """
-        Fetches messages from the broker on a single topic/partition.
-
-        >>> for offset, message in client.fetch('test', 0, 0, 1000):
-        ...     print offset, message
-        0L 'hello world'
-        20L 'hello world'
-
-        :param topic: topic name
-        :param partition: partition ID
-        :param offset: offset to begin read
-        :type offset: integer
-        :param size: the maximum number of bytes to return
-        :rtype: generator of 2-tuples in ``(offset, message)`` format
-        """
-        # TODO: Document failure modes.
-        request = StructuredBytesIO()
-        request.pack(2, REQUEST_TYPE_FETCH)
-        write_request_header(request, topic, partition)
-        request.pack(8, offset)
-        request.pack(4, size)
-
-        response = self.handler.request(request)
-
-        try:
-            # N.B. Using generator here makes dealing with decode errors hard
-            return list(decode_messages(response.get(), from_offset=offset))
-        except SocketDisconnectedError:
-            return []
-        except MessageTooLargeError:
-            # Try again, but larger!
-            return self.fetch(topic, partition, offset, size*1.5)
-
-    def multifetch(self, data):
-        """
-        Fetches messages from the broker on multiple topics/partitions.
-
-        >>> topics = (
-        ...     ('topic-1', 0, 0, 1000),
-        ...     ('topic-2', 0, 0, 1000),
-        ... )
-        >>> for i, response in enumerate(client.fetch(topics)):
-        ...     print 'response:', i
-        ...     for offset, message in messages:
-        ...         print offset, message
-        response 0
-        0L 'hello world'
-        20L 'hello world'
-        response 1
-        0L 'hello world'
-        20L 'hello world'
-
-        :param data: sequence of 4-tuples of the format
-                     ``(topic, partition, offset, size)``
-                     For more information, see :meth:`Client.fetch`.
-        :rtype: generator of fetch responses (message generators).
-            For more information, see :meth:`Client.fetch`.
-        """
-        payloads = []
-        from_offsets = []
-        for topic, partition, offset, size in data:
-            payload = StructuredBytesIO()
-            write_request_header(payload, topic, partition)
-            from_offsets.append(offset)
-            payload.pack(8, offset)
-            payload.pack(4, size)
-            payloads.append(payload)
-
-        request = StructuredBytesIO()
-        request.pack(2, REQUEST_TYPE_MULTIFETCH)
-        request.pack(2, len(payloads))
-        for payload in payloads:
-            request.write(payload)
-        response = self.handler.request(request)
-        return decode_message_sets(response.get(), from_offsets)
-
-    def offsets(self, topic, partition, time, max):
-        """
-        Returns message offsets before a certain time for the given
-        topic/partition.
-
-        >>> client.offsets('test', 0, OFFSET_EARLIEST, 1)
-        [0]
-
-        :param topic: topic name
-        :param partition: partition ID
-        :param time: the time in milliseconds since the UNIX epoch, or either
-            ``OFFSET_EARLIEST`` or ``OFFSET_LATEST``.
-        :type time: integer
-        :param max: the maximum number of offsets to return
-        :rtype: list of offsets
-        """
-        request = StructuredBytesIO()
-        request.pack(2, REQUEST_TYPE_OFFSETS)
-        write_request_header(request, topic, partition)
-        request.pack(8, time)
-        request.pack(4, max)
-        response = self.handler.request(request)
-        (count,) = OffsetsResponseHeader.unpack_from(response.get())
-        offsets = []
-        for i in xrange(0, count):
-            offsets.append(Offset.unpack_from(response.get(),
-                offset=OffsetsResponseHeader.size + (i * Offset.size)).value)
-        return offsets
+        metadata = self._get_metadata()
+        self._update_brokers(metadata.brokers)
+        self._update_topics(metadata.topics)
