@@ -22,7 +22,7 @@ import socket
 import struct
 
 from samsa.exceptions import SocketDisconnectedError
-from samsa.utils.socket import recv_framed
+from samsa.utils.socket import recvall_into
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +64,8 @@ class BrokerConnection(object):
         self.connect()
 
     def request(self, request):
-        self._socket.sendall(request.get_bytes())
+        bytes = request.get_bytes()
+        self._socket.sendall(bytes)
 
     def response(self):
         """Wait for a response from the broker"""
@@ -72,12 +73,9 @@ class BrokerConnection(object):
             size = self._socket.recv(4)
             size = struct.unpack('!i', size)[0]
             output = bytearray(size)
-            received = 0
-            while received < size:
-                received += self._socket.recv_into(output,
-                                                   min(size-received, 4096))
+            recvall_into(self._socket, output)
             # TODO: Figure out if correlation ids are worth it
-            return buffer(output)[4:] # skipping it for now
+            return buffer(output[4:]) # skipping it for now
         except SocketDisconnectedError:
             self.disconnect()
             raise

@@ -5,6 +5,7 @@
 # TODO: Use weak refs to avoid reference cycles?
 
 import logging
+import itertools
 import struct
 
 from collections import defaultdict
@@ -17,7 +18,8 @@ from samsa.utils import Serializable, attribute_repr, compression
 from samsa.utils.protocol import (
     FetchRequest, FetchResponse, MetadataRequest, MetadataResponse,
     OFFSET_EARLIEST, OFFSET_LATEST, OffsetRequest, OffsetResponse,
-    ProduceRequest, ProduceResponse, PartitionOffsetRequest,
+    PartitionFetchRequest, PartitionOffsetRequest,
+    ProduceRequest, ProduceResponse, Message, MessageSet
 )
 
 logger = logging.getLogger(__name__)
@@ -76,21 +78,34 @@ class Broker(object):
         self._reqhandler.start()
         self._connected = True
 
-    def fetch(self, topic_sets, timeout=1000, min_bytes=1024):
-        pass
+    def fetch_messages(self, partition_requests, timeout=30000, min_bytes=1024):
+        if not self.connected:
+            self.connect()
+        future = self.handler.request(FetchRequest(
+            partition_requests=partition_requests,
+            timeout=10000,
+            min_bytes=1,
+        ))
+        return future.get(FetchResponse)
 
-    def produce(self,
-                message_sets,
-                compression=compression.NONE,
-                required_acks=1,
-                timeout=10000):
-        pass
+    def produce_messages(self,
+                         topic_name,
+                         partition_id,
+                         messages,
+                         required_acks=1,
+                         timeout=10000):
+        if not self.connected:
+            self.connect()
+        req = ProduceRequest(required_acks=required_acks, timeout=timeout)
+        req.add_messages(messages, topic_name, partition_id)
+        future = self.handler.request(req)
+        return future.get(ProduceResponse)
 
-    def request_offsets(self, topic_partition_requests):
+    def request_offsets(self, partition_requests):
         """Request offset information for a set of topic/partitions"""
         if not self.connected:
             self.connect()
-        future = self.handler.request(OffsetRequest(topic_partition_requests))
+        future = self.handler.request(OffsetRequest(partition_requests))
         return future.get(OffsetResponse)
 
     def request_metadata(self, topics=[]):
@@ -125,24 +140,28 @@ class Partition(object):
         """Get the earliest offset for this partition."""
         return self.fetch_offsets(OFFSET_EARLIEST)
 
-    def publish(self, data):
+    def publish(self, data, partition_key=None):
         """
         Publishes one or more messages to this partition.
         """
         if isinstance(data, basestring):
-            messages = [data]
+            messages = [Message(data, partition_key=partition_key)]
         elif isinstance(data, collections.Sequence):
-            messages = data
+            messages = [Message(d, partition_key=partition_key)
+                        for d in data]
         else:
-            raise TypeError
+            raise TypeError('Unable to publish data of type %s' % type(data))
 
-        return self.broker.client.produce(self.topic.name, self.number,
-            messages)
+        # TODO: Compression here?
+        return self.leader.produce_messages(self.topic.name, self.id, messages)
 
-    def fetch(self, offset, size):
-        return self.broker.client.fetch(
-            self.topic.name, self.number, offset, size
-        )
+    def fetch_messages(self, offset, max_bytes=307200):
+        req = PartitionFetchRequest(self.topic.name, self.id, offset, max_bytes)
+        res = self.leader.fetch_messages([req])
+        return list(itertools.chain.from_iterable(
+            t.messages
+            for t in res.topics.itervalues()
+        ))
 
     def __hash__(self):
         return hash((self.topic, self.broker.id, self.number))
