@@ -189,7 +189,7 @@ class MessageSet(Serializable):
         :param compression_type: Compression to use on the messages
         :param messages: An initial list of messages for the set
         """
-        self.compression_type = compression
+        self.compression_type = compression_type
         self._messages = messages or []
         self._compressed = None # compressed Message if using compression
 
@@ -415,7 +415,11 @@ class ProduceRequest(Request):
         :param required_acks: see docstring
         :param timeout: timeout (in ms) to wait for the required acks
         """
-        self._msets = defaultdict(lambda: defaultdict(lambda: MessageSet(compression_type=compression)))
+        # {topic_name: {partition_id: MessageSet}}
+        self._msets = defaultdict(
+            lambda: defaultdict(
+                lambda: MessageSet(compression_type=compression_type)
+        ))
         self.required_acks = required_acks
         self.timeout = timeout
         for req in partition_requests:
@@ -639,8 +643,6 @@ class FetchResponse(Response):
                 self.topics[topic] = FetchPartitionResponse(
                     partition[2], self._unpack_message_set(partition[3]),
                 )
-        if not self.topics:
-            import pdb; pdb.set_trace()
 
     def _unpack_message_set(self, buff):
         """MessageSets can be nested. Get just the Messages out of it."""
