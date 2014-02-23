@@ -113,7 +113,7 @@ class SamsaClient(object):
             self.brokers.pop(id_)
         # Make sure any brokers referenced are known
         all_brokers = itertools.chain.from_iterable(
-            [meta.id,]+meta.isr+meta.replicas
+            [meta.leader,]+meta.isr+meta.replicas
             for meta in partition_metadata.itervalues()
         )
         if any(b not in self.brokers for b in all_brokers):
