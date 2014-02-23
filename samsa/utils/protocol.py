@@ -364,6 +364,19 @@ class MetadataResponse(Response):
 ## Produce API
 ##
 
+_PartitionProduceRequest = namedtuple('PartitionProduceRequest',
+    ['topic_name', 'partition_id', 'messages']
+)
+class PartitionProduceRequest(_PartitionProduceRequest):
+    """Produce request for a specific topic/partition
+
+    :ivar topic_name: Name of the topic to use
+    :ivar partition_id: Id of the partition to use
+    :ivar messages: List of :class:`samsa.protocol.Message` to publish
+    """
+    pass
+
+
 class ProduceRequest(Request):
     """Produce Request
 
@@ -373,7 +386,11 @@ class ProduceRequest(Request):
       Partition => int32
       MessageSetSize => int32
     """
-    def __init__(self,  compression=compression.NONE, required_acks=1, timeout=10000):
+    def __init__(self,
+                 partition_requests=[],
+                 compression=compression.NONE,
+                 required_acks=1,
+                 timeout=10000):
         """Create a new ProduceRequest
 
         ``required_acks`` determines how many acknowledgement the server waits
@@ -385,6 +402,8 @@ class ProduceRequest(Request):
             1: Wait for this server to write to the local log and then return
             2+: Wait for N servers to acknowledge
 
+        :param partition_requests: Iterable of
+            :class:`samsa.protocol.PartitionProduceRequest` for this request
         :param compression: Compression to use for messages
         :param required_acks: see docstring
         :param timeout: timeout (in ms) to wait for the required acks
@@ -392,6 +411,8 @@ class ProduceRequest(Request):
         self._msets = defaultdict(lambda: defaultdict(lambda: MessageSet(compression=compression)))
         self.required_acks = required_acks
         self.timeout = timeout
+        for req in partition_requests:
+            self.add_messages(req.messages, req.topic_name, req.partition_id)
 
     def __len__(self):
         """Length of the serialized message, in bytes"""
@@ -413,7 +434,7 @@ class ProduceRequest(Request):
 
         :param messages: an iterable of :class:`samsa.common.Message` to add
         :param topic_name: the name of the topic to publish to
-        :param partition_num: the partition number to publish to
+        :param partition_id: the partition to publish to
         """
         self._msets[topic_name][partition_id].messages.extend(messages)
 
@@ -433,9 +454,9 @@ class ProduceRequest(Request):
             fmt = '!h%dsi' % len(topic_name)
             struct.pack_into(fmt, output, offset, len(topic_name), topic_name, len(partitions))
             offset += struct.calcsize(fmt)
-            for partition_num,message_set in partitions.iteritems():
+            for partition_id,message_set in partitions.iteritems():
                 mset_len = len(message_set)
-                struct.pack_into('!ii', output, offset, partition_num, mset_len)
+                struct.pack_into('!ii', output, offset, partition_id, mset_len)
                 offset += 8
                 message_set.pack_into(output, offset)
                 offset += mset_len
@@ -474,13 +495,13 @@ class ProduceResponse(Response):
 ##
 
 _PartitionFetchRequest = namedtuple('PartitionFetchRequest',
-    ['topic_name', 'partition_num', 'offset', 'max_bytes']
+    ['topic_name', 'partition_id', 'offset', 'max_bytes']
 )
 class PartitionFetchRequest(_PartitionFetchRequest):
     """Fetch request for a specific topic/partition
 
     :ivar topic_name: Name of the topic to fetch from
-    :ivar partition_num: Number of the partition to fetch from
+    :ivar partition_id: Id of the partition to fetch from
     :ivar offset: Offset at which to start reading
     :ivar max_bytes: Max bytes to read from this partition (default: 300kb)
     """
@@ -501,7 +522,7 @@ class FetchRequest(Request):
       FetchOffset => int64
       MaxBytes => int32
     """
-    def __init__(self, partition_requests=None, timeout=1000, min_bytes=1024):
+    def __init__(self, partition_requests=[], timeout=1000, min_bytes=1024):
         """Create a new fetch request
 
         Kafka 0.8 uses long polling for fetch requests, which is different
@@ -519,19 +540,19 @@ class FetchRequest(Request):
         self.timeout = timeout
         self.min_bytes = min_bytes
         self._reqs = defaultdict(dict)
-        if partition_requests:
-            [self.add_request(r) for r in partition_requests]
+        for req in partition_requests:
+            self.add_request(req)
 
     def add_request(self, partition_request):
         """Add a topic/partition/offset to the requests
 
         :param topic_name: The topic to fetch from
-        :param partition_num: The partition to fetch from
+        :param partition_id: The partition to fetch from
         :param offset: The offset to start reading data from
         :param max_bytes: The maximum number of bytes to return in the response
         """
         pr = partition_request
-        self._reqs[pr.topic_name][pr.partition_num] = (pr.offset, pr.max_bytes)
+        self._reqs[pr.topic_name][pr.partition_id] = (pr.offset, pr.max_bytes)
 
     def __len__(self):
         """Length of the serialized message, in bytes"""
@@ -565,9 +586,9 @@ class FetchRequest(Request):
             fmt = '!h%dsi' % len(topic_name)
             struct.pack_into(fmt, output, offset, len(topic_name), topic_name, len(partitions))
             offset += struct.calcsize(fmt)
-            for partition_num,(fetch_offset,max_bytes) in partitions.iteritems():
+            for partition_id,(fetch_offset,max_bytes) in partitions.iteritems():
                 struct.pack_into('!iqi', output, offset,
-                                 partition_num, fetch_offset, max_bytes)
+                                 partition_id, fetch_offset, max_bytes)
                 offset += 16
         return output
 
@@ -637,13 +658,13 @@ class FetchResponse(Response):
 ##
 
 _PartitionOffsetRequest = namedtuple('PartitionOffsetRequest',
-    ['topic_name', 'partition_num', 'offsets_before', 'max_offsets']
+    ['topic_name', 'partition_id', 'offsets_before', 'max_offsets']
 )
 class PartitionOffsetRequest(_PartitionOffsetRequest):
     """Offset request for a specific topic/partition
 
     :ivar topic_name: Name of the topic to look up
-    :ivar partition_num: Number of the partition to look up
+    :ivar partition_id: Id of the partition to look up
     :ivar offsets_before: Retrieve offset information for messages before
                           this timestamp (ms). -1 will retrieve the latest
                           offsets and -2 will retrieve the earliest
@@ -667,7 +688,7 @@ class OffsetRequest(Request):
         """Create a new offset request"""
         self._reqs = defaultdict(dict)
         for t in partition_requests:
-            self._reqs[t.topic_name][t.partition_num] = (t.offsets_before,
+            self._reqs[t.topic_name][t.partition_id] = (t.offsets_before,
                                                          t.max_offsets)
 
     def __len__(self):

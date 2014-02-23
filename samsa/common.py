@@ -19,7 +19,8 @@ from samsa.utils.protocol import (
     FetchRequest, FetchResponse, MetadataRequest, MetadataResponse,
     OFFSET_EARLIEST, OFFSET_LATEST, OffsetRequest, OffsetResponse,
     PartitionFetchRequest, PartitionOffsetRequest,
-    ProduceRequest, ProduceResponse, Message, MessageSet
+    ProduceRequest, ProduceResponse, Message, MessageSet,
+    PartitionProduceRequest,
 )
 
 logger = logging.getLogger(__name__)
@@ -41,10 +42,11 @@ class Broker(object):
         self._timeout = timeout
         self.client = None
 
-    __repr__ = attribute_repr('id')
+    __repr__ = attribute_repr('id', 'host', 'port')
 
     @property
     def connected(self):
+        """Returns True if the connected to the broker."""
         return self._connected
 
     @property
@@ -64,14 +66,11 @@ class Broker(object):
 
     @property
     def handler(self):
-        """The :class:`samsa.handlers.RequestHandler` for this broker.
-
-        Only one handler is created per broker instance.
-        """
+        """The :class:`samsa.handlers.RequestHandler` for this broker."""
         return self._reqhandler
 
     def connect(self):
-        """Establish a connection to the Broker, creating a Client"""
+        """Establish a connection to the Broker."""
         conn = BrokerConnection(self.host, self.port)
         conn.connect(self._timeout)
         self._reqhandler = RequestHandler(self._handler, conn)
@@ -89,17 +88,19 @@ class Broker(object):
         return future.get(FetchResponse)
 
     def produce_messages(self,
-                         topic_name,
-                         partition_id,
-                         messages,
+                         partition_requests,
+                         compression=compression.NONE,
                          required_acks=1,
                          timeout=10000):
         if not self.connected:
             self.connect()
-        req = ProduceRequest(required_acks=required_acks, timeout=timeout)
-        req.add_messages(messages, topic_name, partition_id)
+        req = ProduceRequest(partition_requests=partition_requests,
+                             compression=compression,
+                             required_acks=required_acks,
+                             timeout=timeout)
         future = self.handler.request(req)
-        return future.get(ProduceResponse)
+        res = future.get(ProduceResponse)
+        return None # errors raised on deserialize, no need for return value
 
     def request_offsets(self, partition_requests):
         """Request offset information for a set of topic/partitions"""
@@ -140,31 +141,39 @@ class Partition(object):
         """Get the earliest offset for this partition."""
         return self.fetch_offsets(OFFSET_EARLIEST)
 
-    def publish(self, data, partition_key=None):
-        """
-        Publishes one or more messages to this partition.
-        """
+    def publish(self,
+                data,
+                partition_key=None,
+                compression=compression.NONE,
+                required_acks=1,
+                timeout=1000):
+        """Publish one or more messages to this partition."""
         if isinstance(data, basestring):
-            messages = [Message(data, partition_key=partition_key)]
+            messages = [Message(data, partition_key=partition_key),]
         elif isinstance(data, collections.Sequence):
-            messages = [Message(d, partition_key=partition_key)
-                        for d in data]
+            messages = [Message(d, partition_key=partition_key) for d in data]
         else:
             raise TypeError('Unable to publish data of type %s' % type(data))
 
-        # TODO: Compression here?
-        return self.leader.produce_messages(self.topic.name, self.id, messages)
+        req = PartitionProduceRequest(self.topic.name, self.id, messages)
+        return self.leader.produce_messages(
+            [req,], compression=compression,
+            required_acks=required_acks, timeout=timeout
+        )
 
-    def fetch_messages(self, offset, max_bytes=307200):
+    def fetch_messages(self,
+                       offset,
+                       timeout=30000,
+                       min_bytes=1024,
+                       max_bytes=307200):
         req = PartitionFetchRequest(self.topic.name, self.id, offset, max_bytes)
-        res = self.leader.fetch_messages([req])
-        return list(itertools.chain.from_iterable(
-            t.messages
-            for t in res.topics.itervalues()
-        ))
+        res = self.leader.fetch_messages(
+            [req], timeout=timeout, max_bytes=max_bytes, min_bytes=min_bytes
+        )
+        return res.topics[self.topic.name].messages
 
     def __hash__(self):
-        return hash((self.topic, self.broker.id, self.number))
+        return hash((self.topic, self.number))
 
     def __eq__(self, other):
         return hash(self) == hash(other)
@@ -214,11 +223,7 @@ class Topic(object):
         :param partition_key: a key to be used for semantic partitioning
         :type partition_key: implementation-specific
         """
-        if len(self.partitions) < 1:
-            raise NoAvailablePartitionsError('No partitions are available to '
-                'accept a write for this message. (Is your Kafka broker '
-                'running?)')
-        partition = partitioner(self.partitions, partition_key)
+        partition = partitioner(self.partitions.values(), partition_key)
         return partition.publish(data)
 
     def subscribe(self,
