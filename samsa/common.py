@@ -14,14 +14,14 @@ from zlib import crc32
 from samsa.connection import BrokerConnection
 from samsa.handlers import RequestHandler
 from samsa.partitioners import random_partitioner
-from samsa.utils import Serializable, attribute_repr, compression
-from samsa.utils.protocol import (
+from samsa.protocol import (
     FetchRequest, FetchResponse, MetadataRequest, MetadataResponse,
     OFFSET_EARLIEST, OFFSET_LATEST, OffsetRequest, OffsetResponse,
     PartitionFetchRequest, PartitionOffsetRequest,
     ProduceRequest, ProduceResponse, Message, MessageSet,
     PartitionProduceRequest,
 )
+from samsa.utils import Serializable, attribute_repr, compression
 
 logger = logging.getLogger(__name__)
 

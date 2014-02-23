@@ -23,7 +23,7 @@ from samsa import handlers
 from samsa.common import Broker, Topic, Partition
 from samsa.connection import BrokerConnection
 from samsa.exceptions import ImproperlyConfiguredError
-from samsa.utils.protocol import MetadataRequest, MetadataResponse
+from samsa.protocol import MetadataRequest, MetadataResponse
 from zlib import crc32
 
 
