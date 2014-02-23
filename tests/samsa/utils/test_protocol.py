@@ -1,23 +1,7 @@
 import unittest
 
-from samsa import common, exceptions
-from samsa.utils import compression, protocol
-
-"""
-# TODO: Goes in client. Will remove later
-def testmsg(msg_bytes):
-    import socket
-    conn = socket.create_connection(('localhost', 9092))
-    conn.sendall(msg_bytes)
-    h = conn.recv(4)
-    import struct
-    ln = struct.unpack('!i', h)[0]
-    output = bytearray(ln)
-    received = 0
-    while received < ln:
-        received += conn.recv_into(output, min(ln-received, 4096))
-    return buffer(output)[4:] # skip correlation id
-"""
+from samsa import common, exceptions, protocol
+from samsa.utils import compression
 
 
 class TestMetadataAPI(unittest.TestCase):
@@ -32,15 +16,15 @@ class TestMetadataAPI(unittest.TestCase):
     def test_response(self):
         cluster = protocol.MetadataResponse(
             buffer('\x00\x00\x00\x01\x00\x00\x00\x00\x00\x09localhost\x00\x00#\x84\x00\x00\x00\x01\x00\x00\x00\x04test\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00')
-        ).to_cluster()
+        )
         self.assertEqual(cluster.brokers[0].host, 'localhost')
         self.assertEqual(cluster.brokers[0].port, 9092)
         self.assertEqual(cluster.topics['test'].partitions[0].leader,
-                         cluster.brokers[0])
+                         cluster.brokers[0].id)
         self.assertEqual(cluster.topics['test'].partitions[0].replicas,
-                         [cluster.brokers[0]])
+                         [cluster.brokers[0].id])
         self.assertEqual(cluster.topics['test'].partitions[0].isr,
-                         [cluster.brokers[0]])
+                         [cluster.brokers[0].id])
 
     def test_partition_error(self):
         self.assertRaises(
@@ -77,13 +61,13 @@ class TestProduceAPI(unittest.TestCase):
         )
 
     def test_gzip_compression(self):
-        req = protocol.ProduceRequest(compression=compression.GZIP)
+        req = protocol.ProduceRequest(compression_type=compression.GZIP)
         req.add_messages(self.test_messages, 'test_gzip', 0)
         msg = req.get_bytes()
         self.assertEqual(len(msg), 205) # this isn't a good test
 
     def test_snappy_compression(self):
-        req = protocol.ProduceRequest(compression=compression.SNAPPY)
+        req = protocol.ProduceRequest(compression_type=compression.SNAPPY)
         req.add_messages(self.test_messages, 'test_snappy', 0)
         msg = req.get_bytes()
         self.assertEqual(len(msg), 210) # this isn't a good test
@@ -105,8 +89,8 @@ class TestProduceAPI(unittest.TestCase):
 
 class TestFetchAPI(unittest.TestCase):
     def test_request(self):
-        req = protocol.FetchRequest()
-        req.add_fetch('test', 0, 1)
+        preq = protocol.PartitionFetchRequest('test', 0, 1)
+        req = protocol.FetchRequest(partition_requests=[preq,])
         msg = req.get_bytes()
         self.assertEqual(
             msg,
@@ -130,7 +114,7 @@ class TestFetchAPI(unittest.TestCase):
         message = resp.topics['test'].messages[0]
         self.assertEqual(message.value, 'this is a test message')
         self.assertEqual(message.partition_key, 'test_partition_key')
-        self.assertEqual(message.compression, 0)
+        self.assertEqual(message.compression_type, 0)
         self.assertEqual(message.offset, 1)
 
     def test_gzip_decompression(self):
@@ -138,15 +122,15 @@ class TestFetchAPI(unittest.TestCase):
         response = protocol.FetchResponse(msg)
         self.assertDictEqual(
             response.topics['test_gzip'].messages[0].__dict__,
-            {'partition_key': 'asdf', 'compression': 0, 'value': 'this is a test message', 'offset': 0},
+            {'partition_key': 'asdf', 'compression_type': 0, 'value': 'this is a test message', 'offset': 0},
         )
         self.assertDictEqual(
             response.topics['test_gzip'].messages[1].__dict__,
-            {'partition_key': 'test_key', 'compression': 0, 'value': 'this is also a test message', 'offset': 1},
+            {'partition_key': 'test_key', 'compression_type': 0, 'value': 'this is also a test message', 'offset': 1},
         )
         self.assertDictEqual(
             response.topics['test_gzip'].messages[2].__dict__,
-            {'partition_key': None, 'compression': 0, 'value': "this doesn't have a partition key", 'offset': 2}
+            {'partition_key': None, 'compression_type': 0, 'value': "this doesn't have a partition key", 'offset': 2}
         )
         return
 
@@ -155,22 +139,22 @@ class TestFetchAPI(unittest.TestCase):
         response = protocol.FetchResponse(msg)
         self.assertDictEqual(
             response.topics['test_snappy'].messages[0].__dict__,
-            {'partition_key': 'asdf', 'compression': 0, 'value': 'this is a test message', 'offset': 0},
+            {'partition_key': 'asdf', 'compression_type': 0, 'value': 'this is a test message', 'offset': 0},
         )
         self.assertDictEqual(
             response.topics['test_snappy'].messages[1].__dict__,
-            {'partition_key': 'test_key', 'compression': 0, 'value': 'this is also a test message', 'offset': 1},
+            {'partition_key': 'test_key', 'compression_type': 0, 'value': 'this is also a test message', 'offset': 1},
         )
         self.assertDictEqual(
             response.topics['test_snappy'].messages[2].__dict__,
-            {'partition_key': None, 'compression': 0, 'value': "this doesn't have a partition key", 'offset': 2}
+            {'partition_key': None, 'compression_type': 0, 'value': "this doesn't have a partition key", 'offset': 2}
         )
 
 
 class TestOffsetAPI(unittest.TestCase):
     def test_request(self):
-        req = protocol.OffsetRequest()
-        req.add_topic('test', 0, -1)
+        preq = protocol.PartitionOffsetRequest('test', 0, -1, 1)
+        req = protocol.OffsetRequest(partition_requests=[preq,])
         msg = req.get_bytes()
         self.assertEqual(
             msg,

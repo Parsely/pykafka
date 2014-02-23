@@ -204,8 +204,8 @@ class MessageSet(Serializable):
         if self.compression_type == compression.NONE:
             messages = self._messages
         else:
-            # The only way to get __len__ of compressed is to compress. Store
-            # that so we don't have to do it twice
+            # The only way to get __len__ of compressed is to compress.
+            # Store that so we don't have to do it twice
             if self._compressed is None:
                 self._compressed = self._get_compressed()
             messages = [self._compressed]

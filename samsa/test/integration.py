@@ -31,8 +31,8 @@ from kazoo.testing import KazooTestHarness
 from nose.plugins.attrib import attr
 
 from samsa import handlers
-from samsa.client import Client
-from samsa.cluster import Cluster
+#from samsa.client import Client
+#from samsa.cluster import Cluster
 from samsa.test.case import TestCase
 from samsa.utils.functional import methodmap
 

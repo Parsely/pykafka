@@ -32,10 +32,8 @@ from samsa.exceptions import NoAvailablePartitionsError
 from samsa.test.integration import KafkaIntegrationTestCase, polling_timeout
 from samsa.test.integration import FasterKafkaIntegrationTestCase, polling_timeout
 from samsa.test.case import TestCase
-from samsa.cluster import Cluster
 from samsa.consumer import Consumer
-from samsa.topics import Topic
-from samsa.partitions import Partition
+from samsa.common import Partition, Topic
 from samsa.consumer.partitions import PartitionOwnerRegistry, OwnedPartition
 
 

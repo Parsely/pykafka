@@ -22,9 +22,9 @@ from collections import deque
 from kazoo.exceptions import NodeExistsException, NoNodeException
 from functools import partial
 
-from samsa.client import OFFSET_EARLIEST, OFFSET_LATEST
 from samsa.exceptions import OffsetOutOfRangeError, PartitionOwnedError
-from samsa.partitions import Partition
+from samsa.common import Partition
+from samsa.protocol import OFFSET_EARLIEST, OFFSET_LATEST
 
 
 logger = logging.getLogger(__name__)

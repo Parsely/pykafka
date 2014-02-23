@@ -124,7 +124,7 @@ class Partition(object):
         self.isr = isr
         self.topic = topic
 
-    __repr__ = attribute_repr('topic', 'broker', 'number')
+    __repr__ = attribute_repr('topic', 'number')
 
     def fetch_offsets(self, offsets_before, max_offsets=1):
         request = PartitionOffsetRequest(
