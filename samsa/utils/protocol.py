@@ -116,8 +116,12 @@ class Message(Serializable):
     """
     MAGIC = 0
 
-    def __init__(self, value, partition_key=None, compression=compression.NONE, offset=-1):
-        self.compression = compression
+    def __init__(self,
+                 value,
+                 partition_key=None,
+                 compression_type=compression.NONE,
+                 offset=-1):
+        self.compression_type = compression_type
         self.partition_key = partition_key
         self.value = value
         self.offset = offset
@@ -135,7 +139,10 @@ class Message(Serializable):
         crc,_,attr,key,val = response
         crc_check = crc32(buff[4:])
         # TODO: Handle CRC failure
-        return Message(val, partition_key=key, compression=attr, offset=msg_offset)
+        return Message(val,
+                       partition_key=key,
+                       compression_type=attr,
+                       offset=msg_offset)
 
     def pack_into(self, buff, offset):
         """Serialize and write to ``buff`` starting at offset ``offset``.
@@ -147,11 +154,11 @@ class Message(Serializable):
         """
         if self.partition_key is None:
             fmt = '!BBii%ds' % len(self.value)
-            args = (self.MAGIC, self.compression, -1,
+            args = (self.MAGIC, self.compression_type, -1,
                     len(self.value), self.value)
         else:
             fmt = '!BBi%dsi%ds' % (len(self.partition_key), len(self.value))
-            args = (self.MAGIC, self.compression,
+            args = (self.MAGIC, self.compression_type,
                     len(self.partition_key), self.partition_key,
                     len(self.value), self.value)
         struct.pack_into(fmt, buff, offset+4, *args)
@@ -174,15 +181,15 @@ class MessageSet(Serializable):
       MessageSize => int32
 
     :ivar messages: The list of messages currently in the MessageSet
-    :ivar compression: compression to use for the messages
+    :ivar compression_type: compression to use for the messages
     """
-    def __init__(self, compression=compression.NONE, messages=None):
+    def __init__(self, compression_type=compression.NONE, messages=None):
         """Create a new MessageSet
 
-        :param compression: Compression to use on the messages
+        :param compression_type: Compression to use on the messages
         :param messages: An initial list of messages for the set
         """
-        self.compression = compression
+        self.compression_type = compression
         self._messages = messages or []
         self._compressed = None # compressed Message if using compression
 
@@ -194,7 +201,7 @@ class MessageSet(Serializable):
         requests/responses using MessageSets need that size, though, so
         be careful when using this.
         """
-        if self.compression == compression.NONE:
+        if self.compression_type == compression.NONE:
             messages = self._messages
         else:
             # The only way to get __len__ of compressed is to compress. Store
@@ -216,17 +223,17 @@ class MessageSet(Serializable):
         Returns a Message object with correct headers set and compressed
         data in the value field.
         """
-        assert self.compression != compression.NONE
+        assert self.compression_type != compression.NONE
         tmp_mset = MessageSet(messages=self._messages)
         uncompressed = bytearray(len(tmp_mset))
         tmp_mset.pack_into(uncompressed, 0)
-        if self.compression == compression.GZIP:
+        if self.compression_type == compression.GZIP:
             compressed = compression.encode_gzip(buffer(uncompressed))
-        elif self.compression == compression.SNAPPY:
+        elif self.compression_type == compression.SNAPPY:
             compressed = compression.encode_snappy(buffer(uncompressed))
         else:
-            raise TypeError("Unknown compression: %s" % self.compression)
-        return Message(compressed, compression=self.compression)
+            raise TypeError("Unknown compression: %s" % self.compression_type)
+        return Message(compressed, compression_type=self.compression_type)
 
     @classmethod
     def decode(cls, buff):
@@ -253,7 +260,7 @@ class MessageSet(Serializable):
         :param buff: The buffer to write into
         :param offset: The offset to start the write at
         """
-        if self.compression == compression.NONE:
+        if self.compression_type == compression.NONE:
             messages = self._messages
         else:
             if self._compressed is None:
@@ -388,7 +395,7 @@ class ProduceRequest(Request):
     """
     def __init__(self,
                  partition_requests=[],
-                 compression=compression.NONE,
+                 compression_type=compression.NONE,
                  required_acks=1,
                  timeout=10000):
         """Create a new ProduceRequest
@@ -404,11 +411,11 @@ class ProduceRequest(Request):
 
         :param partition_requests: Iterable of
             :class:`samsa.protocol.PartitionProduceRequest` for this request
-        :param compression: Compression to use for messages
+        :param compression_type: Compression to use for messages
         :param required_acks: see docstring
         :param timeout: timeout (in ms) to wait for the required acks
         """
-        self._msets = defaultdict(lambda: defaultdict(lambda: MessageSet(compression=compression)))
+        self._msets = defaultdict(lambda: defaultdict(lambda: MessageSet(compression_type=compression)))
         self.required_acks = required_acks
         self.timeout = timeout
         for req in partition_requests:
@@ -640,12 +647,12 @@ class FetchResponse(Response):
         output = []
         message_set = MessageSet.decode(buff)
         for message in message_set.messages:
-            if message.compression == compression.NONE:
+            if message.compression_type == compression.NONE:
                 output.append(message)
-            elif message.compression == compression.GZIP:
+            elif message.compression_type == compression.GZIP:
                 decompressed = compression.decode_gzip(message.value)
                 output += self._unpack_message_set(decompressed)
-            elif message.compression == compression.SNAPPY:
+            elif message.compression_type == compression.SNAPPY:
                 # Kafka is sending incompatible headers. Strip it off.
                 decompressed = compression.decode_snappy(message.value[20:])
                 output += self._unpack_message_set(decompressed)

@@ -89,13 +89,13 @@ class Broker(object):
 
     def produce_messages(self,
                          partition_requests,
-                         compression=compression.NONE,
+                         compression_type=compression.NONE,
                          required_acks=1,
                          timeout=10000):
         if not self.connected:
             self.connect()
         req = ProduceRequest(partition_requests=partition_requests,
-                             compression=compression,
+                             compression_type=compression_type,
                              required_acks=required_acks,
                              timeout=timeout)
         future = self.handler.request(req)
@@ -144,7 +144,7 @@ class Partition(object):
     def publish(self,
                 data,
                 partition_key=None,
-                compression=compression.NONE,
+                compression_type=compression.NONE,
                 required_acks=1,
                 timeout=1000):
         """Publish one or more messages to this partition."""
@@ -157,7 +157,7 @@ class Partition(object):
 
         req = PartitionProduceRequest(self.topic.name, self.id, messages)
         return self.leader.produce_messages(
-            [req,], compression=compression,
+            [req,], compression_type=compression_type,
             required_acks=required_acks, timeout=timeout
         )
 
