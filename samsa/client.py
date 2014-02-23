@@ -19,7 +19,6 @@ import itertools
 import json
 import logging
 
-from kazoo.exceptions import NoNodeException
 from samsa import handlers
 from samsa.common import Broker, Topic, Partition
 from samsa.connection import BrokerConnection
@@ -40,52 +39,27 @@ class SamsaClient(object):
     :ivar brokers: The :class:`samsa.common.Broker` map for this cluster.
     :ivar topics: The :class:`samsa.common.Topic` map for this cluster.
     """
-    def __init__(self, zookeeper, handler=None, timeout=30):
+    def __init__(self, hosts='127.0.0.1:9092', handler=None, timeout=30):
         """Create a connection to a Kafka cluster
 
-        :param zookeeper: A zookeeper client.
-        :type zookeeper: :class:`kazoo.client.Client`
         :param handler: Async handler.
         :type handler: :class:`samsa.handlers.Handler`
         """
-        if not zookeeper.connected:
-            raise Exception("Zookeeper must be connected before use.")
-        self.zookeeper = zookeeper
-        self.handler = handler or handlers.ThreadingHandler()
-        self.topics = self.brokers = None
+        self._seed_hosts = hosts
         self._timeout = timeout
         self.brokers = {}
+        self.handler = handler or handlers.ThreadingHandler()
         self.topics = {}
         self.update_cluster()
-
-    def _discover_brokers(self):
-        """Get the list of brokers from Zookeeper.
-
-        :returns: list of `(host, port)` for each broker.
-        """
-        id_path = '/brokers/ids'
-        output = []
-        try:
-            broker_ids = self.zookeeper.get_children(id_path)
-            for id_ in broker_ids:
-                data = json.loads(
-                    self.zookeeper.get('%s/%s' % (id_path, id_))[0]
-                )
-                output.append(Broker(id_, data['host'], data['port'],
-                                     self.handler, self._timeout))
-        except NoNodeException:
-            raise ImproperlyConfiguredError(
-                'The path "%s" does not exist in your '
-                'ZooKeeper cluster -- is your Kafka cluster running?' %
-                id_path)
-        return output
 
     def _get_metadata(self):
         """Get fresh cluster metadata from a broker"""
         if self.brokers:
             brokers = self.brokers.values()
         else:
-            brokers = self._discover_brokers()
+            brokers = [Broker(-1, host, port, self.handler, self._timeout)
+                       for host, port
+                       in [h.split(':') for h in self._seed_hosts.split(',')]]
         for broker in brokers:
             try:
                 return broker.request_metadata()
