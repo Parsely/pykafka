@@ -1,1 +1,2 @@
 include samsa/test/kafka-run-class.sh
+recursive-exclude tests *
