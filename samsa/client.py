@@ -66,6 +66,7 @@ class SamsaClient(object):
             except Exception, e:
                 logger.warning('Unable to connect to broker %s:%s',
                                broker.host, broker.port)
+                raise
         raise Exception('Unable to connect to a broker to fetch metadata.')
 
     def _update_brokers(self, broker_metadata):

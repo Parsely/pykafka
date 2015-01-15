@@ -52,6 +52,8 @@ class BrokerConnection(object):
 
     def disconnect(self):
         """Disconnect from the broker."""
+        if self._socket is None:
+            return
         try:
             self._socket.close()
         except IOError:

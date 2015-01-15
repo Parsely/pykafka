@@ -49,10 +49,6 @@ class ResponseFuture(object):
         if self.error:
             raise self.error
         if response_cls:
-            from samsa.utils.protocol import FetchResponse
-            #if response_cls == FetchResponse and self.response[:4] == '\x00\x00\x00\x00':
-            #    self.response = self.response[:3] + '\x01' + self.response[4:]
-            #    import pdb; pdb.set_trace()
             return response_cls(self.response)
         else:
             return self.response
