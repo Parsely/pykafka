@@ -1,8 +1,8 @@
-APACHE_MIRROR = http://mirrors.sonic.net/apache
+APACHE_MIRROR = https://archive.apache.org/dist/
 
 KAFKA_VERSION := 0.7.1-incubating
 KAFKA_FULL = kafka-$(KAFKA_VERSION)
-KAFKA_URL = $(APACHE_MIRROR)/incubator/kafka/kafka-$(KAFKA_VERSION)/kafka-$(KAFKA_VERSION)-src.tgz
+KAFKA_URL = $(APACHE_MIRROR)/kafka/old_releases/kafka-$(KAFKA_VERSION)/kafka-$(KAFKA_VERSION)-src.tgz
 KAFKA_SRC_TGZ = $(notdir $(KAFKA_URL))
 
 ZOOKEEPER_VERSION := 3.3.5
