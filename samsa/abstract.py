@@ -19,7 +19,13 @@ class Cluster(object):
 
     @abc.abstractmethod
     def update():
-        """Update the Cluster with metadata from Kafka."""
+        """Update the Cluster with metadata from Kafka.
+
+        All updates must happen in-place. This means that if a Topic leader has
+        changed, a new Topic can't be created and put into `self.topics`. That
+        would break any clients that have instances of the old Topic. Instead,
+        the current topic is updated seamlessly.
+        """
         pass
 
 class Broker(object):
