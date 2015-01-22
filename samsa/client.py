@@ -59,15 +59,20 @@ class SamsaClient(object):
         """
         self._seed_hosts = hosts
         self._timeout = timeout
-        self.brokers = {}
         self.handler = None if use_greenlets else handlers.ThreadingHandler()
-        self.topics = {}
         self.use_rdkafka = RD_KAFKA_PRESENT and use_rdkafka
         if self.use_rdkafka:
             logger.info('Using rd_kafka extensions.')
             raise NotImplementedError('Not yet')
         else:
             self.cluster = pysamsa.Cluster(self._seed_hosts, self.handler)
+
+        # Keep access as simple as possible
+        self.brokers = self.cluster.brokers
+
+    def __getitem__(self, key):
+        """Getter used to provide dict-like access to Topics."""
+        return self.cluster.topics[key]
 
     def update_cluster(self):
         """Update known brokers and topics.
