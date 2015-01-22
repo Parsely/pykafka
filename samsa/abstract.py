@@ -1,6 +1,27 @@
 import abc
 
 
+class Cluster(object):
+    """Abstraction of a Kafka cluster.
+
+    :ivar topics: Topics present in this cluster.
+    :ivar brokers: Brokers in the cluster.
+    """
+    __metaclass__ = abc.ABCMeta
+
+    @abc.abstractproperty
+    def brokers():
+        pass
+
+    @abc.abstractproperty
+    def topics():
+        pass
+
+    @abc.abstractmethod
+    def update():
+        """Update the Cluster with metadata from Kafka."""
+        pass
+
 class Broker(object):
     __metaclass__ = abc.ABCMeta
     pass
@@ -98,6 +119,10 @@ class Topic(object):
               Figure out how/where partitioner will be defined
               How are we going to support custom partitioners?
         """
+        pass
+
+    @abc.abstractmethod
+    def consume(self, partitions):
         pass
 
 
