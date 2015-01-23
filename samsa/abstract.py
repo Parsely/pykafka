@@ -112,7 +112,7 @@ class Consumer(object):
         :param topic: The topic to consume from.
         :type topic: :class:`samsa.abstract.Topic` or :class:`str`
         :param partitions: List of partitions to consume from.
-        :type partitions: Iterable of :class:`samsa.abstract.Partition` or `int`
+        :type partitions: Iterable of :class:`samsa.abstract.Partition` or int
         """
         pass
 
@@ -135,8 +135,8 @@ class Consumer(object):
         pass
 
 
-def Producer(object):
-    __metaclass__ == abc.ABCMeta
+class Producer(object):
+    __metaclass__ = abc.ABCMeta
 
     @abc.abstractmethod
     def __init__(self, topic, partitioner=None):
