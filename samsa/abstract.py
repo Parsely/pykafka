@@ -77,21 +77,26 @@ class Partition(object):
     def earliest_offset(self):
         pass
 
-    @abc.abstractmethod
-    def publish(self, data):
-        """Publish data to this partition.
 
-        TODO: Definition of what `data` is
-        """
+class Topic(object):
+    __metaclass__ = abc.ABCMeta
+
+    @abc.abstractproperty
+    def name(self):
+        pass
+
+    @abc.abstractproperty
+    def partitions(self):
         pass
 
     @abc.abstractmethod
-    def fetch(self, offset):
-        """Fetch message or messages from this partition
+    def latest_offsets(self):
+        """Get the latest offset for all partitions."""
+        pass
 
-        TODO: Figure out args and what this should support.
-              It ought to be as simple as possible.
-        """
+    @abc.abstractmethod
+    def earliest_offsets(self):
+        """Get the earliest offset for all partitions."""
         pass
 
 
@@ -99,7 +104,16 @@ class Consumer(object):
     __metaclass__ = abc.ABCMeta
 
     @abc.abstractmethod
-    def __init__(self, topic, partitions=None):
+    def __init__(self, client, topic, partitions=None):
+        """Create a consumer for a topic.
+
+        :param client: Client connection to the cluster.
+        :type client: :class:`samsa.client.SamsaClient`
+        :param topic: The topic to consume from.
+        :type topic: :class:`samsa.abstract.Topic` or :class:`str`
+        :param partitions: List of partitions to consume from.
+        :type partitions: Iterable of :class:`samsa.abstract.Partition` or `int`
+        """
         pass
 
     @abc.abstractproperty
@@ -138,26 +152,4 @@ def Producer(object):
 
     @abc.abstractmethod
     def produce(self, messages):
-        pass
-
-
-class Topic(object):
-    __metaclass__ = abc.ABCMeta
-
-    @abc.abstractproperty
-    def name(self):
-        pass
-
-    @abc.abstractproperty
-    def partitions(self):
-        pass
-
-    @abc.abstractmethod
-    def latest_offsets(self):
-        """Get the latest offset for all partitions."""
-        pass
-
-    @abc.abstractmethod
-    def earliest_offsets(self):
-        """Get the earliest offset for all partitions."""
         pass
