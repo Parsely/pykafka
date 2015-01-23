@@ -1,23 +1,38 @@
+import logging
+
 from samsa import abstract
+from samsa.pysamsa.connection import BrokerConnection
+from samsa.pysamsa.handlers import RequestHandler
+from samsa.pysamsa.protocol import (
+    FetchRequest, FetchResponse, ProduceRequest, OffsetRequest,
+    OffsetResponse, MetadataRequest, MetadataResponse
+)
+from samsa.pysamsa.utils import compression
+
+
+logger = logging.getLogger(__name__)
+
 
 class Broker(abstract.Broker):
-    """A Kafka broker.
 
-    :param cluster: The cluster this broker is associated with.
-    :type cluster: :class:`samsa.cluster.Cluster`
-    :param id_: Kafka broker ID
-    """
-    def __init__(self, id_, host, port, handler, timeout):
+    def __init__(self, metadata, handler, timeout):
+        """Init a Broker.
+
+        :param metadata: Metadata that describes the broker.
+        :type metadata: :class:`samsa.pysamsa.protocol.BrokerMetadata.`
+        :param handler: TODO: Fill in
+        :type handler: TODO: Fill in
+        :param timeout: TODO: Fill in
+        :type timeout: :class:int
+        """
         self._connected = False
-        self._id = int(id_)
-        self._host = host
-        self._port = port
+        self._id = int(metadata.id)
+        self._host = metadata.host
+        self._port = metadata.port
         self._handler = handler
         self._reqhandler = None
         self._timeout = timeout
-        self.client = None
-
-    __repr__ = attribute_repr('id', 'host', 'port')
+        self.connect()
 
     @property
     def connected(self):
@@ -52,9 +67,10 @@ class Broker(abstract.Broker):
         self._reqhandler.start()
         self._connected = True
 
-    def fetch_messages(self, partition_requests, timeout=30000, min_bytes=1024):
-        if not self.connected:
-            self.connect()
+    def fetch_messages(self,
+                       partition_requests,
+                       timeout=30000,
+                       min_bytes=1024):
         future = self.handler.request(FetchRequest(
             partition_requests=partition_requests,
             timeout=10000,
@@ -67,25 +83,18 @@ class Broker(abstract.Broker):
                          compression_type=compression.NONE,
                          required_acks=1,
                          timeout=10000):
-        if not self.connected:
-            self.connect()
         req = ProduceRequest(partition_requests=partition_requests,
                              compression_type=compression_type,
                              required_acks=required_acks,
                              timeout=timeout)
-        future = self.handler.request(req)
-        res = future.get(ProduceResponse)
-        return None # errors raised on deserialize, no need for return value
+        self.handler.request(req).get()
+        return None  # errors raised on deserialize, no need for return value
 
     def request_offsets(self, partition_requests):
         """Request offset information for a set of topic/partitions"""
-        if not self.connected:
-            self.connect()
         future = self.handler.request(OffsetRequest(partition_requests))
         return future.get(OffsetResponse)
 
     def request_metadata(self, topics=[]):
-        if not self.connected:
-            self.connect()
         future = self.handler.request(MetadataRequest(topics=topics))
         return future.get(MetadataResponse)

@@ -1,18 +1,20 @@
 import logging
 
 from samsa import abstract
+from samsa.pysamsa.protocol import (
+    PartitionOffsetRequest, OFFSET_EARLIEST, OFFSET_LATEST
+)
 
 logger = logging.getLogger(__name__)
 
-class Partition(object):
+
+class Partition(abstract.Partition):
     def __init__(self, topic, id_, leader, replicas, isr):
         self.id = id_
         self.leader = leader
         self.replicas = replicas
         self.isr = isr
         self.topic = topic
-
-    __repr__ = attribute_repr('topic', 'number')
 
     def fetch_offsets(self, offsets_before, max_offsets=1):
         request = PartitionOffsetRequest(
@@ -29,37 +31,6 @@ class Partition(object):
         """Get the earliest offset for this partition."""
         return self.fetch_offsets(OFFSET_EARLIEST)
 
-    def publish(self,
-                data,
-                partition_key=None,
-                compression_type=compression.NONE,
-                required_acks=1,
-                timeout=1000):
-        """Publish one or more messages to this partition."""
-        if isinstance(data, basestring):
-            messages = [Message(data, partition_key=partition_key),]
-        elif isinstance(data, collections.Sequence):
-            messages = [Message(d, partition_key=partition_key) for d in data]
-        else:
-            raise TypeError('Unable to publish data of type %s' % type(data))
-
-        req = PartitionProduceRequest(self.topic.name, self.id, messages)
-        return self.leader.produce_messages(
-            [req,], compression_type=compression_type,
-            required_acks=required_acks, timeout=timeout
-        )
-
-    def fetch_messages(self,
-                       offset,
-                       timeout=30000,
-                       min_bytes=1024,
-                       max_bytes=307200):
-        req = PartitionFetchRequest(self.topic.name, self.id, offset, max_bytes)
-        res = self.leader.fetch_messages(
-            [req], timeout=timeout, max_bytes=max_bytes, min_bytes=min_bytes
-        )
-        return res.topics[self.topic.name].messages
-
     def __hash__(self):
         return hash((self.topic, self.number))
 
@@ -68,3 +39,27 @@ class Partition(object):
 
     def __ne__(self, other):
         return not self == other
+
+    def update(self, brokers, metadata):
+        """Update partition with fresh metadata.
+
+        :param brokers: Brokers partitions exist on
+        :type brokers: List of :class:`samsa.pysamsa.Broker`
+        :param metadata: Metadata for the partition
+        :type metadata: :class:`samsa.pysamsa.protocol.PartitionMetadata`
+        """
+        try:
+            # Check leader
+            if metadata.leader != self.leader.id:
+                logger.info('Updating leader for %s', self)
+                self.leader = brokers[metadata.leader]
+            # Check Replicas
+            if sorted(r.id for r in self.replicas) != sorted(metadata.replicas):
+                logger.info('Updating replicas list for %s', self)
+                self.replicas = [brokers[b] for b in metadata.replicas]
+            # Check In-Sync-Replicas
+            if sorted(i.id for i in self.isr) != sorted(metadata.isr):
+                logger.info('Updating in sync replicas list for %s', self)
+                self.isr = [brokers[b] for b in metadata.isr]
+        except KeyError:
+            raise Exception("TODO: Type this exception")
