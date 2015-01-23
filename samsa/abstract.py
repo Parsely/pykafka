@@ -95,6 +95,52 @@ class Partition(object):
         pass
 
 
+class Consumer(object):
+    __metaclass__ = abc.ABCMeta
+
+    @abc.abstractmethod
+    def __init__(self, topic, partitions=None):
+        pass
+
+    @abc.abstractproperty
+    def topic(self):
+        pass
+
+    @abc.abstractproperty
+    def partitions(self):
+        pass
+
+    @abc.abstractmethod
+    def __iter__(self):
+        """Iterator for messages in the consumer."""
+        pass
+
+    @abc.abstractmethod
+    def consume(self, timeout=None):
+        """Consume a message from the topic."""
+        pass
+
+
+def Producer(object):
+    __metaclass__ == abc.ABCMeta
+
+    @abc.abstractmethod
+    def __init__(self, topic, partitioner=None):
+        pass
+
+    @abc.abstractproperty
+    def topic(self):
+        pass
+
+    @abc.abstractproperty
+    def partitioner(self):
+        pass
+
+    @abc.abstractmethod
+    def produce(self, messages):
+        pass
+
+
 class Topic(object):
     __metaclass__ = abc.ABCMeta
 
@@ -108,41 +154,10 @@ class Topic(object):
 
     @abc.abstractmethod
     def latest_offsets(self):
+        """Get the latest offset for all partitions."""
         pass
 
     @abc.abstractmethod
     def earliest_offsets(self):
+        """Get the earliest offset for all partitions."""
         pass
-
-    @abc.abstractmethod
-    def publish(self, data):
-        """Publish data to this topic.
-
-        TODO: Definition of what `data` is
-              Figure out how/where partitioner will be defined
-              How are we going to support custom partitioners?
-        """
-        pass
-
-    @abc.abstractmethod
-    def consume(self, partitions):
-        pass
-
-
-# Do we want an abstract Message? Seems like both could use the same implementation.
-class Message(object):
-    """Message class.
-
-    I'm not sure if this will be abstract, or just shared between the
-    two implementations. Odds are that we'll make a copy of the message
-    from C to Python (depends on when it's going to reclaim the memory).
-    If that's the case, both implementations can share the Message, which
-    will make life a lot easier.
-
-    :ivar response_code: Response code from Kafka
-    :ivar topic: Originating topic
-    :ivar payload: Message payload
-    :ivar key: (optional) Message key
-    :ivar offset: Message offset
-    """
-    pass
