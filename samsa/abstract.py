@@ -28,13 +28,10 @@ class Cluster(object):
         """
         pass
 
+
 class Broker(object):
     __metaclass__ = abc.ABCMeta
     pass
-
-    @abc.abstractproperty
-    def connected(self):
-        pass
 
     @abc.abstractproperty
     def id(self):
