@@ -66,8 +66,6 @@ class SamsaClient(object):
             raise NotImplementedError('Not yet')
         else:
             self.cluster = pysamsa.Cluster(self._seed_hosts, self.handler)
-
-        # Keep access as simple as possible
         self.brokers = self.cluster.brokers
 
     def __getitem__(self, key):
@@ -80,7 +78,7 @@ class SamsaClient(object):
         Updates each Topic and Broker, adding new ones as found,
         with current metadata from the cluster.
         """
-        # TODO: This is *so* not thread-safe, but should be rare.
+        # TODO: This is *so* not thread-safe, but updates should be rare.
         #       Consider making a single lock while this runs to basically
         #       stop the driver.
         self.cluster.update()
