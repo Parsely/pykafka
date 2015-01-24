@@ -17,18 +17,15 @@ logger = logging.getLogger()
 
 class Topic(abstract.Topic):
 
-    def __init__(self, client, topic_metadata):
+    def __init__(self, brokers, topic_metadata):
         """Create the Topic from metadata.
 
-        :param client: Client connection to the cluster
-        :type client: :class:`samsa.client.SamsaClient
         :param topic_metadata: Metadata for all topics
         :type topic_metadata: :class:`samsa.pysamsa.protocol.TopicMetadata`
         """
-        self.client = client
         self._name = topic_metadata.name
         self._partitions = {}
-        self.update(topic_metadata)
+        self.update(brokers, topic_metadata)
 
     @property
     def name(self):

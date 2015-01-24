@@ -55,13 +55,10 @@ class ResponseFuture(object):
 
 
 class Handler(object):
-
     def spawn(self, target, *args, **kwargs):
         raise NotImplementedError
 
 
-# Could be possible to use the Kazoo handlers. Our RequestHandler is already
-# implementation agnostic.
 class ThreadingHandler(Handler):
     QueueEmptyError = Queue.Empty
     Queue = Queue.Queue

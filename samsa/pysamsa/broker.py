@@ -15,24 +15,31 @@ logger = logging.getLogger(__name__)
 
 class Broker(abstract.Broker):
 
-    def __init__(self, metadata, handler, timeout):
+    def __init__(self, id_, host, port, handler, timeout):
         """Init a Broker.
 
-        :param metadata: Metadata that describes the broker.
-        :type metadata: :class:`samsa.pysamsa.protocol.BrokerMetadata.`
         :param handler: TODO: Fill in
         :type handler: TODO: Fill in
         :param timeout: TODO: Fill in
         :type timeout: :class:int
         """
         self._connected = False
-        self._id = int(metadata.id)
-        self._host = metadata.host
-        self._port = metadata.port
+        self._id = int(id_)
+        self._host = host
+        self._port = port
         self._handler = handler
         self._reqhandler = None
         self._timeout = timeout
         self.connect()
+
+    @classmethod
+    def from_metadata(cls, metadata, handler, timeout):
+        """
+        :param metadata: Metadata that describes the broker.
+        :type metadata: :class:`samsa.pysamsa.protocol.BrokerMetadata.`
+        """
+        return cls(metadata.id, metadata.host,
+                   metadata.port, handler, timeout)
 
     @property
     def connected(self):

@@ -42,9 +42,8 @@ class Cluster(object):
                 return broker.request_metadata()
             # TODO: Change to typed exception
             except Exception:
-                logger.exception('Unable to connect to broker %s:%s',
-                                 broker.host,
-                                 broker.port)
+                logger.exception('Unable to connect to broker %s', broker)
+                raise
         raise Exception('Unable to connect to a broker to fetch metadata.')
 
     def _update_brokers(self, broker_metadata):
@@ -63,7 +62,9 @@ class Cluster(object):
         for id_, meta in broker_metadata.iteritems():
             if id_ not in self._brokers:
                 logger.info('Adding new broker %s:%s', meta.host, meta.port)
-                self._brokers[id_] = Broker(meta, self._handler, self._timeout)
+                self._brokers[id_] = Broker.from_metadata(
+                    meta, self._handler, self._timeout
+                )
             else:
                 broker = self._brokers[id_]
                 if meta.host == broker.host and meta.port == broker.port:

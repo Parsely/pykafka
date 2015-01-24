@@ -10,11 +10,31 @@ logger = logging.getLogger(__name__)
 
 class Partition(abstract.Partition):
     def __init__(self, topic, id_, leader, replicas, isr):
-        self.id = id_
-        self.leader = leader
-        self.replicas = replicas
-        self.isr = isr
-        self.topic = topic
+        self._id = id_
+        self._leader = leader
+        self._replicas = replicas
+        self._isr = isr
+        self._topic = topic
+
+    @property
+    def id(self):
+        return self._id
+
+    @property
+    def leader(self):
+        return self._leader
+
+    @property
+    def replicas(self):
+        return self._replicas
+
+    @property
+    def isr(self):
+        return self._isr
+
+    @property
+    def topic(self):
+        return self._topic
 
     def fetch_offsets(self, offsets_before, max_offsets=1):
         request = PartitionOffsetRequest(

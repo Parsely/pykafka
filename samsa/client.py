@@ -54,8 +54,11 @@ class SamsaClient(object):
             logger.info('Using rd_kafka extensions.')
             raise NotImplementedError('Not yet')
         else:
-            self.cluster = pysamsa.Cluster(self._seed_hosts, self._handler)
+            self.cluster = pysamsa.Cluster(self._seed_hosts,
+                                           self._handler,
+                                           self._timeout)
         self.brokers = self.cluster.brokers
+        self.topics = self.cluster.topics
 
     def __getitem__(self, key):
         """Getter used to provide dict-like access to Topics."""
