@@ -1,13 +1,13 @@
 import logging
 
 from samsa import abstract
-from samsa.pysamsa.connection import BrokerConnection
-from samsa.pysamsa.handlers import RequestHandler
-from samsa.pysamsa.protocol import (
+from .connection import BrokerConnection
+from .handlers import RequestHandler
+from .protocol import (
     FetchRequest, FetchResponse, ProduceRequest, OffsetRequest,
     OffsetResponse, MetadataRequest, MetadataResponse
 )
-from samsa.pysamsa.utils import compression
+from .utils import compression
 
 
 logger = logging.getLogger(__name__)

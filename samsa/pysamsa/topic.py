@@ -6,8 +6,8 @@ import logging
 from collections import defaultdict
 
 from samsa import abstract
-from samsa.pysamsa.partition import Partition
-from samsa.pysamsa.protocol import (
+from .partition import Partition
+from .protocol import (
     PartitionOffsetRequest, OFFSET_EARLIEST, OFFSET_LATEST
 )
 

@@ -15,32 +15,21 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import itertools
-import json
 import logging
 
 from samsa import handlers, pysamsa
-from samsa.common import Broker, Topic, Partition
-from samsa.connection import BrokerConnection
-from samsa.exceptions import ImproperlyConfiguredError
-from samsa.protocol import MetadataRequest, MetadataResponse
-from zlib import crc32
 
 try:
     import rd_kafka
-    RD_KAFKA_PRESENT = True
-else:
-    RD_KAFKA_PRESENT = False
+except ImportError:
+    rd_kafka = None
 
 
 logger = logging.getLogger(__name__)
 
+
 class SamsaClient(object):
     """Main entry point for a Kafka cluster
-
-    Notes:
-        * Reconfiguring at any time is hard to coordinate. Updating
-          the cluster should only happen on user actions?
 
     :ivar brokers: The :class:`samsa.common.Broker` map for this cluster.
     :ivar topics: The :class:`samsa.common.Topic` map for this cluster.
@@ -49,23 +38,23 @@ class SamsaClient(object):
                  hosts='127.0.0.1:9092',
                  use_greenlets=False,
                  timeout=30,
-                 use_rdkafka=True):
+                 ignore_rdkafka=False):
         """Create a connection to a Kafka cluster.
 
         :param hosts: Comma separated list of seed hosts to used to connect.
-        :param use_greenlets: If True, gevent will be used instead of threading.
+        :param use_greenlets: If True, use gevent instead of threading.
         :param timeout: Connection timeout, in seconds.
-        :param use_librdkafka: Use rd_kafka, if installed.
+        :param ignore_rdkafka: Don't use rdkafka, even if installed.
         """
         self._seed_hosts = hosts
         self._timeout = timeout
-        self.handler = None if use_greenlets else handlers.ThreadingHandler()
-        self.use_rdkafka = RD_KAFKA_PRESENT and use_rdkafka
-        if self.use_rdkafka:
+        self._handler = None if use_greenlets else handlers.ThreadingHandler()
+        self._use_rdkafka = rd_kafka and not ignore_rdkafka
+        if self._use_rdkafka:
             logger.info('Using rd_kafka extensions.')
             raise NotImplementedError('Not yet')
         else:
-            self.cluster = pysamsa.Cluster(self._seed_hosts, self.handler)
+            self.cluster = pysamsa.Cluster(self._seed_hosts, self._handler)
         self.brokers = self.cluster.brokers
 
     def __getitem__(self, key):

@@ -22,7 +22,7 @@ import socket
 import struct
 
 from samsa.exceptions import SocketDisconnectedError
-from samsa.utils.socket import recvall_into
+from samsa.pysamsa.utils.socket import recvall_into
 
 logger = logging.getLogger(__name__)
 

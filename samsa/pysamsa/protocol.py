@@ -49,7 +49,7 @@ import itertools
 import struct
 
 from collections import defaultdict, namedtuple
-from samsa.utils import Serializable, compression, struct_helpers
+from .utils import Serializable, compression, struct_helpers
 from samsa.exceptions import ERROR_CODES
 from zlib import crc32
 

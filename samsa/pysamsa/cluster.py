@@ -1,6 +1,7 @@
 import logging
 
-from samsa.pysamsa import Broker, Topic
+from .broker import Broker
+from .topic import Topic
 
 
 logger = logging.getLogger(__name__)

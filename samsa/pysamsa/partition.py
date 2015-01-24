@@ -1,7 +1,7 @@
 import logging
 
 from samsa import abstract
-from samsa.pysamsa.protocol import (
+from .protocol import (
     PartitionOffsetRequest, OFFSET_EARLIEST, OFFSET_LATEST
 )
 
