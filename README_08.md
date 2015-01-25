@@ -17,7 +17,7 @@ and we anticipate 0.8.2 being fully released by the time this version is ready.
 
 Items Complete:
   * Architect new zookeeper-free object model
-  * Abstract to accommodate librdkafka integration
+  * Abstract model to accommodate librdkafka integration
   * Implement 0.8 wire protocol (minus offset commit/fetch)
   * Create object model of cluster based on broker-provided metadata
   * Partition offset fetch implementation
@@ -30,6 +30,8 @@ Still be to done:
   * [inprog] SimpleConsumer implementation
   * BalancedConsumer implementation
     * Ideally, will be agnostic between C and Python implementations
+  * Test coverage
+  * Ensure driver reconfigures seamlessly when cluster topology changes
 
 ## librdkafka speedups
 
@@ -43,8 +45,9 @@ pykafka in order to speed up the driver. However, like `hiredis` and `redis`,
 
 Since `librdkafka` is a very full-featured driver, the split between the Python
 and C implementations exists at a very high level.  This can be seen in
-`client.py` and `abstract.py` where the latter is the interface by which the
-client can work with either the Python or C implementation.
+[client.py](samsa/client.py) and [abstract.py](samsa/abstract.py) where the latter
+is the interface by which the client can work with either the Python or
+C implementation.
 
 This architecture is still a work in progress, so the approach may change as
 time goes on.  We're still working through the implications of essentially
