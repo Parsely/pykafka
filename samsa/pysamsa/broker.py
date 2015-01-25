@@ -34,7 +34,8 @@ class Broker(abstract.Broker):
 
     @classmethod
     def from_metadata(cls, metadata, handler, timeout):
-        """
+        """ Create a Broker using BrokerMetadata
+
         :param metadata: Metadata that describes the broker.
         :type metadata: :class:`samsa.pysamsa.protocol.BrokerMetadata.`
         """
@@ -78,6 +79,12 @@ class Broker(abstract.Broker):
                        partition_requests,
                        timeout=30000,
                        min_bytes=1024):
+        """Fetch messages from a set of partitions.
+
+        :param partition_requests: Requests of messages to fetch.
+        :type partition_requests: Iterable of
+            :class:`samsa.pysamsa.protocol.PartitionFetchRequest`
+        """
         future = self.handler.request(FetchRequest(
             partition_requests=partition_requests,
             timeout=10000,
@@ -90,6 +97,12 @@ class Broker(abstract.Broker):
                          compression_type=compression.NONE,
                          required_acks=1,
                          timeout=10000):
+        """Produce messages to a set of partitions.
+
+        :param partition_requests: Requests of messages to produce.
+        :type partition_requests: Iterable of
+            :class:`samsa.pysamsa.protocol.PartitionProduceRequest`
+        """
         req = ProduceRequest(partition_requests=partition_requests,
                              compression_type=compression_type,
                              required_acks=required_acks,

@@ -50,8 +50,10 @@ import struct
 
 from collections import defaultdict, namedtuple
 from .utils import Serializable, compression, struct_helpers
-from samsa.exceptions import ERROR_CODES
 from zlib import crc32
+
+from samsa import common
+from samsa.exceptions import ERROR_CODES
 
 OFFSET_EARLIEST = -2
 OFFSET_LATEST = -1
@@ -100,7 +102,7 @@ class Response(object):
                 clsname, response))
 
 
-class Message(Serializable):
+class Message(common.Message, Serializable):
     """Representation of a Kafka Message
 
     NOTE: Compression is handled in the protocol because

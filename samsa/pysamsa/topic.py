@@ -7,6 +7,7 @@ from collections import defaultdict
 
 from samsa import abstract
 from .partition import Partition
+from .producer import Producer
 from .protocol import (
     PartitionOffsetRequest, OFFSET_EARLIEST, OFFSET_LATEST
 )
@@ -50,6 +51,9 @@ class Topic(abstract.Topic):
             res = broker.request_offsets(reqs)
             output.update(res.topics[self.name])
         return output
+
+    def get_producer(self):
+        return Producer(self)
 
     def latest_offsets(self):
         """Get the latest offset for each partition of this topic."""

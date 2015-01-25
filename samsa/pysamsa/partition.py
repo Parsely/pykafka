@@ -41,15 +41,15 @@ class Partition(abstract.Partition):
             self.topic.name, self.id, offsets_before, max_offsets
         )
         res = self.leader.request_offsets([request])
-        return res.topics[self.topic.name]
+        return res.topics[self.topic.name][self._id][0]
 
     def latest_offset(self):
         """Get the latest offset for this partition."""
-        return self.fetch_offsets(OFFSET_LATEST)
+        return self.fetch_offsets(OFFSET_LATEST)[self._id][0]
 
     def earliest_offset(self):
         """Get the earliest offset for this partition."""
-        return self.fetch_offsets(OFFSET_EARLIEST)
+        return self.fetch_offsets(OFFSET_EARLIEST)[self._id][0]
 
     def __hash__(self):
         return hash((self.topic, self.number))

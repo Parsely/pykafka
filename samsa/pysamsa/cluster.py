@@ -53,6 +53,7 @@ class Cluster(object):
         :type broker_metadata: Dict of `{name: metadata}` where `metadata is
             :class:`samsa.pysamsa.protocol.BrokerMetadata`
         """
+        # FIXME: A cluster with no topics returns no brokers in metadata
         # Remove old brokers
         removed = set(self._brokers.keys()) - set(broker_metadata.keys())
         for id_ in removed:
