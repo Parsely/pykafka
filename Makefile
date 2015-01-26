@@ -15,7 +15,7 @@ integration:
 	python setup.py nosetests --attr=integration
 
 test:
-	python setup.py nosetests
+	python setup.py nosetests --attr=!fixme
 
 vendor:
 	make -C vendor

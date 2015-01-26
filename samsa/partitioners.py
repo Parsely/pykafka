@@ -21,7 +21,7 @@ def random_partitioner(partitions, key):
     """
     Returns a random partition out of all of the available partitions.
     """
-    return random.choice(list(partitions))
+    return random.choice(partitions)
 
 
 class Partitioner(object):
@@ -70,7 +70,7 @@ class HashingPartitioner(Partitioner):
             raise ValueError(
                 'key cannot be `None` when using hashing partitioner'
             )
-        partitions = list(partitions)
+        partitions = sorted(partitions) # sorting is VERY important
         return partitions[abs(self.hash_func(key)) % len(partitions)]
 
 

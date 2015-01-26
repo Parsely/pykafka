@@ -14,7 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-
 def attribute_repr(*attributes):
     """
     Provides an alternative ``__repr__`` implementation that adds the values of
@@ -36,3 +35,13 @@ def attribute_repr(*attributes):
         return u'<%s.%s at 0x%x: %s>' % (
             cls.__module__, cls.__name__, id(self), ', '.join(pairs))
     return _repr
+
+
+class Serializable(object):
+    def __len__(self):
+        """Length of the bytes that will be sent to the Kafka server."""
+        raise NotImplementedError()
+
+    def pack_into(self, buff, offset):
+        """Pack serialized bytes into buff starting at offset ``offset``"""
+        raise NotImplementedError()
