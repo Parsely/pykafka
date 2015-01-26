@@ -21,7 +21,7 @@ from optparse import OptionParser
 
 from kazoo.client import KazooClient
 
-from samsa.cluster import Cluster
+from kafka.cluster import Cluster
 
 parser = OptionParser()
 parser.add_option('--zookeeper', help='zookeeper hosts', default=None)
@@ -48,7 +48,7 @@ exposed = {
 }
 
 banner = """---
-Welcome to Samsa! We've provided some local variables for you:
+Welcome to PyKafka! We've provided some local variables for you:
 %s
 ---""" % '\n'.join('> %s: %s' % (key, repr(value)) for key, value in exposed.iteritems())
 

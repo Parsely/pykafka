@@ -20,7 +20,7 @@ import sys
 
 from setuptools import setup, find_packages
 
-from samsa import __version__
+from kafka import __version__
 
 try:
     import multiprocessing
@@ -28,7 +28,6 @@ except ImportError:
     pass
 
 install_requires = [
-    'kazoo',
 ]
 
 lint_requires = [
@@ -43,11 +42,11 @@ if 'nosetests' in sys.argv[1:]:
     setup_requires.append('nose')
 
 setup(
-    name='samsa',
+    name='kafka',
     version=__version__,
-    author='Ted Kaemming, Matthew Hooker, and Keith Bourgoin',
-    author_email='samsa-users@googlegroups.com',
-    url='https://github.com/getsamsa/samsa',
+    author='Keith Bourgoin',
+    author_email='pykafka-user@googlegroups.com',
+    url='https://github.com/Parsely/pykafka',
     description='Featureful Kafka client.',
     license='Apache License 2.0',
     packages=find_packages(),
