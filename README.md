@@ -8,40 +8,21 @@ The [PyPI package](https://pypi.python.org/pypi/samsa/0.3.11) will stay up for
 the foreseeable future and tags for previous versions will always be
 available in this repo.
 
-# PyKafka 0.8 (with librdkafka) Overview
+# PyKafka 0.8.2-01 Plan
 
-The goals of this branch are:
+The goals of this release are:
 
   * Rename samsa to pykafka
   * Add 0.8.2 support to pykafka
   * Support speedups via librdkafka
 
-## Rename samsa to pykafka
+To view the status of this release, check out the
+[milestone](https://github.com/Parsely/pykafka/milestones/0.8.2-01).
 
-It's a better name, and avoid confustion with samza.  Still need to do this.
-
-## Adding 0.8.2 support to pykafka
+## Adding Kafka 0.8.2 support to PyKafka
 
 We chose to target 0.8.2 because the Offset Commit/Fetch API is stabilized
 and we anticipate 0.8.2 being fully released by the time this version is ready.
-
-Items Complete:
-  * Architect new zookeeper-free object model
-  * Abstract model to accommodate librdkafka integration
-  * Implement 0.8 wire protocol (minus offset commit/fetch)
-  * Create object model of cluster based on broker-provided metadata
-  * Partition offset fetch implementation
-  * Producer implementation
-
-Still be to done:
-  * Offset commit/fetch wire protocol implementation
-  * Offset commit/fetch integrated into consumers
-    * Replaces zookeeper offset storage
-  * [inprog] SimpleConsumer implementation
-  * BalancedConsumer implementation
-    * Ideally, will be agnostic between C and Python implementations
-  * Test coverage
-  * Ensure driver reconfigures seamlessly when cluster topology changes
 
 ## librdkafka speedups
 
@@ -62,7 +43,3 @@ C implementation.
 This architecture is still a work in progress, so the approach may change as
 time goes on.  We're still working through the implications of essentially
 having two implementations in the same driver.
-
-### librdkafka Integration Status
-
-TODO: Fill in status updates
