@@ -1,3 +1,13 @@
+# What happened to Samsa?
+
+Samsa has been renamed PyKafka in anticipation of our next release, which will
+include support for Kafka 0.8.2 as well as optional integration with
+librdkafka in order to be that much faster.
+
+The [PyPI package](https://pypi.python.org/pypi/samsa/0.3.11) will stay up for
+the foreseeable future and tags for previous versions will always be
+available in this repo.
+
 # PyKafka 0.8 (with librdkafka) Overview
 
 The goals of this branch are:
