@@ -9,7 +9,8 @@ logger = logging.getLogger(__name__)
 
 class Cluster(abstract.Cluster):
     def __init__(self, seed_hosts):
-        self.seed_hosts = seed_hosts
+        self.config = {"metadata.broker.list": seed_hosts}
+        # TODO bind a log_cb to this config ^^
         self._brokers = {}
         self._topics = {}
         self.update()
@@ -23,9 +24,7 @@ class Cluster(abstract.Cluster):
         return self._topics
 
     def update(self):
-        config = {"metadata.broker.list": self.seed_hosts}
-        # TODO bind a log_cb to this config ^^
-        self.meta = rd_kafka.Producer(config).metadata()
+        self.meta = rd_kafka.Producer(self.config).metadata()
 
         self._refresh_no_clobber(self.brokers, self.meta["brokers"], Broker)
         self._refresh_no_clobber(self.topics, self.meta["topics"], Topic)
