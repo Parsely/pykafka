@@ -17,7 +17,7 @@ limitations under the License.
 import time
 import unittest2
 
-from kafka.utils.log import get_logger_for_function
+from kafka.pykafka.utils.log import get_logger_for_function
 
 
 class TestCase(unittest2.TestCase):

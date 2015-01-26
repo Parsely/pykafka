@@ -2,9 +2,13 @@ from copy import copy
 import logging
 from time import clock
 
-import rd_kafka
 from kafka import abstract, partitioners
 from kafka .exceptions import KafkaException
+
+try:
+    import rd_kafka
+except ImportError:
+    pass # not installed
 
 
 logger = logging.getLogger(__name__)

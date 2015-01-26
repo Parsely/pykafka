@@ -23,8 +23,8 @@ from kazoo.exceptions import NodeExistsException, NoNodeException
 from functools import partial
 
 from kafka.exceptions import OffsetOutOfRangeError, PartitionOwnedError
-from kafka.common import Partition
-from kafka.protocol import OFFSET_EARLIEST, OFFSET_LATEST
+from kafka.abstract import Partition
+from kafka.pykafka.protocol import OFFSET_EARLIEST, OFFSET_LATEST
 
 
 logger = logging.getLogger(__name__)

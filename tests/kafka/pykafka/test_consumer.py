@@ -28,12 +28,12 @@ from kazoo.testing import KazooTestCase
 from nose.plugins.attrib import attr
 from threading import Event
 
-from kafka.exceptions import NoAvailablePartitionsError
-from kafka.test.integration import KafkaIntegrationTestCase, polling_timeout
+#from kafka.exceptions import NoAvailablePartitionsError
+#from kafka.test.integration import KafkaIntegrationTestCase, polling_timeout
 from kafka.test.integration import FasterKafkaIntegrationTestCase, polling_timeout
 from kafka.test.case import TestCase
-from kafka.consumer import Consumer
-from kafka.common import Partition, Topic
+#from kafka.consumer import Consumer
+#from kafka.common import Partition, Topic
 from kafka.consumer.partitions import PartitionOwnerRegistry, OwnedPartition
 
 
@@ -44,7 +44,6 @@ class TestPartitionOwnerRegistry(KazooTestCase):
     """Test the methods of :class:`kafka.consumer.PartitionOwnerRegistry`.
     """
 
-    @mock.patch('kafka.cluster.BrokerMap')
     def setUp(self, bm, *args):
         super(TestPartitionOwnerRegistry, self).setUp()
         self.c = Cluster(self.client)
@@ -72,7 +71,6 @@ class TestPartitionOwnerRegistry(KazooTestCase):
                 OwnedPartition(Partition(self.c, self.topic, broker, i), 'group', self.message_set_queue)
             )
 
-    @mock.patch.object(OwnedPartition, 'start')
     def test_crd(self, *args):
         """Test partition *c*reate, *r*ead, and *d*elete.
         """
@@ -91,7 +89,6 @@ class TestPartitionOwnerRegistry(KazooTestCase):
             set(self.partitions[1:3])
         )
 
-    @mock.patch.object(OwnedPartition, 'start')
     def test_grows(self, *args):
         """Test that the reference returned by
         :func:`kafka.consumer.partitions.PartitionOwnerRegistry.get` reflects
@@ -143,7 +140,6 @@ class TestConsumer(KazooTestCase, TestCase):
             client.create(part_path, str(n_partitions))
 
 
-    @mock.patch.object(OwnedPartition, 'start')
     def test_assigns_partitions(self, *args):
         """
         Test rebalance
@@ -168,7 +164,6 @@ class TestConsumer(KazooTestCase, TestCase):
         self.assertEquals(len(set(partitions)), n_partitions)
 
 
-    @mock.patch.object(OwnedPartition, 'start')
     def test_broker_addition(self, rebalance):
         """Test adding a broker, and ensure all partitions are discovered
 
@@ -191,7 +186,6 @@ class TestConsumer(KazooTestCase, TestCase):
         self.assertEqual(len(consumer.partitions), 4)
 
 
-    @mock.patch.object(Partition, 'fetch')
     def test_commits_offsets(self, fetch):
         """Test that message offsets are persisted to ZK.
 
@@ -222,7 +216,6 @@ class TestConsumer(KazooTestCase, TestCase):
         self.assertEquals(d, '3')
         c.stop_partitions()
 
-    @mock.patch.object(Partition, 'fetch')
     def test_consumer_remembers_offset(self, fetch):
         """Test that offsets are successfully retrieved from zk.
 
@@ -262,7 +255,6 @@ class TestConsumer(KazooTestCase, TestCase):
         c.stop_partitions()
 
 
-    @mock.patch.object(OwnedPartition, 'start')
     def test_multiclient_rebalance(self, *args):
         """Test rebalancing with many connected clients
 
@@ -311,7 +303,6 @@ class TestConsumer(KazooTestCase, TestCase):
 
         newclient.stop()
 
-    @mock.patch.object(OwnedPartition, 'start')
     def test_too_many_consumers(self, *args):
         """Test graceful failure when # of consumers exceeds partitions
 

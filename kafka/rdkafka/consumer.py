@@ -2,8 +2,12 @@ from collections import namedtuple
 from copy import copy
 import logging
 
-import rd_kafka
 from kafka import abstract
+
+try:
+    import rd_kafka
+except ImportError:
+    pass # not installed
 
 
 logger = logging.getLogger(__name__)

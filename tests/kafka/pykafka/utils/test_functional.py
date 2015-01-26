@@ -17,7 +17,7 @@ limitations under the License.
 import itertools
 import unittest2
 
-from kafka.utils.functional import methodmap, methodimap
+from kafka.pykafka.utils.functional import methodmap, methodimap
 
 
 class MethodMapTestCase(unittest2.TestCase):

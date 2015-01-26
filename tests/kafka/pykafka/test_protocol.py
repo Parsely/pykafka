@@ -1,7 +1,8 @@
 import unittest
 
-from kafka import common, exceptions, protocol
-from kafka.utils import compression
+from kafka import exceptions
+from kafka.pykafka import protocol
+from kafka.pykafka.utils import compression
 
 
 class TestMetadataAPI(unittest.TestCase):
@@ -10,7 +11,7 @@ class TestMetadataAPI(unittest.TestCase):
         msg = req.get_bytes()
         self.assertEqual(
             msg,
-            bytearray(b'\x00\x00\x00\x13\x00\x03\x00\x00\x00\x00\x00\x00\x00\x05samsa\x00\x00\x00\x00')
+            bytearray(b'\x00\x00\x00\x15\x00\x03\x00\x00\x00\x00\x00\x00\x00\x07pykafka\x00\x00\x00\x00')
         )
 
     def test_response(self):
@@ -45,9 +46,9 @@ class TestMetadataAPI(unittest.TestCase):
 
 class TestProduceAPI(unittest.TestCase):
     test_messages = [
-        common.Message('this is a test message', partition_key='asdf'),
-        common.Message('this is also a test message', partition_key='test_key'),
-        common.Message("this doesn't have a partition key"),
+        protocol.Message('this is a test message', partition_key='asdf'),
+        protocol.Message('this is also a test message', partition_key='test_key'),
+        protocol.Message("this doesn't have a partition key"),
     ]
 
     def test_request(self):
@@ -57,20 +58,20 @@ class TestProduceAPI(unittest.TestCase):
         msg = req.get_bytes()
         self.assertEqual(
             msg,
-            bytearray(b"\x00\x00\x00_\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05samsa\x00\x01\x00\x00\'\x10\x00\x00\x00\x01\x00\x04test\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x004\xff\xff\xff\xff\xff\xff\xff\xff\x00\x00\x00(\x0e\x8a\x19O\x00\x00\x00\x00\x00\x04asdf\x00\x00\x00\x16this is a test message")
+            bytearray(b"\x00\x00\x00a\x00\x00\x00\x00\x00\x00\x00\x00\x00\x07pykafka\x00\x01\x00\x00\'\x10\x00\x00\x00\x01\x00\x04test\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x004\xff\xff\xff\xff\xff\xff\xff\xff\x00\x00\x00(\x0e\x8a\x19O\x00\x00\x00\x00\x00\x04asdf\x00\x00\x00\x16this is a test message")
         )
 
     def test_gzip_compression(self):
         req = protocol.ProduceRequest(compression_type=compression.GZIP)
         req.add_messages(self.test_messages, 'test_gzip', 0)
         msg = req.get_bytes()
-        self.assertEqual(len(msg), 205) # this isn't a good test
+        self.assertEqual(len(msg), 207) # this isn't a good test
 
     def test_snappy_compression(self):
         req = protocol.ProduceRequest(compression_type=compression.SNAPPY)
         req.add_messages(self.test_messages, 'test_snappy', 0)
         msg = req.get_bytes()
-        self.assertEqual(len(msg), 210) # this isn't a good test
+        self.assertEqual(len(msg), 212) # this isn't a good test
 
     def test_partition_error(self):
         self.assertRaises(
@@ -94,7 +95,7 @@ class TestFetchAPI(unittest.TestCase):
         msg = req.get_bytes()
         self.assertEqual(
             msg,
-            bytearray(b'\x00\x00\x009\x00\x01\x00\x00\x00\x00\x00\x00\x00\x05samsa\xff\xff\xff\xff\x00\x00\x03\xe8\x00\x00\x04\x00\x00\x00\x00\x01\x00\x04test\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x04\xb0\x00')
+            bytearray(b'\x00\x00\x00;\x00\x01\x00\x00\x00\x00\x00\x00\x00\x07pykafka\xff\xff\xff\xff\x00\x00\x03\xe8\x00\x00\x04\x00\x00\x00\x00\x01\x00\x04test\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x04\xb0\x00')
         )
 
     def test_partition_error(self):
@@ -158,7 +159,7 @@ class TestOffsetAPI(unittest.TestCase):
         msg = req.get_bytes()
         self.assertEqual(
             msg,
-            bytearray(b'\x00\x00\x001\x00\x02\x00\x00\x00\x00\x00\x00\x00\x05samsa\xff\xff\xff\xff\x00\x00\x00\x01\x00\x04test\x00\x00\x00\x01\x00\x00\x00\x00\xff\xff\xff\xff\xff\xff\xff\xff\x00\x00\x00\x01')
+            bytearray(b'\x00\x00\x003\x00\x02\x00\x00\x00\x00\x00\x00\x00\x07pykafka\xff\xff\xff\xff\x00\x00\x00\x01\x00\x04test\x00\x00\x00\x01\x00\x00\x00\x00\xff\xff\xff\xff\xff\xff\xff\xff\x00\x00\x00\x01')
         )
 
     def test_partition_error(self):

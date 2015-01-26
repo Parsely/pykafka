@@ -61,7 +61,7 @@ OFFSET_LATEST = -1
 
 class Request(Serializable):
     """Base class for all Requests. Handles writing header information"""
-    HEADER_LEN= 19 # constant for all messages
+    HEADER_LEN= 21 # constant for all messages
     CLIENT_ID = 'pykafka'
 
     def _write_header(self, buff, api_version=0, correlation_id=0):
