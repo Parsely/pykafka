@@ -7,7 +7,6 @@ python:
 notifications:
   email:
     - keith@parsely.com
-  irc: "irc.freenode.org#samsa"
 
 before_install:
     - sudo apt-get install -qq libev-dev libsnappy-dev
@@ -17,7 +16,7 @@ before_install:
 
 install:
     - python setup.py develop
-    - pip install --use-mirrors samsa[test]
+    - pip install --use-mirrors pykafka[test]
 
 env: ZOOKEEPER_PATH=/usr/share/java KAFKA_PATH=/usr/local/kafka KAFKA_START_TIMEOUT=30
 

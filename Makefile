@@ -1,12 +1,12 @@
 doc:
-	pip install samsa[docs]
+	pip install pykafka[docs]
 	cd doc/ && make html
 
 lint:
-	pip install --use-mirrors samsa[lint]
-	pyflakes ./samsa
+	pip install --use-mirrors kafka[lint]
+	pyflakes ./kafka
 	pyflakes ./tests
-	pep8 ./samsa ./tests
+	pep8 ./kafka ./tests
 
 unit:
 	python setup.py nosetests --attr=!integration
