@@ -1,5 +1,6 @@
-samsa:
+test:
     build: .
     volumes:
-        - .:/usr/src/app
-    working_dir: /usr/src/app
+        - .:/srv/pykafka
+    working_dir: /srv/pykafka
+    command: make test
