@@ -18,7 +18,7 @@ Message = namedtuple("Message", ["topic", "payload", "key", "offset"])
 #      kafka.common.Message etc
 
 
-class Consumer(base.BaseConsumer):
+class SimpleConsumer(base.BaseSimpleConsumer):
 
     def __init__(self, client, topic, partitions=None):
         if isinstance(topic, basestring):

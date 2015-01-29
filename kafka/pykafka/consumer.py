@@ -5,7 +5,7 @@ from Queue import Queue
 from kafka import base
 
 
-class Consumer(base.BaseConsumer):
+class SimpleConsumer(base.BaseSimpleConsumer):
 
     def __init__(self, topic, partitions=None):
         self._consumer_group = None
@@ -42,7 +42,7 @@ class Consumer(base.BaseConsumer):
 
 
 class OwnedPartition(object):
-    """A partition that is owned by a Consumer.
+    """A partition that is owned by a SimpleConsumer.
 
     Used to keep track of offsets and the internal message queue.
     """

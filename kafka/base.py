@@ -100,7 +100,7 @@ class BaseTopic(object):
         pass
 
 
-class BaseConsumer(object):
+class BaseSimpleConsumer(object):
     __metaclass__ = abc.ABCMeta
 
     @abc.abstractmethod
