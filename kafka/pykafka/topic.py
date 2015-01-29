@@ -5,7 +5,7 @@
 import logging
 from collections import defaultdict
 
-from kafka import abstract
+from kafka import base
 from .partition import Partition
 from .producer import Producer
 from .protocol import (
@@ -16,7 +16,7 @@ from .protocol import (
 logger = logging.getLogger()
 
 
-class Topic(abstract.Topic):
+class Topic(base.BaseTopic):
 
     def __init__(self, brokers, topic_metadata):
         """Create the Topic from metadata.

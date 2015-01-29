@@ -1,6 +1,6 @@
 import logging
 
-from kafka import abstract
+from kafka import base
 from .protocol import (
     PartitionOffsetRequest, OFFSET_EARLIEST, OFFSET_LATEST
 )
@@ -8,7 +8,7 @@ from .protocol import (
 logger = logging.getLogger(__name__)
 
 
-class Partition(abstract.Partition):
+class Partition(base.BasePartition):
     def __init__(self, topic, id_, leader, replicas, isr):
         self._id = id_
         self._leader = leader

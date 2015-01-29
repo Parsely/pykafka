@@ -59,12 +59,12 @@ class HashingPartitioner(Partitioner):
         """
         :param partitions: the partitions to choose
         :type partitions: sequence of partitions or
-            :class:`kafka.abstract.PartitionMap`
+            :class:`kafka.base.PartitionMap`
         :param key: key used for routing
         :type key: any hashable type if using the default :func:`hash`
             implementation, any valid value for your custom hash function
         :returns: a partition
-        :rtype: :class:`kafka.abstract.Partition`
+        :rtype: :class:`kafka.base.BasePartition`
         """
         if key is None:
             raise ValueError(

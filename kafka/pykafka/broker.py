@@ -1,6 +1,6 @@
 import logging
 
-from kafka import abstract
+from kafka import base
 from .connection import BrokerConnection
 from .handlers import RequestHandler
 from .protocol import (
@@ -13,7 +13,7 @@ from .utils import compression
 logger = logging.getLogger(__name__)
 
 
-class Broker(abstract.Broker):
+class Broker(base.BaseBroker):
 
     def __init__(self, id_, host, port, handler, timeout):
         """Init a Broker.

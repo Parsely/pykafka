@@ -2,11 +2,10 @@ import itertools
 from collections import defaultdict
 from Queue import Queue
 
-from kafka import abstract
-from .partition import Partition
+from kafka import base
 
 
-class Consumer(abstract.Consumer):
+class Consumer(base.BaseConsumer):
 
     def __init__(self, topic, partitions=None):
         self._consumer_group = None

@@ -1,7 +1,7 @@
 import abc
 
 
-class Cluster(object):
+class BaseCluster(object):
     """Abstraction of a Kafka cluster.
 
     :ivar topics: Topics present in this cluster.
@@ -29,7 +29,7 @@ class Cluster(object):
         pass
 
 
-class Broker(object):
+class BaseBroker(object):
     __metaclass__ = abc.ABCMeta
     pass
 
@@ -46,7 +46,7 @@ class Broker(object):
         pass
 
 
-class Partition(object):
+class BasePartition(object):
     __metaclass__ = abc.ABCMeta
 
     @abc.abstractproperty
@@ -78,7 +78,7 @@ class Partition(object):
         pass
 
 
-class Topic(object):
+class BaseTopic(object):
     __metaclass__ = abc.ABCMeta
 
     @abc.abstractproperty
@@ -100,7 +100,7 @@ class Topic(object):
         pass
 
 
-class Consumer(object):
+class BaseConsumer(object):
     __metaclass__ = abc.ABCMeta
 
     @abc.abstractmethod
@@ -135,7 +135,7 @@ class Consumer(object):
         pass
 
 
-class Producer(object):
+class BaseProducer(object):
     __metaclass__ = abc.ABCMeta
 
     @abc.abstractmethod

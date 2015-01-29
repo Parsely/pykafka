@@ -23,14 +23,14 @@ from kazoo.exceptions import NodeExistsException, NoNodeException
 from functools import partial
 
 from kafka.exceptions import OffsetOutOfRangeError, PartitionOwnedError
-from kafka.abstract import Partition
+from kafka.base import BasePartition
 from kafka.pykafka.protocol import OFFSET_EARLIEST, OFFSET_LATEST
 
 
 logger = logging.getLogger(__name__)
 
 
-class OwnedPartition(Partition):
+class OwnedPartition(BasePartition):
     """Represents a partition as a consumer group sees it.
 
     Runs a long-lived fetcher thread that will fill a message queue

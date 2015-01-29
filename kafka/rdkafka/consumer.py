@@ -2,7 +2,7 @@ from collections import namedtuple
 from copy import copy
 import logging
 
-from kafka import abstract
+from kafka import base
 
 try:
     import rd_kafka
@@ -18,7 +18,7 @@ Message = namedtuple("Message", ["topic", "payload", "key", "offset"])
 #      kafka.common.Message etc
 
 
-class Consumer(abstract.Consumer):
+class Consumer(base.BaseConsumer):
 
     def __init__(self, client, topic, partitions=None):
         if isinstance(topic, basestring):

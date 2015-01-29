@@ -2,7 +2,7 @@ from copy import copy
 import logging
 from time import clock
 
-from kafka import abstract, partitioners
+from kafka import base, partitioners
 from kafka .exceptions import KafkaException
 
 try:
@@ -14,7 +14,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-class Producer(abstract.Producer):
+class Producer(base.BaseProducer):
 
     def __init__(self, topic, partitioner=partitioners.random_partitioner):
         self._topic = topic

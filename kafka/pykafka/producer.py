@@ -1,9 +1,9 @@
-from kafka import abstract, partitioners
+from kafka import base, partitioners
 
 from .protocol import Message, PartitionProduceRequest
 
 
-class Producer(abstract.Producer):
+class Producer(base.BaseProducer):
 
     def __init__(self, topic, partitioner=None):
         self._partitioner = partitioner or partitioners.random_partitioner

@@ -1,6 +1,6 @@
 import logging
 
-from kafka import abstract
+from kafka import base
 
 try:
     import rd_kafka
@@ -10,7 +10,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-class Cluster(abstract.Cluster):
+class Cluster(base.BaseCluster):
     def __init__(self, seed_hosts):
         self.config = {"metadata.broker.list": seed_hosts}
         # TODO bind a log_cb to this config ^^
@@ -42,7 +42,7 @@ class Cluster(abstract.Cluster):
         """
         Add and remove, but do not update existing elements
 
-        As per the spec in kafka.abstract, this avoids replacing elements
+        As per the spec in kafka.base, this avoids replacing elements
         that may be referenced in other places
         """
         removed = set(target.keys()) - set(updates.keys())
@@ -55,7 +55,7 @@ class Cluster(abstract.Cluster):
             target[key] = class_(parent or self, key)
 
 
-class Broker(abstract.Broker):
+class Broker(base.BaseBroker):
     """ Just an adapter class for rd_kafka broker metadata """
 
     def __init__(self, cluster, broker_id):
@@ -75,7 +75,7 @@ class Broker(abstract.Broker):
         return self.cluster.meta["brokers"][self.id]["port"]
 
 
-class Topic(abstract.Topic):
+class Topic(base.BaseTopic):
 
     def __init__(self, cluster, name):
         self.cluster = cluster
