@@ -138,10 +138,6 @@ class BaseSimpleConsumer(object):
 class BaseProducer(object):
     __metaclass__ = abc.ABCMeta
 
-    @abc.abstractmethod
-    def __init__(self, topic, partitioner=None):
-        pass
-
     @abc.abstractproperty
     def topic(self):
         pass
@@ -153,3 +149,7 @@ class BaseProducer(object):
     @abc.abstractmethod
     def produce(self, messages):
         pass
+
+
+class BaseAsyncProducer(BaseProducer):
+    pass
