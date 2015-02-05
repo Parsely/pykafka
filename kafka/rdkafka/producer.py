@@ -54,17 +54,18 @@ class Producer(base.BaseProducer):
 
     def produce(self, messages):
         """ Sync-producer: raises exceptions on delivery failures """
-        delivery_reports = [list() for _ in range(len(messages))]
+        delivery_reports = []
         # This ^^ list of lists is perhaps overly cautious and bulky.  It's
         # meant to provide thread-safety without locking, but maybe all
         # delivery callbacks will actually run on one thread.
 
-        for msg, dr in zip(messages, delivery_reports):
-            par = self.partitioner(self.topic.partitions.keys(),
-                                   msg.partition_key)
-            self.rdk_topic.produce(msg.value,
+        for msg in messages:
+            key, msg = (None, msg) if isinstance(msg, bytes) else msg
+            par = self.partitioner(self.topic.partitions.keys(), key)
+            delivery_reports.append([])
+            self.rdk_topic.produce(msg,
                                    partition=par,
-                                   msg_opaque=dr)
+                                   msg_opaque=delivery_reports[-1])
         # XXX There may be some batch size at which it becomes more efficient
         #     to call rd_kafka_produce_batch() instead; or perhaps there isn't,
         #     because in that approach we'd have to wrap self.partitioner in a

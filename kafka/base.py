@@ -152,7 +152,7 @@ class BaseProducer(object):
 
     @abc.abstractmethod
     def produce(self, messages):
-        """Produce messages for the topic.
+        """Produce messages to the topic.
 
         :param messages: Iterable of messages to be published.
         :type messages: An iterable of either strings or (key, value) tuples.
