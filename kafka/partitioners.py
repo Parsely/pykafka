@@ -17,23 +17,19 @@ limitations under the License.
 import random
 
 
-def random_partitioner(partitions, key):
-    """
-    Returns a random partition out of all of the available partitions.
-    """
+def random_partitioner(partitions, key=None):
+    """Returns a random partition out of all of the available partitions."""
     return random.choice(partitions)
 
 
-class Partitioner(object):
-    """
-    The base class for custom class-based partitioners.
-    """
+class BasePartitioner(object):
+    """Base class for custom class-based partitioners."""
     def __call__(self, partitions, key=None):
         raise NotImplementedError('Subclasses must define their own '
             ' partitioner implementation')
 
 
-class HashingPartitioner(Partitioner):
+class HashingPartitioner(BasePartitioner):
     """
     Returns a (relatively) consistent partition out of all available partitions
     based on the key.

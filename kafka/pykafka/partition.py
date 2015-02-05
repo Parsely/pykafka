@@ -52,7 +52,7 @@ class Partition(base.BasePartition):
         return self.fetch_offsets(OFFSET_EARLIEST)[self._id][0]
 
     def __hash__(self):
-        return hash((self.topic, self.number))
+        return hash((self.topic, self.id))
 
     def __eq__(self, other):
         return hash(self) == hash(other)

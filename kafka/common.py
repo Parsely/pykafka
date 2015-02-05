@@ -16,3 +16,9 @@ class Message(object):
     :ivar offset: Message offset
     """
     pass
+
+class CompressionType(object):
+    """Enum for the various compressions supported."""
+    NONE = 0
+    GZIP = 1
+    SNAPPY = 2

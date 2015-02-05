@@ -26,9 +26,6 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-NONE = 0
-GZIP = 1
-SNAPPY = 2
 
 def encode_gzip(buff):
     """Encode a buffer using gzip"""
