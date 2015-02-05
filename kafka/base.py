@@ -136,20 +136,38 @@ class BaseSimpleConsumer(object):
 
 
 class BaseProducer(object):
+    """Basic Producer for the Kafka Cluster.
+
+    Synchronously publishes messages to Kafka as `produce` is called.
+    """
     __metaclass__ = abc.ABCMeta
 
-    @abc.abstractproperty
+    @property
     def topic(self):
-        pass
+        return self._topic
 
-    @abc.abstractproperty
+    @property
     def partitioner(self):
-        pass
+        return self._partitioner
 
     @abc.abstractmethod
     def produce(self, messages):
+        """Produce messages for the topic.
+
+        :param messages: Iterable of messages to be published.
+        :type messages: An iterable of either strings or (key, value) tuples.
+            If tuples, then the `key` will be sent to the partitioner to
+            determine to which partition it belongs. It will also be sent to
+            Kafka and available when the message is read.
+        """
         pass
 
 
 class BaseAsyncProducer(BaseProducer):
+    """Asynchronous Producer for the Kafka Cluster.
+
+    Asynchronously publishes messages to the Kafka cluster. Calling `produce`
+    will return immediately.  Messages will be batched and published at regular
+    intervals based on settings passed to the AsyncProducer.
+    """
     pass
