@@ -376,19 +376,6 @@ class MetadataResponse(Response):
 ## Produce API
 ##
 
-_PartitionProduceRequest = namedtuple('PartitionProduceRequest',
-    ['topic_name', 'partition_id', 'messages']
-)
-class PartitionProduceRequest(_PartitionProduceRequest):
-    """Produce request for a specific topic/partition
-
-    :ivar topic_name: Name of the topic to use
-    :ivar partition_id: Id of the partition to use
-    :ivar messages: List of :class:`kafka.pykafka.protocol.Message` to publish
-    """
-    pass
-
-
 class ProduceRequest(Request):
     """Produce Request
 
@@ -399,7 +386,6 @@ class ProduceRequest(Request):
       MessageSetSize => int32
     """
     def __init__(self,
-                 partition_requests=[],
                  compression_type=CompressionType.NONE,
                  required_acks=1,
                  timeout=10000):
@@ -427,8 +413,6 @@ class ProduceRequest(Request):
         ))
         self.required_acks = required_acks
         self.timeout = timeout
-        for req in partition_requests:
-            self.add_messages(req.messages, req.topic_name, req.partition_id)
 
     def __len__(self):
         """Length of the serialized message, in bytes"""
@@ -445,14 +429,14 @@ class ProduceRequest(Request):
         """API_KEY for this request, from the Kafka docs"""
         return 0
 
-    def add_messages(self, messages, topic_name, partition_id):
+    def add_message(self, message, topic_name, partition_id):
         """Add a list of :class:`kafka.common.Message` to the waiting request
 
         :param messages: an iterable of :class:`kafka.common.Message` to add
         :param topic_name: the name of the topic to publish to
         :param partition_id: the partition to publish to
         """
-        self._msets[topic_name][partition_id].messages.extend(messages)
+        self._msets[topic_name][partition_id].messages.append(message)
 
     def get_bytes(self):
         """Serialize the message
@@ -477,6 +461,13 @@ class ProduceRequest(Request):
                 message_set.pack_into(output, offset)
                 offset += mset_len
         return output
+
+    def message_count(self):
+        """Get the number of messages across all MessageSets in the request."""
+        return sum(len(mset.messages)
+                   for topic, partitions in self._msets.iteritems()
+                   for partition_id, mset in partitions.iteritems()
+                   )
 
 
 class ProduceResponse(Response):

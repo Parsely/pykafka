@@ -1,6 +1,7 @@
 import logging
 
 from kafka import base
+from kafka.common import CompressionType
 from .connection import BrokerConnection
 from .handlers import RequestHandler
 from .protocol import (
@@ -92,23 +93,18 @@ class Broker(base.BaseBroker):
         ))
         return future.get(FetchResponse)
 
-    def produce_messages(self,
-                         partition_requests,
-                         compression_type=compression.NONE,
-                         required_acks=1,
-                         timeout=10000):
+    def produce_messages(self, produce_request):
         """Produce messages to a set of partitions.
 
-        :param partition_requests: Requests of messages to produce.
         :type partition_requests: Iterable of
-            :class:`kafka.pykafka.protocol.PartitionProduceRequest`
+            :class:`kafka.pykafka.protocol.ProduceRequest`
         """
-        req = ProduceRequest(partition_requests=partition_requests,
-                             compression_type=compression_type,
-                             required_acks=required_acks,
-                             timeout=timeout)
-        self.handler.request(req).get()
-        return None  # errors raised on deserialize, no need for return value
+        if produce_request.required_acks == 0:
+            self.handler.request(produce_request, has_response=False)
+        else:
+            self.handler.request(produce_request).get()
+            # Any errors will be decoded and raised in the `.get()`
+        return None
 
     def request_offsets(self, partition_requests):
         """Request offset information for a set of topic/partitions"""
