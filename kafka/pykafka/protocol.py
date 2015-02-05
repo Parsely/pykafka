@@ -429,6 +429,15 @@ class ProduceRequest(Request):
         """API_KEY for this request, from the Kafka docs"""
         return 0
 
+    @property
+    def messages(self):
+        """Iterable of all messages in the Request"""
+        return itertools.chain.from_iterable(
+            mset.messages
+            for topic, partitions in self._msets.iteritems()
+            for partition_id, mset in partitions.iteritems()
+        )
+
     def add_message(self, message, topic_name, partition_id):
         """Add a list of :class:`kafka.common.Message` to the waiting request
 
@@ -464,6 +473,7 @@ class ProduceRequest(Request):
 
     def message_count(self):
         """Get the number of messages across all MessageSets in the request."""
+        # N.B. sum(len(mset)) is a *lot* faster than sum(1 for m in messages)
         return sum(len(mset.messages)
                    for topic, partitions in self._msets.iteritems()
                    for partition_id, mset in partitions.iteritems()

@@ -1,9 +1,19 @@
+import logging
+import time
 from collections import defaultdict
 
 from kafka import base
 from kafka.common import CompressionType
+from kafka.exceptions import (
+    UnknownTopicOrPartition, LeaderNotAvailable,
+    NotLeaderForPartition, RequestTimedOut,
+)
 from kafka.partitioners import random_partitioner
 from .protocol import Message, ProduceRequest
+
+
+logger = logging.getLogger(__name__)
+
 
 class AsyncProducer(base.BaseAsyncProducer):
 
@@ -37,6 +47,7 @@ class AsyncProducer(base.BaseAsyncProducer):
 class Producer(base.BaseProducer):
 
     def __init__(self,
+                 client,
                  topic,
                  partitioner=random_partitioner,
                  compression=CompressionType.NONE,
@@ -48,6 +59,7 @@ class Producer(base.BaseProducer):
                  batch_size=200):
         """Create a Producer for a topic.
 
+        :param client: KafkaClient used to connect to cluster.
         :param topic: The topic to produce messages for.
         :type topic: :class:`kafka.pykafka.topic.Topic`
         :para compression: Compression to use for messages.
@@ -62,6 +74,7 @@ class Producer(base.BaseProducer):
         :param ack_timeout_ms:
         :param batch_size: Size of batches to send to brokers
         """
+        self._client = client
         self._topic = topic
         self._partitioner = partitioner
         self._batch_size = batch_size
@@ -72,9 +85,31 @@ class Producer(base.BaseProducer):
         self._required_acks = required_acks
         self._ack_timeout_ms = ack_timeout_ms
 
+    def _send_request(self, broker, req):
+        tries = 0
+        while tries < self._max_retries:
+            try:
+                broker.produce_messages(req)
+                break
+            except (UnknownTopicOrPartition , LeaderNotAvailable,
+                    NotLeaderForPartition, RequestTimedOut) as ex:
+                tries += 1
+                if tries >= self._max_retries:
+                    raise
+                elif isinstance(ex, UnknownTopicOrPartition):
+                    logger.warning('Unknown topic: %s. Retrying.', self._topic)
+                elif isinstance(ex, LeaderNotAvailable):
+                    logger.warning('Partition leader unavailable. Retrying.')
+                elif isinstance(ex, NotLeaderForPartition):
+                    # Update cluster metadata and retry the produce request
+                    # FIXME: Can this recurse infinitely?
+                    self._client.update()
+                    self._produce(req.messages)
+                elif isinstance(ex, RequestTimedOut):
+                    logger.warning('Produce request timed out. Retrying.')
+
     def _produce(self, messages):
         """Publish a set of messages to relevant brokers."""
-        # TODO: Implement retries
         # Requests grouped by broker
         requests = defaultdict(lambda: ProduceRequest(
             compression_type=self._compression,
@@ -97,12 +132,12 @@ class Producer(base.BaseProducer):
             )
             # Send requests at the batch size
             if requests[partition.leader].message_count() >= self._batch_size:
-                req = requests.pop(partition.leader)
-                partition.leader.produce_messages(req)
+                self._send_request(partition.leader,
+                                   requests.pop(partition.leader))
 
         # Send any still not sent
         for broker, req in requests.iteritems():
-            broker.produce_messages(req)
+            self._send_request(broker, req)
 
     def produce(self, messages):
         self._produce(messages)
