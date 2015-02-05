@@ -2,20 +2,28 @@ import abc
 
 
 class BaseCluster(object):
-    """Abstraction of a Kafka cluster.
+    """A Kafka cluster.
 
-    :ivar topics: Topics present in this cluster.
-    :ivar brokers: Brokers in the cluster.
+    This is an abstraction of the cluster topology. It provides access
+    to topics and brokers, which can be useful for introspection of a cluster.
     """
     __metaclass__ = abc.ABCMeta
 
-    @abc.abstractproperty
+    @property
     def brokers():
-        pass
+        """Brokers associated with this cluster.
 
-    @abc.abstractproperty
+        :type: `dict` of {broker_id: :class:`kafka.base.BaseBroker`}
+        """
+        return self._brokers
+
+    @property
     def topics():
-        pass
+        """Topics present in this cluster.
+
+        :type: `dict` of {topic_name: :class:`kafka.base.BaseTopic`}
+        """
+        return self._topics
 
     @abc.abstractmethod
     def update():
@@ -30,64 +38,125 @@ class BaseCluster(object):
 
 
 class BaseBroker(object):
+    """A Kafka Broker.
+
+    Not especially useful under normal circumstances, but can be handy
+    when introspecting about a Cluster.
+    """
     __metaclass__ = abc.ABCMeta
     pass
 
-    @abc.abstractproperty
+    @property
     def id(self):
-        pass
+        """Id of the broker
 
-    @abc.abstractproperty
+        :type: `int`
+        """
+        return self._id
+
+    @property
     def host(self):
-        pass
+        """Host of the broker.
 
-    @abc.abstractproperty
+        :type: `str`
+        """
+        return self._host
+
+    @property
     def port(self):
-        pass
+        """Port the broker uses.
+
+        :type: `int`
+        """
+        return self._port
 
 
 class BasePartition(object):
+    """A Kafka Partition.
+
+    Each Kafka topic is split up into parts called "partitions".  When reading
+    or writing a topic, you're actually reading a partition of the topic.
+    Replication also happens at the partition level.
+
+    Like Brokers, Partitions aren't useful under normal circumstances, but
+    are handy to know about for debugging and introspection.
+    """
     __metaclass__ = abc.ABCMeta
 
-    @abc.abstractproperty
+    @property
     def id(self):
-        pass
+        """The id of this partition.
 
-    @abc.abstractproperty
+        :type: `int`
+        """
+        return self._id
+
+    @property
     def leader(self):
-        pass
+        """The leader broker of the partition.
 
-    @abc.abstractproperty
+        :type: :class:`kafka.base.BasePartition`
+        """
+        return self._leader
+
+    @property
     def replicas(self):
-        pass
+        """List of brokers which has replicas of this Partition.
 
-    @abc.abstractproperty
+        :type: `list` of :class:`kafka.base.BaseBroker`
+        """
+        return self._replicas
+
+    @property
     def isr(self):
-        pass
+        """List of brokers which have in-sync replicas of this partition.
 
-    @abc.abstractproperty
+        :type: `list` of :class:`kafka.base.BaseBroker`
+        """
+        return self._isr
+
+    @property
     def topic(self):
-        pass
+        """Name of the topic to which this partition belongs.
+
+        :type: `str`
+        """
+        return self._topic
 
     @abc.abstractmethod
     def latest_offset(self):
+        """Gets the latest offset for the partition."""
         pass
 
     @abc.abstractmethod
     def earliest_offset(self):
+        """Gets the earliest offset for the partition.
+
+        Due to logfile rotation, this will not always be 0. Instead,
+        this will get the earliest offset for which the partition has data.
+        """
         pass
 
 
 class BaseTopic(object):
+    """A Kafka topic."""
     __metaclass__ = abc.ABCMeta
 
-    @abc.abstractproperty
+    @property
     def name(self):
-        pass
+        """The name of the topic.
 
-    @abc.abstractproperty
+        :type: `str`
+        """
+        return self._name
+
+    @property
     def partitions(self):
-        pass
+        """The partitions of this topic.
+
+        :type: `dict` of {`int`: :class:`kafka.base.BasePartition`}
+        """
+        return self._partitions
 
     @abc.abstractmethod
     def latest_offsets(self):
@@ -96,11 +165,26 @@ class BaseTopic(object):
 
     @abc.abstractmethod
     def earliest_offsets(self):
-        """Get the earliest offset for all partitions."""
+        """Get the earliest offset for all partitions.
+
+        Due to logfile rotation, this will not always be 0. Instead,
+        this will get the earliest offset for which the partition has data.
+        """
         pass
 
 
 class BaseSimpleConsumer(object):
+    """A simple consumer which reads data from a topic.
+
+    This is a simple reader useful for testing or single-process situation.
+    **If multiple processes use a SimpleConsumer and read the same topic,
+    they will each read copies of the data.**  Instead, use a BalancedConsumer
+    to ensure each message is only read once.
+
+    The one advantage this implementation has over a BalancedConsumer is that
+    the partitions to be read can be specified. Therefore, if one has hard
+    coded which process reads which partitions, this is a useful soluton.
+    """
     __metaclass__ = abc.ABCMeta
 
     @abc.abstractmethod
@@ -116,18 +200,26 @@ class BaseSimpleConsumer(object):
         """
         pass
 
-    @abc.abstractproperty
-    def topic(self):
-        pass
-
-    @abc.abstractproperty
-    def partitions(self):
-        pass
-
     @abc.abstractmethod
     def __iter__(self):
         """Iterator for messages in the consumer."""
         pass
+
+    @property
+    def topic(self):
+        """The topic from which data is being read.
+
+        :type: :class:`kafka.base.BaseTopic`
+        """
+        return self._topic
+
+    @property
+    def partitions(self):
+        """The partitions from which data is being read.
+
+        :type: `dict` of {`int`: :class:`kafka.base.BasePartition`}
+        """
+        return self._partitions
 
     @abc.abstractmethod
     def consume(self, timeout=None):
@@ -136,19 +228,29 @@ class BaseSimpleConsumer(object):
 
 
 class BaseProducer(object):
+    """A producer which writes data to a topic.
+
+    This producer is synchronous, waiting for a response from Kafka
+    before returning. For an asynchronous implementation, use
+    :class:`kafka.base.BaseAsyncProducer`
+    """
     __metaclass__ = abc.ABCMeta
 
-    @abc.abstractmethod
-    def __init__(self, topic, partitioner=None):
-        pass
-
-    @abc.abstractproperty
+    @property
     def topic(self):
-        pass
+        """The topic to which data is being written.
 
-    @abc.abstractproperty
+        :type: :class:`kafka.base.BaseTopic`
+        """
+        return self._topic
+
+    @property
     def partitioner(self):
-        pass
+        """The partitioner used to determine which partition used.
+
+        :type: :class:`kafka.partitioners.BasePartitioner`
+        """
+        return self._partitioner
 
     @abc.abstractmethod
     def produce(self, messages):
