@@ -1,16 +1,12 @@
-import abc
-
-
 class BaseCluster(object):
     """A Kafka cluster.
 
     This is an abstraction of the cluster topology. It provides access
     to topics and brokers, which can be useful for introspection of a cluster.
     """
-    __metaclass__ = abc.ABCMeta
 
     @property
-    def brokers():
+    def brokers(self):
         """Brokers associated with this cluster.
 
         :type: `dict` of {broker_id: :class:`kafka.base.BaseBroker`}
@@ -18,15 +14,14 @@ class BaseCluster(object):
         return self._brokers
 
     @property
-    def topics():
+    def topics(self):
         """Topics present in this cluster.
 
         :type: `dict` of {topic_name: :class:`kafka.base.BaseTopic`}
         """
         return self._topics
 
-    @abc.abstractmethod
-    def update():
+    def update(self):
         """Update the Cluster with metadata from Kafka.
 
         All updates must happen in-place. This means that if a Topic leader has
@@ -34,7 +29,7 @@ class BaseCluster(object):
         would break any clients that have instances of the old Topic. Instead,
         the current topic is updated seamlessly.
         """
-        pass
+        raise NotImplementedError
 
 
 class BaseBroker(object):
@@ -43,8 +38,6 @@ class BaseBroker(object):
     Not especially useful under normal circumstances, but can be handy
     when introspecting about a Cluster.
     """
-    __metaclass__ = abc.ABCMeta
-    pass
 
     @property
     def id(self):
@@ -81,7 +74,6 @@ class BasePartition(object):
     Like Brokers, Partitions aren't useful under normal circumstances, but
     are handy to know about for debugging and introspection.
     """
-    __metaclass__ = abc.ABCMeta
 
     @property
     def id(self):
@@ -123,24 +115,28 @@ class BasePartition(object):
         """
         return self._topic
 
-    @abc.abstractmethod
     def latest_offset(self):
-        """Gets the latest offset for the partition."""
-        pass
+        """Gets the latest offset for the partition.
 
-    @abc.abstractmethod
+        :return: Latest offset for the partition.
+        :rtype: `int`
+        """
+        raise NotImplementedError
+
     def earliest_offset(self):
         """Gets the earliest offset for the partition.
 
         Due to logfile rotation, this will not always be 0. Instead,
         this will get the earliest offset for which the partition has data.
+
+        :returns: The earliest offset for the partition.
+        :rtype: `int`
         """
-        pass
+        raise NotImplementedError
 
 
 class BaseTopic(object):
     """A Kafka topic."""
-    __metaclass__ = abc.ABCMeta
 
     @property
     def name(self):
@@ -158,19 +154,24 @@ class BaseTopic(object):
         """
         return self._partitions
 
-    @abc.abstractmethod
     def latest_offsets(self):
-        """Get the latest offset for all partitions."""
-        pass
+        """Get the latest offset for all partitions.
 
-    @abc.abstractmethod
+        :returns: The latest offset for all partitions in the topic.
+        :rtype: `dict` of {:class:`kafka.base.BasePartition`: `int`}
+        """
+        raise NotImplementedError
+
     def earliest_offsets(self):
         """Get the earliest offset for all partitions.
 
         Due to logfile rotation, this will not always be 0. Instead,
         this will get the earliest offset for which the partition has data.
+
+        :returns: The earliest offset for all partitions in the topic.
+        :rtype: `dict` of {:class:`kafka.base.BasePartition`: `int`}
         """
-        pass
+        raise NotImplementedError
 
 
 class BaseSimpleConsumer(object):
@@ -185,9 +186,7 @@ class BaseSimpleConsumer(object):
     the partitions to be read can be specified. Therefore, if one has hard
     coded which process reads which partitions, this is a useful soluton.
     """
-    __metaclass__ = abc.ABCMeta
 
-    @abc.abstractmethod
     def __init__(self, client, topic, partitions=None):
         """Create a consumer for a topic.
 
@@ -198,12 +197,11 @@ class BaseSimpleConsumer(object):
         :param partitions: List of partitions to consume from.
         :type partitions: Iterable of :class:`kafka.abstract.Partition` or int
         """
-        pass
+        raise NotImplementedError
 
-    @abc.abstractmethod
     def __iter__(self):
         """Iterator for messages in the consumer."""
-        pass
+        raise NotImplementedError
 
     @property
     def topic(self):
@@ -221,10 +219,13 @@ class BaseSimpleConsumer(object):
         """
         return self._partitions
 
-    @abc.abstractmethod
     def consume(self, timeout=None):
-        """Consume a message from the topic."""
-        pass
+        """Consume a message from the topic.
+
+        :returns: A message.
+        :rtype: :class:`kafka.common.Message`
+        """
+        raise NotImplementedError
 
 
 class BaseProducer(object):
@@ -234,7 +235,6 @@ class BaseProducer(object):
     before returning. For an asynchronous implementation, use
     :class:`kafka.base.BaseAsyncProducer`
     """
-    __metaclass__ = abc.ABCMeta
 
     @property
     def topic(self):
@@ -252,7 +252,6 @@ class BaseProducer(object):
         """
         return self._partitioner
 
-    @abc.abstractmethod
     def produce(self, messages):
         """
         Produce messages to topic
@@ -260,4 +259,4 @@ class BaseProducer(object):
         :type messages: Iterable of strings, or iterable of (key, value) tuples
                         to produce keyed messages
         """
-        pass
+        raise NotImplementedError
