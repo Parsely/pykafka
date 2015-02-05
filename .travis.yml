@@ -16,7 +16,7 @@ before_install:
 
 install:
     - python setup.py develop
-    - pip install --use-mirrors pykafka[test]
+    #- pip install --use-mirrors pykafka[test]
 
 env: ZOOKEEPER_PATH=/usr/share/java KAFKA_PATH=/usr/local/kafka KAFKA_START_TIMEOUT=30
 
