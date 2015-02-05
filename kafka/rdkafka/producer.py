@@ -60,10 +60,10 @@ class Producer(base.BaseProducer):
         # delivery callbacks will actually run on one thread.
 
         for msg in messages:
+            key, msg = (None, msg) if isinstance(msg, bytes) else msg
+            par = self.partitioner(self.topic.partitions.keys(), key)
             delivery_reports.append([])
-            par = self.partitioner(self.topic.partitions.keys(),
-                                   msg.partition_key)
-            self.rdk_topic.produce(msg.value,
+            self.rdk_topic.produce(msg,
                                    partition=par,
                                    msg_opaque=delivery_reports[-1])
         # XXX There may be some batch size at which it becomes more efficient

@@ -152,4 +152,10 @@ class BaseProducer(object):
 
     @abc.abstractmethod
     def produce(self, messages):
+        """
+        Produce messages to topic
+
+        :type messages: Iterable of strings, or iterable of (key, value) tuples
+                        to produce keyed messages
+        """
         pass
