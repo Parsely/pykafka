@@ -10,13 +10,9 @@ notifications:
 
 before_install:
     - sudo apt-get install -qq libev-dev libsnappy-dev
-    #- sudo apt-get install -qq zookeeper libev-dev libsnappy-dev
-    #- make -C vendor kafka > /dev/null
-    #- sudo mv vendor/kafka /usr/local/kafka
 
 install:
     - python setup.py develop
-    #- pip install --use-mirrors pykafka[test]
 
 env: ZOOKEEPER_PATH=/usr/share/java KAFKA_PATH=/usr/local/kafka KAFKA_START_TIMEOUT=30
 
