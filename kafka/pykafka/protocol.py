@@ -413,6 +413,7 @@ class ProduceRequest(Request):
         ))
         self.required_acks = required_acks
         self.timeout = timeout
+        self._message_count = 0  # this optimization is not premature
 
     def __len__(self):
         """Length of the serialized message, in bytes"""
@@ -446,6 +447,7 @@ class ProduceRequest(Request):
         :param partition_id: the partition to publish to
         """
         self._msets[topic_name][partition_id].messages.append(message)
+        self._message_count += 1
 
     def get_bytes(self):
         """Serialize the message
@@ -473,11 +475,7 @@ class ProduceRequest(Request):
 
     def message_count(self):
         """Get the number of messages across all MessageSets in the request."""
-        # N.B. sum(len(mset)) is a *lot* faster than sum(1 for m in messages)
-        return sum(len(mset.messages)
-                   for topic, partitions in self._msets.iteritems()
-                   for partition_id, mset in partitions.iteritems()
-                   )
+        return self._message_count
 
 
 class ProduceResponse(Response):
