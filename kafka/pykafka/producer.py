@@ -93,6 +93,10 @@ class Producer(base.BaseProducer):
                 break
             except (UnknownTopicOrPartition , LeaderNotAvailable,
                     NotLeaderForPartition, RequestTimedOut) as ex:
+                # FIXME: Not all messages will have failed. Only some on a
+                #        bad partition. Retrying should reflect that. The
+                #        fix needs to be in protocol.py as well since it
+                #        only raises one exception no matter how many errors.
                 tries += 1
                 if tries >= self._max_retries:
                     raise
@@ -103,6 +107,7 @@ class Producer(base.BaseProducer):
                 elif isinstance(ex, NotLeaderForPartition):
                     # Update cluster metadata and retry the produce request
                     # FIXME: Can this recurse infinitely?
+                    # FIXME: This will cause a re-partitioning of messages
                     self._client.update()
                     self._produce(req.messages)
                 elif isinstance(ex, RequestTimedOut):
