@@ -60,10 +60,6 @@ class KafkaClient(object):
         self.brokers = self.cluster.brokers
         self.topics = self.cluster.topics
 
-    def __getitem__(self, key):
-        """Getter used to provide dict-like access to Topics."""
-        return self.cluster.topics[key]
-
     def update_cluster(self):
         """Update known brokers and topics.
 
