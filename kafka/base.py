@@ -253,10 +253,22 @@ class BaseProducer(object):
         return self._partitioner
 
     def produce(self, messages):
-        """
-        Produce messages to topic
+        """Produce messages to the topic.
 
-        :type messages: Iterable of strings, or iterable of (key, value) tuples
-                        to produce keyed messages
+        :param messages: Iterable of messages to be published.
+        :type messages: An iterable of either strings or (key, value) tuples.
+            If tuples, then the `key` will be sent to the partitioner to
+            determine to which partition it belongs. It will also be sent to
+            Kafka and available when the message is read.
         """
         raise NotImplementedError
+
+
+class BaseAsyncProducer(BaseProducer):
+    """Asynchronous Producer for the Kafka Cluster.
+
+    Asynchronously publishes messages to the Kafka cluster. Calling `produce`
+    will return immediately.  Messages will be batched and published at regular
+    intervals based on settings passed to the AsyncProducer.
+    """
+    pass

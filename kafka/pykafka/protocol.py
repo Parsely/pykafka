@@ -47,16 +47,19 @@ import logging
 import collections
 import itertools
 import struct
-
 from collections import defaultdict, namedtuple
-from .utils import Serializable, compression, struct_helpers
 from zlib import crc32
 
 from kafka import common
+from kafka.common import CompressionType
 from kafka.exceptions import ERROR_CODES
+from .utils import Serializable, compression, struct_helpers
 
 OFFSET_EARLIEST = -2
 OFFSET_LATEST = -1
+
+
+logger = logging.getLogger(__name__)
 
 
 class Request(Serializable):
@@ -121,7 +124,7 @@ class Message(common.Message, Serializable):
     def __init__(self,
                  value,
                  partition_key=None,
-                 compression_type=compression.NONE,
+                 compression_type=CompressionType.NONE,
                  offset=-1):
         self.compression_type = compression_type
         self.partition_key = partition_key
@@ -185,7 +188,7 @@ class MessageSet(Serializable):
     :ivar messages: The list of messages currently in the MessageSet
     :ivar compression_type: compression to use for the messages
     """
-    def __init__(self, compression_type=compression.NONE, messages=None):
+    def __init__(self, compression_type=CompressionType.NONE, messages=None):
         """Create a new MessageSet
 
         :param compression_type: Compression to use on the messages
@@ -203,7 +206,7 @@ class MessageSet(Serializable):
         requests/responses using MessageSets need that size, though, so
         be careful when using this.
         """
-        if self.compression_type == compression.NONE:
+        if self.compression_type == CompressionType.NONE:
             messages = self._messages
         else:
             # The only way to get __len__ of compressed is to compress.
@@ -225,13 +228,13 @@ class MessageSet(Serializable):
         Returns a Message object with correct headers set and compressed
         data in the value field.
         """
-        assert self.compression_type != compression.NONE
+        assert self.compression_type != CompressionType.NONE
         tmp_mset = MessageSet(messages=self._messages)
         uncompressed = bytearray(len(tmp_mset))
         tmp_mset.pack_into(uncompressed, 0)
-        if self.compression_type == compression.GZIP:
+        if self.compression_type == CompressionType.GZIP:
             compressed = compression.encode_gzip(buffer(uncompressed))
-        elif self.compression_type == compression.SNAPPY:
+        elif self.compression_type == CompressionType.SNAPPY:
             compressed = compression.encode_snappy(buffer(uncompressed))
         else:
             raise TypeError("Unknown compression: %s" % self.compression_type)
@@ -262,7 +265,7 @@ class MessageSet(Serializable):
         :param buff: The buffer to write into
         :param offset: The offset to start the write at
         """
-        if self.compression_type == compression.NONE:
+        if self.compression_type == CompressionType.NONE:
             messages = self._messages
         else:
             if self._compressed is None:
@@ -373,19 +376,6 @@ class MetadataResponse(Response):
 ## Produce API
 ##
 
-_PartitionProduceRequest = namedtuple('PartitionProduceRequest',
-    ['topic_name', 'partition_id', 'messages']
-)
-class PartitionProduceRequest(_PartitionProduceRequest):
-    """Produce request for a specific topic/partition
-
-    :ivar topic_name: Name of the topic to use
-    :ivar partition_id: Id of the partition to use
-    :ivar messages: List of :class:`kafka.pykafka.protocol.Message` to publish
-    """
-    pass
-
-
 class ProduceRequest(Request):
     """Produce Request
 
@@ -396,8 +386,7 @@ class ProduceRequest(Request):
       MessageSetSize => int32
     """
     def __init__(self,
-                 partition_requests=[],
-                 compression_type=compression.NONE,
+                 compression_type=CompressionType.NONE,
                  required_acks=1,
                  timeout=10000):
         """Create a new ProduceRequest
@@ -424,8 +413,7 @@ class ProduceRequest(Request):
         ))
         self.required_acks = required_acks
         self.timeout = timeout
-        for req in partition_requests:
-            self.add_messages(req.messages, req.topic_name, req.partition_id)
+        self._message_count = 0  # this optimization is not premature
 
     def __len__(self):
         """Length of the serialized message, in bytes"""
@@ -442,14 +430,24 @@ class ProduceRequest(Request):
         """API_KEY for this request, from the Kafka docs"""
         return 0
 
-    def add_messages(self, messages, topic_name, partition_id):
+    @property
+    def messages(self):
+        """Iterable of all messages in the Request"""
+        return itertools.chain.from_iterable(
+            mset.messages
+            for topic, partitions in self._msets.iteritems()
+            for partition_id, mset in partitions.iteritems()
+        )
+
+    def add_message(self, message, topic_name, partition_id):
         """Add a list of :class:`kafka.common.Message` to the waiting request
 
         :param messages: an iterable of :class:`kafka.common.Message` to add
         :param topic_name: the name of the topic to publish to
         :param partition_id: the partition to publish to
         """
-        self._msets[topic_name][partition_id].messages.extend(messages)
+        self._msets[topic_name][partition_id].messages.append(message)
+        self._message_count += 1
 
     def get_bytes(self):
         """Serialize the message
@@ -474,6 +472,10 @@ class ProduceRequest(Request):
                 message_set.pack_into(output, offset)
                 offset += mset_len
         return output
+
+    def message_count(self):
+        """Get the number of messages across all MessageSets in the request."""
+        return self._message_count
 
 
 class ProduceResponse(Response):
@@ -651,12 +653,12 @@ class FetchResponse(Response):
         output = []
         message_set = MessageSet.decode(buff)
         for message in message_set.messages:
-            if message.compression_type == compression.NONE:
+            if message.compression_type == CompressionType.NONE:
                 output.append(message)
-            elif message.compression_type == compression.GZIP:
+            elif message.compression_type == CompressionType.GZIP:
                 decompressed = compression.decode_gzip(message.value)
                 output += self._unpack_message_set(decompressed)
-            elif message.compression_type == compression.SNAPPY:
+            elif message.compression_type == CompressionType.SNAPPY:
                 # Kafka is sending incompatible headers. Strip it off.
                 decompressed = compression.decode_snappy(message.value[20:])
                 output += self._unpack_message_set(decompressed)

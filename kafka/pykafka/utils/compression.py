@@ -26,9 +26,6 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-NONE = 0
-GZIP = 1
-SNAPPY = 2
 
 def encode_gzip(buff):
     """Encode a buffer using gzip"""
@@ -53,7 +50,7 @@ def decode_gzip(buff):
 def encode_snappy(buff):
     """Encode a buffer using Snappy"""
     if snappy is None:
-        raise ImportError("Please instally python-snappy")
+        raise ImportError("Please install python-snappy")
     output = snappy.compress(buff)
     return snappy.compress(buff)
 

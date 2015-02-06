@@ -17,7 +17,8 @@ limitations under the License.
 
 import logging
 
-from kafka import handlers, pykafka
+from kafka import pykafka
+from kafka.pykafka import handlers
 
 try:
     import rd_kafka

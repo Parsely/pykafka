@@ -2,7 +2,7 @@ import unittest
 
 from kafka import exceptions
 from kafka.pykafka import protocol
-from kafka.pykafka.utils import compression
+from kafka.common import CompressionType
 
 
 class TestMetadataAPI(unittest.TestCase):
@@ -54,7 +54,7 @@ class TestProduceAPI(unittest.TestCase):
     def test_request(self):
         message = self.test_messages[0]
         req = protocol.ProduceRequest()
-        req.add_messages([message], 'test', 0)
+        req.add_message(message, 'test', 0)
         msg = req.get_bytes()
         self.assertEqual(
             msg,
@@ -62,14 +62,14 @@ class TestProduceAPI(unittest.TestCase):
         )
 
     def test_gzip_compression(self):
-        req = protocol.ProduceRequest(compression_type=compression.GZIP)
-        req.add_messages(self.test_messages, 'test_gzip', 0)
+        req = protocol.ProduceRequest(compression_type=CompressionType.GZIP)
+        [req.add_message(m, 'test_gzip', 0) for m in self.test_messages]
         msg = req.get_bytes()
         self.assertEqual(len(msg), 207) # this isn't a good test
 
     def test_snappy_compression(self):
-        req = protocol.ProduceRequest(compression_type=compression.SNAPPY)
-        req.add_messages(self.test_messages, 'test_snappy', 0)
+        req = protocol.ProduceRequest(compression_type=CompressionType.SNAPPY)
+        [req.add_message(m, 'test_snappy', 0) for m in self.test_messages]
         msg = req.get_bytes()
         self.assertEqual(len(msg), 212) # this isn't a good test
 
