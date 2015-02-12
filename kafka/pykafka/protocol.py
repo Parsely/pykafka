@@ -50,12 +50,9 @@ from collections import defaultdict, namedtuple
 from zlib import crc32
 
 from kafka import common
-from kafka.common import CompressionType
+from kafka.common import CompressionType, OffsetType
 from kafka.exceptions import ERROR_CODES
 from .utils import Serializable, compression, struct_helpers
-
-OFFSET_EARLIEST = -2
-OFFSET_LATEST = -1
 
 
 logger = logging.getLogger(__name__)
