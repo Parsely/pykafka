@@ -64,8 +64,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
 
     def consume(self, timeout=1):
         msg = self.rdk_queue.consume(timeout_ms=1000 * timeout)
-        return None if msg is None else Message(self.topic.name,
-                                                msg.key[:],
-                                                msg.payload[:],
-                                                msg.offset)
-        # XXX copy key/payload to native str in python-librdkafka instead?
+        return None if msg is None else Message(topic=self.topic.name,
+                                                key=msg.key[:],
+                                                payload=msg.payload[:],
+                                                offset=msg.offset)
