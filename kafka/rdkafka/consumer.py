@@ -24,15 +24,13 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         if isinstance(topic, basestring):
             topic = client[topic]
         self._topic = topic
-        self._partitions = partitions or self.topic.partitions # ie all
 
         config, topic_config = self._configure()
         rdk_consumer = rd_kafka.Consumer(config)
         self.rdk_topic = rdk_consumer.open_topic(self.topic.name, topic_config)
         self.rdk_queue = rdk_consumer.new_queue()
-        for p in self.partitions:
-            if not isinstance(p, int):
-                p = p.id
+
+        for p in (partitions or self.topic.partitions.keys()):
             self.rdk_queue.add_toppar(self.rdk_topic, p, start_offset=0)
             # FIXME ^^ change python-librdkafka to provide default for offset
             #       (which should probably be OFFSET_STORED)
@@ -51,12 +49,10 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         return config, topic_config
 
     @property
-    def topic(self):
-        return self._topic
-
-    @property
     def partitions(self):
-        return self._partitions # TODO check if Partitions or ints are expected
+        partition_ids = [p.partition_id for p in self.rdk_queue.partitions]
+        return {k: v for k, v in self.topic.partitions.items()
+                              if k in partition_ids}
 
     def __iter__(self):
         raise NotImplementedError
