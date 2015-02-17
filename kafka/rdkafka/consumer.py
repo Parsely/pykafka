@@ -1,5 +1,6 @@
 from collections import namedtuple
 from copy import copy
+import inspect
 import logging
 
 from kafka import base
@@ -20,12 +21,18 @@ Message = namedtuple("Message", ["topic", "payload", "key", "offset"])
 
 class SimpleConsumer(base.BaseSimpleConsumer):
 
-    def __init__(self, client, topic, partitions=None):
-        if isinstance(topic, basestring):
-            topic = client[topic]
-        self._topic = topic
+    def __init__(self, *args, **kwargs):
+        """ For argspec see base.BaseSimpleConsumer.__init__ """
+        callargs = inspect.getcallargs(
+                base.BaseSimpleConsumer.__init__, self, *args, **kwargs)
 
-        config, topic_config = self._configure()
+        # pop off any callargs that aren't config/topic_config settings:
+        self._topic = callargs.pop("topic")
+        partitions = callargs.pop("partitions")
+        del callargs["self"]
+
+        config, topic_config = self._configure(callargs)
+
         rdk_consumer = rd_kafka.Consumer(config)
         self.rdk_topic = rdk_consumer.open_topic(self.topic.name, topic_config)
         self.rdk_queue = rdk_consumer.new_queue()
@@ -41,7 +48,12 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         # we'd use a common rdk_consumer).  The extra overhead should be
         # acceptable for most uses.
 
-    def _configure(self):
+    def _configure(self, callargs):
+        """
+        Convert callargs to rd_kafka config, topic_config tuple
+        """
+        # TODO (WIP)
+
         config = copy(self.topic.cluster.config)
         topic_config = {} # TODO where do we expose this?
         # TODO config.update( ...stuff like group.id ...)
