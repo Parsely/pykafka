@@ -28,7 +28,10 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                 base.BaseSimpleConsumer.__init__, self, *args, **kwargs)
 
         # pop off any callargs that aren't config/topic_config settings:
+        self.client = callargs.pop("client")
         self._topic = callargs.pop("topic")
+        if isinstance(self._topic, basestring):
+            self._topic = self.client.topics[self._topic]
         partitions = callargs.pop("partitions")
         del callargs["self"]
 
