@@ -4,6 +4,7 @@ import inspect
 import logging
 
 from kafka import base
+from .config import convert_config
 
 try:
     import rd_kafka
@@ -31,7 +32,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         partitions = callargs.pop("partitions")
         del callargs["self"]
 
-        config, topic_config = self._configure(callargs)
+        config, topic_config = convert_config(
+                callargs, base_config=self.topic.cluster.config)
 
         rdk_consumer = rd_kafka.Consumer(config)
         self.rdk_topic = rdk_consumer.open_topic(self.topic.name, topic_config)
@@ -47,18 +49,6 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         # the same toppar (a restriction python-librdkafka would impose if
         # we'd use a common rdk_consumer).  The extra overhead should be
         # acceptable for most uses.
-
-    def _configure(self, callargs):
-        """
-        Convert callargs to rd_kafka config, topic_config tuple
-        """
-        # TODO (WIP)
-
-        config = copy(self.topic.cluster.config)
-        topic_config = {} # TODO where do we expose this?
-        # TODO config.update( ...stuff like group.id ...)
-
-        return config, topic_config
 
     @property
     def partitions(self):
