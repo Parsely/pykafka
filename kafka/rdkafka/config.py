@@ -1,6 +1,7 @@
 """
 Helpers to convert pykafka config names into librdkafka config names
 """
+from copy import copy
 import logging
 
 from kafka.exceptions import ImproperlyConfiguredError
@@ -47,7 +48,7 @@ def convert_config(config_callargs, base_config={}):
     """
     Convert config_callargs to rd_kafka (config, topic_config) tuple
     """
-    config = base_config
+    config = copy(base_config)
     topic_config = {}
     for key, val in config_callargs.iteritems():
         if key in NOT_AVAILABLE or val is None:

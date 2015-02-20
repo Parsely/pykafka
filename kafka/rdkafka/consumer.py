@@ -1,5 +1,4 @@
 from collections import namedtuple
-from copy import copy
 import inspect
 import logging
 
