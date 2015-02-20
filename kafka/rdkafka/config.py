@@ -4,6 +4,7 @@ Helpers to convert pykafka config names into librdkafka config names
 from copy import copy
 import logging
 
+from kafka.common import CompressionType
 from kafka.exceptions import ImproperlyConfiguredError
 from kafka.pykafka.protocol import OFFSET_EARLIEST, OFFSET_LATEST
 from rd_kafka.config_handles import default_config, default_topic_config
@@ -33,14 +34,25 @@ TRANSLATE_VALUES = { # callable or dict for value conversions
         OFFSET_LATEST: "largest",
         False: "error", # ie refuse to set offset automatically
         },
+    "compression": {
+        CompressionType.NONE: "none",
+        CompressionType.GZIP: "gzip",
+        CompressionType.SNAPPY: "snappy",
+    },
     "queued_max_message_chunks": lambda conf, chunks:
         str(chunks * conf["fetch_message_max_bytes"] // 1024),
 }
 
 TRANSLATE_NAMES = { # any names that don't map trivially
+    "ack_timeout_ms": "request.timeout.ms",
+    "batch_size": "batch.num.messages",
+    "compression": "compression.codec",
     "consumer_group": "group.id",
+    "max_retries": "message.send.max.retries",
     "queued_max_message_chunks": "queued.max.messages.kbytes",
     "refresh_leader_backoff_ms": "topic.metadata.refresh.fast.interval.ms",
+    "required_acks": "request.required.acks",
+    "topic_refresh_interval_ms": "topic.metadata.refresh.interval.ms",
     }
 
 

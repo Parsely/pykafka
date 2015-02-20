@@ -1,9 +1,10 @@
-from copy import copy
+import inspect
 import logging
 from time import clock
 
 from kafka import base, partitioners
 from kafka .exceptions import KafkaException
+from .config import convert_config, default_topic_config
 
 try:
     import rd_kafka
@@ -16,18 +17,21 @@ logger = logging.getLogger(__name__)
 
 class Producer(base.BaseProducer):
 
-    def __init__(self, topic, partitioner=partitioners.random_partitioner):
-        self._topic = topic
-        self._partitioner = partitioner
+    def __init__(self, *args, **kwargs):
+        """ For argspec see base.BaseProducer.__init__ """
+        callargs = inspect.getcallargs(
+                base.BaseProducer.__init__, self, *args, **kwargs)
 
-        config, topic_config = self._configure()
-        rdk_producer = rd_kafka.Producer(config)
-        self.rdk_topic = rdk_producer.open_topic(self.topic.name, topic_config)
+        # Pop off any callargs that aren't config/topic_config settings:
+        self.client = callargs.pop("client")
+        self._topic = callargs.pop("topic")
+        if isinstance(self._topic, basestring):
+            self._topic = self.client.topics[self._topic]
+        self._partitioner = callargs.pop("partitioner")
+        del callargs["self"]
 
-    def _configure(self):
-        config = copy(self.topic.cluster.config)
-        topic_config = {} # TODO where do we expose this?
-        # TODO config.update( ...stuff specific to this Producer ...)
+        config, topic_config = convert_config(
+                callargs, base_config=self.topic.cluster.config)
 
         def delivery_callback(msg, **kwargs):
             # cf Producer.produce() below to get what this is for
@@ -37,12 +41,14 @@ class Producer(base.BaseProducer):
             logger.warning("Overwriting user-set delivery callback with ours.")
         config["dr_msg_cb"] = delivery_callback
 
-        # We'll reuse this librdkafka parameter to set how long we'll wait for
-        # delivery reports (300000 is the current librdkafka default):
-        # TODO move the default to some config header
-        self.message_timeout_ms = config.get("message.timeout.ms", 300 * 1000)
+        # Reuse this parameter to set how long to wait for delivery reports:
+        self.message_timeout_ms = int(
+                topic_config.get("message.timeout.ms",
+                                 default_topic_config()["message.timeout.ms"]))
 
-        return config, topic_config
+        # Finally... open topic:
+        rdk_producer = rd_kafka.Producer(config)
+        self.rdk_topic = rdk_producer.open_topic(self.topic.name, topic_config)
 
     @property
     def topic(self):
