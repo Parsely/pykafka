@@ -15,8 +15,10 @@ class Cluster(base.BaseCluster):
         self.config = {"metadata.broker.list": seed_hosts}
         # TODO bind a log_cb to this config ^^
         self._brokers = {}
-        self._topics = {}
+        self._topics = TopicDict(self)
         self.update()
+
+        # Enable topic auto-creation:
 
     @property
     def brokers(self):
@@ -95,6 +97,31 @@ class Topic(base.BaseTopic):
 
     def earliest_offsets(self):
         raise NotImplementedError # TODO
+
+
+class TopicDict(dict):
+    """ A dict that knows how to create Topics """
+
+    def __init__(self, cluster, *args, **kwargs):
+        super(TopicDict, self).__init__(*args, **kwargs)
+        self.cluster = cluster
+
+    def __missing__(self, key):
+        logger.info("Trying to create topic '{}'".format(key))
+
+        # To do a metadata request on a non-existing topic, librdkafka
+        # expects you to take out an actual topic handle, not just a name:
+        rd_kafka.Producer(self.cluster.config).open_topic(key).metadata()
+
+        # Now cluster needs to know about it, too.  This creates another
+        # producer handle and does another metadata request - inefficient,
+        # but the kafka cluster needs time to set up the new topic anyway.
+        self.cluster.update()
+
+        # TODO figure out what to do here when auto-creation is disabled on
+        # the cluster.  In any case avoid endlessly recursing __missing__:
+        if key in self: return self[key]
+        else: raise KeyError(key)
 
 
 class Partition(object):
