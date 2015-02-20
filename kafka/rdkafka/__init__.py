@@ -20,8 +20,6 @@ class Cluster(base.BaseCluster):
         self._topics = TopicDict(self)
         self.update()
 
-        # Enable topic auto-creation:
-
     @property
     def brokers(self):
         return self._brokers
