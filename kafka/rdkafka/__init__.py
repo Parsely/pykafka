@@ -1,6 +1,8 @@
 import logging
+from time import sleep
 
 from kafka import base
+from .config import default_config
 
 try:
     import rd_kafka
@@ -110,18 +112,27 @@ class TopicDict(dict):
         logger.info("Trying to create topic '{}'".format(key))
 
         # To do a metadata request on a non-existing topic, librdkafka
-        # expects you to take out an actual topic handle, not just a name:
+        # expects you to create an actual topic handle, so:
         rd_kafka.Producer(self.cluster.config).open_topic(key).metadata()
 
-        # Now cluster needs to know about it, too.  This creates another
-        # producer handle and does another metadata request - inefficient,
-        # but the kafka cluster needs time to set up the new topic anyway.
-        self.cluster.update()
-
-        # TODO figure out what to do here when auto-creation is disabled on
-        # the cluster.  In any case avoid endlessly recursing __missing__:
-        if key in self: return self[key]
-        else: raise KeyError(key)
+        # Now update self.cluster, which in turn updates this dict.  Because
+        # creating topic-partitions and assigning them leaders and all takes
+        # time, we might need a few rounds of refreshes.  To avoid introducing
+        # more settings, we reuse existing ones which have roughly the right
+        # meaning:
+        conf = default_config()
+        for i in range(int(conf["topic.metadata.refresh.fast.cnt"])):
+            sleep(float(
+                    conf["topic.metadata.refresh.fast.interval.ms"]) * 1e-3)
+            self.cluster.update()
+            # This is empiricism at work: the topic might appear in metadata on
+            # one run, but only have partitions associated with it on the next,
+            # so test both:
+            if key in self and self[key].partitions:
+                break
+        else:
+            raise KeyError(key)
+        # TODO can we detect/report if auto-creation is disabled in kafka?
 
 
 class Partition(object):
