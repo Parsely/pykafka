@@ -56,9 +56,9 @@ TRANSLATE_NAMES = { # any names that don't map trivially
     }
 
 
-def convert_config(config_callargs, base_config={}):
+def convert_config(config_callargs, base_config=None):
     """ Convert config_callargs to rd_kafka (config, topic_config) tuple """
-    config = copy(base_config)
+    config = copy(base_config) if base_config is not None else {}
     topic_config = {}
     for key, val in config_callargs.iteritems():
         if key in NOT_AVAILABLE or val is None:
