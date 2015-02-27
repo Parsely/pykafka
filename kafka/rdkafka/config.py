@@ -57,9 +57,7 @@ TRANSLATE_NAMES = { # any names that don't map trivially
 
 
 def convert_config(config_callargs, base_config={}):
-    """
-    Convert config_callargs to rd_kafka (config, topic_config) tuple
-    """
+    """ Convert config_callargs to rd_kafka (config, topic_config) tuple """
     config = copy(base_config)
     topic_config = {}
     for key, val in config_callargs.iteritems():
@@ -68,18 +66,26 @@ def convert_config(config_callargs, base_config={}):
             continue
 
         # we'll do keys first:
-        try: renamed_key = TRANSLATE_NAMES[key]
-        except KeyError: renamed_key = key.replace("_", ".")
+        try:
+            renamed_key = TRANSLATE_NAMES[key]
+        except KeyError: # just a trivial mapping then:
+            renamed_key = key.replace("_", ".")
 
         # now vals:
-        try: converted_val = TRANSLATE_VALUES[key](config_callargs, val)
-        except TypeError: converted_val = TRANSLATE_VALUES[key][val]
-        except KeyError: converted_val = str(val)
+        try: # we expect a callable or a dict in TRANSLATE_VALUES:
+            converted_val = TRANSLATE_VALUES[key](config_callargs, val)
+        except TypeError:
+            converted_val = TRANSLATE_VALUES[key][val]
+        except KeyError: # no translation, but rdkafka still wants strings:
+            converted_val = str(val)
 
         # split them into two dicts:
-        if renamed_key in RD_TOPIC_CONF_NAMES: destination = topic_config
-        elif renamed_key in RD_CONF_NAMES: destination = config
-        else: raise ImproperlyConfiguredError("{}={} ?".format(key, val))
+        if renamed_key in RD_TOPIC_CONF_NAMES:
+            destination = topic_config
+        elif renamed_key in RD_CONF_NAMES:
+            destination = config
+        else:
+            raise ImproperlyConfiguredError("{}={} ?".format(key, val))
         destination[renamed_key] = converted_val
 
     return config, topic_config
