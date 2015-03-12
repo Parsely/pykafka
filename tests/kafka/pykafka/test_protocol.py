@@ -65,13 +65,13 @@ class TestProduceAPI(unittest.TestCase):
         req = protocol.ProduceRequest(compression_type=CompressionType.GZIP)
         [req.add_message(m, 'test_gzip', 0) for m in self.test_messages]
         msg = req.get_bytes()
-        self.assertEqual(len(msg), 207) # this isn't a good test
+        self.assertEqual(len(msg), 207)  # this isn't a good test
 
     def test_snappy_compression(self):
         req = protocol.ProduceRequest(compression_type=CompressionType.SNAPPY)
         [req.add_message(m, 'test_snappy', 0) for m in self.test_messages]
         msg = req.get_bytes()
-        self.assertEqual(len(msg), 212) # this isn't a good test
+        self.assertEqual(len(msg), 212)  # this isn't a good test
 
     def test_partition_error(self):
         self.assertRaises(
@@ -91,7 +91,7 @@ class TestProduceAPI(unittest.TestCase):
 class TestFetchAPI(unittest.TestCase):
     def test_request(self):
         preq = protocol.PartitionFetchRequest('test', 0, 1)
-        req = protocol.FetchRequest(partition_requests=[preq,])
+        req = protocol.FetchRequest(partition_requests=[preq, ])
         msg = req.get_bytes()
         self.assertEqual(
             msg,
@@ -155,7 +155,7 @@ class TestFetchAPI(unittest.TestCase):
 class TestOffsetAPI(unittest.TestCase):
     def test_request(self):
         preq = protocol.PartitionOffsetRequest('test', 0, -1, 1)
-        req = protocol.OffsetRequest(partition_requests=[preq,])
+        req = protocol.OffsetRequest(partition_requests=[preq, ])
         msg = req.get_bytes()
         self.assertEqual(
             msg,
