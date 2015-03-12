@@ -177,5 +177,9 @@ class TestOffsetAPI(unittest.TestCase):
         self.assertEqual(resp.topics['test'], {0: [2]})
 
 
+class TestOffsetCommitFetchAPI(unittest.TestCase):
+    pass
+
+
 if __name__ == '__main__':
     unittest.main()
