@@ -767,3 +767,63 @@ class OffsetResponse(Response):
                 if partition[1] != 0:
                     self.raise_error(partition[1], response)
                 self.topics[topic_name][partition[0]] = partition[2]
+
+
+class ConsumerMetadataRequest(Request):
+    """A consumer metadata request
+
+    ConsumerMetadataRequest => ConsumerGroup
+      ConsumerGroup => string
+    """
+    def __init__(self, consumer_group):
+        """Create a new consumer metadata request"""
+        self.consumer_group = consumer_group
+
+    def __len__(self):
+        """Length of the serialized message, in bytes"""
+        # Header + replicaId + len(self.consumer_group)
+        return self.HEADER_LEN + 4 + len(self.consumer_group) + 2
+
+    @property
+    def API_KEY(self):
+        """API_KEY for this request, from the Kafka docs"""
+        return 10
+
+    def get_bytes(self):
+        """Serialize the message
+
+        :returns: Serialized message
+        :rtype: :class:`bytearray`
+        """
+        output = bytearray(len(self))
+        self._write_header(output)
+        cglen = len(self.consumer_group)
+        struct.pack_into('!h%ds' % cglen, output, self.HEADER_LEN + 4, cglen, self.consumer_group)
+        return output
+
+
+class ConsumerMetadataResponse(Response):
+    """A consumer metadata response
+
+    ConsumerMetadataResponse => ErrorCode CoordinatorId CoordinatorHost CoordinatorPort
+      ErrorCode => int16
+      CoordinatorId => int32
+      CoordinatorHost => string
+      CoordinatorPort => int32
+    """
+    def __init__(self, buff):
+        """Deserialize into a new Response
+
+        :param buff: Serialized message
+        :type buff: :class:`bytearray`
+        """
+        fmt = 'hiSi'
+        response = struct_helpers.unpack_from(fmt, buff, 0)
+
+        self.topics = {}
+        error_code = response[0]
+        if error_code != 0:
+            self.raise_error(error_code, response)
+        self.coordinator_id = response[1]
+        self.coordinator_host = response[2]
+        self.coordinator_port = response[3]

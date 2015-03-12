@@ -178,7 +178,19 @@ class TestOffsetAPI(unittest.TestCase):
 
 
 class TestOffsetCommitFetchAPI(unittest.TestCase):
-    pass
+    def test_request(self):
+        req = protocol.ConsumerMetadataRequest('test')
+        msg = req.get_bytes()
+        self.assertEqual(
+            msg,
+            bytearray(b'\x00\x00\x00\x1b\x00\n\x00\x00\x00\x00\x00\x00\x00\x07pykafka\x00\x00\x00\x00\x00\x04test')
+        )
+
+    def test_response(self):
+        response = protocol.ConsumerMetadataResponse(
+            buffer('')
+        )
+        # TODO - how do we know what goes in the response buffer here?
 
 
 if __name__ == '__main__':
