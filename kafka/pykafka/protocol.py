@@ -798,7 +798,8 @@ class ConsumerMetadataRequest(Request):
         output = bytearray(len(self))
         self._write_header(output)
         cglen = len(self.consumer_group)
-        struct.pack_into('!h%ds' % cglen, output, self.HEADER_LEN + 4, cglen, self.consumer_group)
+        struct.pack_into('!h%ds' % cglen, output, self.HEADER_LEN + 4, cglen,
+                         self.consumer_group)
         return output
 
 
