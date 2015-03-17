@@ -204,6 +204,13 @@ class TestOffsetCommitFetchAPI(unittest.TestCase):
             bytearray(b'\x00\x00\x00E\x00\x08\x00\x00\x00\x00\x00\x00\x00\x07pykafka\xff\xff\xff\xff\x00\x00\x00\x01\x00\x04test\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00D\x00\x00\x00\x00U\x08\xad\x82\x00\x0ctestmetadata')
         )
 
+    def test_offset_commit_response(self):
+        # TODO - this is what I get back from kafka at the moment, clearly it's wrong
+        response = protocol.ConsumerMetadataResponse(
+            buffer('\x00\x00\x00\x00')
+        )
+        self.assertEqual(response.topics, {})
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -915,3 +915,32 @@ class OffsetCommitRequest(Request):
                                  metadata)
                 offset += 22 + metalen
         return output
+
+
+class OffsetCommitResponse(Response):
+    """An offset commit response
+
+    OffsetCommitResponse => [TopicName [Partition ErrorCode]]]
+      TopicName => string
+      Partition => int32
+      ErrorCode => int16
+    """
+    def __init__(self, buff):
+        """Deserialize into a new Response
+
+        :param buff: Serialized message
+        :type buff: :class:`bytearray`
+        """
+        fmt = '[S [ih ] ]'
+        response = struct_helpers.unpack_from(fmt, buff, 0)
+
+        self.topics = {}
+        for topic_name, partitions in response:
+            print topic_name
+            # a list makes sense here instead of a dict since the only returned
+            # information about the partition is the name
+            self.topics[topic_name] = []
+            for partition in partitions:
+                if partition[1] != 0:
+                    self.raise_error(partition[1], response)
+                self.topics[topic_name].append(partition[0])
