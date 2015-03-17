@@ -828,3 +828,90 @@ class ConsumerMetadataResponse(Response):
         self.coordinator_id = response[1]
         self.coordinator_host = response[2]
         self.coordinator_port = response[3]
+
+
+_PartitionOffsetCommitRequest = namedtuple(
+    'PartitionOffsetCommitRequest',
+    ['topic_name', 'partition_id', 'offset', 'timestamp', 'metadata']
+)
+
+
+class PartitionOffsetCommitRequest(_PartitionOffsetCommitRequest):
+    """Offset request for a specific topic/partition
+
+    :ivar topic_name: Name of the topic to look up
+    :ivar partition_id: Id of the partition to look up
+    :ivar offset:
+    :ivar timestamp:
+    :ivar metadata:
+    """
+    pass
+
+
+class OffsetCommitRequest(Request):
+    """An offset commit request
+
+    OffsetCommitRequest => ConsumerGroup [TopicName [Partition Offset TimeStamp Metadata]]
+      ConsumerGroup => string
+      TopicName => string
+      Partition => int32
+      Offset => int64
+      TimeStamp => int64
+      Metadata => string
+    """
+    def __init__(self, consumer_group, partition_requests=[]):
+        """Create a new offset commit request
+
+        :param partition_requests: Iterable of
+            :class:`kafka.pykafka.protocol.PartitionOffsetCommitRequest` for
+            this request
+        """
+        self.consumer_group = consumer_group
+        self._reqs = defaultdict(dict)
+        for t in partition_requests:
+            self._reqs[t.topic_name][t.partition_id] = (t.offset,
+                                                        t.timestamp,
+                                                        t.metadata)
+
+    def __len__(self):
+        """Length of the serialized message, in bytes"""
+        # Header + replicaId + len(topics)
+        size = self.HEADER_LEN + 4 + 4
+        for topic, parts in self._reqs.iteritems():
+            # topic name + len(parts)
+            size += 2 + len(topic) + 4
+            # partition + offset + timestamp => for each partition
+            size += (4 + 8 + 8) * len(parts)
+            # metadata => for each partition
+            for partition, (_, _, metadata) in parts.iteritems():
+                size += len(metadata) + 2
+        return size
+
+    @property
+    def API_KEY(self):
+        """API_KEY for this request, from the Kafka docs"""
+        return 8
+
+    def get_bytes(self):
+        """Serialize the message
+
+        :returns: Serialized message
+        :rtype: :class:`bytearray`
+        """
+        output = bytearray(len(self))
+        self._write_header(output)
+        offset = self.HEADER_LEN
+        struct.pack_into('!ii', output, offset, -1, len(self._reqs))
+        offset += 8
+        for topic_name, partitions in self._reqs.iteritems():
+            fmt = '!h%dsi' % len(topic_name)
+            struct.pack_into(fmt, output, offset, len(topic_name),
+                             topic_name, len(partitions))
+            offset += struct.calcsize(fmt)
+            for pnum, (poffset, timestamp, metadata) in partitions.iteritems():
+                metalen = len(metadata)
+                struct.pack_into('!iqqh%ds' % metalen, output, offset,
+                                 pnum, poffset, timestamp, metalen,
+                                 metadata)
+                offset += 22 + metalen
+        return output

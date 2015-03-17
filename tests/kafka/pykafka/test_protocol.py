@@ -178,7 +178,7 @@ class TestOffsetAPI(unittest.TestCase):
 
 
 class TestOffsetCommitFetchAPI(unittest.TestCase):
-    def test_request(self):
+    def test_consumer_metadata_request(self):
         req = protocol.ConsumerMetadataRequest('test')
         msg = req.get_bytes()
         self.assertEqual(
@@ -186,13 +186,23 @@ class TestOffsetCommitFetchAPI(unittest.TestCase):
             bytearray(b'\x00\x00\x00\x1b\x00\n\x00\x00\x00\x00\x00\x00\x00\x07pykafka\x00\x00\x00\x00\x00\x04test')
         )
 
-    def test_response(self):
+    def test_consumer_metadata_response(self):
         response = protocol.ConsumerMetadataResponse(
             buffer('\x00\x00\x00\x00\x00\x00\x00\remmett-debian\x00\x00#\x84')
         )
         self.assertEqual(response.coordinator_id, 0)
         self.assertEqual(response.coordinator_host, 'emmett-debian')
         self.assertEqual(response.coordinator_port, 9092)
+
+    def test_offset_commit_request(self):
+        preq = protocol.PartitionOffsetCommitRequest('test', 0, 68, 1426632066,
+                                                     'testmetadata')
+        req = protocol.OffsetCommitRequest('test', partition_requests=[preq, ])
+        msg = req.get_bytes()
+        self.assertEqual(
+            msg,
+            bytearray(b'\x00\x00\x00E\x00\x08\x00\x00\x00\x00\x00\x00\x00\x07pykafka\xff\xff\xff\xff\x00\x00\x00\x01\x00\x04test\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00D\x00\x00\x00\x00U\x08\xad\x82\x00\x0ctestmetadata')
+        )
 
 
 if __name__ == '__main__':
