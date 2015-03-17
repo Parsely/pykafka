@@ -188,9 +188,11 @@ class TestOffsetCommitFetchAPI(unittest.TestCase):
 
     def test_response(self):
         response = protocol.ConsumerMetadataResponse(
-            buffer('')
+            buffer('\x00\x00\x00\x00\x00\x00\x00\remmett-debian\x00\x00#\x84')
         )
-        # TODO - how do we know what goes in the response buffer here?
+        self.assertEqual(response.coordinator_id, 0)
+        self.assertEqual(response.coordinator_host, 'emmett-debian')
+        self.assertEqual(response.coordinator_port, 9092)
 
 
 if __name__ == '__main__':
