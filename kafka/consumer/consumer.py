@@ -17,7 +17,6 @@ limitations under the License.
 
 import logging
 import itertools
-import random
 import socket
 import time
 
@@ -89,10 +88,9 @@ class Consumer(object):
         self._consumer_watcher = None
         self._topic_watcher = None
         self._topics_watcher = None
-        self._rebalancing = True # To stop rebalance while setting watches
+        self._rebalancing = True  # To stop rebalance while setting watches
 
         self._add_self()
-
 
     def _add_self(self):
         """Add this consumer to the zookeeper participants.
@@ -100,14 +98,14 @@ class Consumer(object):
         Ensures we don't add more participants than partitions
         """
         for i in xrange(self.connect_retries):
-            time.sleep(i**2) # first run is 0, ensures we sleep before retry
+            time.sleep(i ** 2)  # first run is 0, ensures we sleep before retry
 
             participants = self._get_participants()
             if len(self.topic.partitions) > len(participants):
-                break # some room to spare
+                break  # some room to spare
             else:
                 logger.debug("More consumers than partitions. "
-                             "Waiting %is to retry" % (i+1) ** 2)
+                             "Waiting %is to retry" % (i + 1) ** 2)
         else:
             raise NoAvailablePartitionsError("Couldn't acquire partition. "
                                              "More consumers than partitions.")
@@ -130,7 +128,6 @@ class Consumer(object):
                 'ZooKeeper cluster -- is your Kafka cluster running?'
                 % broker_path)
 
-        topics_path = '/brokers/topics'
         self._topics_watcher = ChildrenWatch(
             self.cluster.zookeeper,
             '/brokers/topics',
@@ -144,14 +141,12 @@ class Consumer(object):
             self._consumers_changed
         )
 
-
     def _brokers_changed(self, brokers):
         """Watcher for consumer group changes"""
         if not self._rebalancing:
             return
         logger.info("Rebalance triggered by /brokers/ids change")
         self._rebalance(self.cluster.zookeeper.get_children(self.id_path))
-
 
     def _consumers_changed(self, consumer_ids):
         """Watcher for consumer group changes
@@ -161,7 +156,6 @@ class Consumer(object):
             return
         logger.info("Rebalance triggered by %s change" % self.id_path)
         self._rebalance(consumer_ids)
-
 
     def _topic_changed(self, broker_ids):
         """Watcher for brokers/partition count for a topic
@@ -183,7 +177,7 @@ class Consumer(object):
                 '/brokers/topics/%s' % self.topic.name,
                 self._topic_changed
             )
-            return False # stop watch
+            return False  # stop watch
 
     def _get_participants(self, consumer_ids=None):
         """Get a the other consumers of this topic
@@ -206,10 +200,9 @@ class Consumer(object):
                 if topic == self.topic.name:
                     participants.append(id_)
             except NoNodeException:
-                pass # disappeared between ``get_children`` and ``get``
+                pass  # disappeared between ``get_children`` and ``get``
         participants.sort()
         return participants
-
 
     def _decide_partitions(self, participants):
         """Use consumers and partitions to determined owned partitions
@@ -256,7 +249,6 @@ class Consumer(object):
         )
         return new_partitions
 
-
     def _rebalance(self, consumer_ids):
         """Joins a consumer group and claims partitions.
 
@@ -270,7 +262,7 @@ class Consumer(object):
 
         for i in xrange(self.rebalance_retries):
             if i > 0:
-                logger.debug("Retrying in %is" % ((i+1) ** 2))
+                logger.debug("Retrying in %is" % ((i + 1) ** 2))
                 time.sleep(i ** 2)
                 # Make sure nothing's changed while we waited
                 participants = self._get_participants()
@@ -292,14 +284,12 @@ class Consumer(object):
         else:
             raise KafkaException("Couldn't acquire partitions.")
 
-
     def __iter__(self):
         """Iterator for next_message. Blocks until a message arrives
 
         """
         while True:
             yield self.next_message()
-
 
     def next_message(self, block=True, timeout=None):
         """Get the next message from one of the partitions.
@@ -317,15 +307,13 @@ class Consumer(object):
         """
         return self.partition_owner_registry.next_message(block=block, timeout=timeout)
 
-
     def commit_offsets(self):
         """Commit the offsets of all messages consumed so far.
 
         """
-        partitions = list(self.partitions) # freeze in case of rebalance
+        partitions = list(self.partitions)  # freeze in case of rebalance
         for partition in partitions:
             partition.commit_offset()
-
 
     def stop_partitions(self, partitions=None):
         """Stop partitions from fetching more threads.
@@ -334,11 +322,10 @@ class Consumer(object):
 
         """
         if partitions is None:
-            partitions = list(self.partitions) # freeze in case of rebalance
+            partitions = list(self.partitions)  # freeze in case of rebalance
         for partition in partitions:
             partition.stop()
             partition.commit_offset()
-
 
     def empty(self):
         return all([p.empty() for p in self.partitions])

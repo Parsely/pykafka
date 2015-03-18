@@ -18,13 +18,11 @@ limitations under the License.
 import logging
 import time
 
-from collections import deque
 from kazoo.exceptions import NodeExistsException, NoNodeException
 from functools import partial
 
 from kafka.exceptions import OffsetOutOfRangeError, PartitionOwnedError
 from kafka.base import BasePartition
-from kafka.pykafka.protocol import OFFSET_EARLIEST, OFFSET_LATEST
 
 
 logger = logging.getLogger(__name__)
@@ -89,8 +87,8 @@ class OwnedPartition(BasePartition):
         # Limit how many message sets we'll queue up
         self.queued_message_sets = self.cluster.handler.get_semaphore(10)
         # Fetch and monitor threads
-        self._monitor_thread = None #: Monitors the fetch thread
-        self._fetch_thread = None #: Keep the partition queue full
+        self._monitor_thread = None  #: Monitors the fetch thread
+        self._fetch_thread = None  #: Keep the partition queue full
         # Flag to stop returning messages or fetching more
         self._running = False
 
@@ -114,10 +112,10 @@ class OwnedPartition(BasePartition):
                     self._next_offset,
                     self.fetch_size
                 )
-            except OffsetOutOfRangeError, ex:
+            except OffsetOutOfRangeError:
                 msg = 'Offset %i is out of range. Resetting to %%s (%%d)' % self._next_offset
                 reset = self.offset_reset
-                if reset == 'nearest': # resolve which way this is going
+                if reset == 'nearest':  # resolve which way this is going
                     if self._next_offset < self.earliest_offset():
                         reset = 'earliest'
                     else:
@@ -131,7 +129,7 @@ class OwnedPartition(BasePartition):
                     logger.warning(msg, 'OFFSET_LATEST', self._next_offset)
                     continue
                 else:
-                    raise # no reset match? send it up to the consumer
+                    raise  # no reset match? send it up to the consumer
 
             # If there are no messages read, back off a bit
             if len(messages) == 0:
@@ -140,7 +138,7 @@ class OwnedPartition(BasePartition):
                 time.sleep(backoff)
                 continue
             else:
-                backoff = 0 # reset
+                backoff = 0  # reset
 
             # Is there room in the waiting queue?
             self.queued_message_sets.acquire()
@@ -247,7 +245,7 @@ class PartitionOwnerRegistry(object):
         """
         for p in partitions:
             assert p in self._partitions
-            p.stop() # TODO: Fix stop so it happens here instead of in consumer
+            p.stop()  # TODO: Fix stop so it happens here instead of in consumer
             self.cluster.zookeeper.delete(self._path_from_partition(p))
             self._partitions.remove(p)
 
