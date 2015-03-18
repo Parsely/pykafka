@@ -209,7 +209,7 @@ class TestOffsetCommitFetchAPI(unittest.TestCase):
         response = protocol.OffsetCommitResponse(
             buffer('\x00\x00\x00\x00')
         )
-        self.assertEqual(response.topics, {})
+        self.assertEqual(response.topics, None)
 
     def test_offset_fetch_request(self):
         preq = protocol.PartitionOffsetFetchRequest('testtopic', 0)
@@ -225,7 +225,7 @@ class TestOffsetCommitFetchAPI(unittest.TestCase):
         response = protocol.OffsetCommitResponse(
             buffer('\x00\x00\x00\x00')
         )
-        self.assertEqual(response.topics, {})
+        self.assertEqual(response.topics, None)
 
 
 if __name__ == '__main__':
