@@ -1016,3 +1016,44 @@ class OffsetFetchRequest(Request):
                 struct.pack_into('!i', output, offset, pnum)
                 offset += 8
         return output
+
+
+class OffsetFetchPartitionResponse(object):
+    """Partition information that's part of an OffsetFetchResponse"""
+    def __init__(self, offset, metadata):
+        """Create a new OffsetFetchPartitionResponse
+
+        :param offset:
+        :param metadata:
+        """
+        self.offset = offset
+        self.metadata = metadata
+
+
+class OffsetFetchResponse(Response):
+    """An offset fetch response
+
+    OffsetFetchResponse => [TopicName [Partition Offset Metadata ErrorCode]]
+      TopicName => string
+      Partition => int32
+      Offset => int64
+      Metadata => string
+      ErrorCode => int16
+    """
+    def __init__(self, buff):
+        """Deserialize into a new Response
+
+        :param buff: Serialized message
+        :type buff: :class:`bytearray`
+        """
+        fmt = '[S [iqSh ] ]'
+        response = struct_helpers.unpack_from(fmt, buff, 0)
+
+        self.topics = {}
+        for topic_name, partitions in response:
+            self.topics[topic_name] = {}
+            for partition in partitions:
+                if partition[3] != 0:
+                    self.raise_error(partition[3], response)
+                pres = OffsetFetchPartitionResponse(partition[1], partition[2])
+                self.topics[topic_name][partition[0]] = pres
