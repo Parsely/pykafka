@@ -9,6 +9,7 @@ from .protocol import (
     OffsetResponse, MetadataRequest, MetadataResponse,
     OffsetCommitRequest, OffsetCommitResponse,
     OffsetFetchRequest, OffsetFetchResponse,
+    PartitionOffsetCommitRequest, PartitionOffsetFetchRequest
 )
 
 
@@ -121,13 +122,18 @@ class Broker(base.BaseBroker):
     #  Commit/Fetch API  #
     ######################
 
-    def commit_consumer_group_offsets(self, group, partition_requests, retries):
+    def commit_consumer_group_offsets(self, group, partitions, retries):
         """Commit the offsets of all messages consumed so far by this consumer
             group with the Offset Commit/Fetch API
 
         Based on Step 2 here https://cwiki.apache.org/confluence/display/KAFKA/Committing+and+fetching+consumer+offsets+in+Kafka
         """
-        req = OffsetCommitRequest(self.group, partition_requests=partition_requests)
+        # XXX how should metadata be handled?
+        preqs = [PartitionOffsetCommitRequest(self.topic.name, partition.id,
+                                              partition.offset,
+                                              int(time.time()), '')
+                 for partition in partitions]
+        req = OffsetCommitRequest(self.group, partition_requests=preqs)
 
         for i in xrange(retries):
             if i > 0:
@@ -141,12 +147,14 @@ class Broker(base.BaseBroker):
             else:
                 break
 
-    def fetch_consumer_group_offsets(self, group, partition_requests, retries):
+    def fetch_consumer_group_offsets(self, group, partitions, retries):
         """Fetch the offsets stored in Kafka with the Offset Commit/Fetch API
 
         Based on Step 2 here https://cwiki.apache.org/confluence/display/KAFKA/Committing+and+fetching+consumer+offsets+in+Kafka
         """
-        req = OffsetFetchRequest(self.group, partition_requests=partition_requests)
+        preqs = [PartitionOffsetFetchRequest(self.topic.name, partition.id)
+                 for partition in partitions]
+        req = OffsetFetchRequest(self.group, partition_requests=preqs)
 
         for i in xrange(retries):
             if i > 0:
