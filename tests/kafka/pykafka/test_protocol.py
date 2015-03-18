@@ -211,6 +211,15 @@ class TestOffsetCommitFetchAPI(unittest.TestCase):
         )
         self.assertEqual(response.topics, {})
 
+    def test_offset_fetch_request(self):
+        preq = protocol.PartitionOffsetFetchRequest('testtopic', 0)
+        req = protocol.OffsetFetchRequest('test', partition_requests=[preq, ])
+        msg = req.get_bytes()
+        self.assertEqual(
+            msg,
+            bytearray(b'\x00\x00\x00,\x00\t\x00\x00\x00\x00\x00\x00\x00\x07pykafka\xff\xff\xff\xff\x00\x00\x00\x01\x00\ttesttopic\x00\x00\x00\x01\x00\x00\x00\x00')
+        )
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -943,3 +943,76 @@ class OffsetCommitResponse(Response):
                 if partition[1] != 0:
                     self.raise_error(partition[1], response)
                 self.topics[topic_name].append(partition[0])
+
+
+_PartitionOffsetFetchRequest = namedtuple(
+    'PartitionOffsetFetchRequest',
+    ['topic_name', 'partition_id']
+)
+
+
+class PartitionOffsetFetchRequest(_PartitionOffsetFetchRequest):
+    """Offset fetch request for a specific topic/partition
+
+    :ivar topic_name: Name of the topic to look up
+    :ivar partition_id: Id of the partition to look up
+    """
+    pass
+
+
+class OffsetFetchRequest(Request):
+    """An offset fetch request
+
+    OffsetFetchRequest => ConsumerGroup [TopicName [Partition]]
+      ConsumerGroup => string
+      TopicName => string
+      Partition => int32
+    """
+    def __init__(self, consumer_group, partition_requests=[]):
+        """Create a new offset fetch request
+
+        :param partition_requests: Iterable of
+            :class:`kafka.pykafka.protocol.PartitionOffsetFetchRequest` for
+            this request
+        """
+        self.consumer_group = consumer_group
+        self._reqs = defaultdict(list)
+        for t in partition_requests:
+            self._reqs[t.topic_name].append(t.partition_id)
+
+    def __len__(self):
+        """Length of the serialized message, in bytes"""
+        # Header + replicaId + len(topics)
+        size = self.HEADER_LEN + 4 + 4
+        for topic, parts in self._reqs.iteritems():
+            # topic name + len(parts)
+            size += 2 + len(topic) + 4
+            # partition => for each partition
+            size += 4 * len(parts)
+        return size
+
+    @property
+    def API_KEY(self):
+        """API_KEY for this request, from the Kafka docs"""
+        return 9
+
+    def get_bytes(self):
+        """Serialize the message
+
+        :returns: Serialized message
+        :rtype: :class:`bytearray`
+        """
+        output = bytearray(len(self))
+        self._write_header(output)
+        offset = self.HEADER_LEN
+        struct.pack_into('!ii', output, offset, -1, len(self._reqs))
+        offset += 8
+        for topic_name, partitions in self._reqs.iteritems():
+            fmt = '!h%dsi' % len(topic_name)
+            struct.pack_into(fmt, output, offset, len(topic_name),
+                             topic_name, len(partitions))
+            offset += struct.calcsize(fmt)
+            for pnum in partitions:
+                struct.pack_into('!i', output, offset, pnum)
+                offset += 8
+        return output
