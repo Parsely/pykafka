@@ -837,7 +837,7 @@ _PartitionOffsetCommitRequest = namedtuple(
 
 
 class PartitionOffsetCommitRequest(_PartitionOffsetCommitRequest):
-    """Offset request for a specific topic/partition
+    """Offset commit request for a specific topic/partition
 
     :ivar topic_name: Name of the topic to look up
     :ivar partition_id: Id of the partition to look up
