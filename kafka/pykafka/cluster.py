@@ -1,7 +1,9 @@
 import logging
+import time
 
 from .broker import Broker
 from .topic import Topic
+from .protocol import ConsumerMetadataRequest, ConsumerMetadataResponse
 
 
 logger = logging.getLogger(__name__)
@@ -98,6 +100,27 @@ class Cluster(object):
                 logger.info('Adding topic %s', self._topics[name])
             else:
                 self._topics[name].update(meta)
+
+    def discover_offset_manager(self, consumer_group_name):
+        # arbitrarily choose a broker, since this request can go to any
+        broker = self.brokers[self.brokers.keys()[0]]
+        backoff, retries = 2, 0
+        MAX_RETRIES = 3
+        while True:
+            try:
+                retries += 1
+                req = ConsumerMetadataRequest(consumer_group_name)
+                future = broker.handler.request(req)
+                res = future.get(ConsumerMetadataResponse)
+            except Exception:
+                logger.debug('Error discovering offset manager. Sleeping for %ds'.format(backoff))
+                if retries < MAX_RETRIES:
+                    time.sleep(backoff)  # XXX - not sure if this works here
+                    backoff = pow(backoff, 2)
+                else:
+                    raise
+            else:
+                return self.brokers[res.coordinator_id]
 
     def update(self):
         """Update known brokers and topics."""
