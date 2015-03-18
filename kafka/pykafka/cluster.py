@@ -1,5 +1,6 @@
 import logging
 import time
+import random
 
 from .broker import Broker
 from .topic import Topic
@@ -101,9 +102,17 @@ class Cluster(object):
             else:
                 self._topics[name].update(meta)
 
-    def discover_offset_manager(self, consumer_group_name):
+    def get_offset_manager(self, consumer_group_name):
+        """Get the broker designated as the offset manager for this consumer
+            group
+
+        Based on Step 1 at https://cwiki.apache.org/confluence/display/KAFKA/Committing+and+fetching+consumer+offsets+in+Kafka
+
+        :param consumer_group_name: the name of the consumer group
+        :type consumer_group_name: str
+        """
         # arbitrarily choose a broker, since this request can go to any
-        broker = self.brokers[self.brokers.keys()[0]]
+        broker = self.brokers[random.choice(self.brokers.keys())]
         backoff, retries = 2, 0
         MAX_RETRIES = 3
         while True:
