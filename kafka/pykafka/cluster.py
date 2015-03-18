@@ -116,7 +116,7 @@ class Cluster(object):
                 logger.debug('Error discovering offset manager. Sleeping for {}s'.format(backoff))
                 if retries < MAX_RETRIES:
                     time.sleep(backoff)  # XXX - not sure if this works here
-                    backoff = pow(backoff, 2)
+                    backoff = backoff**2
                 else:
                     raise
             else:

@@ -843,7 +843,7 @@ class PartitionOffsetCommitRequest(_PartitionOffsetCommitRequest):
     :ivar partition_id: Id of the partition to look up
     :ivar offset:
     :ivar timestamp:
-    :ivar metadata:
+    :ivar metadata: arbitrary metadata that should be committed with this offset commit
     """
     pass
 
@@ -1024,7 +1024,7 @@ class OffsetFetchPartitionResponse(object):
         """Create a new OffsetFetchPartitionResponse
 
         :param offset:
-        :param metadata:
+        :param metadata: arbitrary metadata that should be committed with this offset commit
         """
         self.offset = offset
         self.metadata = metadata
