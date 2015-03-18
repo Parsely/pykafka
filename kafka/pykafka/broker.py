@@ -122,14 +122,14 @@ class Broker(base.BaseBroker):
     #  Commit/Fetch API  #
     ######################
 
-    def commit_consumer_group_offsets(self, group, partitions, retries):
+    def commit_consumer_group_offsets(self, group, topic, partitions, retries):
         """Commit the offsets of all messages consumed so far by this consumer
             group with the Offset Commit/Fetch API
 
         Based on Step 2 here https://cwiki.apache.org/confluence/display/KAFKA/Committing+and+fetching+consumer+offsets+in+Kafka
         """
         # XXX how should metadata be handled?
-        preqs = [PartitionOffsetCommitRequest(self.topic.name, partition.id,
+        preqs = [PartitionOffsetCommitRequest(topic, partition.id,
                                               partition.offset,
                                               int(time.time()), '')
                  for partition in partitions]
@@ -147,12 +147,12 @@ class Broker(base.BaseBroker):
             else:
                 break
 
-    def fetch_consumer_group_offsets(self, group, partitions, retries):
+    def fetch_consumer_group_offsets(self, group, topic, partitions, retries):
         """Fetch the offsets stored in Kafka with the Offset Commit/Fetch API
 
         Based on Step 2 here https://cwiki.apache.org/confluence/display/KAFKA/Committing+and+fetching+consumer+offsets+in+Kafka
         """
-        preqs = [PartitionOffsetFetchRequest(self.topic.name, partition.id)
+        preqs = [PartitionOffsetFetchRequest(topic, partition.id)
                  for partition in partitions]
         req = OffsetFetchRequest(self.group, partition_requests=preqs)
 
