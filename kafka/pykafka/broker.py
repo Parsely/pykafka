@@ -1,11 +1,14 @@
 import logging
+import time
 
 from kafka import base
 from .connection import BrokerConnection
 from .handlers import RequestHandler
 from .protocol import (
     FetchRequest, FetchResponse, OffsetRequest,
-    OffsetResponse, MetadataRequest, MetadataResponse
+    OffsetResponse, MetadataRequest, MetadataResponse,
+    OffsetCommitRequest, OffsetCommitResponse,
+    OffsetFetchRequest, OffsetFetchResponse,
 )
 
 
@@ -113,3 +116,46 @@ class Broker(base.BaseBroker):
     def request_metadata(self, topics=[]):
         future = self.handler.request(MetadataRequest(topics=topics))
         return future.get(MetadataResponse)
+
+    ######################
+    #  Commit/Fetch API  #
+    ######################
+
+    def commit_consumer_group_offsets(self, group, partition_requests, retries):
+        """Commit the offsets of all messages consumed so far by this consumer
+            group with the Offset Commit/Fetch API
+
+        Based on Step 2 here https://cwiki.apache.org/confluence/display/KAFKA/Committing+and+fetching+consumer+offsets+in+Kafka
+        """
+        req = OffsetCommitRequest(self.group, partition_requests=partition_requests)
+
+        for i in xrange(retries):
+            if i > 0:
+                logger.debug("Retrying in %is" % ((i + 1) ** 2))
+                time.sleep(i ** 2)
+
+            try:
+                self.handler.request(req).get(OffsetCommitResponse)
+            except Exception:
+                logger.debug("Offset commit failed.")
+            else:
+                break
+
+    def fetch_consumer_group_offsets(self, group, partition_requests, retries):
+        """Fetch the offsets stored in Kafka with the Offset Commit/Fetch API
+
+        Based on Step 2 here https://cwiki.apache.org/confluence/display/KAFKA/Committing+and+fetching+consumer+offsets+in+Kafka
+        """
+        req = OffsetFetchRequest(self.group, partition_requests=partition_requests)
+
+        for i in xrange(retries):
+            if i > 0:
+                logger.debug("Retrying in %is" % ((i + 1) ** 2))
+                time.sleep(i ** 2)
+
+            try:
+                res = self.handler.request(req).get(OffsetFetchResponse)
+            except Exception:
+                logger.debug("Offset fetch failed.")
+            else:
+                return res
