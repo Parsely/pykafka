@@ -113,14 +113,17 @@ class Cluster(object):
                 future = broker.handler.request(req)
                 res = future.get(ConsumerMetadataResponse)
             except Exception:
-                logger.debug('Error discovering offset manager. Sleeping for %ds'.format(backoff))
+                logger.debug('Error discovering offset manager. Sleeping for {}s'.format(backoff))
                 if retries < MAX_RETRIES:
                     time.sleep(backoff)  # XXX - not sure if this works here
                     backoff = pow(backoff, 2)
                 else:
                     raise
             else:
-                return self.brokers[res.coordinator_id]
+                coordinator = self.brokers.get(res.coordinator_id, None)
+                if coordinator is None:
+                    raise Exception('Coordinator broker with id {} not found'.format(res.coordinator_id))
+                return coordinator
 
     def update(self):
         """Update known brokers and topics."""
