@@ -936,7 +936,6 @@ class OffsetCommitResponse(Response):
 
         self.topics = {}
         for topic_name, partitions in response:
-            print topic_name
             # a list makes sense here instead of a dict since the only returned
             # information about the partition is the name
             self.topics[topic_name] = []

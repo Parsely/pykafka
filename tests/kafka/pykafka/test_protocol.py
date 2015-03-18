@@ -206,7 +206,7 @@ class TestOffsetCommitFetchAPI(unittest.TestCase):
 
     def test_offset_commit_response(self):
         # TODO - this is what I get back from kafka at the moment, clearly it's wrong
-        response = protocol.ConsumerMetadataResponse(
+        response = protocol.OffsetCommitResponse(
             buffer('\x00\x00\x00\x00')
         )
         self.assertEqual(response.topics, {})
