@@ -32,8 +32,7 @@ logger = logging.getLogger(__name__)
 
 
 class Consumer(object):
-    """Primary API for consuming kazoo messages as a group.
-    """
+    """Primary API for consuming kazoo messages as a group."""
 
     def __init__(self,
                  cluster,
@@ -46,8 +45,6 @@ class Consumer(object):
                  rebalance_retries=4,
                  ):
         """
-        For more info see: kafka.topics.Topic.subscribe
-
         :param cluster:
         :type cluster: :class:`kafka.cluster.Cluster`.
         :param topic: The topic to consume messages from.
@@ -205,9 +202,9 @@ class Consumer(object):
         return participants
 
     def _decide_partitions(self, participants):
-        """Use consumers and partitions to determined owned partitions
+        """Use consumers and partitions to determine owned partitions
 
-        Give a set of subscribed consumers, every individual consumer should
+        Given a set of subscribed consumers, every individual consumer should
         be able to figure out the same distribution of available partitions.
 
         It's very, very important this gives the same result on all machines,
