@@ -1,3 +1,4 @@
+import inspect
 import logging
 import time
 from collections import defaultdict
@@ -8,7 +9,6 @@ from kafka.exceptions import (
     UnknownTopicOrPartition, LeaderNotAvailable,
     NotLeaderForPartition, RequestTimedOut,
 )
-from kafka.partitioners import random_partitioner
 from .protocol import Message, ProduceRequest
 
 
@@ -44,46 +44,17 @@ class AsyncProducer(base.BaseAsyncProducer):
         """
         pass
 
+
 class Producer(base.BaseProducer):
 
-    def __init__(self,
-                 client,
-                 topic,
-                 partitioner=random_partitioner,
-                 compression=CompressionType.NONE,
-                 max_retries=3,
-                 retry_backoff_ms=100,
-                 topic_refresh_interval_ms=600000,
-                 required_acks=1,
-                 ack_timeout_ms=10000,
-                 batch_size=200):
-        """Create a Producer for a topic.
-
-        :param client: KafkaClient used to connect to cluster.
-        :param topic: The topic to produce messages for.
-        :type topic: :class:`kafka.pykafka.topic.Topic`
-        :para compression: Compression to use for messages.
-        :type compression: :class:`kafka.common.CompressionType`
-        :param max_retries: Number of times to retry sending messages.
-        :param retry_backoff_ms: Interval to wait between retries
-        :param topic_refresh_interval_ms: Time between queries to refresh
-            metadata about the topic. The Producer will also refresh this data
-            when the cluster changes (e.g. partitions missing, etc), but this
-            is the interval for how often it actively polls for changes.
-        :param required_acks:
-        :param ack_timeout_ms:
-        :param batch_size: Size of batches to send to brokers
-        """
-        self._client = client
-        self._topic = topic
-        self._partitioner = partitioner
-        self._batch_size = batch_size
-        self._compression = compression
-        self._max_retries = max_retries
-        self._retry_backoff_ms = retry_backoff_ms
-        self._topic_refresh_interval_ms = topic_refresh_interval_ms
-        self._required_acks = required_acks
-        self._ack_timeout_ms = ack_timeout_ms
+    def __init__(self, *args, **kwargs):
+        """ For argspec see base.BaseProducer.__init__ """
+        callargs = inspect.getcallargs(
+                base.BaseProducer.__init__, self, *args, **kwargs)
+        # Save each callarg as "_callarg" on self:
+        del callargs["self"]
+        map(lambda arg: setattr(self, "_" + arg[0], arg[1]),
+            callargs.iteritems())
 
     def _send_request(self, broker, req):
         tries = 0

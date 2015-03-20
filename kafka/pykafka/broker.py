@@ -1,14 +1,12 @@
 import logging
 
 from kafka import base
-from kafka.common import CompressionType
 from .connection import BrokerConnection
 from .handlers import RequestHandler
 from .protocol import (
-    FetchRequest, FetchResponse, ProduceRequest, OffsetRequest,
+    FetchRequest, FetchResponse, OffsetRequest,
     OffsetResponse, MetadataRequest, MetadataResponse
 )
-from .utils import compression
 
 
 logger = logging.getLogger(__name__)

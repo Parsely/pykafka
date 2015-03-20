@@ -44,7 +44,6 @@ limitations under the License.
 """
 
 import logging
-import collections
 import itertools
 import struct
 from collections import defaultdict, namedtuple
@@ -64,14 +63,14 @@ logger = logging.getLogger(__name__)
 
 class Request(Serializable):
     """Base class for all Requests. Handles writing header information"""
-    HEADER_LEN= 21 # constant for all messages
+    HEADER_LEN = 21  # constant for all messages
     CLIENT_ID = 'pykafka'
 
     def _write_header(self, buff, api_version=0, correlation_id=0):
         """Write the header for an outgoing message"""
         fmt = '!ihhih%ds' % len(self.CLIENT_ID)
         struct.pack_into(fmt, buff, 0,
-                         len(buff) - 4, # msglen excludes this int
+                         len(buff) - 4,  # msglen excludes this int
                          self.API_KEY,
                          api_version,
                          correlation_id,
@@ -132,7 +131,7 @@ class Message(common.Message, Serializable):
         self.offset = offset
 
     def __len__(self):
-        size = 4+1+1+4+4+len(self.value)
+        size = 4 + 1 + 1 + 4 + 4 + len(self.value)
         if self.partition_key is not None:
             size += len(self.partition_key)
         return size
@@ -141,8 +140,7 @@ class Message(common.Message, Serializable):
     def decode(self, buff, msg_offset=-1):
         fmt = 'iBBYY'
         response = struct_helpers.unpack_from(fmt, buff, 0)
-        crc,_,attr,key,val = response
-        crc_check = crc32(buff[4:])
+        crc, _, attr, key, val = response
         # TODO: Handle CRC failure
         return Message(val,
                        partition_key=key,
@@ -166,9 +164,9 @@ class Message(common.Message, Serializable):
             args = (self.MAGIC, self.compression_type,
                     len(self.partition_key), self.partition_key,
                     len(self.value), self.value)
-        struct.pack_into(fmt, buff, offset+4, *args)
+        struct.pack_into(fmt, buff, offset + 4, *args)
         fmt_size = struct.calcsize(fmt)
-        crc = crc32(buffer(buff[offset+4:offset+4+fmt_size]))
+        crc = crc32(buffer(buff[(offset + 4):(offset + 4 + fmt_size)]))
         struct.pack_into('!i', buff, offset, crc)
 
 
@@ -196,7 +194,7 @@ class MessageSet(Serializable):
         """
         self.compression_type = compression_type
         self._messages = messages or []
-        self._compressed = None # compressed Message if using compression
+        self._compressed = None  # compressed Message if using compression
 
     def __len__(self):
         """Length of the serialized message, in bytes
@@ -214,7 +212,7 @@ class MessageSet(Serializable):
             if self._compressed is None:
                 self._compressed = self._get_compressed()
             messages = [self._compressed]
-        return (8+4)*len(messages) + sum(len(m) for m in messages)
+        return (8 + 4) * len(messages) + sum(len(m) for m in messages)
 
     @property
     def messages(self):
@@ -247,12 +245,12 @@ class MessageSet(Serializable):
         offset = 0
         while offset < len(buff):
             # TODO: Check we have enough bytes to get msg offset/size
-            msg_offset,size = struct.unpack_from('!qi', buff, offset)
+            msg_offset, size = struct.unpack_from('!qi', buff, offset)
             offset += 12
             # TODO: Check we have all the requisite bytes
             # TODO: Handle messages larger than ``max_bytes``
-            message = Message.decode(buff[offset:offset+size], msg_offset)
-            #print '[%d] (%s) %s' % (message.offset, message.partition_key, message.value)
+            message = Message.decode(buff[offset:offset + size], msg_offset)
+            # print '[%d] (%s) %s' % (message.offset, message.partition_key, message.value)
             messages.append(message)
             offset += size
         return MessageSet(messages=messages)
@@ -281,7 +279,7 @@ class MessageSet(Serializable):
 
 
 ##
-## Metadata API
+# Metadata API
 ##
 
 class MetadataRequest(Request):
@@ -299,7 +297,7 @@ class MetadataRequest(Request):
 
     def __len__(self):
         """Length of the serialized message, in bytes"""
-        return self.HEADER_LEN + 4 + sum(len(t)+2 for t in self.topics)
+        return self.HEADER_LEN + 4 + sum(len(t) + 2 for t in self.topics)
 
     @property
     def API_KEY(self):
@@ -373,7 +371,7 @@ class MetadataResponse(Response):
 
 
 ##
-## Produce API
+# Produce API
 ##
 
 class ProduceRequest(Request):
@@ -410,19 +408,19 @@ class ProduceRequest(Request):
         self._msets = defaultdict(
             lambda: defaultdict(
                 lambda: MessageSet(compression_type=compression_type)
-        ))
+            ))
         self.required_acks = required_acks
         self.timeout = timeout
         self._message_count = 0  # this optimization is not premature
 
     def __len__(self):
         """Length of the serialized message, in bytes"""
-        size = self.HEADER_LEN + 2+4+4 # acks + timeout + len(topics)
-        for topic,parts in self._msets.iteritems():
+        size = self.HEADER_LEN + 2 + 4 + 4  # acks + timeout + len(topics)
+        for topic, parts in self._msets.iteritems():
             # topic name
-            size += 2 + len(topic) + 4 # topic name + len(parts)
+            size += 2 + len(topic) + 4  # topic name + len(parts)
             # partition + mset size + len(mset)
-            size += sum(4+4+len(mset) for mset in parts.itervalues())
+            size += sum(4 + 4 + len(mset) for mset in parts.itervalues())
         return size
 
     @property
@@ -465,7 +463,7 @@ class ProduceRequest(Request):
             fmt = '!h%dsi' % len(topic_name)
             struct.pack_into(fmt, output, offset, len(topic_name), topic_name, len(partitions))
             offset += struct.calcsize(fmt)
-            for partition_id,message_set in partitions.iteritems():
+            for partition_id, message_set in partitions.iteritems():
                 mset_len = len(message_set)
                 struct.pack_into('!ii', output, offset, partition_id, mset_len)
                 offset += 8
@@ -497,7 +495,7 @@ class ProduceResponse(Response):
         fmt = '[S [ihq] ]'
         response = struct_helpers.unpack_from(fmt, buff, 0)
         self.topics = {}
-        for (topic,partitions) in response:
+        for (topic, partitions) in response:
             self.topics[topic] = {}
             for partition in partitions:
                 if partition[1] != 0:
@@ -506,12 +504,15 @@ class ProduceResponse(Response):
 
 
 ##
-## Fetch API
+# Fetch API
 ##
 
-_PartitionFetchRequest = namedtuple('PartitionFetchRequest',
+_PartitionFetchRequest = namedtuple(
+    'PartitionFetchRequest',
     ['topic_name', 'partition_id', 'offset', 'max_bytes']
 )
+
+
 class PartitionFetchRequest(_PartitionFetchRequest):
     """Fetch request for a specific topic/partition
 
@@ -572,12 +573,12 @@ class FetchRequest(Request):
     def __len__(self):
         """Length of the serialized message, in bytes"""
         # replica + max wait + min bytes + len(topics)
-        size = self.HEADER_LEN + 4+4+4+4
-        for topic,parts in self._reqs.iteritems():
+        size = self.HEADER_LEN + 4 + 4 + 4 + 4
+        for topic, parts in self._reqs.iteritems():
             # topic name + len(parts)
-            size += 2+len(topic) + 4
+            size += 2 + len(topic) + 4
             # partition + fetch offset + max bytes => for each partition
-            size += (4+8+4) * len(parts)
+            size += (4 + 8 + 4) * len(parts)
         return size
 
     @property
@@ -601,7 +602,7 @@ class FetchRequest(Request):
             fmt = '!h%dsi' % len(topic_name)
             struct.pack_into(fmt, output, offset, len(topic_name), topic_name, len(partitions))
             offset += struct.calcsize(fmt)
-            for partition_id,(fetch_offset,max_bytes) in partitions.iteritems():
+            for partition_id, (fetch_offset, max_bytes) in partitions.iteritems():
                 struct.pack_into('!iqi', output, offset,
                                  partition_id, fetch_offset, max_bytes)
                 offset += 16
@@ -638,9 +639,8 @@ class FetchResponse(Response):
         """
         fmt = '[S [ihqY] ]'
         response = struct_helpers.unpack_from(fmt, buff, 0)
-        errors = []
         self.topics = {}
-        for (topic,partitions) in response:
+        for (topic, partitions) in response:
             for partition in partitions:
                 if partition[1] != 0:
                     self.raise_error(partition[1], response)
@@ -665,14 +665,16 @@ class FetchResponse(Response):
         return output
 
 
-
 ##
-## Offset API
+# Offset API
 ##
 
-_PartitionOffsetRequest = namedtuple('PartitionOffsetRequest',
+_PartitionOffsetRequest = namedtuple(
+    'PartitionOffsetRequest',
     ['topic_name', 'partition_id', 'offsets_before', 'max_offsets']
 )
+
+
 class PartitionOffsetRequest(_PartitionOffsetRequest):
     """Offset request for a specific topic/partition
 
@@ -702,17 +704,17 @@ class OffsetRequest(Request):
         self._reqs = defaultdict(dict)
         for t in partition_requests:
             self._reqs[t.topic_name][t.partition_id] = (t.offsets_before,
-                                                         t.max_offsets)
+                                                        t.max_offsets)
 
     def __len__(self):
         """Length of the serialized message, in bytes"""
         # Header + replicaId + len(topics)
-        size = self.HEADER_LEN + 4+4
-        for topic,parts in self._reqs.iteritems():
+        size = self.HEADER_LEN + 4 + 4
+        for topic, parts in self._reqs.iteritems():
             # topic name + len(parts)
-            size += 2+len(topic) + 4
+            size += 2 + len(topic) + 4
             # partition + fetch offset + max bytes => for each partition
-            size += (4+8+4) * len(parts)
+            size += (4 + 8 + 4) * len(parts)
         return size
 
     @property
@@ -736,7 +738,7 @@ class OffsetRequest(Request):
             struct.pack_into(fmt, output, offset, len(topic_name),
                              topic_name, len(partitions))
             offset += struct.calcsize(fmt)
-            for pnum,(offsets_before,max_offsets) in partitions.iteritems():
+            for pnum, (offsets_before, max_offsets) in partitions.iteritems():
                 struct.pack_into('!iqi', output, offset,
                                  pnum, offsets_before, max_offsets)
                 offset += 16

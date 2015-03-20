@@ -1,3 +1,7 @@
+from kafka.common import CompressionType
+from kafka.partitioners import random_partitioner
+
+
 class BaseCluster(object):
     """A Kafka cluster.
 
@@ -235,6 +239,35 @@ class BaseProducer(object):
     before returning. For an asynchronous implementation, use
     :class:`kafka.base.BaseAsyncProducer`
     """
+    def __init__(self,
+                 client,
+                 topic,
+                 partitioner=random_partitioner,
+                 compression=CompressionType.NONE,
+                 max_retries=3,
+                 retry_backoff_ms=100,
+                 topic_refresh_interval_ms=600000,
+                 required_acks=1,
+                 ack_timeout_ms=10000,
+                 batch_size=200):
+        """Create a Producer for a topic.
+
+        :param client: KafkaClient used to connect to cluster.
+        :param topic: The topic to produce messages for.
+        :type topic: :class:`kafka.pykafka.topic.Topic`
+        :para compression: Compression to use for messages.
+        :type compression: :class:`kafka.common.CompressionType`
+        :param max_retries: Number of times to retry sending messages.
+        :param retry_backoff_ms: Interval to wait between retries
+        :param topic_refresh_interval_ms: Time between queries to refresh
+            metadata about the topic. The Producer will also refresh this data
+            when the cluster changes (e.g. partitions missing, etc), but this
+            is the interval for how often it actively polls for changes.
+        :param required_acks:
+        :param ack_timeout_ms:
+        :param batch_size: Size of batches to send to brokers
+        """
+        raise NotImplementedError
 
     @property
     def topic(self):
