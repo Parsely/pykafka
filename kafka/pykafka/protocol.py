@@ -986,8 +986,8 @@ class OffsetFetchRequest(Request):
 
     def __len__(self):
         """Length of the serialized message, in bytes"""
-        # Header + replicaId + len(topics)
-        size = self.HEADER_LEN + 4 + 4
+        # Header + consumer group + len(topics)
+        size = self.HEADER_LEN + 2 + len(self.consumer_group) + 4
         for topic, parts in self._reqs.iteritems():
             # topic name + len(parts)
             size += 2 + len(topic) + 4
@@ -1009,16 +1009,20 @@ class OffsetFetchRequest(Request):
         output = bytearray(len(self))
         self._write_header(output)
         offset = self.HEADER_LEN
-        struct.pack_into('!ii', output, offset, -1, len(self._reqs))
-        offset += 8
+        fmt = '!h%dsi' % len(self.consumer_group)
+        struct.pack_into(fmt, output, offset,
+                         len(self.consumer_group), self.consumer_group,
+                         len(self._reqs))
+        offset += struct.calcsize(fmt)
         for topic_name, partitions in self._reqs.iteritems():
             fmt = '!h%dsi' % len(topic_name)
             struct.pack_into(fmt, output, offset, len(topic_name),
                              topic_name, len(partitions))
             offset += struct.calcsize(fmt)
             for pnum in partitions:
-                struct.pack_into('!i', output, offset, pnum)
-                offset += 8
+                fmt = '!i'
+                struct.pack_into(fmt, output, offset, pnum)
+                offset += struct.calcsize(fmt)
         return output
 
 

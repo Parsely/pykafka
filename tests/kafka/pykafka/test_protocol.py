@@ -216,15 +216,16 @@ class TestOffsetCommitFetchAPI(unittest.TestCase):
         msg = req.get_bytes()
         self.assertEqual(
             msg,
-            bytearray(b'\x00\x00\x00,\x00\t\x00\x00\x00\x00\x00\x00\x00\x07pykafka\xff\xff\xff\xff\x00\x00\x00\x01\x00\ttesttopic\x00\x00\x00\x01\x00\x00\x00\x00')
+            bytearray(b'\x00\x00\x00.\x00\t\x00\x00\x00\x00\x00\x00\x00\x07pykafka\x00\x04test\x00\x00\x00\x01\x00\ttesttopic\x00\x00\x00\x01\x00\x00\x00\x00')
         )
 
     def test_offset_fetch_response(self):
         # TODO - this is what I get back from kafka at the moment, clearly it's wrong
-        response = protocol.OffsetCommitResponse(
-            buffer('\x00\x00\x00\x00')
+        response = protocol.OffsetFetchResponse(
+            buffer('\x00\x00\x00\x01\x00\x0cemmett.dummy\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00')
         )
-        self.assertEqual(response.topics, None)
+        self.assertEqual(response.topics['emmett.dummy'][0].metadata, '')
+        self.assertEqual(response.topics['emmett.dummy'][0].offset, 1)
 
 
 if __name__ == '__main__':
