@@ -821,7 +821,6 @@ class ConsumerMetadataResponse(Response):
         fmt = 'hiSi'
         response = struct_helpers.unpack_from(fmt, buff, 0)
 
-        self.topics = {}
         error_code = response[0]
         if error_code != 0:
             self.raise_error(error_code, response)
