@@ -1,5 +1,6 @@
 import itertools
 from collections import defaultdict
+import time
 from Queue import Queue, Empty
 
 from kafka import base
@@ -49,8 +50,10 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         self._consumer_group = consumer_group
         self._topic = topic
         self._fetch_message_max_bytes = fetch_message_max_bytes
+
         self._auto_commit_enable = auto_commit_enable
         self._auto_commit_interval_ms = auto_commit_interval_ms
+        self._last_auto_commit = time.time()
 
         if partitions:
             self._partitions = {OwnedPartition(p, self): topic.partitons[p]
@@ -60,7 +63,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                                for p in topic.partitions}
         # Organize partitions by leader for efficient queries
         self._partitions_by_leader = defaultdict(list)
-        for p in self._partitions.itervalues():
+        for p in self._partitions.iterkeys():
             self._partitions_by_leader[p.leader] = p
         self.partition_cycle = itertools.cycle(self._partitions().keys())
 
@@ -94,13 +97,25 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         return message
 
     def _auto_commit(self):
-        pass
+        if not self._auto_commit_enable or self._auto_commit_interval_ms == 0:
+            return
+
+        if time.time() * 1000.0 >= self._auto_commit_interval_ms:
+            self.commit_offsets()
 
     def commit_offsets(self):
         """Use the Offset Commit/Fetch API to commit offsets for this
             consumer's topic
         """
-        pass
+        if not self.consumer_group:
+            raise Exception("consumer group must be specified to commit offsets")
+
+        self._last_auto_commit = time.time()
+
+        for broker, partitions in self._partitions_by_leader:
+            # XXX create a bunch of PartitionOffsetCommitRequests
+            reqs = [p for p in partitions]
+            broker.commit_offsets(self.consumer_group, reqs)
 
     def fetch_offsets(self):
         """Use the Offset Commit/Fetch API to fetch offsets for this

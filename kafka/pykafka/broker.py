@@ -104,10 +104,16 @@ class Broker(base.BaseBroker):
             # Any errors will be decoded and raised in the `.get()`
         return None
 
-    def request_offsets(self, partition_requests):
+    def request_offset_limits(self, partition_requests):
         """Request offset information for a set of topic/partitions"""
         future = self.handler.request(OffsetRequest(partition_requests))
         return future.get(OffsetResponse)
+
+    def commit_offsets(self, consumer_group, partition_requests):
+        """Use the Offset Commit/Fetch API to commit offsets for a consumer
+            group
+        """
+        pass
 
     def request_metadata(self, topics=[]):
         future = self.handler.request(MetadataRequest(topics=topics))
