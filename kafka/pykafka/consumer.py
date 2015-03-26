@@ -59,13 +59,13 @@ class SimpleConsumer(base.BaseSimpleConsumer):
             self._partitions = {OwnedPartition(p, self): topic.partitons[p]
                                 for p in partitions}
         else:
-            self._partitons = {OwnedPartition(p, self): p
-                               for p in topic.partitions}
+            self._partitions = {OwnedPartition(p, self): p
+                                for k, p in topic.partitions.iteritems()}
         # Organize partitions by leader for efficient queries
         self._partitions_by_leader = defaultdict(list)
         for p in self._partitions.iterkeys():
-            self._partitions_by_leader[p.leader] = p
-        self.partition_cycle = itertools.cycle(self._partitions().keys())
+            self._partitions_by_leader[p.partition.leader] = p
+        self.partition_cycle = itertools.cycle(self._partitions.keys())
 
     @property
     def topic(self):
