@@ -36,20 +36,28 @@ class Partition(base.BasePartition):
     def topic(self):
         return self._topic
 
-    def fetch_offsets(self, offsets_before, max_offsets=1):
+    def fetch_offset_limit(self, offsets_before, max_offsets=1):
+        """Use the Offset API to find a limit of valid offsets
+            for this partition
+
+        :param offsets_before: return an offset from before this timestamp (milliseconds)
+        :type offsets_before: int
+        :param max_offsets: the maximum number of offsets to return
+        :type max_offsets: int
+        """
         request = PartitionOffsetRequest(
             self.topic.name, self.id, offsets_before, max_offsets
         )
         res = self.leader.request_offsets([request])
         return res.topics[self.topic.name][self._id][0]
 
-    def latest_offset(self):
+    def latest_available_offset(self):
         """Get the latest offset for this partition."""
-        return self.fetch_offsets(OFFSET_LATEST)[self._id][0]
+        return self.fetch_offset_limit(OFFSET_LATEST)[self._id][0]
 
-    def earliest_offset(self):
+    def earliest_available_offset(self):
         """Get the earliest offset for this partition."""
-        return self.fetch_offsets(OFFSET_EARLIEST)[self._id][0]
+        return self.fetch_offset_limit(OFFSET_EARLIEST)[self._id][0]
 
     def __hash__(self):
         return hash((self.topic, self.id))

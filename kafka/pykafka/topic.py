@@ -36,11 +36,15 @@ class Topic(base.BaseTopic):
     def partitions(self):
         return self._partitions
 
-    def earliest_offsets(self):
-        """Get the earliest offset for each partition of this topic."""
-        return self.fetch_offsets(OFFSET_EARLIEST)
+    def fetch_offset_limits(self, offsets_before, max_offsets=1):
+        """Use the Offset API to find a limit of valid offsets
+            for each partition in this topic
 
-    def fetch_offsets(self, offsets_before, max_offsets=1):
+        :param offsets_before: return an offset from before this timestamp (milliseconds)
+        :type offsets_before: int
+        :param max_offsets: the maximum number of offsets to return
+        :type max_offsets: int
+        """
         requests = defaultdict(list)  # one request for each broker
         for part in self.partitions.itervalues():
             requests[part.leader].append(PartitionOffsetRequest(
@@ -55,9 +59,13 @@ class Topic(base.BaseTopic):
     def get_producer(self):
         return Producer(self)
 
-    def latest_offsets(self):
+    def earliest_available_offset(self):
+        """Get the earliest offset for each partition of this topic."""
+        return self.fetch_offset_limits(OFFSET_EARLIEST)
+
+    def latest_available_offset(self):
         """Get the latest offset for each partition of this topic."""
-        return self.fetch_offsets(OFFSET_LATEST)
+        return self.fetch_offset_limits(OFFSET_LATEST)
 
     def update(self, brokers, metadata):
         """Update the Partitons with metadata about the cluster.
