@@ -86,7 +86,7 @@ class Broker(base.BaseBroker):
         """
         future = self.handler.request(FetchRequest(
             partition_requests=partition_requests,
-            timeout=10000,
+            timeout=timeout,
             min_bytes=1,
         ))
         return future.get(FetchResponse)

@@ -144,7 +144,7 @@ class OwnedPartition(object):
         """Get a single message from this partition
         """
         if self._messages.empty():
-            self._fetch()
+            self._fetch(timeout=timeout)
 
         try:
             message = self._messages.get_nowait()
@@ -159,7 +159,7 @@ class OwnedPartition(object):
         """
         pass
 
-    def _fetch(self):
+    def _fetch(self, timeout=None):
         topic_name = self.partition.topic.name
         success = False
         while success is False:
@@ -168,15 +168,17 @@ class OwnedPartition(object):
                     self.partition.topic.name, self.partition.id, self.next_offset,
                     self.consumer.fetch_message_max_bytes
                 )
+                response = self.partition.leader.fetch_messages([request],
+                                                                timeout=timeout)
 
-                response = self.partition.leader.fetch_messages(request)
+                messages = response.topics[topic_name].messages
 
-                for message in response.topics[topic_name].messages:
+                for message in messages:
                     if message.offset < self.last_offset_consumed:
                         continue
-
                     self._messages.put(message)
                     self.next_offset = message.offset + 1
+
                 success = True
             except:
                 success = False
