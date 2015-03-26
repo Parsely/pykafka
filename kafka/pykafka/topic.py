@@ -36,6 +36,9 @@ class Topic(base.BaseTopic):
     def partitions(self):
         return self._partitions
 
+    def get_producer(self):
+        return Producer(self)
+
     def fetch_offset_limits(self, offsets_before, max_offsets=1):
         """Use the Offset API to find a limit of valid offsets
             for each partition in this topic
@@ -55,9 +58,6 @@ class Topic(base.BaseTopic):
             res = broker.request_offsets(reqs)
             output.update(res.topics[self.name])
         return output
-
-    def get_producer(self):
-        return Producer(self)
 
     def earliest_available_offset(self):
         """Get the earliest offset for each partition of this topic."""
