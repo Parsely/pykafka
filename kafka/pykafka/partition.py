@@ -36,6 +36,26 @@ class Partition(base.BasePartition):
     def topic(self):
         return self._topic
 
+    def fetch_offset(self, consumer_group):
+        """Use the Offset Commit/Fetch API to get the current offset for this
+            partition for the given consumer group
+
+        :param consumer_group: the name of the consumer group for which to
+            fetch an offset
+        :type consumer_group: str
+        """
+        pass
+
+    def commit_offset(self, consumer_group):
+        """Use the Offset Commit/Fetch API to set the current offset for this
+            partition for the given consumer group
+
+        :param consumer_group: the name of the consumer group for which to
+            fetch an offset
+        :type consumer_group: str
+        """
+        pass
+
     def fetch_offset_limit(self, offsets_before, max_offsets=1):
         """Use the Offset API to find a limit of valid offsets
             for this partition

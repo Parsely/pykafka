@@ -76,6 +76,18 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         """
         pass
 
+    def commit_offsets(self):
+        """Use the Offset Commit/Fetch API to commit offsets for this
+            consumer's topic
+        """
+        pass
+
+    def fetch_offsets(self):
+        """Use the Offset Commit/Fetch API to fetch offsets for this
+            consumer's topic
+        """
+        pass
+
 
 class OwnedPartition(object):
     """A partition that is owned by a SimpleConsumer.
