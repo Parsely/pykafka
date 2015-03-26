@@ -100,7 +100,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         if not self._auto_commit_enable or self._auto_commit_interval_ms == 0:
             return
 
-        if time.time() * 1000.0 >= self._auto_commit_interval_ms:
+        if (time.time() - self._last_auto_commit) * 1000.0 >= self._auto_commit_interval_ms:
             self.commit_offsets()
 
     def commit_offsets(self):
