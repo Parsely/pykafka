@@ -1,9 +1,11 @@
 import itertools
 from collections import defaultdict
-from Queue import Queue
+from Queue import Queue, Empty
 
 from kafka import base
 from kafka.common import OffsetType
+
+from .protocol import PartitionFetchRequest
 
 # Settings to add to the eventual BalancedConsumer
 # consumer_group
@@ -44,18 +46,23 @@ class SimpleConsumer(base.BaseSimpleConsumer):
 
         TODO: param docs
         """
-        self._consumer_group = None
+        self._consumer_group = consumer_group
         self._topic = topic
+        self._fetch_message_max_bytes = fetch_message_max_bytes
+        self._auto_commit_enable = auto_commit_enable
+        self._auto_commit_interval_ms = auto_commit_interval_ms
+
         if partitions:
-            self._partitions = {OwnedPartition(p): topic.partitons[p]
+            self._partitions = {OwnedPartition(p, self): topic.partitons[p]
                                 for p in partitions}
         else:
-            self._partitons = topic.partitions.copy()
-        # Organize partitions by broker for efficient queries
-        self._partitions_by_broker = defaultdict(list)
+            self._partitons = {OwnedPartition(p, self): p
+                               for p in topic.partitions}
+        # Organize partitions by leader for efficient queries
+        self._partitions_by_leader = defaultdict(list)
         for p in self._partitions.itervalues():
-            self._partitions_by_broker[p.broker] = p
-        self.partition_cycle = itertools.cycle(self._partitions.values())
+            self._partitions_by_leader[p.leader] = p
+        self.partition_cycle = itertools.cycle(self._partitions().keys())
 
     @property
     def topic(self):
@@ -64,6 +71,10 @@ class SimpleConsumer(base.BaseSimpleConsumer):
     @property
     def partitions(self):
         return self._partitions
+
+    @property
+    def fetch_message_max_bytes(self):
+        return self._fetch_message_max_bytes
 
     def __iter__(self):
         while True:
@@ -74,6 +85,15 @@ class SimpleConsumer(base.BaseSimpleConsumer):
 
         :param timeout: Seconds to wait before returning None
         """
+        owned_partition = self.partition_cycle.next()
+        message = owned_partition.consume(timeout=timeout)
+
+        if self._auto_commit_enable:
+            self._auto_commit()
+
+        return message
+
+    def _auto_commit(self):
         pass
 
     def commit_offsets(self):
@@ -95,9 +115,53 @@ class OwnedPartition(object):
     Used to keep track of offsets and the internal message queue.
     """
 
-    def __init__(self, partition):
+    def __init__(self, partition, consumer):
         self.partition = partition
+        self.consumer = consumer
         self._messages = Queue()
+        self.last_offset_consumed = 0
+        self.next_offset = 0
+
+        if self.consumer._auto_commit_enable and self.consumer.consumer_group is not None:
+            self.last_offset_consumed = self._fetch_last_known_offset()
 
     def consume(self, timeout=None):
+        """Get a single message from this partition
+        """
+        if self._messages.empty():
+            self._fetch()
+
+        try:
+            message = self._messages.get_nowait()
+            self.last_offset_consumed = message.offset
+            return message
+        except Empty:
+            return None
+
+    def _fetch_last_known_offset(self):
+        """Use the Offset Commit/Fetch API to find the last known offset for
+            this partition
+        """
         pass
+
+    def _fetch(self):
+        topic_name = self.partition.topic.name
+        success = False
+        while success is False:
+            try:
+                request = PartitionFetchRequest(
+                    self.partition.topic.name, self.partition.id, self.next_offset,
+                    self.consumer.fetch_message_max_bytes
+                )
+
+                response = self.partition.leader.fetch_messages(request)
+
+                for message in response.topics[topic_name].messages:
+                    if message.offset < self.last_offset_consumed:
+                        continue
+
+                    self._messages.put(message)
+                    self.next_offset = message.offset + 1
+                success = True
+            except:
+                success = False
