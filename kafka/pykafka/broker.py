@@ -126,7 +126,7 @@ class Broker(base.BaseBroker):
 
         Based on Step 2 here https://cwiki.apache.org/confluence/display/KAFKA/Committing+and+fetching+consumer+offsets+in+Kafka
         """
-        req = OffsetCommitRequest(self.group, partition_requests=preqs)
+        req = OffsetCommitRequest(group, partition_requests=preqs)
         self.handler.request(req).get(OffsetCommitResponse)
 
     def fetch_consumer_group_offsets(self, group, preqs, retries):
@@ -134,5 +134,5 @@ class Broker(base.BaseBroker):
 
         Based on Step 2 here https://cwiki.apache.org/confluence/display/KAFKA/Committing+and+fetching+consumer+offsets+in+Kafka
         """
-        req = OffsetFetchRequest(self.group, partition_requests=preqs)
+        req = OffsetFetchRequest(group, partition_requests=preqs)
         return self.handler.request(req).get(OffsetFetchResponse)
