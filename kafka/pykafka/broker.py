@@ -1,5 +1,4 @@
 import logging
-import time
 
 from kafka import base
 from .connection import BrokerConnection
@@ -8,8 +7,7 @@ from .protocol import (
     FetchRequest, FetchResponse, OffsetRequest,
     OffsetResponse, MetadataRequest, MetadataResponse,
     OffsetCommitRequest, OffsetCommitResponse,
-    OffsetFetchRequest, OffsetFetchResponse,
-    PartitionOffsetCommitRequest, PartitionOffsetFetchRequest
+    OffsetFetchRequest, OffsetFetchResponse
 )
 
 
@@ -122,48 +120,19 @@ class Broker(base.BaseBroker):
     #  Commit/Fetch API  #
     ######################
 
-    def commit_consumer_group_offsets(self, group, topic, partitions, retries):
+    def commit_consumer_group_offsets(self, group, preqs, retries):
         """Commit the offsets of all messages consumed so far by this consumer
             group with the Offset Commit/Fetch API
 
         Based on Step 2 here https://cwiki.apache.org/confluence/display/KAFKA/Committing+and+fetching+consumer+offsets+in+Kafka
         """
-        # XXX how should metadata be handled?
-        preqs = [PartitionOffsetCommitRequest(topic, partition.id,
-                                              partition.offset,
-                                              int(time.time()), '')
-                 for partition in partitions]
         req = OffsetCommitRequest(self.group, partition_requests=preqs)
+        self.handler.request(req).get(OffsetCommitResponse)
 
-        for i in xrange(retries):
-            if i > 0:
-                logger.debug("Retrying in %is" % ((i + 1) ** 2))
-                time.sleep(i ** 2)
-
-            try:
-                self.handler.request(req).get(OffsetCommitResponse)
-            except Exception:
-                logger.debug("Offset commit failed.")
-            else:
-                break
-
-    def fetch_consumer_group_offsets(self, group, topic, partitions, retries):
+    def fetch_consumer_group_offsets(self, group, preqs, retries):
         """Fetch the offsets stored in Kafka with the Offset Commit/Fetch API
 
         Based on Step 2 here https://cwiki.apache.org/confluence/display/KAFKA/Committing+and+fetching+consumer+offsets+in+Kafka
         """
-        preqs = [PartitionOffsetFetchRequest(topic, partition.id)
-                 for partition in partitions]
         req = OffsetFetchRequest(self.group, partition_requests=preqs)
-
-        for i in xrange(retries):
-            if i > 0:
-                logger.debug("Retrying in %is" % ((i + 1) ** 2))
-                time.sleep(i ** 2)
-
-            try:
-                res = self.handler.request(req).get(OffsetFetchResponse)
-            except Exception:
-                logger.debug("Offset fetch failed.")
-            else:
-                return res
+        return self.handler.request(req).get(OffsetFetchResponse)
