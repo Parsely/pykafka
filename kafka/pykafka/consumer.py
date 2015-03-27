@@ -105,6 +105,9 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         self._fetch_message_max_bytes = fetch_message_max_bytes
         self._socket_timeout_ms = socket_timeout_ms
 
+        self._last_message_time = time.time()
+        self._consumer_timeout_ms = consumer_timeout_ms
+
         self._auto_commit_enable = auto_commit_enable
         self._auto_commit_interval_ms = auto_commit_interval_ms
         self._last_auto_commit = time.time()
@@ -135,7 +138,16 @@ class SimpleConsumer(base.BaseSimpleConsumer):
 
     def __iter__(self):
         while True:
-            yield self.consume(timeout=self._socket_timeout_ms)
+            message = self.consume(timeout=self._socket_timeout_ms)
+            if not message and self._consumer_timed_out():
+                raise StopIteration
+            yield message
+
+    def _consumer_timed_out(self):
+        if self._consumer_timeout_ms == -1:
+            return False
+        disp = (time.time() - self._last_message_time) * 1000.0
+        return disp > self._consumer_timeout_ms
 
     def consume(self, timeout=None):
         """Get one message from the consumer.
@@ -148,7 +160,9 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         if self._auto_commit_enable:
             self._auto_commit()
 
-        return message
+        if message:
+            self._last_message_time = time.time()
+            return message
 
     def _auto_commit(self):
         if not self._auto_commit_enable or self._auto_commit_interval_ms == 0:
