@@ -6,11 +6,10 @@ import logging
 from collections import defaultdict
 
 from kafka import base
+from kafka.common import OffsetType
 from .partition import Partition
 from .producer import Producer
-from .protocol import (
-    PartitionOffsetRequest, OFFSET_EARLIEST, OFFSET_LATEST
-)
+from .protocol import PartitionOffsetRequest
 
 
 logger = logging.getLogger()
@@ -61,11 +60,11 @@ class Topic(base.BaseTopic):
 
     def earliest_available_offset(self):
         """Get the earliest offset for each partition of this topic."""
-        return self.fetch_offset_limits(OFFSET_EARLIEST)
+        return self.fetch_offset_limits(OffsetType.EARLIEST)
 
     def latest_available_offset(self):
         """Get the latest offset for each partition of this topic."""
-        return self.fetch_offset_limits(OFFSET_LATEST)
+        return self.fetch_offset_limits(OffsetType.LATEST)
 
     def update(self, brokers, metadata):
         """Update the Partitons with metadata about the cluster.

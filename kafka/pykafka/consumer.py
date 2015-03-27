@@ -135,7 +135,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
 
     def __iter__(self):
         while True:
-            yield self.consume(timeout=self._socket_timout_ms)
+            yield self.consume(timeout=self._socket_timeout_ms)
 
     def consume(self, timeout=None):
         """Get one message from the consumer.
