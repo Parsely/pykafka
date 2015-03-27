@@ -22,7 +22,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                  client_id=None,
                  consumer_group=None,
                  partitions=None,
-                 socket_timout_ms=30000,
+                 socket_timeout_ms=30000,
                  socket_receive_buffer_bytes=60 * 1024,
                  fetch_message_max_bytes=1024 * 1024,
                  num_consumer_fetchers=1,
@@ -45,11 +45,65 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         that this is a balancing consumer. Use a BalancedConsumer for
         that.
 
-        TODO: param docs
+        :param topic: the topic this consumer should consume
+        :type topic: pykafka.topic.Topic
+        :param client_id:
+        :type client_id:
+        :param consumer_group: the name of the consumer group to join
+        :type consumer_group: str
+        :param partitions: existing partitions to which to connect
+        :type partitions: list of pykafka.partition.Partition
+        :param socket_timeout_ms: the socket timeout for network requests
+        :type socket_timeout_ms: int
+        :param socket_receive_buffer_bytes: the size of the socket receive
+            buffer for network requests
+        :type socket_receive_buffer_bytes: int
+        :param fetch_message_max_bytes: the number of bytes of messages to
+            attempt to fetch
+        :type fetch_message_max_bytes: int
+        :param num_consumer_fetchers: the number of threads used to fetch data
+        :type num_consumer_fetchers: int
+        :param auto_commit_enable: if true, periodically commit to kafka the
+            offset of messages already fetched by this consumer
+        :type auto_commit_enable: bool
+        :param auto_commit_interval_ms: the frequency in ms that the consumer
+            offsets are committed to kafka
+        :type auto_commit_interval_ms: int
+        :param queued_max_message_chunks: max number of message chunks buffered
+            for consumption
+        :type queued_max_message_chunks: int
+        :param fetch_min_bytes: the minimum amount of data the server should
+            return for a fetch request. If insufficient data is available the
+            request will block
+        :type fetch_min_bytes: int
+        :param fetch_wait_max_ms: the maximum amount of time the server will
+            block before answering the fetch request if there isn't sufficient
+            data to immediately satisfy fetch_min_bytes
+        :type fetch_wait_max_ms: int
+        :param refresh_leader_backoff_ms: backoff time to refresh the leader of
+            a partition after it loses the current leader
+        :type refresh_leader_backoff_ms: int
+        :param offsets_channel_backoff_ms: backoff time to retry offset
+            commits/fetches
+        :type offsets_channel_backoff_ms: int
+        :param offsets_channel_socket_timeout_ms: socket timeout to use when
+            reading responses for Offset Fetch/Commit requests. This timeout
+            will also be used for the ConsumerMetdata requests that are used
+            to query for the offset coordinator.
+        :type offsets_channel_socket_timeout_ms: int
+        :param offsets_commit_max_retries: Retry the offset commit up to this
+            many times on failure.
+        :type offsets_commit_max_retries: int
+        :param auto_offset_reset: what to do if an offset is out of range
+        :type auto_offset_reset: int
+        :param consumer_timeout_ms: throw a timeout exception to the consumer
+            if no message is available for consumption after the specified interval
+        :type consumer_timeout_ms: int
         """
         self._consumer_group = consumer_group
         self._topic = topic
         self._fetch_message_max_bytes = fetch_message_max_bytes
+        self._socket_timeout_ms = socket_timeout_ms
 
         self._auto_commit_enable = auto_commit_enable
         self._auto_commit_interval_ms = auto_commit_interval_ms
@@ -81,7 +135,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
 
     def __iter__(self):
         while True:
-            yield self.consume()
+            yield self.consume(timeout=self._socket_timout_ms)
 
     def consume(self, timeout=None):
         """Get one message from the consumer.
