@@ -1,9 +1,8 @@
 import logging
 
 from kafka import base
-from .protocol import (
-    PartitionOffsetRequest, OFFSET_EARLIEST, OFFSET_LATEST
-)
+from kafka.common import OffsetType
+from .protocol import PartitionOffsetRequest
 
 logger = logging.getLogger(__name__)
 
@@ -73,11 +72,11 @@ class Partition(base.BasePartition):
 
     def latest_available_offset(self):
         """Get the latest offset for this partition."""
-        return self.fetch_offset_limit(OFFSET_LATEST)[self._id][0]
+        return self.fetch_offset_limit(OffsetType.LATEST)[self._id][0]
 
     def earliest_available_offset(self):
         """Get the earliest offset for this partition."""
-        return self.fetch_offset_limit(OFFSET_EARLIEST)[self._id][0]
+        return self.fetch_offset_limit(OffsetType.EARLIEST)[self._id][0]
 
     def __hash__(self):
         return hash((self.topic, self.id))

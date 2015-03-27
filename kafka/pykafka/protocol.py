@@ -57,9 +57,6 @@ from .utils import Serializable, compression, struct_helpers
 
 logger = logging.getLogger(__name__)
 
-OFFSET_EARLIEST = -2
-OFFSET_LATEST = -1
-
 
 class Request(Serializable):
     """Base class for all Requests. Handles writing header information"""
