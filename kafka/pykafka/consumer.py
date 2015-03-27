@@ -104,6 +104,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         self._topic = topic
         self._fetch_message_max_bytes = fetch_message_max_bytes
         self._socket_timeout_ms = socket_timeout_ms
+        self._fetch_min_bytes = fetch_min_bytes
 
         self._last_message_time = time.time()
         self._consumer_timeout_ms = consumer_timeout_ms
@@ -236,8 +237,10 @@ class OwnedPartition(object):
                     self.partition.topic.name, self.partition.id, self.next_offset,
                     self.consumer.fetch_message_max_bytes
                 )
-                response = self.partition.leader.fetch_messages([request],
-                                                                timeout=timeout)
+                response = self.partition.leader.fetch_messages(
+                    [request], timeout=timeout,
+                    min_bytes=self._fetch_min_bytes
+                )
 
                 messages = response.topics[topic_name].messages
 
