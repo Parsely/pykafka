@@ -110,12 +110,6 @@ class Broker(base.BaseBroker):
         future = self.handler.request(OffsetRequest(partition_requests))
         return future.get(OffsetResponse)
 
-    def commit_offsets(self, consumer_group, partition_requests):
-        """Use the Offset Commit/Fetch API to commit offsets for a consumer
-            group
-        """
-        pass
-
     def request_metadata(self, topics=[]):
         future = self.handler.request(MetadataRequest(topics=topics))
         return future.get(MetadataResponse)
