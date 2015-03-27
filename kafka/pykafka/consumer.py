@@ -113,6 +113,9 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         self._auto_commit_interval_ms = auto_commit_interval_ms
         self._last_auto_commit = time.time()
 
+        self._queued_chunks = 0
+        self._queued_max_message_chunks = queued_max_message_chunks
+
         if partitions:
             self._partitions = {OwnedPartition(p, self): topic.partitons[p]
                                 for p in partitions}
@@ -217,6 +220,7 @@ class OwnedPartition(object):
 
         try:
             message = self._messages.get_nowait()
+            self._queued_chunks -= 1
             self.last_offset_consumed = message.offset
             return message
         except Empty:
@@ -243,6 +247,11 @@ class OwnedPartition(object):
                 )
 
                 messages = response.topics[topic_name].messages
+
+                if self._queued_chunks >= self._queued_max_message_chunks:
+                    return
+
+                self._queued_chunks += 1
 
                 for message in messages:
                     if message.offset < self.last_offset_consumed:
