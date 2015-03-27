@@ -19,7 +19,6 @@ class SimpleConsumer(base.BaseSimpleConsumer):
 
     def __init__(self,
                  topic,
-                 client_id=None,
                  consumer_group=None,
                  partitions=None,
                  socket_timeout_ms=30000,
@@ -47,8 +46,6 @@ class SimpleConsumer(base.BaseSimpleConsumer):
 
         :param topic: the topic this consumer should consume
         :type topic: pykafka.topic.Topic
-        :param client_id:
-        :type client_id:
         :param consumer_group: the name of the consumer group to join
         :type consumer_group: str
         :param partitions: existing partitions to which to connect
