@@ -179,14 +179,14 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         if (time.time() - self._last_auto_commit) * 1000.0 >= self._auto_commit_interval_ms:
             self.commit_offsets()
 
+        self._last_auto_commit = time.time()
+
     def commit_offsets(self):
         """Use the Offset Commit/Fetch API to commit offsets for this
             consumer's topic
         """
         if not self.consumer_group:
             raise Exception("consumer group must be specified to commit offsets")
-
-        self._last_auto_commit = time.time()
 
         for broker, partitions in self._partitions_by_leader:
             # XXX create a bunch of PartitionOffsetCommitRequests
