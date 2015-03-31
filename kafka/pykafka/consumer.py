@@ -19,6 +19,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
 
     def __init__(self,
                  topic,
+                 cluster,
                  consumer_group=None,
                  partitions=None,
                  socket_timeout_ms=30000,
@@ -97,6 +98,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
             if no message is available for consumption after the specified interval
         :type consumer_timeout_ms: int
         """
+        self._cluster = cluster
         self._consumer_group = consumer_group
         self._topic = topic
         self._fetch_message_max_bytes = fetch_message_max_bytes
@@ -109,6 +111,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         self._auto_commit_enable = auto_commit_enable
         self._auto_commit_interval_ms = auto_commit_interval_ms
         self._last_auto_commit = time.time()
+        if self._auto_commit_enable:
+            self._autocommit_worker_thread = self._setup_autocommit_worker()
 
         self._queued_chunks = 0
         self._queued_max_message_chunks = queued_max_message_chunks
@@ -137,6 +141,12 @@ class SimpleConsumer(base.BaseSimpleConsumer):
     def fetch_message_max_bytes(self):
         return self._fetch_message_max_bytes
 
+    def _setup_autocommit_worker(self):
+        def autocommitter():
+            if self._auto_commit_enable:
+                self._auto_commit()
+        return self._cluster.handler.spawn(autocommitter)
+
     def __iter__(self):
         while True:
             message = self.consume(timeout=self._socket_timeout_ms)
@@ -157,9 +167,6 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         """
         owned_partition = self.partition_cycle.next()
         message = owned_partition.consume(timeout=timeout)
-
-        if self._auto_commit_enable:
-            self._auto_commit()
 
         if message:
             self._last_message_time = time.time()
