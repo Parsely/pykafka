@@ -1,3 +1,4 @@
+import functools
 import itertools
 from collections import defaultdict
 import time
@@ -28,7 +29,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                  num_consumer_fetchers=1,
                  auto_commit_enable=False,
                  auto_commit_interval_ms=60 * 1000,
-                 queued_max_message_chunks=2,
+                 queued_max_messages=2000,
                  fetch_min_bytes=1,
                  fetch_wait_max_ms=100,
                  refresh_leader_backoff_ms=200,
@@ -67,9 +68,9 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         :param auto_commit_interval_ms: the frequency in ms that the consumer
             offsets are committed to kafka
         :type auto_commit_interval_ms: int
-        :param queued_max_message_chunks: max number of message chunks buffered
-            for consumption
-        :type queued_max_message_chunks: int
+        :param queued_max_messages: max number of messages buffered for
+            consumption
+        :type queued_max_messages: int
         :param fetch_min_bytes: the minimum amount of data the server should
             return for a fetch request. If insufficient data is available the
             request will block
@@ -114,21 +115,19 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         if self._auto_commit_enable:
             self._autocommit_worker_thread = self._setup_autocommit_worker()
 
-        self._queued_chunks = 0
-        self._queued_max_message_chunks = queued_max_message_chunks
+        self._queued_max_messages = queued_max_messages
 
+        owned_partition_partial = functools.partial(
+            OwnedPartition, consumer_group=self._consumer_group,
+            fetch_message_max_bytes=self._fetch_message_max_bytes,
+            queued_max_messages=self._queued_max_messages
+        )
         if partitions:
-            self._partitions = {
-                OwnedPartition(p, consumer_group=self._consumer_group,
-                               fetch_message_max_bytes=self._fetch_message_max_bytes):
-                topic.partitons[p] for p in partitions
-            }
+            self._partitions = {owned_partition_partial(p): topic.partitons[p]
+                                for p in partitions}
         else:
-            self._partitions = {
-                OwnedPartition(p, consumer_group=self._consumer_group,
-                               fetch_message_max_bytes=self._fetch_message_max_bytes):
-                topic.partitons[p] for k, p in topic.partitions.iteritems()
-            }
+            self._partitions = {owned_partition_partial(p): topic.partitons[p]
+                                for k, p in topic.partitions.iteritems()}
         # Organize partitions by leader for efficient queries
         self._partitions_by_leader = defaultdict(list)
         for p in self._partitions.iterkeys():
@@ -215,10 +214,12 @@ class OwnedPartition(object):
     def __init__(self,
                  partition,
                  consumer_group=None,
-                 fetch_message_max_bytes=1):
+                 fetch_message_max_bytes=1,
+                 queued_max_messages=2000):
         self.partition = partition
         self.consumer_group = consumer_group
         self._fetch_message_max_bytes = fetch_message_max_bytes
+        self._queued_max_messages = queued_max_messages
         self._messages = Queue()
         self.last_offset_consumed = 0
         self.next_offset = 0
@@ -235,7 +236,6 @@ class OwnedPartition(object):
 
         try:
             message = self._messages.get_nowait()
-            self._queued_chunks -= 1
             self.last_offset_consumed = message.offset
             return message
         except Empty:
@@ -263,10 +263,8 @@ class OwnedPartition(object):
 
                 messages = response.topics[topic_name].messages
 
-                if self._queued_chunks >= self._queued_max_message_chunks:
+                if self._messages.qsize() >= self._queued_max_messages:
                     return
-
-                self._queued_chunks += 1
 
                 for message in messages:
                     if message.offset < self.last_offset_consumed:
