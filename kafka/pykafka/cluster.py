@@ -26,6 +26,10 @@ class Cluster(object):
     def topics(self):
         return self._topics
 
+    @property
+    def handler(self):
+        return self._handler
+
     def _get_metadata(self):
         """Get fresh cluster metadata from a broker"""
         # Works either on existing brokers or seed_hosts list

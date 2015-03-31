@@ -6,11 +6,10 @@ import logging
 from collections import defaultdict
 
 from kafka import base
+from kafka.common import OffsetType
 from .partition import Partition
 from .producer import Producer
-from .protocol import (
-    PartitionOffsetRequest, OFFSET_EARLIEST, OFFSET_LATEST
-)
+from .protocol import PartitionOffsetRequest
 
 
 logger = logging.getLogger()
@@ -36,11 +35,20 @@ class Topic(base.BaseTopic):
     def partitions(self):
         return self._partitions
 
-    def earliest_offsets(self):
-        """Get the earliest offset for each partition of this topic."""
-        return self.fetch_offsets(OFFSET_EARLIEST)
+    def get_producer(self):
+        return Producer(self)
 
-    def fetch_offsets(self, offsets_before, max_offsets=1):
+    def fetch_offset_limits(self, offsets_before, max_offsets=1):
+        """Get earliest or latest offset
+
+        Use the Offset API to find a limit of valid offsets for each partition
+        in this topic
+
+        :param offsets_before: return an offset from before this timestamp (milliseconds)
+        :type offsets_before: int
+        :param max_offsets: the maximum number of offsets to return
+        :type max_offsets: int
+        """
         requests = defaultdict(list)  # one request for each broker
         for part in self.partitions.itervalues():
             requests[part.leader].append(PartitionOffsetRequest(
@@ -52,12 +60,13 @@ class Topic(base.BaseTopic):
             output.update(res.topics[self.name])
         return output
 
-    def get_producer(self):
-        return Producer(self)
+    def earliest_available_offsets(self):
+        """Get the earliest offset for each partition of this topic."""
+        return self.fetch_offset_limits(OffsetType.EARLIEST)
 
-    def latest_offsets(self):
+    def latest_available_offsets(self):
         """Get the latest offset for each partition of this topic."""
-        return self.fetch_offsets(OFFSET_LATEST)
+        return self.fetch_offset_limits(OffsetType.LATEST)
 
     def update(self, brokers, metadata):
         """Update the Partitons with metadata about the cluster.

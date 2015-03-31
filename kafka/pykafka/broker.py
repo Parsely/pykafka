@@ -77,7 +77,7 @@ class Broker(base.BaseBroker):
     def fetch_messages(self,
                        partition_requests,
                        timeout=30000,
-                       min_bytes=1024):
+                       min_bytes=1):
         """Fetch messages from a set of partitions.
 
         :param partition_requests: Requests of messages to fetch.
@@ -86,9 +86,10 @@ class Broker(base.BaseBroker):
         """
         future = self.handler.request(FetchRequest(
             partition_requests=partition_requests,
-            timeout=10000,
-            min_bytes=1,
+            timeout=timeout,
+            min_bytes=min_bytes,
         ))
+        # XXX - this call returns even with less than min_bytes of messages?
         return future.get(FetchResponse)
 
     def produce_messages(self, produce_request):
@@ -104,7 +105,7 @@ class Broker(base.BaseBroker):
             # Any errors will be decoded and raised in the `.get()`
         return None
 
-    def request_offsets(self, partition_requests):
+    def request_offset_limits(self, partition_requests):
         """Request offset information for a set of topic/partitions"""
         future = self.handler.request(OffsetRequest(partition_requests))
         return future.get(OffsetResponse)

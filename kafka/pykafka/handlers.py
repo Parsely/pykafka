@@ -88,7 +88,7 @@ class RequestHandler(object):
         atexit.register(self.stop)
 
     def request(self, request, has_response=True):
-        """Construct a new requst
+        """Construct a new request
 
         :returns: :class:`kafka.handlers.ResponseFuture`
         """

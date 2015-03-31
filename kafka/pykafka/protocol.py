@@ -50,12 +50,9 @@ from collections import defaultdict, namedtuple
 from zlib import crc32
 
 from kafka import common
-from kafka.common import CompressionType
+from kafka.common import CompressionType, OffsetType
 from kafka.exceptions import ERROR_CODES
 from .utils import Serializable, compression, struct_helpers
-
-OFFSET_EARLIEST = -2
-OFFSET_LATEST = -1
 
 
 logger = logging.getLogger(__name__)
@@ -639,12 +636,12 @@ class FetchResponse(Response):
         """
         fmt = '[S [ihqY] ]'
         response = struct_helpers.unpack_from(fmt, buff, 0)
-        self.topics = {}
+        self.topics = defaultdict(dict)
         for (topic, partitions) in response:
             for partition in partitions:
                 if partition[1] != 0:
                     self.raise_error(partition[1], response)
-                self.topics[topic] = FetchPartitionResponse(
+                self.topics[topic][partition[0]] = FetchPartitionResponse(
                     partition[2], self._unpack_message_set(partition[3]),
                 )
 
