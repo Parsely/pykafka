@@ -189,7 +189,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
             raise Exception("consumer group must be specified to commit offsets")
 
         for broker, partitions in self._partitions_by_leader:
-            # XXX create a bunch of PartitionOffsetCommitRequests
+            # TODO create a bunch of PartitionOffsetCommitRequests
             reqs = [p for p in partitions]
             broker.commit_offsets(self.consumer_group, reqs)
 
@@ -230,7 +230,7 @@ class OwnedPartition(object):
         except Empty:
             return None
 
-    def _fetch_last_known_offset(self):
+    def _fetch_committed_offset(self):
         """Use the Offset Commit/Fetch API to find the last known offset for
             this partition
         """
