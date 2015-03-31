@@ -70,11 +70,11 @@ class Partition(base.BasePartition):
         res = self.leader.request_offsets([request])
         return res.topics[self.topic.name][self._id][0]
 
-    def latest_available_offset(self):
+    def latest_available_offsets(self):
         """Get the latest offset for this partition."""
         return self.fetch_offset_limit(OffsetType.LATEST)[self._id][0]
 
-    def earliest_available_offset(self):
+    def earliest_available_offsets(self):
         """Get the earliest offset for this partition."""
         return self.fetch_offset_limit(OffsetType.EARLIEST)[self._id][0]
 

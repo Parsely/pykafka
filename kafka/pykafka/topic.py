@@ -39,8 +39,10 @@ class Topic(base.BaseTopic):
         return Producer(self)
 
     def fetch_offset_limits(self, offsets_before, max_offsets=1):
-        """Use the Offset API to find a limit of valid offsets
-            for each partition in this topic
+        """Get earliest or latest offset
+
+        Use the Offset API to find a limit of valid offsets for each partition
+        in this topic
 
         :param offsets_before: return an offset from before this timestamp (milliseconds)
         :type offsets_before: int
@@ -58,11 +60,11 @@ class Topic(base.BaseTopic):
             output.update(res.topics[self.name])
         return output
 
-    def earliest_available_offset(self):
+    def earliest_available_offsets(self):
         """Get the earliest offset for each partition of this topic."""
         return self.fetch_offset_limits(OffsetType.EARLIEST)
 
-    def latest_available_offset(self):
+    def latest_available_offsets(self):
         """Get the latest offset for each partition of this topic."""
         return self.fetch_offset_limits(OffsetType.LATEST)
 
