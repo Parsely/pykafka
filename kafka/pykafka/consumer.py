@@ -225,6 +225,7 @@ class OwnedPartition(object):
 
         if self._consumer_group is not None:
             self.last_offset_consumed = self._fetch_committed_offset()
+            self.next_offset = self.last_offset_consumed + 1
 
     def consume(self, timeout=None):
         """Get a single message from this partition
