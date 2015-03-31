@@ -112,27 +112,28 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         self._auto_commit_enable = auto_commit_enable
         self._auto_commit_interval_ms = auto_commit_interval_ms
         self._last_auto_commit = time.time()
-        if self._auto_commit_enable:
-            self._autocommit_worker_thread = self._setup_autocommit_worker()
 
         self._queued_max_messages = queued_max_messages
 
         owned_partition_partial = functools.partial(
-            OwnedPartition, consumer_group=self._consumer_group,
-            fetch_message_max_bytes=self._fetch_message_max_bytes,
-            queued_max_messages=self._queued_max_messages
-        )
+            OwnedPartition, consumer_group=self._consumer_group)
         if partitions:
-            self._partitions = {owned_partition_partial(p): topic.partitons[p]
+            self._partitions = {owned_partition_partial(p): topic.partitions[p]
                                 for p in partitions}
         else:
-            self._partitions = {owned_partition_partial(p): topic.partitons[p]
+            self._partitions = {owned_partition_partial(p): topic.partitions[k]
                                 for k, p in topic.partitions.iteritems()}
+        self._partitions_by_id = {p.partition.id: p
+                                  for p in self._partitions.iterkeys()}
         # Organize partitions by leader for efficient queries
         self._partitions_by_leader = defaultdict(list)
         for p in self._partitions.iterkeys():
-            self._partitions_by_leader[p.partition.leader] = p
+            self._partitions_by_leader[p.partition.leader].append(p)
         self.partition_cycle = itertools.cycle(self._partitions.keys())
+
+        if self._auto_commit_enable:
+            self._autocommit_worker_thread = self._setup_autocommit_worker()
+        self._fetch_worker_thread = self._setup_fetch_worker()
 
     @property
     def topic(self):
@@ -148,9 +149,16 @@ class SimpleConsumer(base.BaseSimpleConsumer):
 
     def _setup_autocommit_worker(self):
         def autocommitter():
-            if self._auto_commit_enable:
-                self._auto_commit()
+            while True:
+                if self._auto_commit_enable:
+                    self._auto_commit()
         return self._cluster.handler.spawn(autocommitter)
+
+    def _setup_fetch_worker(self):
+        def fetcher():
+            while True:
+                self.fetch()
+        return self._cluster.handler.spawn(fetcher)
 
     def __iter__(self):
         while True:
@@ -193,7 +201,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         if not self.consumer_group:
             raise Exception("consumer group must be specified to commit offsets")
 
-        for broker, partitions in self._partitions_by_leader:
+        for broker, partitions in self._partitions_by_leader.iteritems():
             # TODO create a bunch of PartitionOffsetCommitRequests
             reqs = [p for p in partitions]
             broker.commit_offsets(self.consumer_group, reqs)
@@ -204,6 +212,26 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         """
         pass
 
+    def fetch(self):
+        """Fetch new messages for all partitions
+
+        Create a FetchRequest for each broker and send it. Enqueue each of the
+        returned messages in the approprate OwnedPartition.
+        """
+        for broker, owned_partitions in self._partitions_by_leader.iteritems():
+            reqs = [owned_partition.build_fetch_request(self._fetch_message_max_bytes)
+                    for owned_partition in owned_partitions
+                    if owned_partition.message_count < self._queued_max_messages
+                    and owned_partition.empty]
+            if reqs:
+                response = broker.fetch_messages(
+                    reqs, timeout=self._socket_timeout_ms,
+                    min_bytes=self._fetch_min_bytes
+                )
+                for partition_id, pres in response.topics[self._topic.name].iteritems():
+                    partition = self._partitions_by_id[partition_id]
+                    partition.enqueue_messages(pres.messages)
+
 
 class OwnedPartition(object):
     """A partition that is owned by a SimpleConsumer.
@@ -213,27 +241,35 @@ class OwnedPartition(object):
 
     def __init__(self,
                  partition,
-                 consumer_group=None,
-                 fetch_message_max_bytes=1,
-                 queued_max_messages=2000):
+                 consumer_group=None):
         self.partition = partition
-        self.consumer_group = consumer_group
-        self._fetch_message_max_bytes = fetch_message_max_bytes
-        self._queued_max_messages = queued_max_messages
+        self._consumer_group = consumer_group
         self._messages = Queue()
         self.last_offset_consumed = 0
-        self.next_offset = 0
+        self.next_offset = 1
 
-        if self._consumer_group is not None:
-            self.last_offset_consumed = self._fetch_committed_offset()
-            self.next_offset = self.last_offset_consumed + 1
+    @property
+    def message_count(self):
+        return self._messages.qsize()
+
+    @property
+    def empty(self):
+        return self._messages.empty()
+
+    def build_fetch_request(self, max_bytes):
+        return PartitionFetchRequest(
+            self.partition.topic.name, self.partition.id,
+            self.next_offset, max_bytes)
+
+    def build_committed_offset_request(self):
+        """Use the Offset Commit/Fetch API to find the last known offset for
+            this partition
+        """
+        pass
 
     def consume(self, timeout=None):
         """Get a single message from this partition
         """
-        if self._messages.empty():
-            self._fetch(timeout=timeout)
-
         try:
             message = self._messages.get_nowait()
             self.last_offset_consumed = message.offset
@@ -241,37 +277,9 @@ class OwnedPartition(object):
         except Empty:
             return None
 
-    def _fetch_committed_offset(self):
-        """Use the Offset Commit/Fetch API to find the last known offset for
-            this partition
-        """
-        pass
-
-    def _fetch(self, timeout=None):
-        topic_name = self.partition.topic.name
-        success = False
-        while success is False:
-            try:
-                request = PartitionFetchRequest(
-                    self.partition.topic.name, self.partition.id, self.next_offset,
-                    self._fetch_message_max_bytes
-                )
-                response = self.partition.leader.fetch_messages(
-                    [request], timeout=timeout,
-                    min_bytes=self._fetch_min_bytes
-                )
-
-                messages = response.topics[topic_name].messages
-
-                if self._messages.qsize() >= self._queued_max_messages:
-                    return
-
-                for message in messages:
-                    if message.offset < self.last_offset_consumed:
-                        continue
-                    self._messages.put(message)
-                    self.next_offset = message.offset + 1
-
-                success = True
-            except:
-                success = False
+    def enqueue_messages(self, messages):
+        for message in messages:
+            if message.offset < self.last_offset_consumed:
+                continue
+            self._messages.put(message)
+            self.next_offset = message.offset + 1
