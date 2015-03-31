@@ -118,11 +118,17 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         self._queued_max_message_chunks = queued_max_message_chunks
 
         if partitions:
-            self._partitions = {OwnedPartition(p, self): topic.partitons[p]
-                                for p in partitions}
+            self._partitions = {
+                OwnedPartition(p, consumer_group=self._consumer_group,
+                               fetch_message_max_bytes=self._fetch_message_max_bytes):
+                topic.partitons[p] for p in partitions
+            }
         else:
-            self._partitions = {OwnedPartition(p, self): p
-                                for k, p in topic.partitions.iteritems()}
+            self._partitions = {
+                OwnedPartition(p, consumer_group=self._consumer_group,
+                               fetch_message_max_bytes=self._fetch_message_max_bytes):
+                topic.partitons[p] for k, p in topic.partitions.iteritems()
+            }
         # Organize partitions by leader for efficient queries
         self._partitions_by_leader = defaultdict(list)
         for p in self._partitions.iterkeys():
@@ -206,15 +212,19 @@ class OwnedPartition(object):
     Used to keep track of offsets and the internal message queue.
     """
 
-    def __init__(self, partition, consumer):
+    def __init__(self,
+                 partition,
+                 consumer_group=None,
+                 fetch_message_max_bytes=1):
         self.partition = partition
-        self.consumer = consumer
+        self.consumer_group = consumer_group
+        self._fetch_message_max_bytes = fetch_message_max_bytes
         self._messages = Queue()
         self.last_offset_consumed = 0
         self.next_offset = 0
 
-        if self.consumer._auto_commit_enable and self.consumer.consumer_group is not None:
-            self.last_offset_consumed = self._fetch_last_known_offset()
+        if self._consumer_group is not None:
+            self.last_offset_consumed = self._fetch_committed_offset()
 
     def consume(self, timeout=None):
         """Get a single message from this partition
@@ -243,7 +253,7 @@ class OwnedPartition(object):
             try:
                 request = PartitionFetchRequest(
                     self.partition.topic.name, self.partition.id, self.next_offset,
-                    self.consumer.fetch_message_max_bytes
+                    self._fetch_message_max_bytes
                 )
                 response = self.partition.leader.fetch_messages(
                     [request], timeout=timeout,
