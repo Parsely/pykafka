@@ -213,6 +213,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
             raise Exception("consumer group must be specified to commit offsets")
 
         reqs = [p.build_offset_commit_request() for p in self._partitions.keys()]
+        log.info("Committing offsets for %d partitions", len(reqs))
         self._offset_manager.commit_consumer_group_offsets(self._consumer_group, reqs)
 
     def fetch_offsets(self):

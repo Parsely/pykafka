@@ -141,8 +141,7 @@ class Message(common.Message, Serializable):
         # TODO: Handle CRC failure
         return Message(val,
                        partition_key=key,
-                       compression_type=attr,
-                       offset=msg_offset)
+                       compression_type=attr, offset=msg_offset)
 
     def pack_into(self, buff, offset):
         """Serialize and write to ``buff`` starting at offset ``offset``.
@@ -874,7 +873,7 @@ class OffsetCommitRequest(Request):
 
     def __len__(self):
         """Length of the serialized message, in bytes"""
-        # Header + len(topics)
+        # Header + string size + consumer group size + array length
         size = self.HEADER_LEN + 2 + len(self.consumer_group) + 4
         for topic, parts in self._reqs.iteritems():
             # topic name + len(parts)
@@ -883,7 +882,7 @@ class OffsetCommitRequest(Request):
             size += (4 + 8 + 8) * len(parts)
             # metadata => for each partition
             for partition, (_, _, metadata) in parts.iteritems():
-                size += len(metadata) + 2
+                size += 2 + len(metadata)
         return size
 
     @property
