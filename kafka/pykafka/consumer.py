@@ -119,6 +119,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
 
         self._queued_max_messages = queued_max_messages
 
+        self._offset_manager = self._cluster.get_offset_manager(self._consumer_group)
+
         owned_partition_partial = functools.partial(
             OwnedPartition, consumer_group=self._consumer_group)
         if partitions:
@@ -210,9 +212,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         if not self._consumer_group:
             raise Exception("consumer group must be specified to commit offsets")
 
-        for broker, partitions in self._partitions_by_leader.iteritems():
-            reqs = [p.build_offset_commit_request() for p in partitions]
-            broker.commit_consumer_group_offsets(self._consumer_group, reqs)
+        reqs = [p.build_offset_commit_request() for p in self._partitions.keys()]
+        self._offset_manager.commit_consumer_group_offsets(self._consumer_group, reqs)
 
     def fetch_offsets(self):
         """Fetch offsets for this consumer's topic
@@ -225,16 +226,15 @@ class SimpleConsumer(base.BaseSimpleConsumer):
 
         log.info("Fetching offsets")
 
-        for broker, partitions in self._partitions_by_leader.iteritems():
-            reqs = [p.build_offset_fetch_request() for p in partitions]
-            try:
-                res = broker.fetch_consumer_group_offsets(self._consumer_group, reqs)
-            except UnknownTopicOrPartition as e:
-                log.warning("UnknownTopicOrPartition: %s", e)
-            else:
-                for partition_id, pres in res.topics[self._topic.name].iteritems():
-                    partition = self._partitions_by_id[partition_id]
-                    partition.set_offset_counters(pres)
+        reqs = [p.build_offset_fetch_request() for p in self._partitions.keys()]
+        try:
+            res = self._offset_manager.fetch_consumer_group_offsets(self._consumer_group, reqs)
+        except UnknownTopicOrPartition as e:
+            log.warning("UnknownTopicOrPartition: %s", e)
+        else:
+            for partition_id, pres in res.topics[self._topic.name].iteritems():
+                partition = self._partitions_by_id[partition_id]
+                partition.set_offset_counters(pres)
 
     def fetch(self):
         """Fetch new messages for all partitions
