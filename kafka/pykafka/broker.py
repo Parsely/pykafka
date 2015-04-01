@@ -120,19 +120,33 @@ class Broker(base.BaseBroker):
     #  Commit/Fetch API  #
     ######################
 
-    def commit_consumer_group_offsets(self, group, preqs, retries):
-        """Commit the offsets of all messages consumed so far by this consumer
+    def commit_consumer_group_offsets(self, consumer_group, preqs):
+        """Commit the offsets of all messages consumed
+
+        Commit the offsets of all messages consumed so far by this consumer
             group with the Offset Commit/Fetch API
 
         Based on Step 2 here https://cwiki.apache.org/confluence/display/KAFKA/Committing+and+fetching+consumer+offsets+in+Kafka
+
+        :param consumer_group: the name of the consumer group for which to
+            commit offsets
+        :type consumer_group: str
+        :param preqs: a sequence of <protocol.PartitionOffsetCommitRequest>
+        :type preqs: sequence
         """
-        req = OffsetCommitRequest(group, partition_requests=preqs)
+        req = OffsetCommitRequest(consumer_group, partition_requests=preqs)
         self.handler.request(req).get(OffsetCommitResponse)
 
-    def fetch_consumer_group_offsets(self, group, preqs, retries):
+    def fetch_consumer_group_offsets(self, consumer_group, preqs):
         """Fetch the offsets stored in Kafka with the Offset Commit/Fetch API
 
         Based on Step 2 here https://cwiki.apache.org/confluence/display/KAFKA/Committing+and+fetching+consumer+offsets+in+Kafka
+
+        :param consumer_group: the name of the consumer group for which to
+            commit offsets
+        :type consumer_group: str
+        :param preqs: a sequence of <protocol.PartitionOffsetFetchRequest>
+        :type preqs: sequence
         """
-        req = OffsetFetchRequest(group, partition_requests=preqs)
+        req = OffsetFetchRequest(consumer_group, partition_requests=preqs)
         return self.handler.request(req).get(OffsetFetchResponse)
