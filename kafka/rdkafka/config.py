@@ -39,8 +39,10 @@ TRANSLATE_VALUES = { # callable or dict for value conversions
         CompressionType.GZIP: "gzip",
         CompressionType.SNAPPY: "snappy",
     },
-    "queued_max_message_chunks": lambda conf, chunks:
-        str(chunks * conf["fetch_message_max_bytes"] // 1024),
+    "queued_max_messages": lambda conf, n_messages:
+        # This is our rough conversion to a "queued.max.messages.kbytes" value;
+        # the intent is the same, but we may end up queueing many more messages
+        str(n_messages * conf["fetch_message_max_bytes"] // 1024),
 }
 
 TRANSLATE_NAMES = { # any names that don't map trivially
@@ -49,7 +51,7 @@ TRANSLATE_NAMES = { # any names that don't map trivially
     "compression": "compression.codec",
     "consumer_group": "group.id",
     "max_retries": "message.send.max.retries",
-    "queued_max_message_chunks": "queued.max.messages.kbytes",
+    "queued_max_messages": "queued.max.messages.kbytes",
     "refresh_leader_backoff_ms": "topic.metadata.refresh.fast.interval.ms",
     "required_acks": "request.required.acks",
     "topic_refresh_interval_ms": "topic.metadata.refresh.interval.ms",
