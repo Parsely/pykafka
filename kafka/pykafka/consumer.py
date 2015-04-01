@@ -2,12 +2,16 @@ import functools
 import itertools
 from collections import defaultdict
 import time
+import logging as log
 from Queue import Queue, Empty
 
 from kafka import base
 from kafka.common import OffsetType
+from kafka.exceptions import UnknownTopicOrPartition
 
-from .protocol import PartitionFetchRequest
+from .protocol import (PartitionFetchRequest,
+                       PartitionOffsetCommitRequest,
+                       PartitionOffsetFetchRequest)
 
 # Settings to add to the eventual BalancedConsumer
 # consumer_group
@@ -133,6 +137,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
 
         if self._auto_commit_enable:
             self._autocommit_worker_thread = self._setup_autocommit_worker()
+        # we need to get the most up-to-date offsets before starting consumption
+        self.fetch_offsets()
         self._fetch_worker_thread = self._setup_fetch_worker()
 
     @property
@@ -152,6 +158,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
             while True:
                 if self._auto_commit_enable:
                     self._auto_commit()
+        log.debug("Starting autocommitter thread")
         return self._cluster.handler.spawn(autocommitter)
 
     def _setup_fetch_worker(self):
@@ -190,27 +197,44 @@ class SimpleConsumer(base.BaseSimpleConsumer):
             return
 
         if (time.time() - self._last_auto_commit) * 1000.0 >= self._auto_commit_interval_ms:
+            log.info("Autocommitting consumer offset for consumer group %s and topic %s",
+                     self._consumer_group, self._topic.name)
             self.commit_offsets()
-
-        self._last_auto_commit = time.time()
+            self._last_auto_commit = time.time()
 
     def commit_offsets(self):
-        """Use the Offset Commit/Fetch API to commit offsets for this
-            consumer's topic
+        """Commit offsets for this consumer's topic
+
+        Uses the offset commit/fetch API
         """
-        if not self.consumer_group:
+        if not self._consumer_group:
             raise Exception("consumer group must be specified to commit offsets")
 
         for broker, partitions in self._partitions_by_leader.iteritems():
-            # TODO create a bunch of PartitionOffsetCommitRequests
-            reqs = [p for p in partitions]
-            broker.commit_offsets(self.consumer_group, reqs)
+            reqs = [p.build_offset_commit_request() for p in partitions]
+            broker.commit_consumer_group_offsets(self._consumer_group, reqs)
 
     def fetch_offsets(self):
-        """Use the Offset Commit/Fetch API to fetch offsets for this
-            consumer's topic
+        """Fetch offsets for this consumer's topic
+
+        Uses the offset commit/fetch API
+        Should be called when consumer starts and after any errors
         """
-        pass
+        if not self._consumer_group:
+            raise Exception("consumer group must be specified to fetch offsets")
+
+        log.info("Fetching offsets")
+
+        for broker, partitions in self._partitions_by_leader.iteritems():
+            reqs = [p.build_offset_fetch_request() for p in partitions]
+            try:
+                res = broker.fetch_consumer_group_offsets(self._consumer_group, reqs)
+            except UnknownTopicOrPartition as e:
+                log.warning("UnknownTopicOrPartition: %s", e)
+            else:
+                for partition_id, pres in res.topics[self._topic.name].iteritems():
+                    partition = self._partitions_by_id[partition_id]
+                    partition.set_offset_counters(pres)
 
     def fetch(self):
         """Fetch new messages for all partitions
@@ -246,7 +270,7 @@ class OwnedPartition(object):
         self._consumer_group = consumer_group
         self._messages = Queue()
         self.last_offset_consumed = 0
-        self.next_offset = 1
+        self.next_offset = 0
 
     @property
     def message_count(self):
@@ -256,16 +280,40 @@ class OwnedPartition(object):
     def empty(self):
         return self._messages.empty()
 
+    def set_offset_counters(self, res):
+        """Set the internal offset counters from an OffsetFetchResponse
+
+        :param res: an OffsetFetchPartitionResponse containing the committed
+            offset for this partition
+        :type res: <protocol.PartitionOffsetFetchResponse>
+        """
+        self.last_offset_consumed = res.offset
+        self.next_offset = res.offset + 1
+        log.info("Last offset consumed: %d", self.last_offset_consumed)
+
     def build_fetch_request(self, max_bytes):
         return PartitionFetchRequest(
             self.partition.topic.name, self.partition.id,
             self.next_offset, max_bytes)
 
-    def build_committed_offset_request(self):
-        """Use the Offset Commit/Fetch API to find the last known offset for
-            this partition
+    def build_offset_commit_request(self):
+        """Create a PartitionOffsetCommitRequest for this partition
         """
-        pass
+        return PartitionOffsetCommitRequest(
+            self.partition.topic.name,
+            self.partition.id,
+            self.last_offset_consumed,
+            int(time.time()),
+            ''  # TODO - what to do with metadata?
+        )
+
+    def build_offset_fetch_request(self):
+        """Create a PartitionOffsetFetchRequest for this partition
+        """
+        return PartitionOffsetFetchRequest(
+            self.partition.topic.name,
+            self.partition.id
+        )
 
     def consume(self, timeout=None):
         """Get a single message from this partition
