@@ -220,7 +220,6 @@ class TestOffsetCommitFetchAPI(unittest.TestCase):
         )
 
     def test_offset_fetch_response(self):
-        # TODO - this is what I get back from kafka at the moment, clearly it's wrong
         response = protocol.OffsetFetchResponse(
             buffer('\x00\x00\x00\x01\x00\x0cemmett.dummy\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00')
         )

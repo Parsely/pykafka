@@ -102,14 +102,14 @@ class Cluster(object):
             else:
                 self._topics[name].update(meta)
 
-    def get_offset_manager(self, consumer_group_name):
+    def get_offset_manager(self, consumer_group):
         """Get the broker designated as the offset manager for this consumer
             group
 
         Based on Step 1 at https://cwiki.apache.org/confluence/display/KAFKA/Committing+and+fetching+consumer+offsets+in+Kafka
 
-        :param consumer_group_name: the name of the consumer group
-        :type consumer_group_name: str
+        :param consumer_group: the name of the consumer group
+        :type consumer_group: str
         """
         # arbitrarily choose a broker, since this request can go to any
         broker = self.brokers[random.choice(self.brokers.keys())]
@@ -118,14 +118,14 @@ class Cluster(object):
         while True:
             try:
                 retries += 1
-                req = ConsumerMetadataRequest(consumer_group_name)
+                req = ConsumerMetadataRequest(consumer_group)
                 future = broker.handler.request(req)
                 res = future.get(ConsumerMetadataResponse)
             except Exception:
                 logger.debug('Error discovering offset manager. Sleeping for {}s'.format(backoff))
                 if retries < MAX_RETRIES:
-                    time.sleep(backoff)  # XXX - not sure if this works here
-                    backoff = backoff**2
+                    time.sleep(backoff)
+                    backoff = backoff ** 2
                 else:
                     raise
             else:
