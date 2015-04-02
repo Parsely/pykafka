@@ -7,7 +7,6 @@ from Queue import Queue, Empty
 
 from kafka import base
 from kafka.common import OffsetType
-from kafka.exceptions import UnknownTopicOrPartition
 
 from .protocol import (PartitionFetchRequest,
                        PartitionOffsetCommitRequest,
@@ -229,14 +228,10 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         log.info("Fetching offsets")
 
         reqs = [p.build_offset_fetch_request() for p in self._partitions.keys()]
-        try:
-            res = self._offset_manager.fetch_consumer_group_offsets(self._consumer_group, reqs)
-        except UnknownTopicOrPartition as e:
-            log.warning("UnknownTopicOrPartition: %s", e)
-        else:
-            for partition_id, pres in res.topics[self._topic.name].iteritems():
-                partition = self._partitions_by_id[partition_id]
-                partition.set_offset_counters(pres)
+        res = self._offset_manager.fetch_consumer_group_offsets(self._consumer_group, reqs)
+        for partition_id, pres in res.topics[self._topic.name].iteritems():
+            partition = self._partitions_by_id[partition_id]
+            partition.set_offset_counters(pres)
 
     def fetch(self):
         """Fetch new messages for all partitions
