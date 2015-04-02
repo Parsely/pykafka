@@ -879,12 +879,6 @@ class OffsetCommitRequest(Request):
                                                         t.timestamp,
                                                         t.metadata)
 
-    # api_version needs to be 1 for this type of request to work,
-    # see https://github.com/apache/kafka/blob/0.8.2/core/src/main/scala/kafka/api/OffsetCommitRequest.scala#L47
-    def _write_header(self, buff, api_version=0, correlation_id=0):
-        super(OffsetCommitRequest, self)._write_header(
-            buff, api_version=1, correlation_id=correlation_id)
-
     def __len__(self):
         """Length of the serialized message, in bytes"""
         # Header + string size + consumer group size
@@ -913,7 +907,9 @@ class OffsetCommitRequest(Request):
         :rtype: :class:`bytearray`
         """
         output = bytearray(len(self))
-        self._write_header(output)
+        # api_version needs to be 1 for this type of request to work,
+        # see https://github.com/apache/kafka/blob/0.8.2/core/src/main/scala/kafka/api/OffsetCommitRequest.scala#L47
+        self._write_header(output, api_version=1)
         offset = self.HEADER_LEN
         fmt = '!h%dsih%dsi' % (len(self.consumer_group), len(self.consumer_id))
         struct.pack_into(fmt, output, offset,
