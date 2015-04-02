@@ -214,7 +214,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
 
         reqs = [p.build_offset_commit_request() for p in self._partitions.keys()]
         log.info("Committing offsets for %d partitions", len(reqs))
-        self._offset_manager.commit_consumer_group_offsets(self._consumer_group, reqs)
+        self._offset_manager.commit_consumer_group_offsets(
+            self._consumer_group, 1, 'pykafka', reqs)
 
     def fetch_offsets(self):
         """Fetch offsets for this consumer's topic

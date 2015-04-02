@@ -50,7 +50,7 @@ from collections import defaultdict, namedtuple
 from zlib import crc32
 
 from kafka import common
-from kafka.common import CompressionType, OffsetType
+from kafka.common import CompressionType
 from kafka.exceptions import ERROR_CODES
 from .utils import Serializable, compression, struct_helpers
 
@@ -849,15 +849,21 @@ class PartitionOffsetCommitRequest(_PartitionOffsetCommitRequest):
 class OffsetCommitRequest(Request):
     """An offset commit request
 
-    OffsetCommitRequest => ConsumerGroup [TopicName [Partition Offset TimeStamp Metadata]]
-      ConsumerGroup => string
+    OffsetCommitRequest => ConsumerGroupId ConsumerGroupGenerationId ConsumerId [TopicName [Partition Offset TimeStamp Metadata]]
+      ConsumerGroupId => string
+      ConsumerGroupGenerationId => int32
+      ConsumerId => string
       TopicName => string
       Partition => int32
       Offset => int64
       TimeStamp => int64
       Metadata => string
     """
-    def __init__(self, consumer_group, partition_requests=[]):
+    def __init__(self,
+                 consumer_group,
+                 consumer_group_generation_id,
+                 consumer_id,
+                 partition_requests=[]):
         """Create a new offset commit request
 
         :param partition_requests: Iterable of
@@ -865,16 +871,26 @@ class OffsetCommitRequest(Request):
             this request
         """
         self.consumer_group = consumer_group
+        self.consumer_group_generation_id = consumer_group_generation_id
+        self.consumer_id = consumer_id
         self._reqs = defaultdict(dict)
         for t in partition_requests:
             self._reqs[t.topic_name][t.partition_id] = (t.offset,
                                                         t.timestamp,
                                                         t.metadata)
 
+    # api_version needs to be 1 for this type of request to work,
+    # see https://github.com/apache/kafka/blob/0.8.2/core/src/main/scala/kafka/api/OffsetCommitRequest.scala#L47
+    def _write_header(self, buff, api_version=0, correlation_id=0):
+        super(OffsetCommitRequest, self)._write_header(
+            buff, api_version=1, correlation_id=correlation_id)
+
     def __len__(self):
         """Length of the serialized message, in bytes"""
-        # Header + string size + consumer group size + array length
-        size = self.HEADER_LEN + 2 + len(self.consumer_group) + 4
+        # Header + string size + consumer group size
+        size = self.HEADER_LEN + 2 + len(self.consumer_group)
+        # + generation id + string size + consumer_id size + array length
+        size += 4 + 2 + len(self.consumer_id) + 4
         for topic, parts in self._reqs.iteritems():
             # topic name + len(parts)
             size += 2 + len(topic) + 4
@@ -899,9 +915,11 @@ class OffsetCommitRequest(Request):
         output = bytearray(len(self))
         self._write_header(output)
         offset = self.HEADER_LEN
-        fmt = '!h%dsi' % len(self.consumer_group)
+        fmt = '!h%dsih%dsi' % (len(self.consumer_group), len(self.consumer_id))
         struct.pack_into(fmt, output, offset,
                          len(self.consumer_group), self.consumer_group,
+                         self.consumer_group_generation_id,
+                         len(self.consumer_id), self.consumer_id,
                          len(self._reqs))
         offset += struct.calcsize(fmt)
         for topic_name, partitions in self._reqs.iteritems():

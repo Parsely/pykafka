@@ -120,7 +120,11 @@ class Broker(base.BaseBroker):
     #  Commit/Fetch API  #
     ######################
 
-    def commit_consumer_group_offsets(self, consumer_group, preqs):
+    def commit_consumer_group_offsets(self,
+                                      consumer_group,
+                                      consumer_group_generation_id,
+                                      consumer_id,
+                                      preqs):
         """Commit the offsets of all messages consumed
 
         Commit the offsets of all messages consumed so far by this consumer
@@ -134,7 +138,10 @@ class Broker(base.BaseBroker):
         :param preqs: a sequence of <protocol.PartitionOffsetCommitRequest>
         :type preqs: sequence
         """
-        req = OffsetCommitRequest(consumer_group, partition_requests=preqs)
+        req = OffsetCommitRequest(consumer_group,
+                                  consumer_group_generation_id,
+                                  consumer_id,
+                                  partition_requests=preqs)
         self.handler.request(req).get(OffsetCommitResponse)
 
     def fetch_consumer_group_offsets(self, consumer_group, preqs):
