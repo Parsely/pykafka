@@ -910,11 +910,17 @@ class OffsetCommitRequest(Request):
                              topic_name, len(partitions))
             offset += struct.calcsize(fmt)
             for pnum, (poffset, timestamp, metadata) in partitions.iteritems():
-                metalen = len(metadata)
-                fmt = '!iqqh%ds' % metalen
+                fmt = '!iqq'
                 struct.pack_into(fmt, output, offset,
-                                 pnum, poffset, timestamp, metalen,
-                                 metadata)
+                                 pnum, poffset, timestamp)
+                offset += struct.calcsize(fmt)
+                metalen = len(metadata) or -1
+                fmt = '!h'
+                pack_args = [fmt, output, offset, metalen]
+                if metalen != -1:
+                    fmt += '%ds' % metalen
+                    pack_args = [fmt, output, offset, metalen, metadata]
+                struct.pack_into(*pack_args)
                 offset += struct.calcsize(fmt)
         return output
 
