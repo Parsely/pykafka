@@ -264,7 +264,6 @@ class OwnedPartition(object):
                  partition,
                  consumer_group=None):
         self.partition = partition
-        self._consumer_group = consumer_group
         self._messages = Queue()
         self.last_offset_consumed = 0
         self.next_offset = 0
