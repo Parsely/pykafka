@@ -150,10 +150,6 @@ class SimpleConsumer(base.BaseSimpleConsumer):
     def partitions(self):
         return self._partitions
 
-    @property
-    def fetch_message_max_bytes(self):
-        return self._fetch_message_max_bytes
-
     def _setup_autocommit_worker(self):
         def autocommitter():
             while True:

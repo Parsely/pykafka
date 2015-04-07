@@ -16,11 +16,11 @@ class TestSimpleConsumer(unittest2.TestCase):
 
         op.enqueue_messages([message])
         self.assertEqual(op.message_count, 1)
-        message = op.consume()
+        ret_message = op.consume()
         self.assertEqual(op.last_offset_consumed, message.offset)
         self.assertEqual(op.next_offset, message.offset + 1)
-        self.assertNotEqual(message, None)
-        self.assertEqual(message.value, msgval)
+        self.assertNotEqual(ret_message, None)
+        self.assertEqual(ret_message.value, msgval)
 
     def test_consumer_rejects_old_message(self):
         last_offset = 400
