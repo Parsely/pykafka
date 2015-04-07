@@ -63,7 +63,7 @@ class Request(Serializable):
     HEADER_LEN = 21  # constant for all messages
     CLIENT_ID = 'pykafka'
 
-    def _write_header(self, buff, api_version=0, correlation_id=0):
+    def _write_header(self, buff, api_version=1, correlation_id=0):
         """Write the header for an outgoing message"""
         fmt = '!ihhih%ds' % len(self.CLIENT_ID)
         struct.pack_into(fmt, buff, 0,
@@ -907,9 +907,7 @@ class OffsetCommitRequest(Request):
         :rtype: :class:`bytearray`
         """
         output = bytearray(len(self))
-        # api_version needs to be 1 for this type of request to work,
-        # see https://github.com/apache/kafka/blob/0.8.2/core/src/main/scala/kafka/api/OffsetCommitRequest.scala#L47
-        self._write_header(output, api_version=1)
+        self._write_header(output)
         offset = self.HEADER_LEN
         fmt = '!h%dsih%dsi' % (len(self.consumer_group), len(self.consumer_id))
         struct.pack_into(fmt, output, offset,
@@ -1025,7 +1023,7 @@ class OffsetFetchRequest(Request):
         :rtype: :class:`bytearray`
         """
         output = bytearray(len(self))
-        self._write_header(output, api_version=1)
+        self._write_header(output)
         offset = self.HEADER_LEN
         fmt = '!h%dsi' % len(self.consumer_group)
         struct.pack_into(fmt, output, offset,
