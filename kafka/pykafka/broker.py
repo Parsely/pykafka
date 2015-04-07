@@ -138,6 +138,7 @@ class Broker(base.BaseBroker):
         :param preqs: a sequence of <protocol.PartitionOffsetCommitRequest>
         :type preqs: sequence
         """
+        # TODO - exponential backoff
         req = OffsetCommitRequest(consumer_group,
                                   consumer_group_generation_id,
                                   consumer_id,
@@ -155,5 +156,6 @@ class Broker(base.BaseBroker):
         :param preqs: a sequence of <protocol.PartitionOffsetFetchRequest>
         :type preqs: sequence
         """
+        # TODO - exponential backoff
         req = OffsetFetchRequest(consumer_group, partition_requests=preqs)
         return self.handler.request(req).get(OffsetFetchResponse)
