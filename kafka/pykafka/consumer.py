@@ -123,7 +123,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         owned_partition_partial = functools.partial(
             OwnedPartition, consumer_group=self._consumer_group)
         if partitions:
-            self._partitions = {owned_partition_partial(p): topic.partitions[p]
+            self._partitions = {owned_partition_partial(p): p
                                 for p in partitions}
         else:
             self._partitions = {owned_partition_partial(p): topic.partitions[k]

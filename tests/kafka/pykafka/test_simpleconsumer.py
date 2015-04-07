@@ -2,11 +2,11 @@ import mock
 import time
 import unittest2
 
-from kafka.pykafka.consumer import SimpleConsumer, OwnedPartition
+from kafka.pykafka.consumer import OwnedPartition
 
 
-class TestSimpleConsumer(unittest2.TestCase):
-    def test_consumer_partition_saves_offset(self):
+class TestOwnedPartition(unittest2.TestCase):
+    def test_partition_saves_offset(self):
         msgval = "test"
         op = OwnedPartition(None, None)
 
@@ -22,7 +22,7 @@ class TestSimpleConsumer(unittest2.TestCase):
         self.assertNotEqual(ret_message, None)
         self.assertEqual(ret_message.value, msgval)
 
-    def test_consumer_rejects_old_message(self):
+    def test_partition_rejects_old_message(self):
         last_offset = 400
         op = OwnedPartition(None, None)
         op.last_offset_consumed = last_offset
@@ -36,13 +36,13 @@ class TestSimpleConsumer(unittest2.TestCase):
         op.consume()
         self.assertEqual(op.last_offset_consumed, last_offset)
 
-    def test_consumer_consume_empty_queue(self):
+    def test_partition_consume_empty_queue(self):
         op = OwnedPartition(None, None)
 
         message = op.consume()
         self.assertEqual(message, None)
 
-    def test_consumer_offset_commit_request(self):
+    def test_partition_offset_commit_request(self):
         topic = mock.Mock()
         topic.name = "test_topic"
         partition = mock.Mock()
@@ -62,7 +62,7 @@ class TestSimpleConsumer(unittest2.TestCase):
         self.assertEqual(request.timestamp, rqtime)
         self.assertEqual(request.metadata, '')
 
-    def test_consumer_offset_fetch_request(self):
+    def test_partition_offset_fetch_request(self):
         topic = mock.Mock()
         topic.name = "test_topic"
         partition = mock.Mock()
@@ -76,7 +76,7 @@ class TestSimpleConsumer(unittest2.TestCase):
         self.assertEqual(request.topic_name, topic.name)
         self.assertEqual(request.partition_id, partition.id)
 
-    def test_consumer_offset_counters(self):
+    def test_partition_offset_counters(self):
         res = mock.Mock()
         res.offset = 400
 
