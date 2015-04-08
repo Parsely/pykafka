@@ -40,6 +40,8 @@ class BalancedConsumer():
         self._auto_commit_interval_ms = auto_commit_interval_ms
         self._socket_timeout_ms = socket_timeout_ms
 
+        self._consumer = None
+
         self._id_path = '/consumers/{}/ids'.format(self._consumer_group)
         self._id = "{}:{}".format(socket.gethostname(), uuid4())
 
@@ -49,7 +51,7 @@ class BalancedConsumer():
         self._zookeeper.ensure_path(self._topic_path)
         self._partitions = set()
         self._add_self()
-        self._rebalance()
+        self._setting_watches = True
         self._set_watches()
 
         def _close_zk_connection(signum, frame):
@@ -63,13 +65,15 @@ class BalancedConsumer():
         return zk
 
     def _setup_internal_consumer(self):
-        return SimpleConsumer(self._topic,
-                              self._cluster,
-                              consumer_group=self._consumer_group,
-                              partitions=list(self._partitions),
-                              auto_commit_enable=self._auto_commit_enable,
-                              auto_commit_interval_ms=self._auto_commit_interval_ms,
-                              socket_timeout_ms=self._socket_timeout_ms)
+        if self._consumer is not None:
+            self._consumer.stop()
+        self._consumer = SimpleConsumer(
+            self._topic, self._cluster,
+            consumer_group=self._consumer_group,
+            partitions=list(self._partitions),
+            auto_commit_enable=self._auto_commit_enable,
+            auto_commit_interval_ms=self._auto_commit_interval_ms,
+            socket_timeout_ms=self._socket_timeout_ms)
 
     def _decide_partitions(self, participants):
         # Freeze and sort partitions so we always have the same results
@@ -93,7 +97,7 @@ class BalancedConsumer():
         )
         new_partitions = set(new_partitions)
         log.info(
-            'Rebalancing %i participants for %i partitions. '
+            'Balancing %i participants for %i partitions. '
             'My Partitions: %s -- Consumers: %s --- All Partitions: %s',
             len(participants), len(all_partitions),
             [p_to_str(p) for p in new_partitions],
@@ -124,6 +128,7 @@ class BalancedConsumer():
         return participants
 
     def _set_watches(self):
+        self._setting_watches = True
         # Set all our watches and then rebalance
         broker_path = '/brokers/ids'
         try:
@@ -142,8 +147,8 @@ class BalancedConsumer():
             '/brokers/topics',
             self._topics_changed
         )
+        self._setting_watches = False
 
-        # Final watch will trigger rebalance
         self._consumer_watcher = ChildrenWatch(
             self._zookeeper, self._id_path,
             self._consumers_changed
@@ -171,14 +176,10 @@ class BalancedConsumer():
 
         participants = self._get_participants()
         new_partitions = self._decide_partitions(participants)
+        self._remove_partitions(self._partitions - new_partitions)
+        self._add_partitions(new_partitions - self._partitions)
 
-        old_partitions = self._partitions - new_partitions
-        self._partitions -= old_partitions
-        self._remove_partitions(old_partitions)
-        self._partitions |= new_partitions - self._partitions
-        self._add_partitions(self._partitions)
-
-        self._consumer = self._setup_internal_consumer()
+        self._setup_internal_consumer()
 
     def _path_from_partition(self, p):
         return "%s/%s-%s" % (self._topic_path, p.leader.id, p.id)
@@ -191,6 +192,7 @@ class BalancedConsumer():
         for p in partitions:
             assert p in self._partitions
             self._zookeeper.delete(self._path_from_partition(p))
+        self._partitions -= partitions
 
     def _add_partitions(self, partitions):
         """Add `partitions` to the registry.
@@ -205,15 +207,22 @@ class BalancedConsumer():
                 )
             except NodeExistsError as e:
                 raise e
+        self._partitions |= partitions - self._partitions
 
     def _brokers_changed(self, brokers):
-        pass
+        if self._setting_watches:
+            return
+        self._rebalance()
 
     def _consumers_changed(self, consumers):
-        pass
+        if self._setting_watches:
+            return
+        self._rebalance()
 
     def _topics_changed(self, topics):
-        pass
+        if self._setting_watches:
+            return
+        self._rebalance()
 
     def consume(self):
         """Get one message from the consumer

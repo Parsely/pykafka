@@ -118,6 +118,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         self._auto_commit_interval_ms = auto_commit_interval_ms
         self._last_auto_commit = time.time()
 
+        self._running = True
+
         self._queued_max_messages = queued_max_messages
 
         self._offset_manager = self._cluster.get_offset_manager(self._consumer_group)
@@ -152,10 +154,16 @@ class SimpleConsumer(base.BaseSimpleConsumer):
     def partitions(self):
         return self._partitions
 
+    def __del__(self):
+        self.stop()
+
+    def stop(self):
+        self._running = False
+
     def _setup_autocommit_worker(self):
         def autocommitter():
             while True:
-                if self._auto_commit_enable:
+                if self._running and self._auto_commit_enable:
                     self._auto_commit()
         log.debug("Starting autocommitter thread")
         return self._cluster.handler.spawn(autocommitter)
@@ -163,7 +171,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
     def _setup_fetch_worker(self):
         def fetcher():
             while True:
-                self.fetch()
+                if self._running:
+                    self.fetch()
         return self._cluster.handler.spawn(fetcher)
 
     def __iter__(self):
