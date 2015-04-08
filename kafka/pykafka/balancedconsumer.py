@@ -53,18 +53,19 @@ class BalancedConsumer():
         self._socket_timeout_ms = socket_timeout_ms
 
         self._consumer = None
-
-        self._id_path = '/consumers/{}/ids'.format(self._consumer_group)
         self._id = "{}:{}".format(socket.gethostname(), uuid4())
+        self._partitions = set()
+        self._setting_watches = True
 
-        self._zookeeper = self._setup_zookeeper(zk_host)
         self._topic_path = '/consumers/{}/owners/{}'.format(self._consumer_group,
                                                             self._topic.name)
+        self._id_path = '/consumers/{}/ids'.format(self._consumer_group)
+
+        self._zookeeper = self._setup_zookeeper(zk_host)
         self._zookeeper.ensure_path(self._topic_path)
-        self._partitions = set()
         self._add_self()
-        self._setting_watches = True
         self._set_watches()
+        self._rebalance()
 
         def _close_zk_connection(signum, frame):
             self._zookeeper.stop()
@@ -190,21 +191,22 @@ class BalancedConsumer():
             '/brokers/topics',
             self._topics_changed
         )
-        self._setting_watches = False
 
         self._consumer_watcher = ChildrenWatch(
             self._zookeeper, self._id_path,
             self._consumers_changed
         )
+        self._setting_watches = False
 
     def _add_self(self):
-        """Add this consumer to the zookeeper participants.
+        """Register this consumer in zookeeper
 
         Ensures we don't add more participants than partitions
         """
         participants = self._get_participants()
         if len(self._topic.partitions) <= len(participants):
             log.debug("More consumers than partitions.")
+            return
 
         path = '{}/{}'.format(self._id_path, self._id)
         self._zookeeper.create(
