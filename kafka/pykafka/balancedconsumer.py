@@ -4,6 +4,7 @@ import socket
 import signal
 import sys
 import itertools
+import time
 
 from kazoo.exceptions import NoNodeException, NodeExistsError
 from kazoo.client import KazooClient
@@ -56,6 +57,7 @@ class BalancedConsumer():
         self._id = "{}:{}".format(socket.gethostname(), uuid4())
         self._partitions = set()
         self._setting_watches = True
+        self._rebalance_retries = 5
 
         self._topic_path = '/consumers/{}/owners/{}'.format(self._consumer_group,
                                                             self._topic.name)
@@ -223,8 +225,22 @@ class BalancedConsumer():
 
         participants = self._get_participants()
         new_partitions = self._decide_partitions(participants)
-        self._remove_partitions(self._partitions - new_partitions)
-        self._add_partitions(new_partitions - self._partitions)
+
+        for i in xrange(self._rebalance_retries):
+            if i > 0:
+                log.debug("Retrying in %is" % ((i + 1) ** 2))
+                time.sleep(i ** 2)
+
+                participants = self._get_participants()
+                new_partitions = self._decide_partitions(participants)
+
+            self._remove_partitions(self._partitions - new_partitions)
+
+            try:
+                self._add_partitions(new_partitions - self._partitions)
+                break
+            except NodeExistsError:
+                continue
 
         self._setup_internal_consumer()
 
@@ -249,13 +265,10 @@ class BalancedConsumer():
         :type partitions: iterable of :class:kafka.pykafka.partition.Partition
         """
         for p in partitions:
-            try:
-                self._zookeeper.create(
-                    self._path_from_partition(p), self._id,
-                    ephemeral=True
-                )
-            except NodeExistsError as e:
-                raise e
+            self._zookeeper.create(
+                self._path_from_partition(p), self._id,
+                ephemeral=True
+            )
         self._partitions |= partitions - self._partitions
 
     def _brokers_changed(self, brokers):
