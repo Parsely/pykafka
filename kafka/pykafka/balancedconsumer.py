@@ -30,11 +30,11 @@ class BalancedConsumer():
         self._consumer_group = consumer_group
         self._topic = topic
 
+        self._id_path = '/consumers/{}/ids'.format(self._consumer_group)
+        self._id = "{}:{}".format(socket.gethostname(), uuid4())
+
         self._zookeeper = self._setup_zookeeper(zk_host)
         self._consumer = self._setup_internal_consumer()
-
-        self._id_path = '/consumers/{}/ids'.format(self.consumer_group)
-        self._id = "{}:{}".format(socket.gethostname(), uuid4())
 
     def _setup_zookeeper(self, zk_host):
         zk = KazooClient(zk_host)
@@ -51,8 +51,8 @@ class BalancedConsumer():
 
     def _decide_partitions(self, participants):
         # Freeze and sort partitions so we always have the same results
-        p_to_str = lambda p: '-'.join([p.topic.name, str(p.broker.id)])
-        all_partitions = list(self._topic.partitions)
+        p_to_str = lambda p: '-'.join([p.topic.name, str(p.leader.id)])
+        all_partitions = list(self._topic.partitions.values())
         all_partitions.sort(key=p_to_str)
 
         # get start point, # of partitions, and remainder
