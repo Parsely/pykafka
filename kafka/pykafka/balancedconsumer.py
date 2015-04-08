@@ -28,6 +28,8 @@ class BalancedConsumer():
         self._zookeeper = self._setup_zookeeper(zk_host)
         self._consumer = self._setup_internal_consumer()
 
+        self._id_path = '/consumers/{}/ids'.format(self.consumer_group)
+
     def _setup_zookeeper(self, zk_host):
         zk = KazooClient(zk_host)
         zk.start()
@@ -45,10 +47,10 @@ class BalancedConsumer():
         return []
 
     def _get_participants(self):
-        zk = self._cluster.zookeeper
-
+        """Use zookeeper to get the other consumers of this topic
+        """
         try:
-            consumer_ids = zk.get_children(self.id_path)
+            consumer_ids = self._zookeeper.get_children(self._id_path)
         except NoNodeException:
             log.debug("Consumer group doesn't exist. "
                       "No participants to find")
@@ -57,8 +59,8 @@ class BalancedConsumer():
         participants = []
         for id_ in consumer_ids:
             try:
-                topic, stat = zk.get("%s/%s" % (self.id_path, id_))
-                if topic == self.topic.name:
+                topic, stat = self._zookeeper.get("%s/%s" % (self._id_path, id_))
+                if topic == self._topic.name:
                     participants.append(id_)
             except NoNodeException:
                 pass  # disappeared between ``get_children`` and ``get``
