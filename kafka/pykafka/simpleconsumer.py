@@ -207,8 +207,6 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         if not self._consumer_group:
             raise Exception("consumer group must be specified to commit offsets")
 
-        self._offset_manager = self._cluster.get_offset_manager(self._consumer_group)
-
         reqs = [p.build_offset_commit_request() for p in self._partitions.keys()]
         log.info("Committing offsets for %d partitions", len(reqs))
         self._offset_manager.commit_consumer_group_offsets(
@@ -222,8 +220,6 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         """
         if not self._consumer_group:
             raise Exception("consumer group must be specified to fetch offsets")
-
-        self._offset_manager = self._cluster.get_offset_manager(self._consumer_group)
 
         log.info("Fetching offsets")
 
