@@ -23,6 +23,10 @@ class BalancedConsumer():
                  socket_timeout_ms=30000):
         """Create a BalancedConsumer
 
+        Maintains a single instance of SimpleConsumer, periodically using the
+        consumer rebalancing algorithm to reassign partitions to this
+        SimpleConsumer.
+
         :param topic: the topic this consumer should consume
         :type topic: pykafka.topic.Topic
         :param cluster: the cluster this consumer should connect to
@@ -31,6 +35,14 @@ class BalancedConsumer():
         :type consumer_group: str
         :param zk_host: the ip and port of the zookeeper node to connect to
         :type zk_host: str
+        :param auto_commit_enable: if true, periodically commit to kafka the
+            offset of messages already fetched by this consumer
+        :type auto_commit_enable: bool
+        :param auto_commit_interval_ms: the frequency in ms that the consumer
+            offsets are committed to kafka
+        :type auto_commit_interval_ms: int
+        :param socket_timeout_ms: the socket timeout for network requests
+        :type socket_timeout_ms: int
         """
         self._cluster = cluster
         self._consumer_group = consumer_group
@@ -60,11 +72,22 @@ class BalancedConsumer():
         signal.signal(signal.SIGINT, _close_zk_connection)
 
     def _setup_zookeeper(self, zk_host):
+        """Open a connection to a ZooKeeper host
+
+        :param zk_host: the '<ip>:<port>' address of the zookeeper node to
+            which to connect
+        :type zk_host: str
+        """
         zk = KazooClient(zk_host)
         zk.start()
         return zk
 
     def _setup_internal_consumer(self):
+        """Create an internal SimpleConsumer instance
+
+        If there is already a SimpleConsumer instance held by this object,
+        stop its threads and mark it for garbage collection.
+        """
         if self._consumer is not None:
             self._consumer.stop()
         self._consumer = SimpleConsumer(
@@ -76,6 +99,19 @@ class BalancedConsumer():
             socket_timeout_ms=self._socket_timeout_ms)
 
     def _decide_partitions(self, participants):
+        """Decide which partitions belong to this consumer
+
+        Uses the consumer rebalancing algorithm described here
+        http://kafka.apache.org/documentation.html
+
+        It is very important that the participants array is sorted,
+        since this algorithm runs on each consumer and indexes into the same
+        array.
+
+        :param participants: sorted list of ids of the other consumers in this
+            consumer group
+        :type participants: list
+        """
         # Freeze and sort partitions so we always have the same results
         p_to_str = lambda p: '-'.join([p.topic.name, str(p.leader.id), str(p.id)])
         all_partitions = list(self._topic.partitions.values())
@@ -108,6 +144,8 @@ class BalancedConsumer():
 
     def _get_participants(self):
         """Use zookeeper to get the other consumers of this topic
+
+        Returns a sorted list of the ids of the other consumers of self._topic
         """
         try:
             consumer_ids = self._zookeeper.get_children(self._id_path)
@@ -128,6 +166,11 @@ class BalancedConsumer():
         return participants
 
     def _set_watches(self):
+        """Set watches in zookeeper that will trigger rebalances
+
+        Rebalances should be triggered whenever a broker, topic, or consumer
+        znode is changed in ZooKeeper.
+        """
         self._setting_watches = True
         # Set all our watches and then rebalance
         broker_path = '/brokers/ids'
@@ -169,6 +212,8 @@ class BalancedConsumer():
 
     def _rebalance(self):
         """Join a consumer group and claim partitions.
+
+        Called whenever a ZooKeeper watch is triggered
         """
         log.info('Rebalancing consumer %s for topic %s.' % (
             self._id, self._topic.name)
@@ -185,9 +230,10 @@ class BalancedConsumer():
         return "%s/%s-%s" % (self._topic_path, p.leader.id, p.id)
 
     def _remove_partitions(self, partitions):
-        """Remove `partitions` from the registry.
+        """Remove partitions from the ZK registry.
+
         :param partitions: partitions to remove.
-        :type partitions: iterable of :class:`samsa.partitions.Partition`.
+        :type partitions: iterable of :class:kafka.pykafka.partition.Partition
         """
         for p in partitions:
             assert p in self._partitions
@@ -195,9 +241,10 @@ class BalancedConsumer():
         self._partitions -= partitions
 
     def _add_partitions(self, partitions):
-        """Add `partitions` to the registry.
+        """Add partitions to the ZK registry.
+
         :param partitions: partitions to add.
-        :type partitions: iterable of :class:`samsa.partitions.Partition`.
+        :type partitions: iterable of :class:kafka.pykafka.partition.Partition
         """
         for p in partitions:
             try:
@@ -225,8 +272,7 @@ class BalancedConsumer():
         self._rebalance()
 
     def consume(self):
-        """Get one message from the consumer
-        """
+        """Get one message from the consumer"""
         return self._consumer.consume()
 
     def __iter__(self):
