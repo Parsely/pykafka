@@ -5,6 +5,7 @@ import itertools
 
 from kazoo.exceptions import NoNodeException
 from kazoo.client import KazooClient
+from kazoo.recipe.watchers import ChildrenWatch
 
 from kafka.pykafka.simpleconsumer import SimpleConsumer
 
@@ -34,6 +35,7 @@ class BalancedConsumer():
         self._id = "{}:{}".format(socket.gethostname(), uuid4())
 
         self._zookeeper = self._setup_zookeeper(zk_host)
+        self._add_self()
         self._consumer = self._setup_internal_consumer()
 
     def _setup_zookeeper(self, zk_host):
@@ -100,6 +102,55 @@ class BalancedConsumer():
                 pass  # disappeared between ``get_children`` and ``get``
         participants.sort()
         return participants
+
+    def _add_self(self):
+        """Add this consumer to the zookeeper participants.
+
+        Ensures we don't add more participants than partitions
+        """
+        participants = self._get_participants()
+        if len(self._topic.partitions) <= len(participants):
+            log.debug("More consumers than partitions.")
+
+        path = '{}/{}'.format(self._id_path, self._id)
+        self._zookeeper.create(
+            path, self._topic.name, ephemeral=True, makepath=True)
+
+        # Set all our watches and then rebalance
+        self._rebalancing = False
+        broker_path = '/brokers/ids'
+        try:
+            self._broker_watcher = ChildrenWatch(
+                self._zookeeper, broker_path,
+                self._brokers_changed
+            )
+        except NoNodeException:
+            raise Exception(
+                'The broker_path "%s" does not exist in your '
+                'ZooKeeper cluster -- is your Kafka cluster running?'
+                % broker_path)
+
+        self._topics_watcher = ChildrenWatch(
+            self._zookeeper,
+            '/brokers/topics',
+            self._topics_changed
+        )
+        self._rebalancing = True
+
+        # Final watch will trigger rebalance
+        self._consumer_watcher = ChildrenWatch(
+            self._zookeeper, self._id_path,
+            self._consumers_changed
+        )
+
+    def _brokers_changed(self, brokers):
+        pass
+
+    def _consumers_changed(self, consumers):
+        pass
+
+    def _topics_changed(self, topics):
+        pass
 
     def consume(self):
         """Get one message from the consumer
