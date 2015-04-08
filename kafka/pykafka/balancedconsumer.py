@@ -15,7 +15,10 @@ class BalancedConsumer():
                  topic,
                  cluster,
                  consumer_group,
-                 zk_host='127.0.0.1:2181'):
+                 zk_host='127.0.0.1:2181',
+                 auto_commit_enable=False,
+                 auto_commit_interval_ms=60 * 1000,
+                 socket_timeout_ms=30000):
         """Create a BalancedConsumer
 
         :param topic: the topic this consumer should consume
@@ -30,6 +33,10 @@ class BalancedConsumer():
         self._cluster = cluster
         self._consumer_group = consumer_group
         self._topic = topic
+
+        self._auto_commit_enable = auto_commit_enable
+        self._auto_commit_interval_ms = auto_commit_interval_ms
+        self._socket_timeout_ms = socket_timeout_ms
 
         self._id_path = '/consumers/{}/ids'.format(self._consumer_group)
         self._id = "{}:{}".format(socket.gethostname(), uuid4())
@@ -49,7 +56,10 @@ class BalancedConsumer():
         return SimpleConsumer(self._topic,
                               self._cluster,
                               consumer_group=self._consumer_group,
-                              partitions=partitions)
+                              partitions=partitions,
+                              auto_commit_enable=self._auto_commit_enable,
+                              auto_commit_interval_ms=self._auto_commit_interval_ms,
+                              socket_timeout_ms=self._socket_timeout_ms)
 
     def _decide_partitions(self, participants):
         # Freeze and sort partitions so we always have the same results
