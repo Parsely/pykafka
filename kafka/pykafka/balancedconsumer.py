@@ -1,4 +1,7 @@
 import logging as log
+from uuid import uuid4
+import socket
+import itertools
 
 from kazoo.exceptions import NoNodeException
 from kazoo.client import KazooClient
@@ -20,6 +23,8 @@ class BalancedConsumer():
         :type cluster: pykafka.cluster.Cluster
         :param consumer_group: the name of the consumer group to join
         :type consumer_group: str
+        :param zk_host: the ip and port of the zookeeper node to connect to
+        :type zk_host: str
         """
         self._cluster = cluster
         self._consumer_group = consumer_group
@@ -29,6 +34,7 @@ class BalancedConsumer():
         self._consumer = self._setup_internal_consumer()
 
         self._id_path = '/consumers/{}/ids'.format(self.consumer_group)
+        self._id = "{}:{}".format(socket.gethostname(), uuid4())
 
     def _setup_zookeeper(self, zk_host):
         zk = KazooClient(zk_host)
@@ -44,7 +50,35 @@ class BalancedConsumer():
                               partitions=partitions)
 
     def _decide_partitions(self, participants):
-        return []
+        # Freeze and sort partitions so we always have the same results
+        p_to_str = lambda p: '-'.join([p.topic.name, str(p.broker.id)])
+        all_partitions = list(self._topic.partitions)
+        all_partitions.sort(key=p_to_str)
+
+        # get start point, # of partitions, and remainder
+        idx = participants.index(self._id)
+        parts_per_consumer = len(all_partitions) / len(participants)
+        remainder_ppc = len(all_partitions) % len(participants)
+
+        start = parts_per_consumer * idx + min(idx, remainder_ppc)
+        num_parts = parts_per_consumer + (0 if (idx + 1 > remainder_ppc) else 1)
+
+        # assign partitions from i*N to (i+1)*N - 1 to consumer Ci
+        new_partitions = itertools.islice(
+            all_partitions,
+            start,
+            start + num_parts
+        )
+        new_partitions = set(new_partitions)
+        log.info(
+            'Rebalancing %i participants for %i partitions. '
+            'My Partitions: %s -- Consumers: %s --- All Partitions: %s',
+            len(participants), len(all_partitions),
+            [p_to_str(p) for p in new_partitions],
+            str(participants),
+            [p_to_str(p) for p in all_partitions]
+        )
+        return new_partitions
 
     def _get_participants(self):
         """Use zookeeper to get the other consumers of this topic
@@ -66,3 +100,12 @@ class BalancedConsumer():
                 pass  # disappeared between ``get_children`` and ``get``
         participants.sort()
         return participants
+
+    def consume(self):
+        """Get one message from the consumer
+        """
+        return self._consumer.consume()
+
+    def __iter__(self):
+        while True:
+            yield self._consumer.consume()
