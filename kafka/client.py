@@ -37,6 +37,7 @@ class KafkaClient(object):
     """
     def __init__(self,
                  hosts='127.0.0.1:9092',
+                 zk_host='127.0.0.1:2181',
                  use_greenlets=False,
                  timeout=30,
                  ignore_rdkafka=False):
@@ -49,6 +50,7 @@ class KafkaClient(object):
         """
         self._seed_hosts = hosts
         self._timeout = timeout
+        self._zk_host = zk_host
         self._handler = None if use_greenlets else handlers.ThreadingHandler()
         self._use_rdkafka = rd_kafka and not ignore_rdkafka
         if self._use_rdkafka:
@@ -56,6 +58,7 @@ class KafkaClient(object):
             raise NotImplementedError('Not yet')
         else:
             self.cluster = pykafka.Cluster(self._seed_hosts,
+                                           self._zk_host,
                                            self._handler,
                                            self._timeout)
         self.brokers = self.cluster.brokers
