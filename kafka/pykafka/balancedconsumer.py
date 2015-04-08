@@ -40,9 +40,11 @@ class BalancedConsumer():
 
         self._id_path = '/consumers/{}/ids'.format(self._consumer_group)
         self._id = "{}:{}".format(socket.gethostname(), uuid4())
+        self._rebalancing = True
 
         self._zookeeper = self._setup_zookeeper(zk_host)
         self._add_self()
+        self._set_watches()
         self._consumer = self._setup_internal_consumer()
 
     def _setup_zookeeper(self, zk_host):
@@ -113,19 +115,7 @@ class BalancedConsumer():
         participants.sort()
         return participants
 
-    def _add_self(self):
-        """Add this consumer to the zookeeper participants.
-
-        Ensures we don't add more participants than partitions
-        """
-        participants = self._get_participants()
-        if len(self._topic.partitions) <= len(participants):
-            log.debug("More consumers than partitions.")
-
-        path = '{}/{}'.format(self._id_path, self._id)
-        self._zookeeper.create(
-            path, self._topic.name, ephemeral=True, makepath=True)
-
+    def _set_watches(self):
         # Set all our watches and then rebalance
         self._rebalancing = False
         broker_path = '/brokers/ids'
@@ -152,6 +142,19 @@ class BalancedConsumer():
             self._zookeeper, self._id_path,
             self._consumers_changed
         )
+
+    def _add_self(self):
+        """Add this consumer to the zookeeper participants.
+
+        Ensures we don't add more participants than partitions
+        """
+        participants = self._get_participants()
+        if len(self._topic.partitions) <= len(participants):
+            log.debug("More consumers than partitions.")
+
+        path = '{}/{}'.format(self._id_path, self._id)
+        self._zookeeper.create(
+            path, self._topic.name, ephemeral=True, makepath=True)
 
     def _brokers_changed(self, brokers):
         pass
