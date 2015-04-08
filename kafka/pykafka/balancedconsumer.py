@@ -1,9 +1,11 @@
 import logging as log
 from uuid import uuid4
 import socket
+import signal
+import sys
 import itertools
 
-from kazoo.exceptions import NoNodeException
+from kazoo.exceptions import NoNodeException, NodeExistsError
 from kazoo.client import KazooClient
 from kazoo.recipe.watchers import ChildrenWatch
 
@@ -40,12 +42,20 @@ class BalancedConsumer():
 
         self._id_path = '/consumers/{}/ids'.format(self._consumer_group)
         self._id = "{}:{}".format(socket.gethostname(), uuid4())
-        self._rebalancing = True
 
         self._zookeeper = self._setup_zookeeper(zk_host)
+        self._topic_path = '/consumers/{}/owners/{}'.format(self._consumer_group,
+                                                            self._topic.name)
+        self._zookeeper.ensure_path(self._topic_path)
+        self._partitions = set()
         self._add_self()
+        self._rebalance()
         self._set_watches()
-        self._consumer = self._setup_internal_consumer()
+
+        def _close_zk_connection(signum, frame):
+            self._zookeeper.stop()
+            sys.exit()
+        signal.signal(signal.SIGINT, _close_zk_connection)
 
     def _setup_zookeeper(self, zk_host):
         zk = KazooClient(zk_host)
@@ -53,19 +63,17 @@ class BalancedConsumer():
         return zk
 
     def _setup_internal_consumer(self):
-        participants = self._get_participants()
-        partitions = self._decide_partitions(participants)
         return SimpleConsumer(self._topic,
                               self._cluster,
                               consumer_group=self._consumer_group,
-                              partitions=partitions,
+                              partitions=list(self._partitions),
                               auto_commit_enable=self._auto_commit_enable,
                               auto_commit_interval_ms=self._auto_commit_interval_ms,
                               socket_timeout_ms=self._socket_timeout_ms)
 
     def _decide_partitions(self, participants):
         # Freeze and sort partitions so we always have the same results
-        p_to_str = lambda p: '-'.join([p.topic.name, str(p.leader.id)])
+        p_to_str = lambda p: '-'.join([p.topic.name, str(p.leader.id), str(p.id)])
         all_partitions = list(self._topic.partitions.values())
         all_partitions.sort(key=p_to_str)
 
@@ -117,7 +125,6 @@ class BalancedConsumer():
 
     def _set_watches(self):
         # Set all our watches and then rebalance
-        self._rebalancing = False
         broker_path = '/brokers/ids'
         try:
             self._broker_watcher = ChildrenWatch(
@@ -135,7 +142,6 @@ class BalancedConsumer():
             '/brokers/topics',
             self._topics_changed
         )
-        self._rebalancing = True
 
         # Final watch will trigger rebalance
         self._consumer_watcher = ChildrenWatch(
@@ -155,6 +161,50 @@ class BalancedConsumer():
         path = '{}/{}'.format(self._id_path, self._id)
         self._zookeeper.create(
             path, self._topic.name, ephemeral=True, makepath=True)
+
+    def _rebalance(self):
+        """Join a consumer group and claim partitions.
+        """
+        log.info('Rebalancing consumer %s for topic %s.' % (
+            self._id, self._topic.name)
+        )
+
+        participants = self._get_participants()
+        new_partitions = self._decide_partitions(participants)
+
+        old_partitions = self._partitions - new_partitions
+        self._partitions -= old_partitions
+        self._remove_partitions(old_partitions)
+        self._partitions |= new_partitions - self._partitions
+        self._add_partitions(self._partitions)
+
+        self._consumer = self._setup_internal_consumer()
+
+    def _path_from_partition(self, p):
+        return "%s/%s-%s" % (self._topic_path, p.leader.id, p.id)
+
+    def _remove_partitions(self, partitions):
+        """Remove `partitions` from the registry.
+        :param partitions: partitions to remove.
+        :type partitions: iterable of :class:`samsa.partitions.Partition`.
+        """
+        for p in partitions:
+            assert p in self._partitions
+            self._zookeeper.delete(self._path_from_partition(p))
+
+    def _add_partitions(self, partitions):
+        """Add `partitions` to the registry.
+        :param partitions: partitions to add.
+        :type partitions: iterable of :class:`samsa.partitions.Partition`.
+        """
+        for p in partitions:
+            try:
+                self._zookeeper.create(
+                    self._path_from_partition(p), self._id,
+                    ephemeral=True
+                )
+            except NodeExistsError as e:
+                raise e
 
     def _brokers_changed(self, brokers):
         pass
