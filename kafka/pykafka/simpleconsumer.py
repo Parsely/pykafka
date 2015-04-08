@@ -51,6 +51,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
 
         :param topic: the topic this consumer should consume
         :type topic: pykafka.topic.Topic
+        :param cluster: the cluster this consumer should connect to
+        :type cluster: pykafka.cluster.Cluster
         :param consumer_group: the name of the consumer group to join
         :type consumer_group: str
         :param partitions: existing partitions to which to connect
