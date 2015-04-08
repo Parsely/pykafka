@@ -2,8 +2,6 @@ import logging
 import time
 import random
 
-from kazoo.client import KazooClient
-
 from .broker import Broker
 from .topic import Topic
 from .protocol import ConsumerMetadataRequest, ConsumerMetadataResponse
@@ -15,20 +13,13 @@ logger = logging.getLogger(__name__)
 class Cluster(object):
     """Cluster implementation used to populate the KafkaClient."""
 
-    def __init__(self, hosts, zk_host, handler, timeout):
+    def __init__(self, hosts, handler, timeout):
         self._seed_hosts = hosts
         self._timeout = timeout
         self._handler = handler
         self._brokers = {}
         self._topics = {}
-        zookeeper = KazooClient(zk_host)
-        zookeeper.start()
-        self._zookeeper = zookeeper
         self.update()
-
-    @property
-    def zookeeper(self):
-        return self._zookeeper
 
     @property
     def brokers(self):

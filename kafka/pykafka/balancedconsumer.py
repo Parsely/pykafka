@@ -1,6 +1,7 @@
 import logging as log
 
 from kazoo.exceptions import NoNodeException
+from kazoo.client import KazooClient
 
 from kafka.pykafka.simpleconsumer import SimpleConsumer
 
@@ -9,7 +10,8 @@ class BalancedConsumer():
     def __init__(self,
                  topic,
                  cluster,
-                 consumer_group):
+                 consumer_group,
+                 zk_host='127.0.0.1:2181'):
         """Create a BalancedConsumer
 
         :param topic: the topic this consumer should consume
@@ -22,7 +24,14 @@ class BalancedConsumer():
         self._cluster = cluster
         self._consumer_group = consumer_group
         self._topic = topic
+
+        self._zookeeper = self._setup_zookeeper(zk_host)
         self._consumer = self._setup_internal_consumer()
+
+    def _setup_zookeeper(self, zk_host):
+        zk = KazooClient(zk_host)
+        zk.start()
+        return zk
 
     def _setup_internal_consumer(self):
         participants = self._get_participants()
