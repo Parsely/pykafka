@@ -102,9 +102,9 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         self._queued_max_messages = queued_max_messages
         self._num_consumer_fetchers = num_consumer_fetchers
         self._fetch_wait_max_ms = fetch_wait_max_ms
+        self._consumer_timeout_ms = consumer_timeout_ms
 
         self._last_message_time = time.time()
-        self._consumer_timeout_ms = consumer_timeout_ms
 
         self._auto_commit_enable = auto_commit_enable
         self._auto_commit_interval_ms = auto_commit_interval_ms
