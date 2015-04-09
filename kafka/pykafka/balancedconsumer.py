@@ -129,6 +129,7 @@ class BalancedConsumer():
 
         def _close_zk_connection(signum, frame):
             self._zookeeper.stop()
+            self._consumer.stop()
             sys.exit()
         signal.signal(signal.SIGINT, _close_zk_connection)
 

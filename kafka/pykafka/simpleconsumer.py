@@ -153,7 +153,9 @@ class SimpleConsumer(base.BaseSimpleConsumer):
     def _setup_autocommit_worker(self):
         def autocommitter():
             while True:
-                if self._running and self._auto_commit_enable:
+                if not self._running:
+                    break
+                if self._auto_commit_enable:
                     self._auto_commit()
         log.debug("Starting autocommitter thread")
         return self._cluster.handler.spawn(autocommitter)
@@ -161,8 +163,9 @@ class SimpleConsumer(base.BaseSimpleConsumer):
     def _setup_fetch_workers(self):
         def fetcher():
             while True:
-                if self._running:
-                    self.fetch()
+                if not self._running:
+                    break
+                self.fetch()
         return [self._cluster.handler.spawn(fetcher)
                 for i in xrange(self._num_consumer_fetchers)]
 
