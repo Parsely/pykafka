@@ -13,12 +13,14 @@ logger = logging.getLogger(__name__)
 class Cluster(object):
     """Cluster implementation used to populate the KafkaClient."""
 
-    def __init__(self, hosts, handler, timeout):
+    def __init__(self, hosts, handler, timeout,
+                 socket_receive_buffer_bytes=64 * 1024):
         self._seed_hosts = hosts
         self._timeout = timeout
         self._handler = handler
         self._brokers = {}
         self._topics = {}
+        self._socket_receive_buffer_bytes = socket_receive_buffer_bytes
         self.update()
 
     @property
@@ -45,7 +47,8 @@ class Cluster(object):
             try:
                 if isinstance(broker, basestring):
                     h, p = broker.split(':')
-                    broker = Broker(-1, h, p, self._handler, self._timeout)
+                    broker = Broker(-1, h, p, self._handler, self._timeout,
+                                    buffer_size=self._socket_receive_buffer_bytes)
                 return broker.request_metadata()
             # TODO: Change to typed exception
             except Exception:
@@ -71,7 +74,8 @@ class Cluster(object):
             if id_ not in self._brokers:
                 logger.info('Adding new broker %s:%s', meta.host, meta.port)
                 self._brokers[id_] = Broker.from_metadata(
-                    meta, self._handler, self._timeout
+                    meta, self._handler, self._timeout,
+                    buffer_size=self._socket_receive_buffer_bytes
                 )
             else:
                 broker = self._brokers[id_]

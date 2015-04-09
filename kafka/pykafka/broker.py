@@ -16,7 +16,8 @@ logger = logging.getLogger(__name__)
 
 class Broker(base.BaseBroker):
 
-    def __init__(self, id_, host, port, handler, timeout):
+    def __init__(self, id_, host, port, handler, timeout,
+                 buffer_size=64 * 1024):
         """Init a Broker.
 
         :param handler: TODO: Fill in
@@ -31,17 +32,20 @@ class Broker(base.BaseBroker):
         self._handler = handler
         self._reqhandler = None
         self._timeout = timeout
+        self._buffer_size = buffer_size
         self.connect()
 
     @classmethod
-    def from_metadata(cls, metadata, handler, timeout):
+    def from_metadata(cls, metadata, handler, timeout,
+                      buffer_size=64 * 1024):
         """ Create a Broker using BrokerMetadata
 
         :param metadata: Metadata that describes the broker.
         :type metadata: :class:`kafka.pykafka.protocol.BrokerMetadata.`
         """
         return cls(metadata.id, metadata.host,
-                   metadata.port, handler, timeout)
+                   metadata.port, handler, timeout,
+                   buffer_size=buffer_size)
 
     @property
     def connected(self):
@@ -70,7 +74,7 @@ class Broker(base.BaseBroker):
 
     def connect(self):
         """Establish a connection to the Broker."""
-        conn = BrokerConnection(self.host, self.port)
+        conn = BrokerConnection(self.host, self.port, self._buffer_size)
         conn.connect(self._timeout)
         self._reqhandler = RequestHandler(self._handler, conn)
         self._reqhandler.start()

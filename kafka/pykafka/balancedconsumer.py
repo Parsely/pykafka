@@ -21,7 +21,6 @@ class BalancedConsumer():
                  consumer_group,
                  zookeeper_connect='127.0.0.1:2181',
                  socket_timeout_ms=30 * 1000,
-                 socket_receive_buffer_bytes=60 * 1024,
                  fetch_message_max_bytes=1024 * 1024,
                  num_consumer_fetchers=1,
                  auto_commit_enable=False,
@@ -53,9 +52,6 @@ class BalancedConsumer():
         :type zookeeper_connect: str
         :param socket_timeout_ms: the socket timeout for network requests
         :type socket_timeout_ms: int
-        :param socket_receive_buffer_bytes: the size of the socket receive
-            buffer for network requests
-        :type socket_receive_buffer_bytes: int
         :param fetch_message_max_bytes: the number of bytes of messages to
             attempt to fetch
         :type fetch_message_max_bytes: int

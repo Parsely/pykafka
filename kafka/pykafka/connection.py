@@ -30,8 +30,8 @@ logger = logging.getLogger(__name__)
 class BrokerConnection(object):
     """A socket connection to Kafka."""
 
-    def __init__(self, host, port):
-        self._buff = bytearray(64 * 1024)
+    def __init__(self, host, port, buffer_size=64 * 1024):
+        self._buff = bytearray(buffer_size)
         self.host = host
         self.port = port
         self._socket = None

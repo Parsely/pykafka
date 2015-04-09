@@ -39,13 +39,17 @@ class KafkaClient(object):
                  hosts='127.0.0.1:9092',
                  use_greenlets=False,
                  timeout=30,
-                 ignore_rdkafka=False):
+                 ignore_rdkafka=False,
+                 socket_receive_buffer_bytes=64 * 1024):
         """Create a connection to a Kafka cluster.
 
         :param hosts: Comma separated list of seed hosts to used to connect.
         :param use_greenlets: If True, use gevent instead of threading.
         :param timeout: Connection timeout, in seconds.
         :param ignore_rdkafka: Don't use rdkafka, even if installed.
+        :param socket_receive_buffer_bytes: the size of the socket receive
+            buffer for network requests
+        :type socket_receive_buffer_bytes: int
         """
         self._seed_hosts = hosts
         self._timeout = timeout
@@ -55,9 +59,12 @@ class KafkaClient(object):
             logger.info('Using rd_kafka extensions.')
             raise NotImplementedError('Not yet')
         else:
-            self.cluster = pykafka.Cluster(self._seed_hosts,
-                                           self._handler,
-                                           self._timeout)
+            self.cluster = pykafka.Cluster(
+                self._seed_hosts,
+                self._handler,
+                self._timeout,
+                socket_receive_buffer_bytes=socket_receive_buffer_bytes
+            )
         self.brokers = self.cluster.brokers
         self.topics = self.cluster.topics
 
