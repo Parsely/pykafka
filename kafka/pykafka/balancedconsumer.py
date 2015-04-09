@@ -19,7 +19,7 @@ class BalancedConsumer():
                  topic,
                  cluster,
                  consumer_group,
-                 zk_host='127.0.0.1:2181',
+                 zookeeper_connect='127.0.0.1:2181',
                  socket_timeout_ms=30000,
                  socket_receive_buffer_bytes=60 * 1024,
                  fetch_message_max_bytes=1024 * 1024,
@@ -48,8 +48,9 @@ class BalancedConsumer():
         :type cluster: pykafka.cluster.Cluster
         :param consumer_group: the name of the consumer group to join
         :type consumer_group: str
-        :param zk_host: the ip and port of the zookeeper node to connect to
-        :type zk_host: str
+        :param zookeeper_connect: comma separated ip:port strings of the
+            zookeeper nodes to connect to
+        :type zookeeper_connect: str
         :param socket_timeout_ms: the socket timeout for network requests
         :type socket_timeout_ms: int
         :param socket_receive_buffer_bytes: the size of the socket receive
@@ -126,22 +127,28 @@ class BalancedConsumer():
             sys.exit()
         signal.signal(signal.SIGINT, _close_zk_connection)
 
-        self._zookeeper = self._setup_zookeeper(zk_host)
+        self._zookeeper = self._setup_zookeeper(zookeeper_connect)
         self._zookeeper.ensure_path(self._topic_path)
         self._add_self()
         self._set_watches()
         self._rebalance()
 
-    def _setup_zookeeper(self, zk_host):
+    def _setup_zookeeper(self, zookeeper_connect):
         """Open a connection to a ZooKeeper host
 
-        :param zk_host: the '<ip>:<port>' address of the zookeeper node to
+        :param zookeeper_connect: the '<ip>:<port>' address of the zookeeper node to
             which to connect
-        :type zk_host: str
+        :type zookeeper_connect: str
         """
-        zk = KazooClient(zk_host)
-        zk.start()
-        return zk
+        hosts = zookeeper_connect.split(',')
+        for host in hosts:
+            try:
+                zk = KazooClient(host)
+            except:
+                log.debug("Connecting to zookeeper at %s failed.", host)
+        if zk is not None:
+            zk.start()
+            return zk
 
     def _setup_internal_consumer(self):
         """Create an internal SimpleConsumer instance
