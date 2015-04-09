@@ -277,7 +277,7 @@ class BalancedConsumer():
             log.debug("More consumers than partitions.")
             return
 
-        path = '{}/{}'.format(self._consumer_id_path, self._id)
+        path = '{}/{}'.format(self._consumer_id_path, self._consumer_id)
         self._zookeeper.create(
             path, self._topic.name, ephemeral=True, makepath=True)
 
