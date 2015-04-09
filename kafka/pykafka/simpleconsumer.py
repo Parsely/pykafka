@@ -110,6 +110,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         self._fetch_message_max_bytes = fetch_message_max_bytes
         self._socket_timeout_ms = socket_timeout_ms
         self._fetch_min_bytes = fetch_min_bytes
+        self._queued_max_messages = queued_max_messages
 
         self._last_message_time = time.time()
         self._consumer_timeout_ms = consumer_timeout_ms
@@ -119,8 +120,6 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         self._last_auto_commit = time.time()
 
         self._running = True
-
-        self._queued_max_messages = queued_max_messages
 
         self._offset_manager = self._cluster.get_offset_manager(self._consumer_group)
 

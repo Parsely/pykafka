@@ -11,6 +11,7 @@ from kazoo.client import KazooClient
 from kazoo.recipe.watchers import ChildrenWatch
 
 from kafka.pykafka.simpleconsumer import SimpleConsumer
+from kafka.common import OffsetType
 
 
 class BalancedConsumer():
@@ -19,9 +20,21 @@ class BalancedConsumer():
                  cluster,
                  consumer_group,
                  zk_host='127.0.0.1:2181',
+                 socket_timeout_ms=30000,
+                 socket_receive_buffer_bytes=60 * 1024,
+                 fetch_message_max_bytes=1024 * 1024,
+                 num_consumer_fetchers=1,
                  auto_commit_enable=False,
                  auto_commit_interval_ms=60 * 1000,
-                 socket_timeout_ms=30000):
+                 queued_max_messages=2000,
+                 fetch_min_bytes=1,
+                 fetch_wait_max_ms=100,
+                 refresh_leader_backoff_ms=200,
+                 offsets_channel_backoff_ms=1000,
+                 offsets_channel_socket_timeout_ms=10000,
+                 offsets_commit_max_retries=5,
+                 auto_offset_reset=OffsetType.LATEST,
+                 consumer_timeout_ms=-1):
         """Create a BalancedConsumer
 
         Maintains a single instance of SimpleConsumer, periodically using the
@@ -36,14 +49,52 @@ class BalancedConsumer():
         :type consumer_group: str
         :param zk_host: the ip and port of the zookeeper node to connect to
         :type zk_host: str
+        :param socket_timeout_ms: the socket timeout for network requests
+        :type socket_timeout_ms: int
+        :param socket_receive_buffer_bytes: the size of the socket receive
+            buffer for network requests
+        :type socket_receive_buffer_bytes: int
+        :param fetch_message_max_bytes: the number of bytes of messages to
+            attempt to fetch
+        :type fetch_message_max_bytes: int
+        :param num_consumer_fetchers: the number of threads used to fetch data
+        :type num_consumer_fetchers: int
         :param auto_commit_enable: if true, periodically commit to kafka the
             offset of messages already fetched by this consumer
         :type auto_commit_enable: bool
         :param auto_commit_interval_ms: the frequency in ms that the consumer
             offsets are committed to kafka
         :type auto_commit_interval_ms: int
-        :param socket_timeout_ms: the socket timeout for network requests
-        :type socket_timeout_ms: int
+        :param queued_max_messages: max number of messages buffered for
+            consumption
+        :type queued_max_messages: int
+        :param fetch_min_bytes: the minimum amount of data the server should
+            return for a fetch request. If insufficient data is available the
+            request will block
+        :type fetch_min_bytes: int
+        :param fetch_wait_max_ms: the maximum amount of time the server will
+            block before answering the fetch request if there isn't sufficient
+            data to immediately satisfy fetch_min_bytes
+        :type fetch_wait_max_ms: int
+        :param refresh_leader_backoff_ms: backoff time to refresh the leader of
+            a partition after it loses the current leader
+        :type refresh_leader_backoff_ms: int
+        :param offsets_channel_backoff_ms: backoff time to retry offset
+            commits/fetches
+        :type offsets_channel_backoff_ms: int
+        :param offsets_channel_socket_timeout_ms: socket timeout to use when
+            reading responses for Offset Fetch/Commit requests. This timeout
+            will also be used for the ConsumerMetdata requests that are used
+            to query for the offset coordinator.
+        :type offsets_channel_socket_timeout_ms: int
+        :param offsets_commit_max_retries: Retry the offset commit up to this
+            many times on failure.
+        :type offsets_commit_max_retries: int
+        :param auto_offset_reset: what to do if an offset is out of range
+        :type auto_offset_reset: int
+        :param consumer_timeout_ms: throw a timeout exception to the consumer
+            if no message is available for consumption after the specified interval
+        :type consumer_timeout_ms: int
         """
         self._cluster = cluster
         self._consumer_group = consumer_group
@@ -52,6 +103,8 @@ class BalancedConsumer():
         self._auto_commit_enable = auto_commit_enable
         self._auto_commit_interval_ms = auto_commit_interval_ms
         self._socket_timeout_ms = socket_timeout_ms
+        self._fetch_message_max_bytes = fetch_message_max_bytes
+        self._fetch_min_bytes = fetch_min_bytes
 
         self._consumer = None
         self._id = "{}:{}".format(socket.gethostname(), uuid4())
@@ -99,7 +152,9 @@ class BalancedConsumer():
             partitions=list(self._partitions),
             auto_commit_enable=self._auto_commit_enable,
             auto_commit_interval_ms=self._auto_commit_interval_ms,
-            socket_timeout_ms=self._socket_timeout_ms)
+            socket_timeout_ms=self._socket_timeout_ms,
+            fetch_message_max_bytes=self._fetch_message_max_bytes,
+            fetch_min_bytes=self._fetch_min_bytes)
 
     def _decide_partitions(self, participants):
         """Decide which partitions belong to this consumer
