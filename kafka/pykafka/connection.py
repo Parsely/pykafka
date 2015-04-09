@@ -76,8 +76,7 @@ class BrokerConnection(object):
             size = self._socket.recv(4)
             size = struct.unpack('!i', size)[0]
             recvall_into(self._socket, self._buff, size)
-            # TODO: Figure out if correlation ids are worth it
-            return buffer(self._buff[4:4 + size]) # skipping it for now
+            return buffer(self._buff[4:4 + size])
         except SocketDisconnectedError:
             self.disconnect()
             raise
