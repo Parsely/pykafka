@@ -20,7 +20,6 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                  cluster,
                  consumer_group=None,
                  partitions=None,
-                 socket_timeout_ms=30 * 1000,
                  fetch_message_max_bytes=1024 * 1024,
                  num_consumer_fetchers=1,
                  auto_commit_enable=False,
@@ -50,8 +49,6 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         :type consumer_group: str
         :param partitions: existing partitions to which to connect
         :type partitions: list of pykafka.partition.Partition
-        :param socket_timeout_ms: the socket timeout for network requests
-        :type socket_timeout_ms: int
         :param fetch_message_max_bytes: the number of bytes of messages to
             attempt to fetch
         :type fetch_message_max_bytes: int
@@ -171,7 +168,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
 
     def __iter__(self):
         while True:
-            message = self.consume(timeout=self._socket_timeout_ms)
+            message = self.consume()
             if not message and self._consumer_timed_out():
                 raise StopIteration
             yield message
@@ -182,13 +179,13 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         disp = (time.time() - self._last_message_time) * 1000.0
         return disp > self._consumer_timeout_ms
 
-    def consume(self, timeout=None):
+    def consume(self):
         """Get one message from the consumer.
 
         :param timeout: Seconds to wait before returning None
         """
         owned_partition = self.partition_cycle.next()
-        message = owned_partition.consume(timeout=timeout)
+        message = owned_partition.consume()
 
         if message:
             self._last_message_time = time.time()
@@ -322,7 +319,7 @@ class OwnedPartition(object):
             self.partition.id
         )
 
-    def consume(self, timeout=None):
+    def consume(self):
         """Get a single message from this partition
         """
         try:

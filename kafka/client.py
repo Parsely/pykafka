@@ -38,21 +38,22 @@ class KafkaClient(object):
     def __init__(self,
                  hosts='127.0.0.1:9092',
                  use_greenlets=False,
-                 timeout=30,
+                 socket_timeout_ms=30 * 1000,
                  ignore_rdkafka=False,
                  socket_receive_buffer_bytes=64 * 1024):
         """Create a connection to a Kafka cluster.
 
         :param hosts: Comma separated list of seed hosts to used to connect.
         :param use_greenlets: If True, use gevent instead of threading.
-        :param timeout: Connection timeout, in seconds.
+        :param socket_timeout_ms: the socket timeout for network requests
+        :type socket_timeout_ms: int
         :param ignore_rdkafka: Don't use rdkafka, even if installed.
         :param socket_receive_buffer_bytes: the size of the socket receive
             buffer for network requests
         :type socket_receive_buffer_bytes: int
         """
         self._seed_hosts = hosts
-        self._timeout = timeout
+        self._timeout = socket_timeout_ms
         self._handler = None if use_greenlets else handlers.ThreadingHandler()
         self._use_rdkafka = rd_kafka and not ignore_rdkafka
         if self._use_rdkafka:
