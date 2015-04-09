@@ -34,7 +34,8 @@ class BalancedConsumer():
                  offsets_commit_max_retries=5,
                  auto_offset_reset=OffsetType.LATEST,
                  consumer_timeout_ms=-1,
-                 rebalance_max_retries=5):
+                 rebalance_max_retries=5,
+                 rebalance_backoff_ms=2 * 1000):
         """Create a BalancedConsumer
 
         Maintains a single instance of SimpleConsumer, periodically using the
@@ -95,6 +96,8 @@ class BalancedConsumer():
         :param rebalance_max_retries: Maximum number of attempts before failing to
             rebalance
         :type rebalance_max_retries: int
+        :param rebalance_backoff_ms: Backoff time between retries during rebalance.
+        :type rebalance_backoff_ms: int
         """
         if not isinstance(cluster, weakref.ProxyType):
             self._cluster = weakref.proxy(cluster)
@@ -304,8 +307,8 @@ class BalancedConsumer():
             except NodeExistsError:
                 log.debug("Partition still owned")
 
-            log.debug("Retrying in %is" % ((i + 1) ** 2))
-            time.sleep(i ** 2)
+            log.debug("Retrying")
+            time.sleep(i * (float(self._rebalance_backoff_ms) / 1000.0))
 
         self._setup_internal_consumer()
 
