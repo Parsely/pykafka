@@ -14,7 +14,8 @@ from kazoo.recipe.watchers import ChildrenWatch
 from kafka.common import OffsetType
 from kafka.pykafka.simpleconsumer import SimpleConsumer
 
-# TODO - support refresh.leader.backoff.ms option
+# TODO - support refresh_leader_backoff_ms option
+# TODO - support auto_offset_reset option
 
 
 class BalancedConsumer():

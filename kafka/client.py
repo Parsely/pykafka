@@ -40,7 +40,8 @@ class KafkaClient(object):
                  use_greenlets=False,
                  socket_timeout_ms=30 * 1000,
                  ignore_rdkafka=False,
-                 socket_receive_buffer_bytes=64 * 1024):
+                 socket_receive_buffer_bytes=64 * 1024,
+                 exclude_internal_topics=True):
         """Create a connection to a Kafka cluster.
 
         :param hosts: Comma separated list of seed hosts to used to connect.
@@ -51,6 +52,9 @@ class KafkaClient(object):
         :param socket_receive_buffer_bytes: the size of the socket receive
             buffer for network requests
         :type socket_receive_buffer_bytes: int
+        :param exclude_internal_topics: Whether messages from internal topics
+            (such as offsets) should be exposed to the consumer.
+        :type exclude_internal_topics: bool
         """
         self._seed_hosts = hosts
         self._timeout = socket_timeout_ms
@@ -64,7 +68,8 @@ class KafkaClient(object):
                 self._seed_hosts,
                 self._handler,
                 self._timeout,
-                socket_receive_buffer_bytes=socket_receive_buffer_bytes
+                socket_receive_buffer_bytes=socket_receive_buffer_bytes,
+                exclude_internal_topics=exclude_internal_topics
             )
         self.brokers = self.cluster.brokers
         self.topics = self.cluster.topics

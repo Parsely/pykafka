@@ -14,13 +14,15 @@ class Cluster(object):
     """Cluster implementation used to populate the KafkaClient."""
 
     def __init__(self, hosts, handler, timeout,
-                 socket_receive_buffer_bytes=64 * 1024):
+                 socket_receive_buffer_bytes=64 * 1024,
+                 exclude_internal_topics=True):
         self._seed_hosts = hosts
         self._timeout = timeout
         self._handler = handler
         self._brokers = {}
         self._topics = {}
         self._socket_receive_buffer_bytes = socket_receive_buffer_bytes
+        self._exclude_internal_topics = exclude_internal_topics
         self.update()
 
     @property
@@ -100,11 +102,19 @@ class Cluster(object):
             self._topics.pop(name)
         # Add/update partition information
         for name, meta in metadata.iteritems():
-            if name not in self._topics:
-                self._topics[name] = Topic(self, meta)
-                logger.info('Adding topic %s', self._topics[name])
-            else:
-                self._topics[name].update(meta)
+            if not self._should_exclude_topic(name):
+                if name not in self._topics:
+                    self._topics[name] = Topic(self, meta)
+                    logger.info('Adding topic %s', self._topics[name])
+                else:
+                    self._topics[name].update(meta)
+
+    def _should_exclude_topic(self, topic_name):
+        """Return a boolean indicating whether this topic should be exluded
+        """
+        if not self._exclude_internal_topics:
+            return False
+        return topic_name.startswith("__")
 
     def get_offset_manager(self, consumer_group):
         """Get the broker designated as the offset manager for this consumer
