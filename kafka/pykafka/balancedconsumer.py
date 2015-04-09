@@ -16,6 +16,8 @@ from kafka.pykafka.simpleconsumer import SimpleConsumer
 
 # TODO - support refresh_leader_backoff_ms option
 # TODO - support auto_offset_reset option
+# zookeeper.session.timeout.ms
+# zookeeper.sync.time.ms
 
 
 class BalancedConsumer():
@@ -38,7 +40,8 @@ class BalancedConsumer():
                  auto_offset_reset=OffsetType.LATEST,
                  consumer_timeout_ms=-1,
                  rebalance_max_retries=5,
-                 rebalance_backoff_ms=2 * 1000):
+                 rebalance_backoff_ms=2 * 1000,
+                 zookeeper_connection_timeout_ms=6 * 1000):
         """Create a BalancedConsumer
 
         Maintains a single instance of SimpleConsumer, periodically using the
@@ -101,6 +104,9 @@ class BalancedConsumer():
         :type rebalance_max_retries: int
         :param rebalance_backoff_ms: Backoff time between retries during rebalance.
         :type rebalance_backoff_ms: int
+        :param zookeeper_connection_timeout_ms: The max time that the client
+            waits while establishing a connection to zookeeper.
+        :type zookeeper_connection_timeout_ms: int
         """
         if not isinstance(cluster, weakref.ProxyType):
             self._cluster = weakref.proxy(cluster)
@@ -135,23 +141,26 @@ class BalancedConsumer():
             sys.exit()
         signal.signal(signal.SIGINT, _close_zk_connection)
 
-        self._zookeeper = self._setup_zookeeper(zookeeper_connect)
+        self._zookeeper = self._setup_zookeeper(zookeeper_connect,
+                                                zookeeper_connection_timeout_ms)
         self._zookeeper.ensure_path(self._topic_path)
         self._add_self()
         self._set_watches()
         self._rebalance()
 
-    def _setup_zookeeper(self, zookeeper_connect):
+    def _setup_zookeeper(self, zookeeper_connect, timeout):
         """Open a connection to a ZooKeeper host
 
         :param zookeeper_connect: the '<ip>:<port>' address of the zookeeper node to
             which to connect
         :type zookeeper_connect: str
+        :param timeout: connection timeout in milliseconds
+        :type timeout: int
         """
         hosts = zookeeper_connect.split(',')
         for host in hosts:
             try:
-                zk = KazooClient(host)
+                zk = KazooClient(host=host, timeout=float(timeout) / 1000.0)
             except:
                 log.debug("Connecting to zookeeper at %s failed.", host)
         if zk is not None:
