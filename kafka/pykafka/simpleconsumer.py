@@ -29,7 +29,6 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                  fetch_wait_max_ms=100,
                  refresh_leader_backoff_ms=200,
                  offsets_channel_backoff_ms=1000,
-                 offsets_channel_socket_timeout_ms=10000,
                  offsets_commit_max_retries=5,
                  auto_offset_reset=OffsetType.LATEST,
                  consumer_timeout_ms=-1):
@@ -77,11 +76,6 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         :param offsets_channel_backoff_ms: backoff time to retry offset
             commits/fetches
         :type offsets_channel_backoff_ms: int
-        :param offsets_channel_socket_timeout_ms: socket timeout to use when
-            reading responses for Offset Fetch/Commit requests. This timeout
-            will also be used for the ConsumerMetdata requests that are used
-            to query for the offset coordinator.
-        :type offsets_channel_socket_timeout_ms: int
         :param offsets_commit_max_retries: Retry the offset commit up to this
             many times on failure.
         :type offsets_commit_max_retries: int
