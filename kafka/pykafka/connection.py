@@ -31,6 +31,7 @@ class BrokerConnection(object):
     """A socket connection to Kafka."""
 
     def __init__(self, host, port):
+        self._buff = bytearray(64 * 1024)
         self.host = host
         self.port = port
         self._socket = None
@@ -74,10 +75,9 @@ class BrokerConnection(object):
         try:
             size = self._socket.recv(4)
             size = struct.unpack('!i', size)[0]
-            output = bytearray(size)
-            recvall_into(self._socket, output)
+            recvall_into(self._socket, self._buff, size)
             # TODO: Figure out if correlation ids are worth it
-            return buffer(output[4:]) # skipping it for now
+            return buffer(self._buff[4:4 + size]) # skipping it for now
         except SocketDisconnectedError:
             self.disconnect()
             raise

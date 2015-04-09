@@ -17,9 +17,9 @@ limitations under the License.
 from kafka.exceptions import SocketDisconnectedError
 
 
-def recvall_into(socket, bytea):
+def recvall_into(socket, bytea, size):
     """
-    Reads enough data from the socket to fill the provided bytearray (modifies
+    Reads `size` bytes from the socket into the provided bytearray (modifies
     in-place.)
 
     This is basically a hack around the fact that ``socket.recv_into`` doesn't
@@ -27,10 +27,10 @@ def recvall_into(socket, bytea):
 
     :type socket: :class:`socket.Socket`
     :type bytea: ``bytearray``
+    :type size: int
     :rtype: ``bytearray``
     """
     offset = 0
-    size = len(bytea)
     while offset < size:
         remaining = size - offset
         chunk = socket.recv(remaining)
