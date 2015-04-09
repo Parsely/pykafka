@@ -14,6 +14,8 @@ from kazoo.recipe.watchers import ChildrenWatch
 from kafka.common import OffsetType
 from kafka.pykafka.simpleconsumer import SimpleConsumer
 
+# TODO - support refresh.leader.backoff.ms option
+
 
 class BalancedConsumer():
     def __init__(self,
@@ -114,6 +116,7 @@ class BalancedConsumer():
         self._num_consumer_fetchers = num_consumer_fetchers
         self._queued_max_messages = queued_max_messages
         self._fetch_wait_max_ms = fetch_wait_max_ms
+        self._rebalance_backoff_ms = rebalance_backoff_ms
 
         self._consumer = None
         self._consumer_id = "{}:{}".format(socket.gethostname(), uuid4())
