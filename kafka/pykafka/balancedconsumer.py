@@ -34,7 +34,7 @@ class BalancedConsumer():
                  offsets_commit_max_retries=5,
                  auto_offset_reset=OffsetType.LATEST,
                  consumer_timeout_ms=-1,
-                 rebalance_retries=5):
+                 rebalance_max_retries=5):
         """Create a BalancedConsumer
 
         Maintains a single instance of SimpleConsumer, periodically using the
@@ -92,9 +92,9 @@ class BalancedConsumer():
             if no message is available for consumption after the specified
             interval
         :type consumer_timeout_ms: int
-        :param rebalance_retries: Maximum number of attempts before failing to
+        :param rebalance_max_retries: Maximum number of attempts before failing to
             rebalance
-        :type rebalance_retries: int
+        :type rebalance_max_retries: int
         """
         if not isinstance(cluster, weakref.ProxyType):
             self._cluster = weakref.proxy(cluster)
@@ -292,7 +292,7 @@ class BalancedConsumer():
             self._consumer_id, self._topic.name)
         )
 
-        for i in xrange(self._rebalance_retries):
+        for i in xrange(self._rebalance_max_retries):
             participants = self._get_participants()
             new_partitions = self._decide_partitions(participants)
 
