@@ -121,16 +121,16 @@ class BalancedConsumer():
                                                             self._topic.name)
         self._id_path = '/consumers/{}/ids'.format(self._consumer_group)
 
+        def _close_zk_connection(signum, frame):
+            self._zookeeper.stop()
+            sys.exit()
+        signal.signal(signal.SIGINT, _close_zk_connection)
+
         self._zookeeper = self._setup_zookeeper(zk_host)
         self._zookeeper.ensure_path(self._topic_path)
         self._add_self()
         self._set_watches()
         self._rebalance()
-
-        def _close_zk_connection(signum, frame):
-            self._zookeeper.stop()
-            sys.exit()
-        signal.signal(signal.SIGINT, _close_zk_connection)
 
     def _setup_zookeeper(self, zk_host):
         """Open a connection to a ZooKeeper host
@@ -147,7 +147,7 @@ class BalancedConsumer():
         """Create an internal SimpleConsumer instance
 
         If there is already a SimpleConsumer instance held by this object,
-        stop its threads and mark it for garbage collection.
+        disable its workers and mark it for garbage collection.
         """
         if self._consumer is not None:
             self._consumer.stop()
@@ -177,7 +177,7 @@ class BalancedConsumer():
         """
         # Freeze and sort partitions so we always have the same results
         p_to_str = lambda p: '-'.join([p.topic.name, str(p.leader.id), str(p.id)])
-        all_partitions = list(self._topic.partitions.values())
+        all_partitions = self._topic.partitions.values()
         all_partitions.sort(key=p_to_str)
 
         # get start point, # of partitions, and remainder
@@ -283,16 +283,9 @@ class BalancedConsumer():
             self._id, self._topic.name)
         )
 
-        participants = self._get_participants()
-        new_partitions = self._decide_partitions(participants)
-
         for i in xrange(self._rebalance_retries):
-            if i > 0:
-                log.debug("Retrying in %is" % ((i + 1) ** 2))
-                time.sleep(i ** 2)
-
-                participants = self._get_participants()
-                new_partitions = self._decide_partitions(participants)
+            participants = self._get_participants()
+            new_partitions = self._decide_partitions(participants)
 
             self._remove_partitions(self._partitions - new_partitions)
 
@@ -300,7 +293,10 @@ class BalancedConsumer():
                 self._add_partitions(new_partitions - self._partitions)
                 break
             except NodeExistsError:
-                continue
+                log.debug("Partition still owned")
+
+            log.debug("Retrying in %is" % ((i + 1) ** 2))
+            time.sleep(i ** 2)
 
         self._setup_internal_consumer()
 
@@ -329,21 +325,24 @@ class BalancedConsumer():
                 self._path_from_partition(p), self._id,
                 ephemeral=True
             )
-        self._partitions |= partitions - self._partitions
+        self._partitions |= partitions
 
     def _brokers_changed(self, brokers):
         if self._setting_watches:
             return
+        log.debug("Rebalance triggered by broker change")
         self._rebalance()
 
     def _consumers_changed(self, consumers):
         if self._setting_watches:
             return
+        log.debug("Rebalance triggered by consumer change")
         self._rebalance()
 
     def _topics_changed(self, topics):
         if self._setting_watches:
             return
+        log.debug("Rebalance triggered by topic change")
         self._rebalance()
 
     def consume(self):
