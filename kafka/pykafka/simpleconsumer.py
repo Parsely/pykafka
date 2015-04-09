@@ -5,6 +5,7 @@ import time
 import logging as log
 from Queue import Queue, Empty
 import weakref
+import threading
 
 from kafka import base
 from kafka.common import OffsetType
@@ -242,18 +243,23 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         returned messages in the approprate OwnedPartition.
         """
         for broker, owned_partitions in self._partitions_by_leader.iteritems():
-            reqs = [owned_partition.build_fetch_request(self._fetch_message_max_bytes)
-                    for owned_partition in owned_partitions
-                    if owned_partition.message_count < self._queued_max_messages
-                    and owned_partition.empty]
+            reqs = []
+            for owned_partition in owned_partitions:
+                # attempt to acquire lock, just pass if we can't
+                if owned_partition.lock.acquire(False):
+                    has_room = owned_partition.message_count < self._queued_max_messages
+                    if owned_partition.empty and has_room:
+                        reqs.append(owned_partition.build_fetch_request(
+                            self._fetch_message_max_bytes))
             if reqs:
                 response = broker.fetch_messages(
                     reqs, timeout=self._socket_timeout_ms,
                     min_bytes=self._fetch_min_bytes
                 )
                 for partition_id, pres in response.topics[self._topic.name].iteritems():
-                    partition = self._partitions_by_id[partition_id]
-                    partition.enqueue_messages(pres.messages)
+                    owned_partition = self._partitions_by_id[partition_id]
+                    owned_partition.enqueue_messages(pres.messages)
+                    owned_partition.lock.release()
 
 
 class OwnedPartition(object):
@@ -269,6 +275,7 @@ class OwnedPartition(object):
         self._messages = Queue()
         self.last_offset_consumed = 0
         self.next_offset = 0
+        self.lock = threading.Lock()
 
     @property
     def message_count(self):
