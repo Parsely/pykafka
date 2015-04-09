@@ -5,6 +5,7 @@ import socket
 import sys
 import time
 from uuid import uuid4
+import weakref
 
 from kazoo.client import KazooClient
 from kazoo.exceptions import NoNodeException, NodeExistsError
@@ -98,7 +99,10 @@ class BalancedConsumer():
             rebalance
         :type rebalance_retries: int
         """
-        self._cluster = cluster
+        if not isinstance(cluster, weakref.ProxyType):
+            self._cluster = weakref.proxy(cluster)
+        else:
+            self._cluster = cluster
         self._consumer_group = consumer_group
         self._topic = topic
 

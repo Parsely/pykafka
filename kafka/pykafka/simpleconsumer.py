@@ -4,6 +4,7 @@ from collections import defaultdict
 import time
 import logging as log
 from Queue import Queue, Empty
+import weakref
 
 from kafka import base
 from kafka.common import OffsetType
@@ -92,7 +93,10 @@ class SimpleConsumer(base.BaseSimpleConsumer):
             if no message is available for consumption after the specified interval
         :type consumer_timeout_ms: int
         """
-        self._cluster = cluster
+        if not isinstance(cluster, weakref.ProxyType):
+            self._cluster = weakref.proxy(cluster)
+        else:
+            self._cluster = cluster
         self._consumer_group = consumer_group
         self._topic = topic
         self._fetch_message_max_bytes = fetch_message_max_bytes
