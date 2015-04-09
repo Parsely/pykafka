@@ -101,16 +101,13 @@ class Topic(base.BaseTopic):
             else:
                 self._partitions[id_].update(meta)
 
-    def get_simple_consumer(self, consumer_group, **kwargs):
+    def get_simple_consumer(self, consumer_group=None, **kwargs):
         """Return a SimpleConsumer of this topic
         """
         return SimpleConsumer(self, self._cluster,
-                              consumer_group=consumer_group,
-                              **kwargs)
+                              consumer_group=consumer_group, **kwargs)
 
     def get_balanced_consumer(self, consumer_group, **kwargs):
         """Return a BalancedConsumer of this topic
         """
-        return BalancedConsumer(self, self._cluster,
-                                consumer_group=consumer_group,
-                                **kwargs)
+        return BalancedConsumer(self, self._cluster, consumer_group, **kwargs)
