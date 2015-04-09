@@ -101,7 +101,7 @@ class Cluster(object):
         # Add/update partition information
         for name, meta in metadata.iteritems():
             if name not in self._topics:
-                self._topics[name] = Topic(self._brokers, meta)
+                self._topics[name] = Topic(self, meta)
                 logger.info('Adding topic %s', self._topics[name])
             else:
                 self._topics[name].update(meta)
