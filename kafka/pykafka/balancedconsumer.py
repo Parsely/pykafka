@@ -25,7 +25,6 @@ class BalancedConsumer():
                  topic,
                  cluster,
                  consumer_group,
-                 zookeeper_connect='127.0.0.1:2181',
                  fetch_message_max_bytes=1024 * 1024,
                  num_consumer_fetchers=1,
                  auto_commit_enable=False,
@@ -41,7 +40,8 @@ class BalancedConsumer():
                  consumer_timeout_ms=-1,
                  rebalance_max_retries=5,
                  rebalance_backoff_ms=2 * 1000,
-                 zookeeper_connection_timeout_ms=6 * 1000):
+                 zookeeper_connection_timeout_ms=6 * 1000,
+                 zookeeper_connect='127.0.0.1:2181'):
         """Create a BalancedConsumer
 
         Maintains a single instance of SimpleConsumer, periodically using the
@@ -54,9 +54,6 @@ class BalancedConsumer():
         :type cluster: pykafka.cluster.Cluster
         :param consumer_group: the name of the consumer group to join
         :type consumer_group: str
-        :param zookeeper_connect: comma separated ip:port strings of the
-            zookeeper nodes to connect to
-        :type zookeeper_connect: str
         :param fetch_message_max_bytes: the number of bytes of messages to
             attempt to fetch
         :type fetch_message_max_bytes: int
@@ -107,6 +104,9 @@ class BalancedConsumer():
         :param zookeeper_connection_timeout_ms: The max time that the client
             waits while establishing a connection to zookeeper.
         :type zookeeper_connection_timeout_ms: int
+        :param zookeeper_connect: comma separated ip:port strings of the
+            zookeeper nodes to connect to
+        :type zookeeper_connect: str
         """
         if not isinstance(cluster, weakref.ProxyType):
             self._cluster = weakref.proxy(cluster)
