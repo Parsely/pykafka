@@ -31,6 +31,8 @@ def recvall_into(socket, bytea, size):
     :rtype: ``bytearray``
     """
     offset = 0
+    if size > len(bytea):
+        raise ValueError("Buffer overflow in broker connection (buffer size is {})".format(len(bytea)))
     while offset < size:
         remaining = size - offset
         chunk = socket.recv(remaining)
