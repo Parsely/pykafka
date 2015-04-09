@@ -104,6 +104,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         self._socket_timeout_ms = socket_timeout_ms
         self._fetch_min_bytes = fetch_min_bytes
         self._queued_max_messages = queued_max_messages
+        self._num_consumer_fetchers = num_consumer_fetchers
 
         self._last_message_time = time.time()
         self._consumer_timeout_ms = consumer_timeout_ms
@@ -136,7 +137,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
             self._autocommit_worker_thread = self._setup_autocommit_worker()
         # we need to get the most up-to-date offsets before starting consumption
         self.fetch_offsets()
-        self._fetch_worker_thread = self._setup_fetch_worker()
+        self._fetch_workers = self._setup_fetch_workers()
 
     @property
     def topic(self):
@@ -160,12 +161,13 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         log.debug("Starting autocommitter thread")
         return self._cluster.handler.spawn(autocommitter)
 
-    def _setup_fetch_worker(self):
+    def _setup_fetch_workers(self):
         def fetcher():
             while True:
                 if self._running:
                     self.fetch()
-        return self._cluster.handler.spawn(fetcher)
+        return [self._cluster.handler.spawn(fetcher)
+                for i in xrange(self._num_consumer_fetchers)]
 
     def __iter__(self):
         while True:

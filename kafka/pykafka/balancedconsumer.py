@@ -112,6 +112,7 @@ class BalancedConsumer():
         self._fetch_message_max_bytes = fetch_message_max_bytes
         self._fetch_min_bytes = fetch_min_bytes
         self._rebalance_retries = rebalance_retries
+        self._num_consumer_fetchers = num_consumer_fetchers
 
         self._consumer = None
         self._consumer_id = "{}:{}".format(socket.gethostname(), uuid4())
@@ -166,7 +167,9 @@ class BalancedConsumer():
             auto_commit_interval_ms=self._auto_commit_interval_ms,
             socket_timeout_ms=self._socket_timeout_ms,
             fetch_message_max_bytes=self._fetch_message_max_bytes,
-            fetch_min_bytes=self._fetch_min_bytes)
+            fetch_min_bytes=self._fetch_min_bytes,
+            num_consumer_fetchers=self._num_consumer_fetchers
+        )
 
     def _decide_partitions(self, participants):
         """Decide which partitions belong to this consumer
