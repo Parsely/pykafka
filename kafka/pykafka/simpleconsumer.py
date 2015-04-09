@@ -98,10 +98,10 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         self._consumer_group = consumer_group
         self._topic = topic
         self._fetch_message_max_bytes = fetch_message_max_bytes
-        self._socket_timeout_ms = socket_timeout_ms
         self._fetch_min_bytes = fetch_min_bytes
         self._queued_max_messages = queued_max_messages
         self._num_consumer_fetchers = num_consumer_fetchers
+        self._fetch_wait_max_ms = fetch_wait_max_ms
 
         self._last_message_time = time.time()
         self._consumer_timeout_ms = consumer_timeout_ms
@@ -252,7 +252,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                             self._fetch_message_max_bytes))
             if reqs:
                 response = broker.fetch_messages(
-                    reqs, timeout=self._socket_timeout_ms,
+                    reqs, timeout=self._fetch_wait_max_ms,
                     min_bytes=self._fetch_min_bytes
                 )
                 for partition_id, pres in response.topics[self._topic.name].iteritems():
