@@ -1,17 +1,17 @@
-import logging as log
-from uuid import uuid4
-import socket
-import signal
-import sys
 import itertools
+import logging as log
+import signal
+import socket
+import sys
 import time
+from uuid import uuid4
 
-from kazoo.exceptions import NoNodeException, NodeExistsError
 from kazoo.client import KazooClient
+from kazoo.exceptions import NoNodeException, NodeExistsError
 from kazoo.recipe.watchers import ChildrenWatch
 
-from kafka.pykafka.simpleconsumer import SimpleConsumer
 from kafka.common import OffsetType
+from kafka.pykafka.simpleconsumer import SimpleConsumer
 
 
 class BalancedConsumer():
@@ -34,7 +34,8 @@ class BalancedConsumer():
                  offsets_channel_socket_timeout_ms=10000,
                  offsets_commit_max_retries=5,
                  auto_offset_reset=OffsetType.LATEST,
-                 consumer_timeout_ms=-1):
+                 consumer_timeout_ms=-1,
+                 rebalance_retries=5):
         """Create a BalancedConsumer
 
         Maintains a single instance of SimpleConsumer, periodically using the
@@ -93,8 +94,12 @@ class BalancedConsumer():
         :param auto_offset_reset: what to do if an offset is out of range
         :type auto_offset_reset: int
         :param consumer_timeout_ms: throw a timeout exception to the consumer
-            if no message is available for consumption after the specified interval
+            if no message is available for consumption after the specified
+            interval
         :type consumer_timeout_ms: int
+        :param rebalance_retries: Maximum number of attempts before failing to
+            rebalance
+        :type rebalance_retries: int
         """
         self._cluster = cluster
         self._consumer_group = consumer_group
@@ -105,12 +110,12 @@ class BalancedConsumer():
         self._socket_timeout_ms = socket_timeout_ms
         self._fetch_message_max_bytes = fetch_message_max_bytes
         self._fetch_min_bytes = fetch_min_bytes
+        self._rebalance_retries = rebalance_retries
 
         self._consumer = None
         self._id = "{}:{}".format(socket.gethostname(), uuid4())
         self._partitions = set()
         self._setting_watches = True
-        self._rebalance_retries = 5
 
         self._topic_path = '/consumers/{}/owners/{}'.format(self._consumer_group,
                                                             self._topic.name)

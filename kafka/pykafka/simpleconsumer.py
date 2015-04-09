@@ -8,19 +8,11 @@ from Queue import Queue, Empty
 from kafka import base
 from kafka.common import OffsetType
 
-from .protocol import (PartitionFetchRequest,
-                       PartitionOffsetCommitRequest,
+from .protocol import (PartitionFetchRequest, PartitionOffsetCommitRequest,
                        PartitionOffsetFetchRequest)
-
-# Settings to add to the eventual BalancedConsumer
-# consumer_group
-# rebalance_max_retries
-# rebalance_backoff_ms
-# partition_assignment_strategy
 
 
 class SimpleConsumer(base.BaseSimpleConsumer):
-
     def __init__(self,
                  topic,
                  cluster,
