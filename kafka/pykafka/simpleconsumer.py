@@ -18,7 +18,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                  cluster,
                  consumer_group=None,
                  partitions=None,
-                 socket_timeout_ms=30000,
+                 socket_timeout_ms=30 * 1000,
                  socket_receive_buffer_bytes=60 * 1024,
                  fetch_message_max_bytes=1024 * 1024,
                  num_consumer_fetchers=1,

@@ -20,7 +20,7 @@ class BalancedConsumer():
                  cluster,
                  consumer_group,
                  zookeeper_connect='127.0.0.1:2181',
-                 socket_timeout_ms=30000,
+                 socket_timeout_ms=30 * 1000,
                  socket_receive_buffer_bytes=60 * 1024,
                  fetch_message_max_bytes=1024 * 1024,
                  num_consumer_fetchers=1,
@@ -114,13 +114,13 @@ class BalancedConsumer():
         self._rebalance_retries = rebalance_retries
 
         self._consumer = None
-        self._id = "{}:{}".format(socket.gethostname(), uuid4())
+        self._consumer_id = "{}:{}".format(socket.gethostname(), uuid4())
         self._partitions = set()
         self._setting_watches = True
 
         self._topic_path = '/consumers/{}/owners/{}'.format(self._consumer_group,
                                                             self._topic.name)
-        self._id_path = '/consumers/{}/ids'.format(self._consumer_group)
+        self._consumer_id_path = '/consumers/{}/ids'.format(self._consumer_group)
 
         def _close_zk_connection(signum, frame):
             self._zookeeper.stop()
@@ -188,7 +188,7 @@ class BalancedConsumer():
         all_partitions.sort(key=p_to_str)
 
         # get start point, # of partitions, and remainder
-        idx = participants.index(self._id)
+        idx = participants.index(self._consumer_id)
         parts_per_consumer = len(all_partitions) / len(participants)
         remainder_ppc = len(all_partitions) % len(participants)
 
@@ -218,7 +218,7 @@ class BalancedConsumer():
         Returns a sorted list of the ids of the other consumers of self._topic
         """
         try:
-            consumer_ids = self._zookeeper.get_children(self._id_path)
+            consumer_ids = self._zookeeper.get_children(self._consumer_id_path)
         except NoNodeException:
             log.debug("Consumer group doesn't exist. "
                       "No participants to find")
@@ -227,7 +227,7 @@ class BalancedConsumer():
         participants = []
         for id_ in consumer_ids:
             try:
-                topic, stat = self._zookeeper.get("%s/%s" % (self._id_path, id_))
+                topic, stat = self._zookeeper.get("%s/%s" % (self._consumer_id_path, id_))
                 if topic == self._topic.name:
                     participants.append(id_)
             except NoNodeException:
@@ -262,7 +262,7 @@ class BalancedConsumer():
         )
 
         self._consumer_watcher = ChildrenWatch(
-            self._zookeeper, self._id_path,
+            self._zookeeper, self._consumer_id_path,
             self._consumers_changed
         )
         self._setting_watches = False
@@ -277,7 +277,7 @@ class BalancedConsumer():
             log.debug("More consumers than partitions.")
             return
 
-        path = '{}/{}'.format(self._id_path, self._id)
+        path = '{}/{}'.format(self._consumer_id_path, self._id)
         self._zookeeper.create(
             path, self._topic.name, ephemeral=True, makepath=True)
 
@@ -287,7 +287,7 @@ class BalancedConsumer():
         Called whenever a ZooKeeper watch is triggered
         """
         log.info('Rebalancing consumer %s for topic %s.' % (
-            self._id, self._topic.name)
+            self._consumer_id, self._topic.name)
         )
 
         for i in xrange(self._rebalance_retries):
@@ -329,7 +329,7 @@ class BalancedConsumer():
         """
         for p in partitions:
             self._zookeeper.create(
-                self._path_from_partition(p), self._id,
+                self._path_from_partition(p), self._consumer_id,
                 ephemeral=True
             )
         self._partitions |= partitions
