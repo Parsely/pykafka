@@ -1,3 +1,5 @@
+from __future__ import division
+
 __license__ = """
 Copyright 2012 DISQUS
 Copyright 2013,2014 Parse.ly, Inc.
@@ -48,7 +50,7 @@ class BrokerConnection(object):
         """Connect to the broker."""
         self._socket = socket.create_connection(
             (self.host, self.port),
-            timeout=float(timeout) / 1000.0
+            timeout=timeout / 1000
         )
 
     def disconnect(self):

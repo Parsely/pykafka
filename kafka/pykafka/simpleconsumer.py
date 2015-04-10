@@ -104,8 +104,6 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         self._auto_commit_interval_ms = auto_commit_interval_ms
         self._last_auto_commit = time.time()
 
-        self._running = True
-
         self._offset_manager = self._cluster.get_offset_manager(self._consumer_group)
 
         owned_partition_partial = functools.partial(
@@ -123,6 +121,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         for p in self._partitions.iterkeys():
             self._partitions_by_leader[p.partition.leader].append(p)
         self.partition_cycle = itertools.cycle(self._partitions.keys())
+
+        self._running = True
 
         if self._auto_commit_enable:
             self._autocommit_worker_thread = self._setup_autocommit_worker()

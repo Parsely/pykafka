@@ -1,11 +1,12 @@
+from __future__ import division
 import itertools
 import logging as log
 import signal
 import socket
 import sys
 import time
-from uuid import uuid4
 import weakref
+from uuid import uuid4
 
 from kazoo.client import KazooClient
 from kazoo.exceptions import NoNodeException, NodeExistsError
@@ -146,17 +147,9 @@ class BalancedConsumer():
         :param timeout: connection timeout in milliseconds
         :type timeout: int
         """
-        zk = None
-        hosts = zookeeper_connect.split(',')
-        for host in hosts:
-            try:
-                zk = KazooClient(host, timeout=float(timeout) / 1000.0)
-                break
-            except:
-                log.debug("Connecting to zookeeper at %s failed.", host)
-        if zk is not None:
-            zk.start()
-            return zk
+        zk = KazooClient(zookeeper_connect, timeout=timeout / 1000)
+        zk.start()
+        return zk
 
     def _setup_internal_consumer(self):
         """Create an internal SimpleConsumer instance
@@ -315,7 +308,7 @@ class BalancedConsumer():
                 log.debug("Partition still owned")
 
             log.debug("Retrying")
-            time.sleep(i * (float(self._rebalance_backoff_ms) / 1000.0))
+            time.sleep(i * (self._rebalance_backoff_ms / 1000))
 
         self._setup_internal_consumer()
 

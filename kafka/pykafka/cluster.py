@@ -74,7 +74,7 @@ class Cluster(object):
         # Add/update current brokers
         for id_, meta in broker_metadata.iteritems():
             if id_ not in self._brokers:
-                logger.info('Adding new broker %s:%s', meta.host, meta.port)
+                logger.info('Discovered broker %s:%s', meta.host, meta.port)
                 self._brokers[id_] = Broker.from_metadata(
                     meta, self._handler, self._timeout,
                     buffer_size=self._socket_receive_buffer_bytes
@@ -105,7 +105,7 @@ class Cluster(object):
             if not self._should_exclude_topic(name):
                 if name not in self._topics:
                     self._topics[name] = Topic(self, meta)
-                    logger.info('Adding topic %s', self._topics[name])
+                    logger.info('Discovered topic %s', self._topics[name])
                 else:
                     self._topics[name].update(meta)
 
