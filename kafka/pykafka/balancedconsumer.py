@@ -146,10 +146,12 @@ class BalancedConsumer():
         :param timeout: connection timeout in milliseconds
         :type timeout: int
         """
+        zk = None
         hosts = zookeeper_connect.split(',')
         for host in hosts:
             try:
-                zk = KazooClient(host=host, timeout=float(timeout) / 1000.0)
+                zk = KazooClient(host, timeout=float(timeout) / 1000.0)
+                break
             except:
                 log.debug("Connecting to zookeeper at %s failed.", host)
         if zk is not None:
