@@ -56,6 +56,7 @@ from .utils import Serializable, compression, struct_helpers
 
 
 logger = logging.getLogger(__name__)
+ERROR_OFFSET_OUT_OF_RANGE = 1
 
 
 class Request(Serializable):
@@ -1044,7 +1045,7 @@ class OffsetFetchRequest(Request):
 
 class OffsetFetchPartitionResponse(object):
     """Partition information that's part of an OffsetFetchResponse"""
-    def __init__(self, offset, metadata):
+    def __init__(self, offset, metadata, error):
         """Create a new OffsetFetchPartitionResponse
 
         :param offset:
@@ -1052,6 +1053,7 @@ class OffsetFetchPartitionResponse(object):
         """
         self.offset = offset
         self.metadata = metadata
+        self.error = error
 
 
 class OffsetFetchResponse(Response):
@@ -1077,7 +1079,9 @@ class OffsetFetchResponse(Response):
         for topic_name, partitions in response:
             self.topics[topic_name] = {}
             for partition in partitions:
-                if partition[3] != 0:
+                if partition[3] not in (0, ERROR_OFFSET_OUT_OF_RANGE):
                     self.raise_error(partition[3], response)
-                pres = OffsetFetchPartitionResponse(partition[1], partition[2])
+                pres = OffsetFetchPartitionResponse(partition[1],
+                                                    partition[2],
+                                                    partition[3])
                 self.topics[topic_name][partition[0]] = pres
