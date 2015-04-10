@@ -41,7 +41,10 @@ class Broker(base.BaseBroker):
         self.connect()
 
     @classmethod
-    def from_metadata(cls, metadata, handler, timeout,
+    def from_metadata(cls,
+                      metadata,
+                      handler,
+                      timeout,
                       buffer_size=64 * 1024):
         """ Create a Broker using BrokerMetadata
 
@@ -95,7 +98,7 @@ class Broker(base.BaseBroker):
         :type partition_requests: Iterable of
             :class:`kafka.pykafka.protocol.PartitionFetchRequest`
         """
-        future = self.handler.request(FetchRequest(
+        future = self._reqhandler.request(FetchRequest(
             partition_requests=partition_requests,
             timeout=timeout,
             min_bytes=min_bytes,
@@ -110,19 +113,19 @@ class Broker(base.BaseBroker):
             :class:`kafka.pykafka.protocol.ProduceRequest`
         """
         if produce_request.required_acks == 0:
-            self.handler.request(produce_request, has_response=False)
+            self._reqhandler.request(produce_request, has_response=False)
         else:
-            self.handler.request(produce_request).get()
+            self._reqhandler.request(produce_request).get()
             # Any errors will be decoded and raised in the `.get()`
         return None
 
     def request_offset_limits(self, partition_requests):
         """Request offset information for a set of topic/partitions"""
-        future = self.handler.request(OffsetRequest(partition_requests))
+        future = self._reqhandler.request(OffsetRequest(partition_requests))
         return future.get(OffsetResponse)
 
     def request_metadata(self, topics=[]):
-        future = self.handler.request(MetadataRequest(topics=topics))
+        future = self._reqhandler.request(MetadataRequest(topics=topics))
         return future.get(MetadataResponse)
 
     ######################
@@ -152,7 +155,7 @@ class Broker(base.BaseBroker):
                                   consumer_group_generation_id,
                                   consumer_id,
                                   partition_requests=preqs)
-        self.handler.request(req).get(OffsetCommitResponse)
+        self._reqhandler.request(req).get(OffsetCommitResponse)
 
     def fetch_consumer_group_offsets(self, consumer_group, preqs):
         """Fetch the offsets stored in Kafka with the Offset Commit/Fetch API
@@ -167,4 +170,4 @@ class Broker(base.BaseBroker):
         """
         # TODO - exponential backoff
         req = OffsetFetchRequest(consumer_group, partition_requests=preqs)
-        return self.handler.request(req).get(OffsetFetchResponse)
+        return self._reqhandler.request(req).get(OffsetFetchResponse)
