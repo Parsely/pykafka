@@ -9,10 +9,10 @@ import threading
 
 from kafka import base
 from kafka.common import OffsetType
+from kafka.exceptions import OffsetOutOfRangeError
 
 from .protocol import (PartitionFetchRequest, PartitionOffsetCommitRequest,
-                       PartitionOffsetFetchRequest, ERROR_OFFSET_OUT_OF_RANGE,
-                       PartitionOffsetRequest)
+                       PartitionOffsetFetchRequest, PartitionOffsetRequest)
 
 
 class SimpleConsumer(base.BaseSimpleConsumer):
@@ -257,7 +257,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         out_of_range_partitions, in_range_partitions = [], []
         for partition_id, pres in res.topics[self._topic.name].iteritems():
             owned_partition = self._partitions_by_id[partition_id]
-            if pres.error == ERROR_OFFSET_OUT_OF_RANGE:
+            if pres.error == OffsetOutOfRangeError.ERROR_CODE:
                 out_of_range_partitions.append(owned_partition)
             else:
                 in_range_partitions.append((owned_partition, pres))

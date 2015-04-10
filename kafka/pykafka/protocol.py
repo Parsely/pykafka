@@ -51,12 +51,11 @@ from zlib import crc32
 
 from kafka import common
 from kafka.common import CompressionType
-from kafka.exceptions import ERROR_CODES
+from kafka.exceptions import ERROR_CODES, OffsetOutOfRangeError
 from .utils import Serializable, compression, struct_helpers
 
 
 logger = logging.getLogger(__name__)
-ERROR_OFFSET_OUT_OF_RANGE = 1
 
 
 class Request(Serializable):
@@ -640,7 +639,7 @@ class FetchResponse(Response):
         self.topics = defaultdict(dict)
         for (topic, partitions) in response:
             for partition in partitions:
-                if partition[1] not in (0, 1):
+                if partition[1] not in (0, OffsetOutOfRangeError.ERROR_CODE):
                     self.raise_error(partition[1], response)
                 self.topics[topic][partition[0]] = FetchPartitionResponse(
                     partition[2], self._unpack_message_set(partition[3]),
@@ -1081,7 +1080,7 @@ class OffsetFetchResponse(Response):
         for topic_name, partitions in response:
             self.topics[topic_name] = {}
             for partition in partitions:
-                if partition[3] not in (0, ERROR_OFFSET_OUT_OF_RANGE):
+                if partition[3] not in (0, OffsetOutOfRangeError.ERROR_CODE):
                     self.raise_error(partition[3], response)
                 pres = OffsetFetchPartitionResponse(partition[1],
                                                     partition[2],
