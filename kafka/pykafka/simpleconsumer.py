@@ -305,7 +305,7 @@ class OwnedPartition(object):
             self.partition.id,
             self.last_offset_consumed,
             int(time.time()),
-            ''  # TODO - what to do with metadata?
+            'pykafka'
         )
 
     def build_offset_fetch_request(self):
