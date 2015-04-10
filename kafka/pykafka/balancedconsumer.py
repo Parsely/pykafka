@@ -34,7 +34,8 @@ class BalancedConsumer():
                  rebalance_max_retries=5,
                  rebalance_backoff_ms=2 * 1000,
                  zookeeper_connection_timeout_ms=6 * 1000,
-                 zookeeper_connect='127.0.0.1:2181'):
+                 zookeeper_connect='127.0.0.1:2181',
+                 zookeeper=None):
         """Create a BalancedConsumer
 
         Maintains a single instance of SimpleConsumer, periodically using the
@@ -95,6 +96,8 @@ class BalancedConsumer():
         :param zookeeper_connect: comma separated ip:port strings of the
             zookeeper nodes to connect to
         :type zookeeper_connect: str
+        :param zookeeper: A KazooClient connected to a Zookeeper instance
+        :type zookeeper: kazoo.client.KazooClient
         """
         if not isinstance(cluster, weakref.ProxyType):
             self._cluster = weakref.proxy(cluster)
@@ -123,8 +126,8 @@ class BalancedConsumer():
                                                             self._topic.name)
         self._consumer_id_path = '/consumers/{}/ids'.format(self._consumer_group)
 
-        self._zookeeper = self._setup_zookeeper(zookeeper_connect,
-                                                zookeeper_connection_timeout_ms)
+        self._zookeeper = zookeeper or self._setup_zookeeper(
+            zookeeper_connect, zookeeper_connection_timeout_ms)
         self._zookeeper.ensure_path(self._topic_path)
         self._add_self()
         self._set_watches()
