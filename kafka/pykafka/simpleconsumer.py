@@ -11,7 +11,8 @@ from kafka import base
 from kafka.common import OffsetType
 
 from .protocol import (PartitionFetchRequest, PartitionOffsetCommitRequest,
-                       PartitionOffsetFetchRequest)
+                       PartitionOffsetFetchRequest, ERROR_OFFSET_OUT_OF_RANGE,
+                       PartitionOffsetRequest)
 
 
 class SimpleConsumer(base.BaseSimpleConsumer):
@@ -99,6 +100,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         self._consumer_timeout_ms = consumer_timeout_ms
         self._offsets_channel_backoff_ms = offsets_channel_backoff_ms
         self._offsets_commit_max_retries = offsets_commit_max_retries
+        self._auto_offset_reset = auto_offset_reset
 
         self._last_message_time = time.time()
 
@@ -239,9 +241,50 @@ class SimpleConsumer(base.BaseSimpleConsumer):
 
         reqs = [p.build_offset_fetch_request() for p in self._partitions.keys()]
         res = self._offset_manager.fetch_consumer_group_offsets(self._consumer_group, reqs)
+        parts_in, parts_out = self._filter_partition_responses(res)
+        for owned_partition, pres in parts_in:
+            owned_partition.set_offset(pres.offset)
+        self._reset_offsets(parts_out)
+
+    def _filter_partition_responses(self, res):
+        """Group partition responses by offset-in-range and offset-out-of-range
+
+        This function accepts as input a FetchResponse or an OffsetFetchResponse.
+
+        :param res: a Response containing zero or more partition responses
+        :type res: FetchResponse or OffsetFetchResponse
+        """
+        out_of_range_partitions, in_range_partitions = [], []
         for partition_id, pres in res.topics[self._topic.name].iteritems():
-            partition = self._partitions_by_id[partition_id]
-            partition.set_offset_counters(pres)
+            owned_partition = self._partitions_by_id[partition_id]
+            if pres.error == ERROR_OFFSET_OUT_OF_RANGE:
+                out_of_range_partitions.append(owned_partition)
+            else:
+                in_range_partitions.append((owned_partition, pres))
+        return in_range_partitions, out_of_range_partitions
+
+    def _reset_offsets(self, errored_partitions):
+        """Reset offsets after an OffsetOutOfRangeError
+
+        Issue an OffsetRequest for each partition and set the appropriate
+        returned offset in the OwnedPartition per self._auto_offset_reset
+
+        :param errored_partitions: the partitions with out-of-range offsets
+        :type errored_partitions: Iterable of OwnedPartition
+        """
+        # group out-of-range partitions by leader
+        owned_partitions_by_leader = defaultdict(list)
+        for p in errored_partitions:
+            owned_partitions_by_leader[p.partition.leader].append(p)
+
+        # get valid offset ranges for each partition
+        for broker, owned_partitions in owned_partitions_by_leader.iteritems():
+            reqs = [owned_partition.build_offset_request(self._auto_offset_reset)
+                    for owned_partition in owned_partitions]
+            response = broker.request_offset_limits(reqs)
+            for partition_id, offsets in response.topics[self._topic.name].iteritems():
+                owned_partition = self._partitions_by_id[partition_id]
+                owned_partition.set_offset(offsets[0])
 
     def fetch(self):
         """Fetch new messages for all partitions
@@ -264,9 +307,10 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                     timeout=self._fetch_wait_max_ms,
                     min_bytes=self._fetch_min_bytes
                 )
-                for partition_id, pres in response.topics[self._topic.name].iteritems():
-                    owned_partition = self._partitions_by_id[partition_id]
+                parts_in, parts_out = self._filter_partition_responses(response)
+                for owned_partition, pres in parts_in:
                     owned_partition.enqueue_messages(pres.messages)
+                self._reset_offsets(parts_out)
             for owned_partition, _ in partition_reqs:
                 owned_partition.lock.release()
 
@@ -290,18 +334,27 @@ class OwnedPartition(object):
     def message_count(self):
         return self._messages.qsize()
 
-    def set_offset_counters(self, res):
+    def set_offset(self, last_offset_consumed):
         """Set the internal offset counters from an OffsetFetchResponse
 
-        :param res: an OffsetFetchPartitionResponse containing the committed
-            offset for this partition
-        :type res: <protocol.PartitionOffsetFetchResponse>
+        :param last_offset_consumed: the last committed offset for this
+            partition
+        :type last_offset_consumed: int
         """
-        self.last_offset_consumed = res.offset
-        self.next_offset = res.offset + 1
+        self.last_offset_consumed = last_offset_consumed
+        self.next_offset = last_offset_consumed + 1
         log.info("Last offset consumed: %d", self.last_offset_consumed)
 
+    def build_offset_request(self, auto_offset_reset):
+        """Create a PartitionOffsetRequest for this partition
+        """
+        return PartitionOffsetRequest(
+            self.partition.topic.name, self.partition.id,
+            auto_offset_reset, 1)
+
     def build_fetch_request(self, max_bytes):
+        """Create a FetchPartitionRequest for this partition
+        """
         return PartitionFetchRequest(
             self.partition.topic.name, self.partition.id,
             self.next_offset, max_bytes)
