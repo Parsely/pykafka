@@ -13,7 +13,10 @@ logger = logging.getLogger(__name__)
 class Cluster(object):
     """Cluster implementation used to populate the KafkaClient."""
 
-    def __init__(self, hosts, handler, timeout,
+    def __init__(self,
+                 hosts,
+                 handler,
+                 timeout,
                  socket_receive_buffer_bytes=64 * 1024,
                  exclude_internal_topics=True):
         self._seed_hosts = hosts
