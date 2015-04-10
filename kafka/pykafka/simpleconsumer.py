@@ -241,8 +241,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         for broker, owned_partitions in self._partitions_by_leader.iteritems():
             reqs = []
             for owned_partition in owned_partitions:
-                has_room = owned_partition.message_count < self._queued_max_messages
-                if owned_partition.empty and has_room:
+                if owned_partition.message_count < self._queued_max_messages:
                     # attempt to acquire lock, just pass if we can't
                     if owned_partition.lock.acquire(False):
                         reqs.append(owned_partition.build_fetch_request(
@@ -276,10 +275,6 @@ class OwnedPartition(object):
     @property
     def message_count(self):
         return self._messages.qsize()
-
-    @property
-    def empty(self):
-        return self._messages.empty()
 
     def set_offset_counters(self, res):
         """Set the internal offset counters from an OffsetFetchResponse
