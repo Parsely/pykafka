@@ -10,9 +10,9 @@ from kazoo.client import KazooClient
 from kazoo.exceptions import NoNodeException, NodeExistsError
 from kazoo.recipe.watchers import ChildrenWatch
 
-from kafka.common import OffsetType
-from kafka.pykafka.simpleconsumer import SimpleConsumer
-from kafka.exceptions import KafkaException
+from .common import OffsetType
+from .pykafka.simpleconsumer import SimpleConsumer
+from .exceptions import KafkaException
 
 
 class BalancedConsumer():

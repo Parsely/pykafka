@@ -12,7 +12,7 @@ from .partition import Partition
 from .producer import Producer
 from .protocol import PartitionOffsetRequest
 from .simpleconsumer import SimpleConsumer
-from .balancedconsumer import BalancedConsumer
+from kafka.balancedconsumer import BalancedConsumer
 
 
 logger = logging.getLogger()
