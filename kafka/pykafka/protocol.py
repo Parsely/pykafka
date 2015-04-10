@@ -608,7 +608,7 @@ class FetchRequest(Request):
 
 class FetchPartitionResponse(object):
     """Partition information that's part of a FetchResponse"""
-    def __init__(self, max_offset, messages):
+    def __init__(self, max_offset, messages, error):
         """Create a new FetchPartitionResponse
 
         :param max_offset: The offset at the end of this partition
@@ -616,6 +616,7 @@ class FetchPartitionResponse(object):
         """
         self.max_offset = max_offset
         self.messages = messages
+        self.error = error
 
 
 class FetchResponse(Response):
@@ -639,10 +640,11 @@ class FetchResponse(Response):
         self.topics = defaultdict(dict)
         for (topic, partitions) in response:
             for partition in partitions:
-                if partition[1] != 0:
+                if partition[1] not in (0, 1):
                     self.raise_error(partition[1], response)
                 self.topics[topic][partition[0]] = FetchPartitionResponse(
                     partition[2], self._unpack_message_set(partition[3]),
+                    partition[1]
                 )
 
     def _unpack_message_set(self, buff):
