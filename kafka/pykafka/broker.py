@@ -31,11 +31,13 @@ class Broker(base.BaseBroker):
         :type timeout: :class:int
         """
         self._connected = False
+        self._offsets_channel_connected = False
         self._id = int(id_)
         self._host = host
         self._port = port
         self._handler = handler
-        self._reqhandler = None
+        self._req_handler = None
+        self._offsets_channel_req_handler = None
         self._timeout = timeout
         self._buffer_size = buffer_size
         self.connect()
@@ -61,6 +63,11 @@ class Broker(base.BaseBroker):
         return self._connected
 
     @property
+    def offsets_channel_connected(self):
+        """Returns True if the connected to the broker."""
+        return self._offsets_channel_connected
+
+    @property
     def id(self):
         """The broker's ID within the Kafka cluster."""
         return self._id
@@ -77,16 +84,35 @@ class Broker(base.BaseBroker):
 
     @property
     def handler(self):
-        """The :class:`kafka.handlers.RequestHandler` for this broker."""
-        return self._reqhandler
+        """The primary :class:`kafka.handlers.RequestHandler` for this broker.
+
+        This handler handles all requests outside of the commit/fetch api
+        """
+        return self._req_handler
+
+    @property
+    def offsets_channel_handler(self):
+        """The offset channel :class:`kafka.handlers.RequestHandler` for this broker.
+
+        This handler handles all requests that use the commit/fetch api
+        """
+        return self._offsets_channel_req_handler
 
     def connect(self):
         """Establish a connection to the Broker."""
         conn = BrokerConnection(self.host, self.port, self._buffer_size)
         conn.connect(self._timeout)
-        self._reqhandler = RequestHandler(self._handler, conn)
-        self._reqhandler.start()
+        self._req_handler = RequestHandler(self._handler, conn)
+        self._req_handler.start()
         self._connected = True
+
+    def connect_offsets_channel(self):
+        """Establish a connection to the Broker for the offsets channel"""
+        conn = BrokerConnection(self.host, self.port, self._buffer_size)
+        conn.connect(self._timeout)
+        self._offsets_channel_req_handler = RequestHandler(self._handler, conn)
+        self._offsets_channel_req_handler.start()
+        self._offsets_channel_connected = True
 
     def fetch_messages(self,
                        partition_requests,
@@ -98,7 +124,7 @@ class Broker(base.BaseBroker):
         :type partition_requests: Iterable of
             :class:`kafka.pykafka.protocol.PartitionFetchRequest`
         """
-        future = self._reqhandler.request(FetchRequest(
+        future = self._req_handler.request(FetchRequest(
             partition_requests=partition_requests,
             timeout=timeout,
             min_bytes=min_bytes,
@@ -113,19 +139,19 @@ class Broker(base.BaseBroker):
             :class:`kafka.pykafka.protocol.ProduceRequest`
         """
         if produce_request.required_acks == 0:
-            self._reqhandler.request(produce_request, has_response=False)
+            self._req_handler.request(produce_request, has_response=False)
         else:
-            self._reqhandler.request(produce_request).get()
+            self._req_handler.request(produce_request).get()
             # Any errors will be decoded and raised in the `.get()`
         return None
 
     def request_offset_limits(self, partition_requests):
         """Request offset information for a set of topic/partitions"""
-        future = self._reqhandler.request(OffsetRequest(partition_requests))
+        future = self._req_handler.request(OffsetRequest(partition_requests))
         return future.get(OffsetResponse)
 
     def request_metadata(self, topics=[]):
-        future = self._reqhandler.request(MetadataRequest(topics=topics))
+        future = self._req_handler.request(MetadataRequest(topics=topics))
         return future.get(MetadataResponse)
 
     ######################
@@ -150,12 +176,14 @@ class Broker(base.BaseBroker):
         :param preqs: a sequence of <protocol.PartitionOffsetCommitRequest>
         :type preqs: sequence
         """
+        if not self._offsets_channel_connected:
+            self.connect_offsets_channel()
         # TODO - exponential backoff
         req = OffsetCommitRequest(consumer_group,
                                   consumer_group_generation_id,
                                   consumer_id,
                                   partition_requests=preqs)
-        self._reqhandler.request(req).get(OffsetCommitResponse)
+        self._offsets_channel_req_handler.request(req).get(OffsetCommitResponse)
 
     def fetch_consumer_group_offsets(self, consumer_group, preqs):
         """Fetch the offsets stored in Kafka with the Offset Commit/Fetch API
@@ -168,6 +196,8 @@ class Broker(base.BaseBroker):
         :param preqs: a sequence of <protocol.PartitionOffsetFetchRequest>
         :type preqs: sequence
         """
+        if not self._offsets_channel_connected:
+            self.connect_offsets_channel()
         # TODO - exponential backoff
         req = OffsetFetchRequest(consumer_group, partition_requests=preqs)
-        return self._reqhandler.request(req).get(OffsetFetchResponse)
+        return self._offsets_channel_req_handler.request(req).get(OffsetFetchResponse)
