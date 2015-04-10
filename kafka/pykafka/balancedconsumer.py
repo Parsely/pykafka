@@ -116,6 +116,8 @@ class BalancedConsumer():
         self._fetch_wait_max_ms = fetch_wait_max_ms
         self._rebalance_backoff_ms = rebalance_backoff_ms
         self._consumer_timeout_ms = consumer_timeout_ms
+        self._offsets_channel_backoff_ms = offsets_channel_backoff_ms
+        self._offsets_commit_max_retries = offsets_commit_max_retries
 
         self._consumer = None
         self._consumer_id = "{}:{}".format(socket.gethostname(), uuid4())
@@ -169,7 +171,9 @@ class BalancedConsumer():
             num_consumer_fetchers=self._num_consumer_fetchers,
             queued_max_messages=self._queued_max_messages,
             fetch_wait_max_ms=self._fetch_wait_max_ms,
-            consumer_timeout_ms=self._consumer_timeout_ms
+            consumer_timeout_ms=self._consumer_timeout_ms,
+            offsets_channel_backoff_ms=self._offsets_channel_backoff_ms,
+            offsets_commit_max_retries=self._offsets_commit_max_retries
         )
 
     def _decide_partitions(self, participants):

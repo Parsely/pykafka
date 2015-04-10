@@ -97,6 +97,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         self._num_consumer_fetchers = num_consumer_fetchers
         self._fetch_wait_max_ms = fetch_wait_max_ms
         self._consumer_timeout_ms = consumer_timeout_ms
+        self._offsets_channel_backoff_ms = offsets_channel_backoff_ms
+        self._offsets_commit_max_retries = offsets_commit_max_retries
 
         self._last_message_time = time.time()
 
@@ -210,8 +212,17 @@ class SimpleConsumer(base.BaseSimpleConsumer):
 
         reqs = [p.build_offset_commit_request() for p in self._partitions.keys()]
         log.info("Committing offsets for %d partitions", len(reqs))
-        self._offset_manager.commit_consumer_group_offsets(
-            self._consumer_group, 1, 'pykafka', reqs)
+
+        for i in xrange(self._offsets_commit_max_retries):
+            try:
+                self._offset_manager.commit_consumer_group_offsets(
+                    self._consumer_group, 1, 'pykafka', reqs)
+                break
+            except Exception as e:
+                log.warning("Offset commit failed %s", e)
+
+            log.debug("Retrying")
+            time.sleep(i * (self._offsets_channel_backoff_ms / 1000))
 
     def fetch_offsets(self):
         """Fetch offsets for this consumer's topic
