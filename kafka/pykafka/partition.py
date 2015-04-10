@@ -67,7 +67,7 @@ class Partition(base.BasePartition):
         request = PartitionOffsetRequest(
             self.topic.name, self.id, offsets_before, max_offsets
         )
-        res = self.leader.request_offsets([request])
+        res = self._leader.request_offsets([request])
         return res.topics[self.topic.name][self._id][0]
 
     def latest_available_offsets(self):
@@ -97,9 +97,9 @@ class Partition(base.BasePartition):
         """
         try:
             # Check leader
-            if metadata.leader != self.leader.id:
+            if metadata.leader != self._leader.id:
                 logger.info('Updating leader for %s', self)
-                self.leader = brokers[metadata.leader]
+                self._leader = brokers[metadata.leader]
             # Check Replicas
             if sorted(r.id for r in self.replicas) != sorted(metadata.replicas):
                 logger.info('Updating replicas list for %s', self)
