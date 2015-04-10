@@ -13,12 +13,21 @@ logger = logging.getLogger(__name__)
 class Cluster(object):
     """Cluster implementation used to populate the KafkaClient."""
 
-    def __init__(self, hosts, handler, timeout):
+    def __init__(self,
+                 hosts,
+                 handler,
+                 socket_timeout_ms=30 * 1000,
+                 offsets_channel_socket_timeout_ms=10 * 1000,
+                 socket_receive_buffer_bytes=64 * 1024,
+                 exclude_internal_topics=True):
         self._seed_hosts = hosts
-        self._timeout = timeout
+        self._socket_timeout_ms = socket_timeout_ms
+        self._offsets_channel_socket_timeout_ms = offsets_channel_socket_timeout_ms
         self._handler = handler
         self._brokers = {}
         self._topics = {}
+        self._socket_receive_buffer_bytes = socket_receive_buffer_bytes
+        self._exclude_internal_topics = exclude_internal_topics
         self.update()
 
     @property
@@ -45,7 +54,9 @@ class Cluster(object):
             try:
                 if isinstance(broker, basestring):
                     h, p = broker.split(':')
-                    broker = Broker(-1, h, p, self._handler, self._timeout)
+                    broker = Broker(-1, h, p, self._handler, self._socket_timeout_ms,
+                                    self._offsets_channel_socket_timeout_ms,
+                                    buffer_size=self._socket_receive_buffer_bytes)
                 return broker.request_metadata()
             # TODO: Change to typed exception
             except Exception:
@@ -69,9 +80,11 @@ class Cluster(object):
         # Add/update current brokers
         for id_, meta in broker_metadata.iteritems():
             if id_ not in self._brokers:
-                logger.info('Adding new broker %s:%s', meta.host, meta.port)
+                logger.info('Discovered broker %s:%s', meta.host, meta.port)
                 self._brokers[id_] = Broker.from_metadata(
-                    meta, self._handler, self._timeout
+                    meta, self._handler, self._socket_timeout_ms,
+                    self._offsets_channel_socket_timeout_ms,
+                    buffer_size=self._socket_receive_buffer_bytes
                 )
             else:
                 broker = self._brokers[id_]
@@ -96,11 +109,19 @@ class Cluster(object):
             self._topics.pop(name)
         # Add/update partition information
         for name, meta in metadata.iteritems():
-            if name not in self._topics:
-                self._topics[name] = Topic(self._brokers, meta)
-                logger.info('Adding topic %s', self._topics[name])
-            else:
-                self._topics[name].update(meta)
+            if not self._should_exclude_topic(name):
+                if name not in self._topics:
+                    self._topics[name] = Topic(self, meta)
+                    logger.info('Discovered topic %s', self._topics[name])
+                else:
+                    self._topics[name].update(meta)
+
+    def _should_exclude_topic(self, topic_name):
+        """Return a boolean indicating whether this topic should be exluded
+        """
+        if not self._exclude_internal_topics:
+            return False
+        return topic_name.startswith("__")
 
     def get_offset_manager(self, consumer_group):
         """Get the broker designated as the offset manager for this consumer

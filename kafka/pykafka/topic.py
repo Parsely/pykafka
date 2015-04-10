@@ -2,14 +2,17 @@
 # TODO: __slots__ where appropriate
 # TODO: Use weak refs to avoid reference cycles?
 
-import logging
 from collections import defaultdict
+import logging
+import weakref
 
 from kafka import base
 from kafka.common import OffsetType
 from .partition import Partition
 from .producer import Producer
 from .protocol import PartitionOffsetRequest
+from .simpleconsumer import SimpleConsumer
+from .balancedconsumer import BalancedConsumer
 
 
 logger = logging.getLogger()
@@ -17,15 +20,16 @@ logger = logging.getLogger()
 
 class Topic(base.BaseTopic):
 
-    def __init__(self, brokers, topic_metadata):
+    def __init__(self, cluster, topic_metadata):
         """Create the Topic from metadata.
 
         :param topic_metadata: Metadata for all topics
         :type topic_metadata: :class:`kafka.pykafka.protocol.TopicMetadata`
         """
         self._name = topic_metadata.name
+        self._cluster = weakref.proxy(cluster)
         self._partitions = {}
-        self.update(brokers, topic_metadata)
+        self.update(cluster.brokers, topic_metadata)
 
     @property
     def name(self):
@@ -96,3 +100,14 @@ class Topic(base.BaseTopic):
                 )
             else:
                 self._partitions[id_].update(meta)
+
+    def get_simple_consumer(self, consumer_group=None, **kwargs):
+        """Return a SimpleConsumer of this topic
+        """
+        return SimpleConsumer(self, self._cluster,
+                              consumer_group=consumer_group, **kwargs)
+
+    def get_balanced_consumer(self, consumer_group, **kwargs):
+        """Return a BalancedConsumer of this topic
+        """
+        return BalancedConsumer(self, self._cluster, consumer_group, **kwargs)
