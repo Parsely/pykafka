@@ -12,6 +12,7 @@ from kazoo.recipe.watchers import ChildrenWatch
 
 from kafka.common import OffsetType
 from kafka.pykafka.simpleconsumer import SimpleConsumer
+from kafka.exceptions import KafkaException
 
 
 class BalancedConsumer():
@@ -284,8 +285,7 @@ class BalancedConsumer():
         """
         participants = self._get_participants()
         if len(self._topic.partitions) <= len(participants):
-            log.debug("More consumers than partitions.")
-            return
+            raise KafkaException("Cannot add consumer: more consumers than partitions")
 
         path = '{}/{}'.format(self._consumer_id_path, self._consumer_id)
         self._zookeeper.create(
