@@ -239,22 +239,25 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         returned messages in the approprate OwnedPartition.
         """
         for broker, owned_partitions in self._partitions_by_leader.iteritems():
-            reqs = []
+            partition_reqs = []
             for owned_partition in owned_partitions:
-                if owned_partition.message_count < self._queued_max_messages:
-                    # attempt to acquire lock, just pass if we can't
-                    if owned_partition.lock.acquire(False):
-                        reqs.append(owned_partition.build_fetch_request(
-                            self._fetch_message_max_bytes))
-            if reqs:
+                # attempt to acquire lock, just pass if we can't
+                if owned_partition.lock.acquire(False) and \
+                        owned_partition.message_count < self._queued_max_messages:
+                    fetch_req = owned_partition.build_fetch_request(
+                        self._fetch_message_max_bytes)
+                    partition_reqs.append((owned_partition, fetch_req))
+            if partition_reqs:
                 response = broker.fetch_messages(
-                    reqs, timeout=self._fetch_wait_max_ms,
+                    [a[1] for a in partition_reqs],
+                    timeout=self._fetch_wait_max_ms,
                     min_bytes=self._fetch_min_bytes
                 )
                 for partition_id, pres in response.topics[self._topic.name].iteritems():
                     owned_partition = self._partitions_by_id[partition_id]
                     owned_partition.enqueue_messages(pres.messages)
-                    owned_partition.lock.release()
+            for owned_partition, _ in partition_reqs:
+                owned_partition.lock.release()
 
 
 class OwnedPartition(object):
