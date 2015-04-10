@@ -241,10 +241,10 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         for broker, owned_partitions in self._partitions_by_leader.iteritems():
             reqs = []
             for owned_partition in owned_partitions:
-                # attempt to acquire lock, just pass if we can't
-                if owned_partition.lock.acquire(False):
-                    has_room = owned_partition.message_count < self._queued_max_messages
-                    if owned_partition.empty and has_room:
+                has_room = owned_partition.message_count < self._queued_max_messages
+                if owned_partition.empty and has_room:
+                    # attempt to acquire lock, just pass if we can't
+                    if owned_partition.lock.acquire(False):
                         reqs.append(owned_partition.build_fetch_request(
                             self._fetch_message_max_bytes))
             if reqs:
