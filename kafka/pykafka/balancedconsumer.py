@@ -1,9 +1,7 @@
 from __future__ import division
 import itertools
 import logging as log
-import signal
 import socket
-import sys
 import time
 import weakref
 from uuid import uuid4
@@ -125,18 +123,16 @@ class BalancedConsumer():
                                                             self._topic.name)
         self._consumer_id_path = '/consumers/{}/ids'.format(self._consumer_group)
 
-        def _close_zk_connection(signum, frame):
-            self._zookeeper.stop()
-            self._consumer.stop()
-            sys.exit()
-        signal.signal(signal.SIGINT, _close_zk_connection)
-
         self._zookeeper = self._setup_zookeeper(zookeeper_connect,
                                                 zookeeper_connection_timeout_ms)
         self._zookeeper.ensure_path(self._topic_path)
         self._add_self()
         self._set_watches()
         self._rebalance()
+
+    def stop(self):
+        self._zookeeper.stop()
+        self._consumer.stop()
 
     def _setup_zookeeper(self, zookeeper_connect, timeout):
         """Open a connection to a ZooKeeper host
