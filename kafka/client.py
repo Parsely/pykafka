@@ -39,6 +39,7 @@ class KafkaClient(object):
                  hosts='127.0.0.1:9092',
                  use_greenlets=False,
                  socket_timeout_ms=30 * 1000,
+                 offsets_channel_socket_timeout_ms=10 * 1000,
                  ignore_rdkafka=False,
                  socket_receive_buffer_bytes=64 * 1024,
                  exclude_internal_topics=True):
@@ -48,6 +49,9 @@ class KafkaClient(object):
         :param use_greenlets: If True, use gevent instead of threading.
         :param socket_timeout_ms: the socket timeout for network requests
         :type socket_timeout_ms: int
+        :param offsets_channel_socket_timeout_ms: Socket timeout when reading
+            responses for offset fetch/commit requests.
+        :type offsets_channel_socket_timeout_ms: int
         :param ignore_rdkafka: Don't use rdkafka, even if installed.
         :param socket_receive_buffer_bytes: the size of the socket receive
             buffer for network requests
@@ -57,7 +61,8 @@ class KafkaClient(object):
         :type exclude_internal_topics: bool
         """
         self._seed_hosts = hosts
-        self._timeout = socket_timeout_ms
+        self._socket_timeout_ms = socket_timeout_ms
+        self._offsets_channel_socket_timeout_ms = offsets_channel_socket_timeout_ms
         self._handler = None if use_greenlets else handlers.ThreadingHandler()
         self._use_rdkafka = rd_kafka and not ignore_rdkafka
         if self._use_rdkafka:
@@ -67,7 +72,8 @@ class KafkaClient(object):
             self.cluster = pykafka.Cluster(
                 self._seed_hosts,
                 self._handler,
-                self._timeout,
+                socket_timeout_ms=self._socket_timeout_ms,
+                offsets_channel_socket_timeout_ms=self._offsets_channel_socket_timeout_ms,
                 socket_receive_buffer_bytes=socket_receive_buffer_bytes,
                 exclude_internal_topics=exclude_internal_topics
             )

@@ -21,7 +21,8 @@ class Broker(base.BaseBroker):
                  host,
                  port,
                  handler,
-                 timeout,
+                 socket_timeout_ms,
+                 offsets_channel_socket_timeout_ms,
                  buffer_size=64 * 1024):
         """Init a Broker.
 
@@ -38,7 +39,8 @@ class Broker(base.BaseBroker):
         self._handler = handler
         self._req_handler = None
         self._offsets_channel_req_handler = None
-        self._timeout = timeout
+        self._socket_timeout_ms = socket_timeout_ms
+        self._offsets_channel_socket_timeout_ms = offsets_channel_socket_timeout_ms
         self._buffer_size = buffer_size
         self.connect()
 
@@ -46,7 +48,8 @@ class Broker(base.BaseBroker):
     def from_metadata(cls,
                       metadata,
                       handler,
-                      timeout,
+                      socket_timeout_ms,
+                      offsets_channel_socket_timeout_ms,
                       buffer_size=64 * 1024):
         """ Create a Broker using BrokerMetadata
 
@@ -54,7 +57,8 @@ class Broker(base.BaseBroker):
         :type metadata: :class:`kafka.pykafka.protocol.BrokerMetadata.`
         """
         return cls(metadata.id, metadata.host,
-                   metadata.port, handler, timeout,
+                   metadata.port, handler, socket_timeout_ms,
+                   offsets_channel_socket_timeout_ms,
                    buffer_size=buffer_size)
 
     @property
@@ -101,7 +105,7 @@ class Broker(base.BaseBroker):
     def connect(self):
         """Establish a connection to the Broker."""
         conn = BrokerConnection(self.host, self.port, self._buffer_size)
-        conn.connect(self._timeout)
+        conn.connect(self._socket_timeout_ms)
         self._req_handler = RequestHandler(self._handler, conn)
         self._req_handler.start()
         self._connected = True
@@ -109,7 +113,7 @@ class Broker(base.BaseBroker):
     def connect_offsets_channel(self):
         """Establish a connection to the Broker for the offsets channel"""
         conn = BrokerConnection(self.host, self.port, self._buffer_size)
-        conn.connect(self._timeout)
+        conn.connect(self._offsets_channel_socket_timeout_ms)
         self._offsets_channel_req_handler = RequestHandler(self._handler, conn)
         self._offsets_channel_req_handler.start()
         self._offsets_channel_connected = True
