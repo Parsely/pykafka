@@ -2,7 +2,7 @@ from collections import namedtuple
 from copy import copy
 import logging
 
-from kafka import base
+from pykafka import base
 
 try:
     import rd_kafka

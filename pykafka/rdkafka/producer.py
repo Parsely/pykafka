@@ -2,8 +2,8 @@ from copy import copy
 import logging
 from time import clock
 
-from kafka import base, partitioners
-from kafka .exceptions import KafkaException
+from pykafka import base, partitioners
+from pykafka .exceptions import KafkaException
 
 try:
     import rd_kafka
