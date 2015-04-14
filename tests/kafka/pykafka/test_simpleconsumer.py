@@ -2,7 +2,7 @@ import mock
 import time
 import unittest2
 
-from kafka.pykafka.consumer import OwnedPartition
+from kafka.pykafka.simpleconsumer import OwnedPartition
 
 
 class TestOwnedPartition(unittest2.TestCase):
@@ -32,7 +32,7 @@ class TestOwnedPartition(unittest2.TestCase):
         message.offset = 20
 
         op.enqueue_messages([message])
-        self.assertEqual(op.empty, True)
+        self.assertEqual(op.message_count, 0)
         op.consume()
         self.assertEqual(op.last_offset_consumed, last_offset)
 
@@ -60,7 +60,7 @@ class TestOwnedPartition(unittest2.TestCase):
         self.assertEqual(request.offset, op.last_offset_consumed)
         # sketchy, but it works because of second resolution
         self.assertEqual(request.timestamp, rqtime)
-        self.assertEqual(request.metadata, '')
+        self.assertEqual(request.metadata, 'pykafka')
 
     def test_partition_offset_fetch_request(self):
         topic = mock.Mock()
@@ -81,7 +81,7 @@ class TestOwnedPartition(unittest2.TestCase):
         res.offset = 400
 
         op = OwnedPartition(None, None)
-        op.set_offset_counters(res)
+        op.set_offset(res.offset)
 
         self.assertEqual(op.last_offset_consumed, res.offset)
         self.assertEqual(op.next_offset, res.offset + 1)
