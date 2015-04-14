@@ -339,7 +339,6 @@ class OwnedPartition(object):
         """
         self.last_offset_consumed = last_offset_consumed
         self.next_offset = last_offset_consumed + 1
-        log.info("Last offset consumed: %d", self.last_offset_consumed)
 
     def build_offset_request(self, auto_offset_reset):
         """Create a PartitionOffsetRequest for this partition
