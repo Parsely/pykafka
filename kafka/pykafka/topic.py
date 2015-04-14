@@ -2,15 +2,17 @@
 # TODO: __slots__ where appropriate
 # TODO: Use weak refs to avoid reference cycles?
 
-import logging
 from collections import defaultdict
+import logging
+import weakref
 
 from kafka import base
+from kafka.common import OffsetType
 from .partition import Partition
 from .producer import Producer
-from .protocol import (
-    PartitionOffsetRequest, OFFSET_EARLIEST, OFFSET_LATEST
-)
+from .protocol import PartitionOffsetRequest
+from .simpleconsumer import SimpleConsumer
+from kafka.balancedconsumer import BalancedConsumer
 
 
 logger = logging.getLogger()
@@ -18,15 +20,16 @@ logger = logging.getLogger()
 
 class Topic(base.BaseTopic):
 
-    def __init__(self, brokers, topic_metadata):
+    def __init__(self, cluster, topic_metadata):
         """Create the Topic from metadata.
 
         :param topic_metadata: Metadata for all topics
         :type topic_metadata: :class:`kafka.pykafka.protocol.TopicMetadata`
         """
         self._name = topic_metadata.name
+        self._cluster = weakref.proxy(cluster)
         self._partitions = {}
-        self.update(brokers, topic_metadata)
+        self.update(cluster.brokers, topic_metadata)
 
     @property
     def name(self):
@@ -36,11 +39,20 @@ class Topic(base.BaseTopic):
     def partitions(self):
         return self._partitions
 
-    def earliest_offsets(self):
-        """Get the earliest offset for each partition of this topic."""
-        return self.fetch_offsets(OFFSET_EARLIEST)
+    def get_producer(self):
+        return Producer(self)
 
-    def fetch_offsets(self, offsets_before, max_offsets=1):
+    def fetch_offset_limits(self, offsets_before, max_offsets=1):
+        """Get earliest or latest offset
+
+        Use the Offset API to find a limit of valid offsets for each partition
+        in this topic
+
+        :param offsets_before: return an offset from before this timestamp (milliseconds)
+        :type offsets_before: int
+        :param max_offsets: the maximum number of offsets to return
+        :type max_offsets: int
+        """
         requests = defaultdict(list)  # one request for each broker
         for part in self.partitions.itervalues():
             requests[part.leader].append(PartitionOffsetRequest(
@@ -52,12 +64,13 @@ class Topic(base.BaseTopic):
             output.update(res.topics[self.name])
         return output
 
-    def get_producer(self):
-        return Producer(self)
+    def earliest_available_offsets(self):
+        """Get the earliest offset for each partition of this topic."""
+        return self.fetch_offset_limits(OffsetType.EARLIEST)
 
-    def latest_offsets(self):
+    def latest_available_offsets(self):
         """Get the latest offset for each partition of this topic."""
-        return self.fetch_offsets(OFFSET_LATEST)
+        return self.fetch_offset_limits(OffsetType.LATEST)
 
     def update(self, brokers, metadata):
         """Update the Partitons with metadata about the cluster.
@@ -87,3 +100,14 @@ class Topic(base.BaseTopic):
                 )
             else:
                 self._partitions[id_].update(meta)
+
+    def get_simple_consumer(self, consumer_group=None, **kwargs):
+        """Return a SimpleConsumer of this topic
+        """
+        return SimpleConsumer(self, self._cluster,
+                              consumer_group=consumer_group, **kwargs)
+
+    def get_balanced_consumer(self, consumer_group, **kwargs):
+        """Return a BalancedConsumer of this topic
+        """
+        return BalancedConsumer(self, self._cluster, consumer_group, **kwargs)

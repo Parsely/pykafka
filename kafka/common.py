@@ -22,3 +22,8 @@ class CompressionType(object):
     NONE = 0
     GZIP = 1
     SNAPPY = 2
+
+class OffsetType(object):
+    """Enum for special values for earliest/latest offsets."""
+    EARLIEST = -2
+    LATEST = -1

@@ -1,3 +1,5 @@
+from __future__ import division
+
 __license__ = """
 Copyright 2012 DISQUS
 Copyright 2013,2014 Parse.ly, Inc.
@@ -30,7 +32,8 @@ logger = logging.getLogger(__name__)
 class BrokerConnection(object):
     """A socket connection to Kafka."""
 
-    def __init__(self, host, port):
+    def __init__(self, host, port, buffer_size=64 * 1024):
+        self._buff = bytearray(buffer_size)
         self.host = host
         self.port = port
         self._socket = None
@@ -47,7 +50,7 @@ class BrokerConnection(object):
         """Connect to the broker."""
         self._socket = socket.create_connection(
             (self.host, self.port),
-            timeout=timeout
+            timeout=timeout / 1000
         )
 
     def disconnect(self):
@@ -74,10 +77,8 @@ class BrokerConnection(object):
         try:
             size = self._socket.recv(4)
             size = struct.unpack('!i', size)[0]
-            output = bytearray(size)
-            recvall_into(self._socket, output)
-            # TODO: Figure out if correlation ids are worth it
-            return buffer(output[4:]) # skipping it for now
+            recvall_into(self._socket, self._buff, size)
+            return buffer(self._buff[4:4 + size])
         except SocketDisconnectedError:
             self.disconnect()
             raise

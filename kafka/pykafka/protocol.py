@@ -51,11 +51,8 @@ from zlib import crc32
 
 from kafka import common
 from kafka.common import CompressionType
-from kafka.exceptions import ERROR_CODES
+from kafka.exceptions import ERROR_CODES, OffsetOutOfRangeError
 from .utils import Serializable, compression, struct_helpers
-
-OFFSET_EARLIEST = -2
-OFFSET_LATEST = -1
 
 
 logger = logging.getLogger(__name__)
@@ -66,7 +63,7 @@ class Request(Serializable):
     HEADER_LEN = 21  # constant for all messages
     CLIENT_ID = 'pykafka'
 
-    def _write_header(self, buff, api_version=0, correlation_id=0):
+    def _write_header(self, buff, api_version=1, correlation_id=0):
         """Write the header for an outgoing message"""
         fmt = '!ihhih%ds' % len(self.CLIENT_ID)
         struct.pack_into(fmt, buff, 0,
@@ -144,8 +141,7 @@ class Message(common.Message, Serializable):
         # TODO: Handle CRC failure
         return Message(val,
                        partition_key=key,
-                       compression_type=attr,
-                       offset=msg_offset)
+                       compression_type=attr, offset=msg_offset)
 
     def pack_into(self, buff, offset):
         """Serialize and write to ``buff`` starting at offset ``offset``.
@@ -611,7 +607,7 @@ class FetchRequest(Request):
 
 class FetchPartitionResponse(object):
     """Partition information that's part of a FetchResponse"""
-    def __init__(self, max_offset, messages):
+    def __init__(self, max_offset, messages, error):
         """Create a new FetchPartitionResponse
 
         :param max_offset: The offset at the end of this partition
@@ -619,6 +615,7 @@ class FetchPartitionResponse(object):
         """
         self.max_offset = max_offset
         self.messages = messages
+        self.error = error
 
 
 class FetchResponse(Response):
@@ -639,13 +636,14 @@ class FetchResponse(Response):
         """
         fmt = '[S [ihqY] ]'
         response = struct_helpers.unpack_from(fmt, buff, 0)
-        self.topics = {}
+        self.topics = defaultdict(dict)
         for (topic, partitions) in response:
             for partition in partitions:
-                if partition[1] != 0:
+                if partition[1] not in (0, OffsetOutOfRangeError.ERROR_CODE):
                     self.raise_error(partition[1], response)
-                self.topics[topic] = FetchPartitionResponse(
+                self.topics[topic][partition[0]] = FetchPartitionResponse(
                     partition[2], self._unpack_message_set(partition[3]),
+                    partition[1]
                 )
 
     def _unpack_message_set(self, buff):
@@ -770,3 +768,321 @@ class OffsetResponse(Response):
                 if partition[1] != 0:
                     self.raise_error(partition[1], response)
                 self.topics[topic_name][partition[0]] = partition[2]
+
+
+class ConsumerMetadataRequest(Request):
+    """A consumer metadata request
+
+    ConsumerMetadataRequest => ConsumerGroup
+      ConsumerGroup => string
+    """
+    def __init__(self, consumer_group):
+        """Create a new consumer metadata request"""
+        self.consumer_group = consumer_group
+
+    def __len__(self):
+        """Length of the serialized message, in bytes"""
+        # Header + replicaId + len(self.consumer_group)
+        return self.HEADER_LEN + 4 + len(self.consumer_group) + 2
+
+    @property
+    def API_KEY(self):
+        """API_KEY for this request, from the Kafka docs"""
+        return 10
+
+    def get_bytes(self):
+        """Serialize the message
+
+        :returns: Serialized message
+        :rtype: :class:`bytearray`
+        """
+        output = bytearray(len(self))
+        self._write_header(output)
+        cglen = len(self.consumer_group)
+        struct.pack_into('!h%ds' % cglen, output, self.HEADER_LEN + 4, cglen,
+                         self.consumer_group)
+        return output
+
+
+class ConsumerMetadataResponse(Response):
+    """A consumer metadata response
+
+    ConsumerMetadataResponse => ErrorCode CoordinatorId CoordinatorHost CoordinatorPort
+      ErrorCode => int16
+      CoordinatorId => int32
+      CoordinatorHost => string
+      CoordinatorPort => int32
+    """
+    def __init__(self, buff):
+        """Deserialize into a new Response
+
+        :param buff: Serialized message
+        :type buff: :class:`bytearray`
+        """
+        fmt = 'hiSi'
+        response = struct_helpers.unpack_from(fmt, buff, 0)
+
+        error_code = response[0]
+        if error_code != 0:
+            self.raise_error(error_code, response)
+        self.coordinator_id = response[1]
+        self.coordinator_host = response[2]
+        self.coordinator_port = response[3]
+
+
+_PartitionOffsetCommitRequest = namedtuple(
+    'PartitionOffsetCommitRequest',
+    ['topic_name', 'partition_id', 'offset', 'timestamp', 'metadata']
+)
+
+
+class PartitionOffsetCommitRequest(_PartitionOffsetCommitRequest):
+    """Offset commit request for a specific topic/partition
+
+    :ivar topic_name: Name of the topic to look up
+    :ivar partition_id: Id of the partition to look up
+    :ivar offset:
+    :ivar timestamp:
+    :ivar metadata: arbitrary metadata that should be committed with this offset commit
+    """
+    pass
+
+
+class OffsetCommitRequest(Request):
+    """An offset commit request
+
+    OffsetCommitRequest => ConsumerGroupId ConsumerGroupGenerationId ConsumerId [TopicName [Partition Offset TimeStamp Metadata]]
+      ConsumerGroupId => string
+      ConsumerGroupGenerationId => int32
+      ConsumerId => string
+      TopicName => string
+      Partition => int32
+      Offset => int64
+      TimeStamp => int64
+      Metadata => string
+    """
+    def __init__(self,
+                 consumer_group,
+                 consumer_group_generation_id,
+                 consumer_id,
+                 partition_requests=[]):
+        """Create a new offset commit request
+
+        :param partition_requests: Iterable of
+            :class:`kafka.pykafka.protocol.PartitionOffsetCommitRequest` for
+            this request
+        """
+        self.consumer_group = consumer_group
+        self.consumer_group_generation_id = consumer_group_generation_id
+        self.consumer_id = consumer_id
+        self._reqs = defaultdict(dict)
+        for t in partition_requests:
+            self._reqs[t.topic_name][t.partition_id] = (t.offset,
+                                                        t.timestamp,
+                                                        t.metadata)
+
+    def __len__(self):
+        """Length of the serialized message, in bytes"""
+        # Header + string size + consumer group size
+        size = self.HEADER_LEN + 2 + len(self.consumer_group)
+        # + generation id + string size + consumer_id size + array length
+        size += 4 + 2 + len(self.consumer_id) + 4
+        for topic, parts in self._reqs.iteritems():
+            # topic name + len(parts)
+            size += 2 + len(topic) + 4
+            # partition + offset + timestamp => for each partition
+            size += (4 + 8 + 8) * len(parts)
+            # metadata => for each partition
+            for partition, (_, _, metadata) in parts.iteritems():
+                size += 2 + len(metadata)
+        return size
+
+    @property
+    def API_KEY(self):
+        """API_KEY for this request, from the Kafka docs"""
+        return 8
+
+    def get_bytes(self):
+        """Serialize the message
+
+        :returns: Serialized message
+        :rtype: :class:`bytearray`
+        """
+        output = bytearray(len(self))
+        self._write_header(output)
+        offset = self.HEADER_LEN
+        fmt = '!h%dsih%dsi' % (len(self.consumer_group), len(self.consumer_id))
+        struct.pack_into(fmt, output, offset,
+                         len(self.consumer_group), self.consumer_group,
+                         self.consumer_group_generation_id,
+                         len(self.consumer_id), self.consumer_id,
+                         len(self._reqs))
+        offset += struct.calcsize(fmt)
+        for topic_name, partitions in self._reqs.iteritems():
+            fmt = '!h%dsi' % len(topic_name)
+            struct.pack_into(fmt, output, offset, len(topic_name),
+                             topic_name, len(partitions))
+            offset += struct.calcsize(fmt)
+            for pnum, (poffset, timestamp, metadata) in partitions.iteritems():
+                fmt = '!iqq'
+                struct.pack_into(fmt, output, offset,
+                                 pnum, poffset, timestamp)
+                offset += struct.calcsize(fmt)
+                metalen = len(metadata) or -1
+                fmt = '!h'
+                pack_args = [fmt, output, offset, metalen]
+                if metalen != -1:
+                    fmt += '%ds' % metalen
+                    pack_args = [fmt, output, offset, metalen, metadata]
+                struct.pack_into(*pack_args)
+                offset += struct.calcsize(fmt)
+        return output
+
+
+class OffsetCommitResponse(Response):
+    """An offset commit response
+
+    OffsetCommitResponse => [TopicName [Partition ErrorCode]]]
+      TopicName => string
+      Partition => int32
+      ErrorCode => int16
+    """
+    def __init__(self, buff):
+        """Deserialize into a new Response
+
+        :param buff: Serialized message
+        :type buff: :class:`bytearray`
+        """
+        fmt = '[S [ih ] ]'
+        response = struct_helpers.unpack_from(fmt, buff, 0)
+
+        self.topics = {}
+        for topic_name, partitions in response:
+            # a list makes sense here instead of a dict since the only returned
+            # information about the partition is the name
+            self.topics[topic_name] = []
+            for partition in partitions:
+                if partition[1] != 0:
+                    self.raise_error(partition[1], response)
+                self.topics[topic_name].append(partition[0])
+
+
+_PartitionOffsetFetchRequest = namedtuple(
+    'PartitionOffsetFetchRequest',
+    ['topic_name', 'partition_id']
+)
+
+
+class PartitionOffsetFetchRequest(_PartitionOffsetFetchRequest):
+    """Offset fetch request for a specific topic/partition
+
+    :ivar topic_name: Name of the topic to look up
+    :ivar partition_id: Id of the partition to look up
+    """
+    pass
+
+
+class OffsetFetchRequest(Request):
+    """An offset fetch request
+
+    OffsetFetchRequest => ConsumerGroup [TopicName [Partition]]
+      ConsumerGroup => string
+      TopicName => string
+      Partition => int32
+    """
+    def __init__(self, consumer_group, partition_requests=[]):
+        """Create a new offset fetch request
+
+        :param partition_requests: Iterable of
+            :class:`kafka.pykafka.protocol.PartitionOffsetFetchRequest` for
+            this request
+        """
+        self.consumer_group = consumer_group
+        self._reqs = defaultdict(list)
+        for t in partition_requests:
+            self._reqs[t.topic_name].append(t.partition_id)
+
+    def __len__(self):
+        """Length of the serialized message, in bytes"""
+        # Header + consumer group + len(topics)
+        size = self.HEADER_LEN + 2 + len(self.consumer_group) + 4
+        for topic, parts in self._reqs.iteritems():
+            # topic name + len(parts)
+            size += 2 + len(topic) + 4
+            # partition => for each partition
+            size += 4 * len(parts)
+        return size
+
+    @property
+    def API_KEY(self):
+        """API_KEY for this request, from the Kafka docs"""
+        return 9
+
+    def get_bytes(self):
+        """Serialize the message
+
+        :returns: Serialized message
+        :rtype: :class:`bytearray`
+        """
+        output = bytearray(len(self))
+        self._write_header(output)
+        offset = self.HEADER_LEN
+        fmt = '!h%dsi' % len(self.consumer_group)
+        struct.pack_into(fmt, output, offset,
+                         len(self.consumer_group), self.consumer_group,
+                         len(self._reqs))
+        offset += struct.calcsize(fmt)
+        for topic_name, partitions in self._reqs.iteritems():
+            fmt = '!h%dsi' % len(topic_name)
+            struct.pack_into(fmt, output, offset, len(topic_name),
+                             topic_name, len(partitions))
+            offset += struct.calcsize(fmt)
+            for pnum in partitions:
+                fmt = '!i'
+                struct.pack_into(fmt, output, offset, pnum)
+                offset += struct.calcsize(fmt)
+        return output
+
+
+class OffsetFetchPartitionResponse(object):
+    """Partition information that's part of an OffsetFetchResponse"""
+    def __init__(self, offset, metadata, error):
+        """Create a new OffsetFetchPartitionResponse
+
+        :param offset:
+        :param metadata: arbitrary metadata that should be committed with this offset commit
+        """
+        self.offset = offset
+        self.metadata = metadata
+        self.error = error
+
+
+class OffsetFetchResponse(Response):
+    """An offset fetch response
+
+    OffsetFetchResponse => [TopicName [Partition Offset Metadata ErrorCode]]
+      TopicName => string
+      Partition => int32
+      Offset => int64
+      Metadata => string
+      ErrorCode => int16
+    """
+    def __init__(self, buff):
+        """Deserialize into a new Response
+
+        :param buff: Serialized message
+        :type buff: :class:`bytearray`
+        """
+        fmt = '[S [iqSh ] ]'
+        response = struct_helpers.unpack_from(fmt, buff, 0)
+
+        self.topics = {}
+        for topic_name, partitions in response:
+            self.topics[topic_name] = {}
+            for partition in partitions:
+                if partition[3] not in (0, OffsetOutOfRangeError.ERROR_CODE):
+                    self.raise_error(partition[3], response)
+                pres = OffsetFetchPartitionResponse(partition[1],
+                                                    partition[2],
+                                                    partition[3])
+                self.topics[topic_name][partition[0]] = pres
