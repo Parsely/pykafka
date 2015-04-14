@@ -86,7 +86,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
             if no message is available for consumption after the specified interval
         :type consumer_timeout_ms: int
         """
-        if not isinstance(cluster, weakref.ProxyType):
+        if not isinstance(cluster, weakref.ProxyType) and \
+                not isinstance(cluster, weakref.CallableProxyType):
             self._cluster = weakref.proxy(cluster)
         else:
             self._cluster = cluster
