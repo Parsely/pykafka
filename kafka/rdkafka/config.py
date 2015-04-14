@@ -4,9 +4,8 @@ Helpers to convert pykafka config names into librdkafka config names
 from copy import copy
 import logging
 
-from kafka.common import CompressionType
+from kafka.common import CompressionType, OffsetType
 from kafka.exceptions import ImproperlyConfiguredError
-from kafka.pykafka.protocol import OFFSET_EARLIEST, OFFSET_LATEST
 from rd_kafka.config_handles import default_config, default_topic_config
 
 
@@ -18,10 +17,11 @@ logger= logging.getLogger(__name__)
 RD_CONF_NAMES = default_config().keys() + ["group.id"]
 RD_TOPIC_CONF_NAMES = default_topic_config().keys()
 
-NOT_AVAILABLE = [ # no equivalent in librdkafka
+NOT_AVAILABLE = [ # no equivalent config option in librdkafka
      "offsets_channel_backoff_ms",
      "offsets_channel_socket_timeout_ms",
      "offsets_commit_max_retries",
+     "num_consumer_fetchers",
      ]
 
 TRANSLATE_VALUES = { # callable or dict for value conversions
@@ -30,8 +30,8 @@ TRANSLATE_VALUES = { # callable or dict for value conversions
         False: "false",
         },
     "auto_offset_reset": {
-        OFFSET_EARLIEST: "smallest",
-        OFFSET_LATEST: "largest",
+        OffsetType.EARLIEST: "smallest",
+        OffsetType.LATEST: "largest",
         False: "error", # ie refuse to set offset automatically
         },
     "compression": {
