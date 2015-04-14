@@ -3,9 +3,9 @@ import logging
 import time
 from collections import defaultdict
 
-from kafka import base
-from kafka.common import CompressionType
-from kafka.exceptions import (
+from pykafka import base
+from pykafka.common import CompressionType
+from pykafka.exceptions import (
     UnknownTopicOrPartition, LeaderNotAvailable,
     NotLeaderForPartition, RequestTimedOut,
 )

@@ -7,9 +7,9 @@ from Queue import Queue, Empty
 import weakref
 import threading
 
-from kafka import base
-from kafka.common import OffsetType
-from kafka.exceptions import OffsetOutOfRangeError
+from pykafka import base
+from pykafka.common import OffsetType
+from pykafka.exceptions import OffsetOutOfRangeError
 
 from .protocol import (PartitionFetchRequest, PartitionOffsetCommitRequest,
                        PartitionOffsetFetchRequest, PartitionOffsetRequest)

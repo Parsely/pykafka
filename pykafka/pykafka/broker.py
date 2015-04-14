@@ -1,6 +1,6 @@
 import logging
 
-from kafka import base
+from pykafka import base
 from .connection import BrokerConnection
 from .handlers import RequestHandler
 from .protocol import (

@@ -49,9 +49,9 @@ import struct
 from collections import defaultdict, namedtuple
 from zlib import crc32
 
-from kafka import common
-from kafka.common import CompressionType
-from kafka.exceptions import ERROR_CODES, OffsetOutOfRangeError
+from pykafka import common
+from pykafka.common import CompressionType
+from pykafka.exceptions import ERROR_CODES, OffsetOutOfRangeError
 from .utils import Serializable, compression, struct_helpers
 
 

@@ -20,7 +20,7 @@ import sys
 
 from setuptools import setup, find_packages
 
-from kafka import __version__
+from pykafka import __version__
 
 install_requires = [
     'kazoo'
@@ -38,7 +38,7 @@ if 'nosetests' in sys.argv[1:]:
     setup_requires.append('nose')
 
 setup(
-    name='kafka',
+    name='pykafka',
     version=__version__,
     author='Keith Bourgoin',
     author_email='pykafka-user@googlegroups.com',

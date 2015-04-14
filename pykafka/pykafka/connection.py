@@ -23,7 +23,7 @@ import logging
 import socket
 import struct
 
-from kafka.exceptions import SocketDisconnectedError
+from pykafka.exceptions import SocketDisconnectedError
 from .utils.socket import recvall_into
 
 logger = logging.getLogger(__name__)

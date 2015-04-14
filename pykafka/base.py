@@ -1,5 +1,5 @@
-from kafka.common import CompressionType
-from kafka.partitioners import random_partitioner
+from common import CompressionType
+from partitioners import random_partitioner
 
 
 class BaseCluster(object):

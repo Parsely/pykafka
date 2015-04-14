@@ -1,8 +1,8 @@
 import unittest
 
-from kafka import exceptions
-from kafka.pykafka import protocol
-from kafka.common import CompressionType
+from pykafka import exceptions
+from pykafka.pykafka import protocol
+from pykafka.common import CompressionType
 
 
 class TestMetadataAPI(unittest.TestCase):

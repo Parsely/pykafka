@@ -6,13 +6,13 @@ from collections import defaultdict
 import logging
 import weakref
 
-from kafka import base
-from kafka.common import OffsetType
+from pykafka import base
+from pykafka.common import OffsetType
+from pykafka.balancedconsumer import BalancedConsumer
 from .partition import Partition
 from .producer import Producer
 from .protocol import PartitionOffsetRequest
 from .simpleconsumer import SimpleConsumer
-from kafka.balancedconsumer import BalancedConsumer
 
 
 logger = logging.getLogger()

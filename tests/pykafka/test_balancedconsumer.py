@@ -2,7 +2,7 @@ import mock
 import unittest2
 from uuid import uuid4
 
-from kafka.balancedconsumer import BalancedConsumer
+from pykafka.balancedconsumer import BalancedConsumer
 
 
 class TestBalancedConsumer(unittest2.TestCase):
