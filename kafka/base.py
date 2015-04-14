@@ -1,4 +1,4 @@
-from kafka.common import CompressionType
+from kafka.common import CompressionType, OffsetType
 from kafka.partitioners import random_partitioner
 
 
@@ -191,7 +191,23 @@ class BaseSimpleConsumer(object):
     coded which process reads which partitions, this is a useful soluton.
     """
 
-    def __init__(self, client, topic, partitions=None):
+    def __init__(self,
+                 topic,
+                 cluster,
+                 consumer_group=None,
+                 partitions=None,
+                 fetch_message_max_bytes=1024*1024,
+                 num_consumer_fetchers=1,
+                 auto_commit_enable=False,
+                 auto_commit_interval_ms=60*1000,
+                 queued_max_messages=2000,
+                 fetch_min_bytes=1,
+                 fetch_wait_max_ms=100,
+                 refresh_leader_backoff_ms=200,
+                 offsets_channel_backoff_ms=1000,
+                 offsets_commit_max_retries=5,
+                 auto_offset_reset=OffsetType.LATEST,
+                 consumer_timeout_ms=-1):
         """Create a consumer for a topic.
 
         :param client: Client connection to the cluster.
