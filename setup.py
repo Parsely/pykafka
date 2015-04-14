@@ -22,12 +22,8 @@ from setuptools import setup, find_packages
 
 from kafka import __version__
 
-try:
-    import multiprocessing
-except ImportError:
-    pass
-
 install_requires = [
+    'kazoo'
 ]
 
 lint_requires = [
@@ -35,7 +31,7 @@ lint_requires = [
     'pyflakes'
 ]
 
-tests_require = ['kazoo', 'mock', 'nose', 'unittest2', 'python-snappy']
+tests_require = ['mock', 'nose', 'unittest2', 'python-snappy']
 dependency_links = []
 setup_requires = []
 if 'nosetests' in sys.argv[1:]:
