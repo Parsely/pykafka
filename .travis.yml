@@ -7,6 +7,7 @@ python:
 notifications:
   email:
     - keith@parsely.com
+    - emmett@parsely.com
 
 before_install:
     - sudo apt-get install -qq libev-dev libsnappy-dev
