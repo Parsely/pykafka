@@ -1,6 +1,5 @@
 import mock
 import unittest2
-import random
 from uuid import uuid4
 
 from kafka.balancedconsumer import BalancedConsumer
@@ -9,8 +8,8 @@ from kafka.balancedconsumer import BalancedConsumer
 class TestBalancedConsumer(unittest2.TestCase):
     def test_decide_partitions(self):
         for i in xrange(100):
-            num_participants = random.randint(1, 300)
-            num_partitions = random.randint(1, 300)
+            num_participants = i + 1
+            num_partitions = 100 - i
             consumer_group = 'testgroup'
 
             topic = mock.Mock()
