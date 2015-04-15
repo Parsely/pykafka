@@ -2,7 +2,7 @@ import logging
 
 from nose.plugins.attrib import attr
 
-from kafka.test.integration import KafkaIntegrationTestCase
+from pykafka.test.integration import KafkaIntegrationTestCase
 
 @attr('fixme')
 class KafkaHandlerTestCase(KafkaIntegrationTestCase):

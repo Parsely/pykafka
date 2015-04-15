@@ -1,6 +1,6 @@
 import unittest
 
-from kafka.pykafka.utils import struct_helpers
+from pykafka.pykafka.utils import struct_helpers
 
 
 class StructHelpersTests(unittest.TestCase):
