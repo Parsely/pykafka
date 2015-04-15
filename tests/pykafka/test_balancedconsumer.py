@@ -27,7 +27,7 @@ class TestBalancedConsumer(unittest2.TestCase):
             cluster = mock.MagicMock()
             zk = mock.MagicMock()
             cns = BalancedConsumer(topic, cluster, consumer_group,
-                                zookeeper=zk, auto_start=False)
+                                   zookeeper=zk, auto_start=False)
 
             participants = ['test-debian:{}'.format(uuid4())
                             for i in xrange(num_participants - 1)]
