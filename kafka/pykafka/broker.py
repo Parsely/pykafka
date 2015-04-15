@@ -154,7 +154,7 @@ class Broker(base.BaseBroker):
         future = self._req_handler.request(OffsetRequest(partition_requests))
         return future.get(OffsetResponse)
 
-    def request_metadata(self, topics=[]):
+    def request_metadata(self, topics=None):
         future = self._req_handler.request(MetadataRequest(topics=topics))
         return future.get(MetadataResponse)
 

@@ -284,12 +284,12 @@ class MetadataRequest(Request):
     MetadataRequest => [TopicName]
       TopicName => string
     """
-    def __init__(self, topics=[]):
+    def __init__(self, topics=None):
         """Create a new MetadatRequest
 
         :param topics: Topics to query. Leave empty for all available topics.
         """
-        self.topics = topics
+        self.topics = topics or []
 
     def __len__(self):
         """Length of the serialized message, in bytes"""
