@@ -16,13 +16,13 @@ class TestBalancedConsumer(unittest2.TestCase):
             topic.name = 'testtopic'
 
             topic.partitions = {}
-            for i in xrange(num_partitions):
+            for k in xrange(num_partitions):
                 part = mock.Mock()
-                part.id = i
+                part.id = k
                 part.topic = topic
                 part.leader = mock.Mock()
-                part.leader.id = i % num_participants
-                topic.partitions[i] = part
+                part.leader.id = k % num_participants
+                topic.partitions[k] = part
 
             cluster = mock.MagicMock()
             zk = mock.MagicMock()
