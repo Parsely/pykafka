@@ -187,7 +187,7 @@ class Broker(base.BaseBroker):
                                   consumer_group_generation_id,
                                   consumer_id,
                                   partition_requests=preqs)
-        self._offsets_channel_req_handler.request(req).get(OffsetCommitResponse)
+        return self._offsets_channel_req_handler.request(req).get(OffsetCommitResponse)
 
     def fetch_consumer_group_offsets(self, consumer_group, preqs):
         """Fetch the offsets stored in Kafka with the Offset Commit/Fetch API

@@ -780,9 +780,8 @@ class OffsetResponse(Response):
         for topic_name, partitions in response:
             self.topics[topic_name] = {}
             for partition in partitions:
-                if partition[1] != 0:
-                    self.raise_error(partition[1], response)
-                self.topics[topic_name][partition[0]] = partition[2]
+                self.topics[topic_name][partition[0]] = OffsetPartitionResponse(
+                    partition[2], partition[1])
 
 
 class ConsumerMetadataRequest(Request):
@@ -983,13 +982,9 @@ class OffsetCommitResponse(Response):
 
         self.topics = {}
         for topic_name, partitions in response:
-            # a list makes sense here instead of a dict since the only returned
-            # information about the partition is the name
-            self.topics[topic_name] = []
+            self.topics[topic_name] = {}
             for partition in partitions:
-                if partition[1] != 0:
-                    self.raise_error(partition[1], response)
-                self.topics[topic_name].append(partition[0])
+                self.topics[topic_name][partition[0]] = OffsetCommitPartitionResponse(partition[1])
 
 
 _PartitionOffsetFetchRequest = namedtuple(
