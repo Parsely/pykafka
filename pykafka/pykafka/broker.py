@@ -33,7 +33,7 @@ class Broker(base.BaseBroker):
         :type timeout: :class:int
         """
         self._connection = None
-        self._offsets_channel_connection = False
+        self._offsets_channel_connection = None
         self._id = int(id_)
         self._host = host
         self._port = port
@@ -70,7 +70,9 @@ class Broker(base.BaseBroker):
     @property
     def offsets_channel_connected(self):
         """Returns True if the connected to the broker."""
-        return self._offsets_channel_connection.connected
+        if self._offsets_channel_connection:
+            return self._offsets_channel_connection.connected
+        return False
 
     @property
     def id(self):
@@ -113,9 +115,9 @@ class Broker(base.BaseBroker):
 
     def connect_offsets_channel(self):
         """Establish a connection to the Broker for the offsets channel"""
-        self._offsets_connection = BrokerConnection(self.host, self.port,
-                                                    self._buffer_size)
-        self._offsets_connection.connect(self._offsets_channel_socket_timeout_ms)
+        self._offsets_channel_connection = BrokerConnection(self.host, self.port,
+                                                            self._buffer_size)
+        self._offsets_channel_connection.connect(self._offsets_channel_socket_timeout_ms)
         self._offsets_channel_req_handler = RequestHandler(
             self._handler, self._offsets_channel_connection
         )
