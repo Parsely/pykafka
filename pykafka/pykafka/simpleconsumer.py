@@ -217,17 +217,22 @@ class SimpleConsumer(base.BaseSimpleConsumer):
 
         reqs = [p.build_offset_commit_request() for p in self._partitions.keys()]
         log.info("Committing offsets for %d partitions", len(reqs))
-
         for i in xrange(self._offsets_commit_max_retries):
-            try:
-                self._offset_manager.commit_consumer_group_offsets(
-                    self._consumer_group, 1, 'pykafka', reqs)
-                break
-            except Exception as e:
-                log.warning("Offset commit failed %s", e)
-
-            log.debug("Retrying")
+            if i > 0:
+                log.debug("Retrying")
             time.sleep(i * (self._offsets_channel_backoff_ms / 1000))
+
+            response = self._offset_manager.commit_consumer_group_offsets(
+                self._consumer_group, 1, 'pykafka', reqs)
+            parts_by_error = self._filter_partition_responses(response)
+            if not self._handle_partition_errors(parts_by_error):
+                break
+            log.error("Error committing offsets for topic %s", self._topic.name)
+
+            # retry only the partitions that errored
+            parts_by_error.pop(0)
+            errored_partitions = [op for err_group in parts_by_error.iteritems() for op in err_group]
+            reqs = [p.build_offset_commit_request() for p in errored_partitions]
 
     def fetch_offsets(self):
         """Fetch offsets for this consumer's topic
