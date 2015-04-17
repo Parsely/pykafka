@@ -237,7 +237,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                 self._consumer_group, 1, 'pykafka', reqs)
             parts_by_error = self._handle_partition_responses(
                 response,
-                self._default_error_handlers)
+                self._default_error_handlers,
+                partitions_by_id=self._partitions_by_id)
             if len(parts_by_error) == 1 and 0 in parts_by_error:
                 break
             log.error("Error committing offsets for topic %s", self._topic.name)
@@ -267,24 +268,14 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         self._handle_partition_responses(
             res,
             self._default_error_handlers,
-            success_handler=_handle_success)
+            success_handler=_handle_success,
+            partitions_by_id=self._partitions_by_id)
 
-    def _filter_partition_responses(self, res):
-        """Group partition responses by error code
-
-        This function accepts as input a Response instance
-
-        :param res: a Response containing zero or more partition responses
-        :type res: pykafka.protocol.Response
-        """
-        partitions_by_error = defaultdict(list)
-        for topic_name in res.topics.keys():
-            for partition_id, pres in res.topics[topic_name].iteritems():
-                owned_partition = self._partitions_by_id[partition_id]
-                partitions_by_error[pres.error].append((owned_partition, pres))
-        return partitions_by_error
-
-    def _handle_partition_responses(self, response, error_handlers, success_handler=None):
+    def _handle_partition_responses(self,
+                                    response,
+                                    error_handlers,
+                                    success_handler=None,
+                                    partitions_by_id=None):
         """Call the appropriate handler for each errored partition
 
         :param response: a Response object containing partition responses
@@ -293,12 +284,22 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         :type success_handler: callable(parts)
         :param error_handlers: mapping of error code to handler
         :type error_handlers: dict {int: callable(parts)}
+        :param partitions_by_id: a dict mapping partition ids to OwnedPartition
+            instances
+        :type partitions_by_id: dict {int: pykafka.simpleconsumer.OwnedPartition}
         """
         error_handlers = error_handlers.copy()
         if success_handler is not None:
             error_handlers[0] = success_handler
 
-        parts_by_error = self._filter_partition_responses(response)
+        # group partition responses by error code
+        parts_by_error = defaultdict(list)
+        for topic_name in response.topics.keys():
+            for partition_id, pres in response.topics[topic_name].iteritems():
+                owned_partition = None
+                if partitions_by_id is not None:
+                    owned_partition = partitions_by_id[partition_id]
+                parts_by_error[pres.error].append((owned_partition, pres))
 
         for errcode, parts in parts_by_error.iteritems():
             if errcode in error_handlers:
@@ -332,7 +333,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
             self._handle_partition_responses(
                 response,
                 self._default_error_handlers,
-                success_handler=_handle_success)
+                success_handler=_handle_success,
+                partitions_by_id=self._partitions_by_id)
 
     def fetch(self):
         """Fetch new messages for all partitions
@@ -362,7 +364,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                 self._handle_partition_responses(
                     response,
                     self._default_error_handlers,
-                    success_handler=_handle_success)
+                    success_handler=_handle_success,
+                    partitions_by_id=self._partitions_by_id)
             for owned_partition, _ in partition_reqs:
                 owned_partition.lock.release()
 
