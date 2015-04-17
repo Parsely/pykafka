@@ -265,7 +265,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                 partitions_by_error[pres.error].append((owned_partition, pres))
         return partitions_by_error
 
-    def _handle_partition_errors(self, response, success_handler=None, error_handlers=None):
+    def _handle_partition_errors(self, response, success_handler=None, handlers=None):
         """Call the appropriate handler for each errored partition
 
         :param response: a Response object containing partition responses
@@ -275,10 +275,10 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         :param error_handlers: mapping of error code to handler
         :type error_handlers: dict {int: callable(owned_partition, partition_response)}
         """
-        if error_handlers is None:
-            error_handlers = {}
-        error_handlers = dict(
-            self._default_error_handlers.items() + error_handlers.items())
+        if handlers is None:
+            handlers = {}
+        error_handlers = self._default_error_handlers.clone()
+        error_handlers.update(handlers.items())
         if success_handler is not None:
             error_handlers[0] = success_handler
 
