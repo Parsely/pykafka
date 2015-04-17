@@ -127,9 +127,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
             self._partitions_by_leader[p.partition.leader].append(p)
         self.partition_cycle = itertools.cycle(self._partitions.keys())
 
-        self._default_error_handlers = {
-            UnknownTopicOrPartition.ERROR_CODE: lambda op, pres: self._raise_error(UnknownTopicOrPartition)
-        }
+        self._default_error_handlers = self._build_default_error_handlers()
 
         self._running = True
 
@@ -138,6 +136,19 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         # we need to get the most up-to-date offsets before starting consumption
         self.fetch_offsets()
         self._fetch_workers = self._setup_fetch_workers()
+
+    def _build_default_error_handlers(self):
+        def _handle_UnknownTopicOrPartition(parts):
+            self._raise_error(UnknownTopicOrPartition)
+
+        def _handle_OffsetOutOfRangeError(parts):
+            self._reset_offsets((owned_partition
+                                 for owned_partition, pres in parts))
+
+        return {
+            UnknownTopicOrPartition.ERROR_CODE: _handle_UnknownTopicOrPartition,
+            OffsetOutOfRangeError.ERROR_CODE: _handle_OffsetOutOfRangeError
+        }
 
     @property
     def topic(self):
@@ -243,12 +254,15 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         if not self._consumer_group:
             raise Exception("consumer group must be specified to fetch offsets")
 
+        def _handle_success(parts):
+            for owned_partition, pres in parts:
+                owned_partition.set_offset(pres.offset)
+
         log.info("Fetching offsets")
 
         reqs = [p.build_offset_fetch_request() for p in self._partitions.keys()]
         res = self._offset_manager.fetch_consumer_group_offsets(self._consumer_group, reqs)
-        success_handlers = lambda op, pres: op.set_offset(pres.offset)
-        self._handle_partition_responses(res, success_handler=success_handlers)
+        self._handle_partition_responses(res, success_handler=_handle_success)
 
     def _filter_partition_responses(self, res):
         """Group partition responses by error code
@@ -277,7 +291,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         """
         if handlers is None:
             handlers = {}
-        error_handlers = self._default_error_handlers.clone()
+        error_handlers = self._default_error_handlers.copy()
         error_handlers.update(handlers.items())
         if success_handler is not None:
             error_handlers[0] = success_handler
@@ -285,13 +299,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         parts_by_error = self._filter_partition_responses(response)
 
         for errcode, parts in parts_by_error.iteritems():
-            for owned_partition, pres in parts:
-                if errcode in error_handlers:
-                    error_handlers[errcode](owned_partition, pres)
-
-        self._reset_offsets(
-            [a[0] for a in
-             parts_by_error[OffsetOutOfRangeError.ERROR_CODE]])
+            if errcode in error_handlers:
+                error_handlers[errcode](parts)
 
         return parts_by_error
 
@@ -304,6 +313,10 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         :param errored_partitions: the partitions with out-of-range offsets
         :type errored_partitions: Iterable of OwnedPartition
         """
+        def _handle_success(parts):
+            for owned_partition, pres in parts:
+                owned_partition.set_offset(pres.offset[0])
+
         # group out-of-range partitions by leader
         by_leader = defaultdict(list)
         for p in errored_partitions:
@@ -314,8 +327,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
             reqs = [owned_partition.build_offset_request(self._auto_offset_reset)
                     for owned_partition in owned_partitions]
             response = broker.request_offset_limits(reqs)
-            success_handler = lambda op, pres: op.set_offset(pres.offset[0])
-            self._handle_partition_responses(response, success_handler=success_handler)
+            self._handle_partition_responses(response, success_handler=_handle_success)
 
     def fetch(self):
         """Fetch new messages for all partitions
@@ -323,6 +335,10 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         Create a FetchRequest for each broker and send it. Enqueue each of the
         returned messages in the approprate OwnedPartition.
         """
+        def _handle_success(parts):
+            for owned_partition, pres in parts:
+                owned_partition.enqueue_messages(pres.messages)
+
         for broker, owned_partitions in self._partitions_by_leader.iteritems():
             partition_reqs = []
             for owned_partition in owned_partitions:
@@ -338,8 +354,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                     timeout=self._fetch_wait_max_ms,
                     min_bytes=self._fetch_min_bytes
                 )
-                success_handler = lambda op, pres: op.enqueue_messages(pres.messages)
-                self._handle_partition_responses(response, success_handler=success_handler)
+                self._handle_partition_responses(
+                    response, success_handler=_handle_success)
             for owned_partition, _ in partition_reqs:
                 owned_partition.lock.release()
 
