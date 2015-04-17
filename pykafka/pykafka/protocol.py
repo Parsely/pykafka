@@ -360,7 +360,9 @@ class MetadataResponse(Response):
                 self.raise_error(err, response)
             part_metas = {}
             for (p_err, id_, leader, replicas, isr) in partitions:
-                if p_err != 0:
+                if p_err == 9:
+                    logger.info('ReplicaNotAvailable: %s/%s', name, id_)
+                elif p_err != 0:
                     self.raise_error(p_err, response)
                 part_metas[id_] = PartitionMetadata(id_, leader, replicas, isr)
             self.topics[name] = TopicMetadata(name, part_metas)

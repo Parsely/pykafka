@@ -32,8 +32,8 @@ class Broker(base.BaseBroker):
         :param timeout: TODO: Fill in
         :type timeout: :class:int
         """
-        self._connected = False
-        self._offsets_channel_connected = False
+        self._connection = None
+        self._offsets_channel_connection = False
         self._id = int(id_)
         self._host = host
         self._port = port
@@ -65,12 +65,12 @@ class Broker(base.BaseBroker):
     @property
     def connected(self):
         """Returns True if the connected to the broker."""
-        return self._connected
+        return self._connection.connected
 
     @property
     def offsets_channel_connected(self):
         """Returns True if the connected to the broker."""
-        return self._offsets_channel_connected
+        return self._offsets_channel_connection.connected
 
     @property
     def id(self):
@@ -105,19 +105,21 @@ class Broker(base.BaseBroker):
 
     def connect(self):
         """Establish a connection to the Broker."""
-        conn = BrokerConnection(self.host, self.port, self._buffer_size)
-        conn.connect(self._socket_timeout_ms)
-        self._req_handler = RequestHandler(self._handler, conn)
+        self._connection = BrokerConnection(self.host, self.port,
+                                            self._buffer_size)
+        self._connection.connect(self._socket_timeout_ms)
+        self._req_handler = RequestHandler(self._handler, self._connection)
         self._req_handler.start()
-        self._connected = True
 
     def connect_offsets_channel(self):
         """Establish a connection to the Broker for the offsets channel"""
-        conn = BrokerConnection(self.host, self.port, self._buffer_size)
-        conn.connect(self._offsets_channel_socket_timeout_ms)
-        self._offsets_channel_req_handler = RequestHandler(self._handler, conn)
+        self._offsets_connection = BrokerConnection(self.host, self.port,
+                                                    self._buffer_size)
+        self._offsets_connection.connect(self._offsets_channel_socket_timeout_ms)
+        self._offsets_channel_req_handler = RequestHandler(
+            self._handler, self._offsets_channel_connection
+        )
         self._offsets_channel_req_handler.start()
-        self._offsets_channel_connected = True
 
     def fetch_messages(self,
                        partition_requests,
@@ -180,7 +182,7 @@ class Broker(base.BaseBroker):
         :param preqs: a sequence of <protocol.PartitionOffsetCommitRequest>
         :type preqs: sequence
         """
-        if not self._offsets_channel_connected:
+        if not self.offsets_channel_connected:
             self.connect_offsets_channel()
         # TODO - exponential backoff
         req = OffsetCommitRequest(consumer_group,
@@ -200,7 +202,7 @@ class Broker(base.BaseBroker):
         :param preqs: a sequence of <protocol.PartitionOffsetFetchRequest>
         :type preqs: sequence
         """
-        if not self._offsets_channel_connected:
+        if not self.offsets_channel_connected:
             self.connect_offsets_channel()
         # TODO - exponential backoff
         req = OffsetFetchRequest(consumer_group, partition_requests=preqs)

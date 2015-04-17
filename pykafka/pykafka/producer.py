@@ -7,7 +7,7 @@ from pykafka.common import CompressionType
 from pykafka.exceptions import (
     UnknownTopicOrPartition, LeaderNotAvailable,
     NotLeaderForPartition, RequestTimedOut,
-    ProduceFailureError
+    ProduceFailureError, SocketDisconnectedError
 )
 from pykafka.partitioners import random_partitioner
 from .protocol import Message, ProduceRequest
@@ -86,29 +86,41 @@ class Producer(base.BaseProducer):
                 yield (message.partition_key, message.value), partition_id
 
         # Do the request
-        response = broker.produce_messages(req)
-
-        # Figure out if we need to retry any messages
         to_retry = []
-        for topic, partitions in response.topics.iteritems():
-            for partition, (error, offset) in partitions.iteritems():
-                if error == 0:
-                    continue  # All's well
-                if error == UnknownTopicOrPartition.ERROR_CODE:
-                    logger.warning('Unknown topic: %s. Retrying.',
-                                   self._topic)
-                elif error == LeaderNotAvailable.ERROR_CODE:
-                    logger.warning('Leader not available: %s/%s. '
-                                   'Retrying.', topic, partition)
-                elif error == NotLeaderForPartition.ERROR_CODE:
-                    logger.warning('Partition leader for %s/%s changed. '
-                                   'Retrying.', topic, partition)
-                    # Update cluster metadata to get new leader
-                    self._cluster.update()
-                elif error == RequestTimedOut.ERROR_CODE:
-                    logger.warning('Produce request to %s:%s timed out. '
-                                   'Retrying.', broker.host, broker.port)
-                to_retry.extend(_get_partition_msgs(partition, req))
+        try:
+            response = broker.produce_messages(req)
+
+            # Figure out if we need to retry any messages
+            to_retry = []
+            for topic, partitions in response.topics.iteritems():
+                for partition, (error, offset) in partitions.iteritems():
+                    if error == 0:
+                        continue  # All's well
+                    if error == UnknownTopicOrPartition.ERROR_CODE:
+                        logger.warning('Unknown topic: %s. Retrying.',
+                                       self._topic)
+                    elif error == LeaderNotAvailable.ERROR_CODE:
+                        logger.warning('Leader not available: %s/%s. '
+                                       'Retrying.', topic, partition)
+                    elif error == NotLeaderForPartition.ERROR_CODE:
+                        logger.warning('Partition leader for %s/%s changed. '
+                                       'Retrying.', topic, partition)
+                        # Update cluster metadata to get new leader
+                        self._cluster.update()
+                    elif error == RequestTimedOut.ERROR_CODE:
+                        logger.warning('Produce request to %s:%s timed out. '
+                                       'Retrying.', broker.host, broker.port)
+                    to_retry.extend(_get_partition_msgs(partition, req))
+        except SocketDisconnectedError:
+            logger.warning('Broker %s:%s disconnected. Retrying produce')
+            self._cluster.update()
+            to_retry = [
+                ((message.partition_key, message.value), p_id)
+                for topic, partitions in req.msets.iteritems()
+                for p_id, mset in partitions.iteritems()
+                for message in mset.messages
+            ]
+
 
         if to_retry:
             attempt += 1

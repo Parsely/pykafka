@@ -45,23 +45,27 @@ class Cluster(object):
     def _get_metadata(self):
         """Get fresh cluster metadata from a broker"""
         # Works either on existing brokers or seed_hosts list
-        if self.brokers:
-            brokers = self.brokers.values()
-        else:
+        brokers = [b for b in self.brokers.values() if b.connected]
+        if brokers:
+            for broker in brokers:
+                try:
+                    return broker.request_metadata()
+                except:
+                    logger.exception('Unable to connect to broker %s', broker)
+        else:  # try seed hosts
             brokers = self._seed_hosts.split(',')
-
-        for broker in brokers:
-            try:
-                if isinstance(broker, basestring):
-                    h, p = broker.split(':')
-                    broker = Broker(-1, h, p, self._handler, self._socket_timeout_ms,
+            for broker_str in brokers:
+                try:
+                    h, p = broker_str.split(':')
+                    broker = Broker(-1, h, p, self._handler,
+                                    self._socket_timeout_ms,
                                     self._offsets_channel_socket_timeout_ms,
                                     buffer_size=self._socket_receive_buffer_bytes)
-                return broker.request_metadata()
-            # TODO: Change to typed exception
-            except Exception:
-                logger.exception('Unable to connect to broker %s', broker)
-                raise
+                    return broker.request_metadata()
+                except:
+                    logger.exception('Unable to connect to broker %s',
+                                     broker_str)
+        # Couldn't connect anywhere. Raise an error.
         raise Exception('Unable to connect to a broker to fetch metadata.')
 
     def _update_brokers(self, broker_metadata):
