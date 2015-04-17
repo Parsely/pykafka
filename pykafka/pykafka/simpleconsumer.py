@@ -224,7 +224,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
 
             response = self._offset_manager.commit_consumer_group_offsets(
                 self._consumer_group, 1, 'pykafka', reqs)
-            parts_by_error = self._handle_partition_errors(response)
+            parts_by_error = self._handle_partition_responses(response)
             if len(parts_by_error) == 1 and 0 in parts_by_error:
                 break
             log.error("Error committing offsets for topic %s", self._topic.name)
@@ -248,7 +248,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         reqs = [p.build_offset_fetch_request() for p in self._partitions.keys()]
         res = self._offset_manager.fetch_consumer_group_offsets(self._consumer_group, reqs)
         success_handlers = lambda op, pres: op.set_offset(pres.offset)
-        self._handle_partition_errors(res, success_handler=success_handlers)
+        self._handle_partition_responses(res, success_handler=success_handlers)
 
     def _filter_partition_responses(self, res):
         """Group partition responses by error code
@@ -265,7 +265,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                 partitions_by_error[pres.error].append((owned_partition, pres))
         return partitions_by_error
 
-    def _handle_partition_errors(self, response, success_handler=None, handlers=None):
+    def _handle_partition_responses(self, response, success_handler=None, handlers=None):
         """Call the appropriate handler for each errored partition
 
         :param response: a Response object containing partition responses
@@ -315,7 +315,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                     for owned_partition in owned_partitions]
             response = broker.request_offset_limits(reqs)
             success_handler = lambda op, pres: op.set_offset(pres.offset[0])
-            self._handle_partition_errors(response, success_handler=success_handler)
+            self._handle_partition_responses(response, success_handler=success_handler)
 
     def fetch(self):
         """Fetch new messages for all partitions
@@ -339,7 +339,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                     min_bytes=self._fetch_min_bytes
                 )
                 success_handler = lambda op, pres: op.enqueue_messages(pres.messages)
-                self._handle_partition_errors(response, success_handler=success_handler)
+                self._handle_partition_responses(response, success_handler=success_handler)
             for owned_partition, _ in partition_reqs:
                 owned_partition.lock.release()
 
