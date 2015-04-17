@@ -10,7 +10,6 @@ import threading
 from pykafka import base
 from pykafka.common import OffsetType
 from pykafka.exceptions import (OffsetOutOfRangeError, UnknownTopicOrPartition,
-                                InvalidMessageError, InvalidMessageSize,
                                 OffsetMetadataTooLarge)
 
 from .utils.error_handlers import handle_partition_responses, raise_error
@@ -148,8 +147,6 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         return {
             UnknownTopicOrPartition.ERROR_CODE: lambda p: raise_error(UnknownTopicOrPartition),
             OffsetOutOfRangeError.ERROR_CODE: _handle_OffsetOutOfRangeError,
-            InvalidMessageError.ERROR_CODE: lambda p: raise_error(InvalidMessageError),
-            InvalidMessageSize.ERROR_CODE: lambda p: raise_error(InvalidMessageSize),
             OffsetMetadataTooLarge.ERROR_CODE: lambda p: raise_error(OffsetMetadataTooLarge)
         }
 
