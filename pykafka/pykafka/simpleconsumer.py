@@ -11,6 +11,7 @@ from pykafka import base
 from pykafka.common import OffsetType
 from pykafka.exceptions import OffsetOutOfRangeError, UnknownTopicOrPartition
 
+from .utils.error_handlers import handle_partition_responses
 from .protocol import (PartitionFetchRequest, PartitionOffsetCommitRequest,
                        PartitionOffsetFetchRequest, PartitionOffsetRequest)
 
@@ -235,7 +236,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
 
             response = self._offset_manager.commit_consumer_group_offsets(
                 self._consumer_group, 1, 'pykafka', reqs)
-            parts_by_error = self._handle_partition_responses(
+            parts_by_error = handle_partition_responses(
                 response,
                 self._default_error_handlers,
                 partitions_by_id=self._partitions_by_id)
@@ -265,47 +266,11 @@ class SimpleConsumer(base.BaseSimpleConsumer):
 
         reqs = [p.build_offset_fetch_request() for p in self._partitions.keys()]
         res = self._offset_manager.fetch_consumer_group_offsets(self._consumer_group, reqs)
-        self._handle_partition_responses(
+        handle_partition_responses(
             res,
             self._default_error_handlers,
             success_handler=_handle_success,
             partitions_by_id=self._partitions_by_id)
-
-    def _handle_partition_responses(self,
-                                    response,
-                                    error_handlers,
-                                    success_handler=None,
-                                    partitions_by_id=None):
-        """Call the appropriate handler for each errored partition
-
-        :param response: a Response object containing partition responses
-        :type response: pykafka.protocol.Response
-        :param success_handler: function to call for successful partitions
-        :type success_handler: callable(parts)
-        :param error_handlers: mapping of error code to handler
-        :type error_handlers: dict {int: callable(parts)}
-        :param partitions_by_id: a dict mapping partition ids to OwnedPartition
-            instances
-        :type partitions_by_id: dict {int: pykafka.simpleconsumer.OwnedPartition}
-        """
-        error_handlers = error_handlers.copy()
-        if success_handler is not None:
-            error_handlers[0] = success_handler
-
-        # group partition responses by error code
-        parts_by_error = defaultdict(list)
-        for topic_name in response.topics.keys():
-            for partition_id, pres in response.topics[topic_name].iteritems():
-                owned_partition = None
-                if partitions_by_id is not None:
-                    owned_partition = partitions_by_id[partition_id]
-                parts_by_error[pres.error].append((owned_partition, pres))
-
-        for errcode, parts in parts_by_error.iteritems():
-            if errcode in error_handlers:
-                error_handlers[errcode](parts)
-
-        return parts_by_error
 
     def _reset_offsets(self, errored_partitions):
         """Reset offsets after an OffsetOutOfRangeError
@@ -330,7 +295,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
             reqs = [owned_partition.build_offset_request(self._auto_offset_reset)
                     for owned_partition in owned_partitions]
             response = broker.request_offset_limits(reqs)
-            self._handle_partition_responses(
+            handle_partition_responses(
                 response,
                 self._default_error_handlers,
                 success_handler=_handle_success,
@@ -361,7 +326,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                     timeout=self._fetch_wait_max_ms,
                     min_bytes=self._fetch_min_bytes
                 )
-                self._handle_partition_responses(
+                handle_partition_responses(
                     response,
                     self._default_error_handlers,
                     success_handler=_handle_success,
