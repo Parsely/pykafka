@@ -36,6 +36,9 @@ class MessageTooLargeError(KafkaException):
 class SocketDisconnectedError(KafkaException):
     pass
 
+class ProduceFailureError(KafkaException):
+    pass
+
 
 
 ##

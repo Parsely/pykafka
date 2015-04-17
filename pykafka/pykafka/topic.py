@@ -40,7 +40,7 @@ class Topic(base.BaseTopic):
         return self._partitions
 
     def get_producer(self):
-        return Producer(self)
+        return Producer(self._cluster, self)
 
     def fetch_offset_limits(self, offsets_before, max_offsets=1):
         """Get earliest or latest offset

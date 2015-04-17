@@ -1,3 +1,4 @@
+import itertools
 import logging
 from collections import defaultdict
 
@@ -6,6 +7,7 @@ from pykafka.common import CompressionType
 from pykafka.exceptions import (
     UnknownTopicOrPartition, LeaderNotAvailable,
     NotLeaderForPartition, RequestTimedOut,
+    ProduceFailureError
 )
 from pykafka.partitioners import random_partitioner
 from .protocol import Message, ProduceRequest
@@ -69,43 +71,58 @@ class Producer(base.BaseProducer):
         self._ack_timeout_ms = ack_timeout_ms
         self._batch_size = batch_size
 
-    def _send_request(self, broker, req):
-        tries = 0
-        while tries < self._max_retries:
-            try:
-                broker.produce_messages(req)
-                break
-            except (UnknownTopicOrPartition, LeaderNotAvailable,
-                    NotLeaderForPartition, RequestTimedOut) as ex:
-                # FIXME: Not all messages will have failed. Only some on a
-                #        bad partition. Retrying should reflect that. The
-                #        fix needs to be in protocol.py as well since it
-                #        only raises one exception no matter how many errors.
-                tries += 1
-                if tries >= self._max_retries:
-                    raise
-                elif isinstance(ex, UnknownTopicOrPartition):
-                    logger.warning('Unknown topic: %s. Retrying.', self._topic)
-                elif isinstance(ex, LeaderNotAvailable):
-                    logger.warning('Partition leader unavailable. Retrying.')
-                elif isinstance(ex, NotLeaderForPartition):
-                    # Update cluster metadata and retry the produce request
-                    # FIXME: Can this recurse infinitely?
-                    # FIXME: This will cause a re-partitioning of messages
+    def _send_request(self, broker, req, attempt):
+        """Send the request to the broker and handle the response."""
+
+        def _get_partition_msgs(partition_id, req):
+            """Get all the messages for the partitions from the request."""
+            messages = itertools.chain.from_iterable(
+                mset.messages
+                for topic, partitions in req.msets.iteritems()
+                for p_id, mset in partitions.iteritems()
+                if p_id == partition_id
+            )
+            for message in messages:
+                yield (message.partition_key, message.value), partition_id
+
+        # Do the request
+        response = broker.produce_messages(req)
+
+        # Figure out if we need to retry any messages
+        to_retry = []
+        for topic, partitions in response.topics.iteritems():
+            for partition, (error, offset) in partitions.iteritems():
+                if error == 0:
+                    continue  # All's well
+                if error == UnknownTopicOrPartition.ERROR_CODE:
+                    logger.warning('Unknown topic: %s. Retrying.',
+                                   self._topic)
+                elif error == LeaderNotAvailable.ERROR_CODE:
+                    logger.warning('Leader not available: %s/%s. '
+                                   'Retrying.', topic, partition)
+                elif error == NotLeaderForPartition.ERROR_CODE:
+                    logger.warning('Partition leader for %s/%s changed. '
+                                   'Retrying.', topic, partition)
+                    # Update cluster metadata to get new leader
                     self._cluster.update()
-                    self._produce(req.messages)
-                elif isinstance(ex, RequestTimedOut):
-                    logger.warning('Produce request timed out. Retrying.')
+                elif error == RequestTimedOut.ERROR_CODE:
+                    logger.warning('Produce request to %s:%s timed out. '
+                                   'Retrying.', broker.host, broker.port)
+                to_retry.extend(_get_partition_msgs(partition, req))
 
-    def _produce(self, messages):
-        """Publish a set of messages to relevant brokers."""
-        # Requests grouped by broker
-        requests = defaultdict(lambda: ProduceRequest(
-            compression_type=self._compression,
-            required_acks=self._required_acks,
-            timeout=self._ack_timeout_ms
-        ))
+        if to_retry:
+            attempt += 1
+            if attempt < self._max_retries:
+                self._produce(to_retry, attempt)
+            else:
+                raise ProduceFailureError('Unable to produce messages. See log for details.')
 
+    def _partition_messages(self, messages):
+        """Assign messages to partitions using the partitioner.
+
+        :param messages: Iterable of messages to publish.
+        :returns:        Generator of ((key, value), partition_id)
+        """
         partitions = self._topic.partitions.values()
         for message in messages:
             if isinstance(message, basestring):
@@ -113,20 +130,43 @@ class Producer(base.BaseProducer):
                 value = message
             else:
                 key, value = message
-            partition = self._partitioner(partitions, key)
-            requests[partition.leader].add_message(
+            yield (key, value), self._partitioner(partitions, message).id
+
+    def _produce(self, message_partition_tups, attempt):
+        """Publish a set of messages to relevant brokers.
+
+        :param message_partition_tups: Messages with partitions assigned.
+        :type message_partition_tups:  tuples of ((key, value), partition_id)
+        """
+        # Requests grouped by broker
+        requests = defaultdict(lambda: ProduceRequest(
+            compression_type=self._compression,
+            required_acks=self._required_acks,
+            timeout=self._ack_timeout_ms,
+        ))
+
+        for ((key, value), partition_id) in message_partition_tups:
+            # N.B. This handles retries, so the leader lookup is needed
+            leader = self._topic.partitions[partition_id].leader
+            if attempt == 0:
+                leader = self._topic.partitions[partition_id].isr[1]
+            requests[leader].add_message(
                 Message(value, partition_key=key),
                 self._topic.name,
-                partition.id
+                partition_id
             )
             # Send requests at the batch size
-            if requests[partition.leader].message_count() >= self._batch_size:
-                self._send_request(partition.leader,
-                                   requests.pop(partition.leader))
+            if requests[leader].message_count() >= self._batch_size:
+                self._send_request(leader,
+                                   requests.pop(leader),
+                                   attempt)
 
         # Send any still not sent
-        for broker, req in requests.iteritems():
-            self._send_request(broker, req)
+        for leader, req in requests.iteritems():
+            self._send_request(leader, req, attempt)
 
     def produce(self, messages):
-        self._produce(messages)
+        # Do partition distribution here. We need to be able to retry producing
+        # only *some* messages when a leader changes. Therefore, we don't want
+        # a random partition distribution changing that on the retry.
+        self._produce(self._partition_messages(messages), 0)

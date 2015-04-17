@@ -7,7 +7,8 @@ from .protocol import (
     FetchRequest, FetchResponse, OffsetRequest,
     OffsetResponse, MetadataRequest, MetadataResponse,
     OffsetCommitRequest, OffsetCommitResponse,
-    OffsetFetchRequest, OffsetFetchResponse
+    OffsetFetchRequest, OffsetFetchResponse,
+    ProduceResponse
 )
 
 
@@ -145,9 +146,8 @@ class Broker(base.BaseBroker):
         if produce_request.required_acks == 0:
             self._req_handler.request(produce_request, has_response=False)
         else:
-            self._req_handler.request(produce_request).get()
-            # Any errors will be decoded and raised in the `.get()`
-        return None
+            future = self._req_handler.request(produce_request)
+            return future.get(ProduceResponse)
 
     def request_offset_limits(self, partition_requests):
         """Request offset information for a set of topic/partitions"""

@@ -401,7 +401,7 @@ class ProduceRequest(Request):
         :param timeout: timeout (in ms) to wait for the required acks
         """
         # {topic_name: {partition_id: MessageSet}}
-        self._msets = defaultdict(
+        self.msets = defaultdict(
             lambda: defaultdict(
                 lambda: MessageSet(compression_type=compression_type)
             ))
@@ -412,7 +412,7 @@ class ProduceRequest(Request):
     def __len__(self):
         """Length of the serialized message, in bytes"""
         size = self.HEADER_LEN + 2 + 4 + 4  # acks + timeout + len(topics)
-        for topic, parts in self._msets.iteritems():
+        for topic, parts in self.msets.iteritems():
             # topic name
             size += 2 + len(topic) + 4  # topic name + len(parts)
             # partition + mset size + len(mset)
@@ -429,7 +429,7 @@ class ProduceRequest(Request):
         """Iterable of all messages in the Request"""
         return itertools.chain.from_iterable(
             mset.messages
-            for topic, partitions in self._msets.iteritems()
+            for topic, partitions in self.msets.iteritems()
             for partition_id, mset in partitions.iteritems()
         )
 
@@ -440,7 +440,7 @@ class ProduceRequest(Request):
         :param topic_name: the name of the topic to publish to
         :param partition_id: the partition to publish to
         """
-        self._msets[topic_name][partition_id].messages.append(message)
+        self.msets[topic_name][partition_id].messages.append(message)
         self._message_count += 1
 
     def get_bytes(self):
@@ -453,9 +453,9 @@ class ProduceRequest(Request):
         self._write_header(output)
         offset = self.HEADER_LEN
         struct.pack_into('!hii', output, offset,
-                         self.required_acks, self.timeout, len(self._msets))
+                         self.required_acks, self.timeout, len(self.msets))
         offset += 10
-        for topic_name, partitions in self._msets.iteritems():
+        for topic_name, partitions in self.msets.iteritems():
             fmt = '!h%dsi' % len(topic_name)
             struct.pack_into(fmt, output, offset, len(topic_name), topic_name, len(partitions))
             offset += struct.calcsize(fmt)
@@ -494,9 +494,7 @@ class ProduceResponse(Response):
         for (topic, partitions) in response:
             self.topics[topic] = {}
             for partition in partitions:
-                if partition[1] != 0:
-                    self.raise_error(partition[1], response)
-                self.topics[topic][partition[0]] = partition[2]
+                self.topics[topic][partition[0]] = tuple(partition[1:3])
 
 
 ##
