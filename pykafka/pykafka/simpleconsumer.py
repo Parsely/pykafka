@@ -305,12 +305,12 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         :type errored_partitions: Iterable of OwnedPartition
         """
         # group out-of-range partitions by leader
-        owned_partitions_by_leader = defaultdict(list)
+        by_leader = defaultdict(list)
         for p in errored_partitions:
-            owned_partitions_by_leader[p.partition.leader].append(p)
+            by_leader[p.partition.leader].append(p)
 
         # get valid offset ranges for each partition
-        for broker, owned_partitions in owned_partitions_by_leader.iteritems():
+        for broker, owned_partitions in by_leader.iteritems():
             reqs = [owned_partition.build_offset_request(self._auto_offset_reset)
                     for owned_partition in owned_partitions]
             response = broker.request_offset_limits(reqs)
