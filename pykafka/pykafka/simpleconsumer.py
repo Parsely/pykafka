@@ -140,20 +140,14 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         self._fetch_workers = self._setup_fetch_workers()
 
     def _build_default_error_handlers(self):
-        def _handle_UnknownTopicOrPartition(parts):
-            raise_error(UnknownTopicOrPartition)
-
         def _handle_OffsetOutOfRangeError(parts):
             self._reset_offsets((owned_partition
                                  for owned_partition, pres in parts))
 
-        def _handle_InvalidMessageError(parts):
-            raise_error(InvalidMessageError)
-
         return {
-            UnknownTopicOrPartition.ERROR_CODE: _handle_UnknownTopicOrPartition,
+            UnknownTopicOrPartition.ERROR_CODE: lambda: raise_error(UnknownTopicOrPartition),
             OffsetOutOfRangeError.ERROR_CODE: _handle_OffsetOutOfRangeError,
-            InvalidMessageError.ERROR_CODE: _handle_InvalidMessageError
+            InvalidMessageError.ERROR_CODE: lambda: raise_error(InvalidMessageError)
         }
 
     @property
