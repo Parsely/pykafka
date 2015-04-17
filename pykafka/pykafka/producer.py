@@ -148,8 +148,6 @@ class Producer(base.BaseProducer):
         for ((key, value), partition_id) in message_partition_tups:
             # N.B. This handles retries, so the leader lookup is needed
             leader = self._topic.partitions[partition_id].leader
-            if attempt == 0:
-                leader = self._topic.partitions[partition_id].isr[1]
             requests[leader].add_message(
                 Message(value, partition_key=key),
                 self._topic.name,
