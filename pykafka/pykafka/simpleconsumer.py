@@ -11,7 +11,7 @@ from pykafka import base
 from pykafka.common import OffsetType
 from pykafka.exceptions import OffsetOutOfRangeError, UnknownTopicOrPartition
 
-from .utils.error_handlers import handle_partition_responses
+from .utils.error_handlers import handle_partition_responses, raise_error
 from .protocol import (PartitionFetchRequest, PartitionOffsetCommitRequest,
                        PartitionOffsetFetchRequest, PartitionOffsetRequest)
 
@@ -140,7 +140,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
 
     def _build_default_error_handlers(self):
         def _handle_UnknownTopicOrPartition(parts):
-            self._raise_error(UnknownTopicOrPartition)
+            raise_error(UnknownTopicOrPartition)
 
         def _handle_OffsetOutOfRangeError(parts):
             self._reset_offsets((owned_partition
@@ -333,9 +333,6 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                     partitions_by_id=self._partitions_by_id)
             for owned_partition, _ in partition_reqs:
                 owned_partition.lock.release()
-
-    def _raise_error(self, error, info=""):
-        raise error(info)
 
 
 class OwnedPartition(object):

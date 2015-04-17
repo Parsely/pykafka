@@ -35,3 +35,7 @@ def handle_partition_responses(response,
             error_handlers[errcode](parts)
 
     return parts_by_error
+
+
+def raise_error(error, info=""):
+    raise error(info)
