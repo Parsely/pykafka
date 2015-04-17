@@ -1,6 +1,4 @@
-import inspect
 import logging
-import time
 from collections import defaultdict
 
 from pykafka import base
@@ -9,6 +7,7 @@ from pykafka.exceptions import (
     UnknownTopicOrPartition, LeaderNotAvailable,
     NotLeaderForPartition, RequestTimedOut,
 )
+from pykafka.partitioners import random_partitioner
 from .protocol import Message, ProduceRequest
 
 
@@ -47,14 +46,28 @@ class AsyncProducer(base.BaseAsyncProducer):
 
 class Producer(base.BaseProducer):
 
-    def __init__(self, *args, **kwargs):
-        """ For argspec see base.BaseProducer.__init__ """
-        callargs = inspect.getcallargs(
-                base.BaseProducer.__init__, self, *args, **kwargs)
-        # Save each callarg as "_callarg" on self:
-        del callargs["self"]
-        map(lambda arg: setattr(self, "_" + arg[0], arg[1]),
-            callargs.iteritems())
+    def __init__(self,
+                 cluster,
+                 topic,
+                 partitioner=random_partitioner,
+                 compression=CompressionType.NONE,
+                 max_retries=3,
+                 retry_backoff_ms=100,
+                 topic_refresh_interval_ms=600000,
+                 required_acks=1,
+                 ack_timeout_ms=10000,
+                 batch_size=200):
+        # See BaseProduce.__init__.__doc__ for docstring
+        self._cluster = cluster
+        self._topic = topic
+        self._partitioner = partitioner
+        self._compression = compression
+        self._max_retries = max_retries
+        self._retry_backoff_ms = retry_backoff_ms
+        self._topic_refresh_interval_ms = topic_refresh_interval_ms
+        self._required_acks = required_acks
+        self._ack_timeout_ms = ack_timeout_ms
+        self._batch_size = batch_size
 
     def _send_request(self, broker, req):
         tries = 0
@@ -62,7 +75,7 @@ class Producer(base.BaseProducer):
             try:
                 broker.produce_messages(req)
                 break
-            except (UnknownTopicOrPartition , LeaderNotAvailable,
+            except (UnknownTopicOrPartition, LeaderNotAvailable,
                     NotLeaderForPartition, RequestTimedOut) as ex:
                 # FIXME: Not all messages will have failed. Only some on a
                 #        bad partition. Retrying should reflect that. The
@@ -79,7 +92,7 @@ class Producer(base.BaseProducer):
                     # Update cluster metadata and retry the produce request
                     # FIXME: Can this recurse infinitely?
                     # FIXME: This will cause a re-partitioning of messages
-                    self._client.update()
+                    self._cluster.update()
                     self._produce(req.messages)
                 elif isinstance(ex, RequestTimedOut):
                     logger.warning('Produce request timed out. Retrying.')
