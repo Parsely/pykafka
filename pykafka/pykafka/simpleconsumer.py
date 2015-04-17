@@ -285,9 +285,9 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         :param response: a Response object containing partition responses
         :type response: pykafka.protocol.Response
         :param success_handler: function to call for successful partitions
-        :type success_handler: callable(owned_partition, partition_response)
+        :type success_handler: callable(parts)
         :param error_handlers: mapping of error code to handler
-        :type error_handlers: dict {int: callable(owned_partition, partition_response)}
+        :type error_handlers: dict {int: callable(parts)}
         """
         if handlers is None:
             handlers = {}
