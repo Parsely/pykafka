@@ -247,8 +247,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
 
         reqs = [p.build_offset_fetch_request() for p in self._partitions.keys()]
         res = self._offset_manager.fetch_consumer_group_offsets(self._consumer_group, reqs)
-        error_handlers = {0: lambda op, pres: op.set_offset(pres.offset)}
-        self._handle_partition_errors(res, handlers=error_handlers)
+        success_handlers = lambda op, pres: op.set_offset(pres.offset)
+        self._handle_partition_errors(res, success_handler=success_handlers)
 
     def _filter_partition_responses(self, res):
         """Group partition responses by error code
@@ -265,20 +265,24 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                 partitions_by_error[pres.error].append((owned_partition, pres))
         return partitions_by_error
 
-    def _handle_partition_errors(self, res, handlers=None):
+    def _handle_partition_errors(self, response, success_handler=None, error_handlers=None):
         """Call the appropriate handler for each errored partition
 
-        :param res: a Response object containing partition responses
-        :type res: pykafka.protocol.Response
-        :param handlers: mapping of error code to handler
-        :type handlers: dict {int: callable(owned_partition, partition_response)}
+        :param response: a Response object containing partition responses
+        :type response: pykafka.protocol.Response
+        :param success_handler: function to call for successful partitions
+        :type success_handler: callable(owned_partition, partition_response)
+        :param error_handlers: mapping of error code to handler
+        :type error_handlers: dict {int: callable(owned_partition, partition_response)}
         """
-        if handlers is None:
-            handlers = {}
+        if error_handlers is None:
+            error_handlers = {}
         error_handlers = dict(
-            self._default_error_handlers.items() + handlers.items())
+            self._default_error_handlers.items() + error_handlers.items())
+        if success_handler is not None:
+            error_handlers[0] = success_handler
 
-        parts_by_error = self._filter_partition_responses(res)
+        parts_by_error = self._filter_partition_responses(response)
 
         for errcode, parts in parts_by_error.iteritems():
             for owned_partition, pres in parts:
@@ -310,8 +314,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
             reqs = [owned_partition.build_offset_request(self._auto_offset_reset)
                     for owned_partition in owned_partitions]
             response = broker.request_offset_limits(reqs)
-            error_handlers = {0: lambda op, pres: op.set_offset(pres.offset[0])}
-            self._handle_partition_errors(response, handlers=error_handlers)
+            success_handler = lambda op, pres: op.set_offset(pres.offset[0])
+            self._handle_partition_errors(response, success_handler=success_handler)
 
     def fetch(self):
         """Fetch new messages for all partitions
@@ -334,8 +338,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                     timeout=self._fetch_wait_max_ms,
                     min_bytes=self._fetch_min_bytes
                 )
-                error_handlers = {0: lambda op, pres: op.enqueue_messages(pres.messages)}
-                self._handle_partition_errors(response, handlers=error_handlers)
+                success_handler = lambda op, pres: op.enqueue_messages(pres.messages)
+                self._handle_partition_errors(response, success_handler=success_handler)
             for owned_partition, _ in partition_reqs:
                 owned_partition.lock.release()
 
