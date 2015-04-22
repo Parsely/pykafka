@@ -1,3 +1,5 @@
+from __future__ import division
+
 import logging
 import time
 import random
@@ -5,6 +7,7 @@ import random
 from .broker import Broker
 from .topic import Topic
 from .protocol import ConsumerMetadataRequest, ConsumerMetadataResponse
+from pykafka.exceptions import ConsumerCoordinatorNotAvailable
 
 
 logger = logging.getLogger(__name__)
@@ -138,20 +141,20 @@ class Cluster(object):
         """
         # arbitrarily choose a broker, since this request can go to any
         broker = self.brokers[random.choice(self.brokers.keys())]
-        backoff, retries = 2, 0
         MAX_RETRIES = 3
-        while True:
+
+        for i in xrange(MAX_RETRIES):
+            if i > 0:
+                logger.debug("Retrying")
+            time.sleep(i)
+
+            req = ConsumerMetadataRequest(consumer_group)
+            future = broker.handler.request(req)
             try:
-                retries += 1
-                req = ConsumerMetadataRequest(consumer_group)
-                future = broker.handler.request(req)
                 res = future.get(ConsumerMetadataResponse)
-            except Exception:
-                logger.debug('Error discovering offset manager. Sleeping for {}s'.format(backoff))
-                if retries < MAX_RETRIES:
-                    time.sleep(backoff)
-                    backoff = backoff ** 2
-                else:
+            except ConsumerCoordinatorNotAvailable:
+                logger.debug('Error discovering offset manager.')
+                if i == MAX_RETRIES - 1:
                     raise
             else:
                 coordinator = self.brokers.get(res.coordinator_id, None)
