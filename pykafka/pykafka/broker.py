@@ -1,4 +1,5 @@
 import logging
+import time
 
 from pykafka import base
 from .connection import BrokerConnection
@@ -10,6 +11,7 @@ from .protocol import (
     OffsetFetchRequest, OffsetFetchResponse,
     ProduceResponse
 )
+from pykafka.exceptions import LeaderNotAvailable
 
 
 logger = logging.getLogger(__name__)
@@ -159,8 +161,26 @@ class Broker(base.BaseBroker):
         return future.get(OffsetResponse)
 
     def request_metadata(self, topics=None):
-        future = self._req_handler.request(MetadataRequest(topics=topics))
-        return future.get(MetadataResponse)
+        max_retries = 3
+        for i in xrange(max_retries):
+            if i > 0:
+                logger.debug("Retrying")
+            time.sleep(i)
+
+            future = self._req_handler.request(MetadataRequest(topics=topics))
+            response = future.get(MetadataResponse)
+
+            errored = False
+            for name, topic_metadata in response.topics.iteritems():
+                if topic_metadata.err == LeaderNotAvailable.ERROR_CODE:
+                    logger.warning("Leader not available.")
+                    errored = True
+                for pid, partition_metadata in topic_metadata.partitions.iteritems():
+                    if partition_metadata.err == LeaderNotAvailable.ERROR_CODE:
+                        logger.warning("Leader not available.")
+                        errored = True
+
+        return response if not errored else None
 
     ######################
     #  Commit/Fetch API  #

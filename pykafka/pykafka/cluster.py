@@ -51,10 +51,9 @@ class Cluster(object):
         brokers = [b for b in self.brokers.values() if b.connected]
         if brokers:
             for broker in brokers:
-                try:
-                    return broker.request_metadata()
-                except:
-                    logger.exception('Unable to connect to broker %s', broker)
+                response = broker.request_metadata()
+                if response is not None:
+                    return response
         else:  # try seed hosts
             brokers = self._seed_hosts.split(',')
             for broker_str in brokers:
@@ -64,7 +63,9 @@ class Cluster(object):
                                     self._socket_timeout_ms,
                                     self._offsets_channel_socket_timeout_ms,
                                     buffer_size=self._socket_receive_buffer_bytes)
-                    return broker.request_metadata()
+                    response = broker.request_metadata()
+                    if response is not None:
+                        return response
                 except:
                     logger.exception('Unable to connect to broker %s',
                                      broker_str)
