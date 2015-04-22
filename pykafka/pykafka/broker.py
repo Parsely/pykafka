@@ -180,7 +180,8 @@ class Broker(base.BaseBroker):
                         logger.warning("Leader not available.")
                         errored = True
 
-        return response if not errored else None
+            if not errored:
+                return response
 
     ######################
     #  Commit/Fetch API  #
