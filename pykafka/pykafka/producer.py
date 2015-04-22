@@ -6,7 +6,8 @@ from pykafka import base
 from pykafka.common import CompressionType
 from pykafka.exceptions import (
     UnknownTopicOrPartition, NotLeaderForPartition, RequestTimedOut,
-    ProduceFailureError, SocketDisconnectedError
+    ProduceFailureError, SocketDisconnectedError, InvalidMessageError,
+    InvalidMessageSize, MessageSizeTooLarge
 )
 from pykafka.partitioners import random_partitioner
 from .protocol import Message, ProduceRequest
@@ -106,6 +107,14 @@ class Producer(base.BaseProducer):
                     elif error == RequestTimedOut.ERROR_CODE:
                         logger.warning('Produce request to %s:%s timed out. '
                                        'Retrying.', broker.host, broker.port)
+                    elif error == InvalidMessageError.ERROR_CODE:
+                        logger.warning('Encountered InvalidMessageError')
+                    elif error == InvalidMessageSize.ERROR_CODE:
+                        logger.warning('Encountered InvalidMessageSize')
+                        continue
+                    elif error == MessageSizeTooLarge.ERROR_CODE:
+                        logger.warning('Encountered MessageSizeTooLarge')
+                        continue
                     to_retry.extend(_get_partition_msgs(partition, req))
         except SocketDisconnectedError:
             logger.warning('Broker %s:%s disconnected. Retrying produce')
@@ -116,7 +125,6 @@ class Producer(base.BaseProducer):
                 for p_id, mset in partitions.iteritems()
                 for message in mset.messages
             ]
-
 
         if to_retry:
             attempt += 1
