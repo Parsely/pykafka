@@ -10,7 +10,8 @@ import threading
 from pykafka import base
 from pykafka.common import OffsetType
 from pykafka.exceptions import (OffsetOutOfRangeError, UnknownTopicOrPartition,
-                                OffsetMetadataTooLarge, OffsetsLoadInProgress)
+                                OffsetMetadataTooLarge, OffsetsLoadInProgress,
+                                NotCoordinatorForConsumer)
 
 from .utils.error_handlers import handle_partition_responses, raise_error
 from .protocol import (PartitionFetchRequest, PartitionOffsetCommitRequest,
@@ -113,7 +114,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         self._auto_commit_interval_ms = auto_commit_interval_ms
         self._last_auto_commit = time.time()
 
-        self._offset_manager = self._cluster.get_offset_manager(self._consumer_group)
+        self._discover_offset_manager()
 
         owned_partition_partial = functools.partial(
             OwnedPartition, consumer_group=self._consumer_group)
@@ -146,11 +147,18 @@ class SimpleConsumer(base.BaseSimpleConsumer):
             self._reset_offsets((owned_partition
                                  for owned_partition, pres in parts))
 
+        def _handle_NotCoordinatorForConsumer(parts):
+            self._discover_offset_manager()
+
         return {
             UnknownTopicOrPartition.ERROR_CODE: lambda p: raise_error(UnknownTopicOrPartition),
             OffsetOutOfRangeError.ERROR_CODE: _handle_OffsetOutOfRangeError,
-            OffsetMetadataTooLarge.ERROR_CODE: lambda p: raise_error(OffsetMetadataTooLarge)
+            OffsetMetadataTooLarge.ERROR_CODE: lambda p: raise_error(OffsetMetadataTooLarge),
+            NotCoordinatorForConsumer.ERROR_CODE: _handle_NotCoordinatorForConsumer
         }
+
+    def _discover_offset_manager(self):
+        self._offset_manager = self._cluster.get_offset_manager(self._consumer_group)
 
     @property
     def topic(self):
