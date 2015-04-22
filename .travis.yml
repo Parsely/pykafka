@@ -7,12 +7,13 @@ python:
 notifications:
   email:
     - keith@parsely.com
+    - emmett@parsely.com
 
 before_install:
     - sudo apt-get install -qq libev-dev libsnappy-dev
 
 install:
-    - pip install python-snappy
+    - pip install python-snappy kazoo
     - python setup.py develop
 
 env: ZOOKEEPER_PATH=/usr/share/java KAFKA_PATH=/usr/local/kafka KAFKA_START_TIMEOUT=30
