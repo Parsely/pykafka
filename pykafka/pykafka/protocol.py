@@ -318,9 +318,9 @@ class MetadataRequest(Request):
 
 
 BrokerMetadata = namedtuple('BrokerMetadata', ['id', 'host', 'port'])
-TopicMetadata = namedtuple('TopicMetadata', ['name', 'partitions'])
+TopicMetadata = namedtuple('TopicMetadata', ['name', 'partitions', 'err'])
 PartitionMetadata = namedtuple('PartitionMetadata',
-                               ['id', 'leader', 'replicas', 'isr'])
+                               ['id', 'leader', 'replicas', 'isr', 'err'])
 
 
 class MetadataResponse(Response):
@@ -356,16 +356,11 @@ class MetadataResponse(Response):
 
         self.topics = {}
         for (err, name, partitions) in topics:
-            if err != 0:
-                self.raise_error(err, response)
             part_metas = {}
             for (p_err, id_, leader, replicas, isr) in partitions:
-                if p_err == 9:
-                    logger.info('ReplicaNotAvailable: %s/%s', name, id_)
-                elif p_err != 0:
-                    self.raise_error(p_err, response)
-                part_metas[id_] = PartitionMetadata(id_, leader, replicas, isr)
-            self.topics[name] = TopicMetadata(name, part_metas)
+                part_metas[id_] = PartitionMetadata(id_, leader, replicas,
+                                                    isr, p_err)
+            self.topics[name] = TopicMetadata(name, part_metas, err)
 
 
 ##
