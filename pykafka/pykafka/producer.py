@@ -5,8 +5,7 @@ from collections import defaultdict
 from pykafka import base
 from pykafka.common import CompressionType
 from pykafka.exceptions import (
-    UnknownTopicOrPartition, LeaderNotAvailable,
-    NotLeaderForPartition, RequestTimedOut,
+    UnknownTopicOrPartition, NotLeaderForPartition, RequestTimedOut,
     ProduceFailureError, SocketDisconnectedError
 )
 from pykafka.partitioners import random_partitioner
@@ -97,11 +96,8 @@ class Producer(base.BaseProducer):
                     if error == 0:
                         continue  # All's well
                     if error == UnknownTopicOrPartition.ERROR_CODE:
-                        logger.warning('Unknown topic: %s. Retrying.',
-                                       self._topic)
-                    elif error == LeaderNotAvailable.ERROR_CODE:
-                        logger.warning('Leader not available: %s/%s. '
-                                       'Retrying.', topic, partition)
+                        logger.warning('Unknown topic: %s or partition: %s. Retrying.',
+                                       self._topic, partition)
                     elif error == NotLeaderForPartition.ERROR_CODE:
                         logger.warning('Partition leader for %s/%s changed. '
                                        'Retrying.', topic, partition)
