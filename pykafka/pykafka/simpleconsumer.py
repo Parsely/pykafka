@@ -10,7 +10,7 @@ import threading
 from pykafka import base
 from pykafka.common import OffsetType
 from pykafka.exceptions import (OffsetOutOfRangeError, UnknownTopicOrPartition,
-                                OffsetMetadataTooLarge)
+                                OffsetMetadataTooLarge, OffsetsLoadInProgress)
 
 from .utils.error_handlers import handle_partition_responses, raise_error
 from .protocol import (PartitionFetchRequest, PartitionOffsetCommitRequest,
@@ -102,8 +102,10 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         self._fetch_wait_max_ms = fetch_wait_max_ms
         self._consumer_timeout_ms = consumer_timeout_ms
         self._offsets_channel_backoff_ms = offsets_channel_backoff_ms
-        self._offsets_commit_max_retries = offsets_commit_max_retries
         self._auto_offset_reset = auto_offset_reset
+        self._offsets_commit_max_retries = offsets_commit_max_retries
+        # not directly configurable
+        self._offsets_fetch_max_retries = offsets_commit_max_retries
 
         self._last_message_time = time.time()
 
@@ -264,12 +266,25 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         log.info("Fetching offsets")
 
         reqs = [p.build_offset_fetch_request() for p in self._partitions.keys()]
-        res = self._offset_manager.fetch_consumer_group_offsets(self._consumer_group, reqs)
-        handle_partition_responses(
-            res,
-            self._default_error_handlers,
-            success_handler=_handle_success,
-            partitions_by_id=self._partitions_by_id)
+
+        for i in xrange(self._offsets_fetch_max_retries):
+            if i > 0:
+                log.debug("Retrying")
+
+            res = self._offset_manager.fetch_consumer_group_offsets(self._consumer_group, reqs)
+            parts_by_error = handle_partition_responses(
+                res,
+                self._default_error_handlers,
+                success_handler=_handle_success,
+                partitions_by_id=self._partitions_by_id)
+
+            if len(parts_by_error) == 1 and 0 in parts_by_error:
+                break
+            log.error("Error fetching offsets for topic %s", self._topic.name)
+
+            # retry only OffsetsLoadInProgress responses
+            reqs = [p.build_offset_fetch_request()
+                    for p in parts_by_error.get(OffsetsLoadInProgress.ERROR_CODE, [])]
 
     def _reset_offsets(self, errored_partitions):
         """Reset offsets after an OffsetOutOfRangeError
