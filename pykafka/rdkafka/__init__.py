@@ -1,6 +1,8 @@
 import logging
+from time import sleep
 
 from pykafka import base
+from .config import default_config
 
 try:
     import rd_kafka
@@ -15,7 +17,7 @@ class Cluster(base.BaseCluster):
         self.config = {"metadata.broker.list": seed_hosts}
         # TODO bind a log_cb to this config ^^
         self._brokers = {}
-        self._topics = {}
+        self._topics = TopicDict(self)
         self.update()
 
     @property
@@ -95,6 +97,40 @@ class Topic(base.BaseTopic):
 
     def earliest_offsets(self):
         raise NotImplementedError # TODO
+
+
+class TopicDict(dict):
+    """ A dict that knows how to create Topics """
+
+    def __init__(self, cluster, *args, **kwargs):
+        super(TopicDict, self).__init__(*args, **kwargs)
+        self.cluster = cluster
+
+    def __missing__(self, key):
+        logger.info("Trying to create topic '{}'".format(key))
+
+        # To do a metadata request on a non-existing topic, librdkafka
+        # expects you to create an actual topic handle, so:
+        rd_kafka.Producer(self.cluster.config).open_topic(key).metadata()
+
+        # Now update self.cluster, which in turn updates this dict.  Because
+        # creating topic-partitions and assigning them leaders and all takes
+        # time, we might need a few rounds of refreshes.  To avoid introducing
+        # more settings, we reuse existing ones which have roughly the right
+        # meaning:
+        conf = default_config()
+        for i in range(int(conf["topic.metadata.refresh.fast.cnt"])):
+            sleep(float(
+                    conf["topic.metadata.refresh.fast.interval.ms"]) * 1e-3)
+            self.cluster.update()
+            # This is empiricism at work: the topic might appear in metadata on
+            # one run, but only have partitions associated with it on the next,
+            # so test both:
+            if key in self and self[key].partitions:
+                break
+        else:
+            raise KeyError(key)
+        # TODO can we detect/report if auto-creation is disabled in kafka?
 
 
 class Partition(object):

@@ -1,9 +1,10 @@
-from copy import copy
 import logging
 from time import clock
 
-from pykafka import base, partitioners
-from pykafka .exceptions import KafkaException
+from pykafka import base
+from pykafka.exceptions import KafkaException
+from .config import convert_config, default_topic_config
+from .utils import get_defaults_dict
 
 try:
     import rd_kafka
@@ -12,22 +13,35 @@ except ImportError:
 
 
 logger = logging.getLogger(__name__)
+BASE_PRODUCER_DEFAULTS = get_defaults_dict(base.BaseProducer.__init__)
 
 
 class Producer(base.BaseProducer):
 
-    def __init__(self, topic, partitioner=partitioners.random_partitioner):
-        self._topic = topic
+    def __init__(
+            self,
+            client,
+            topic,
+            partitioner=BASE_PRODUCER_DEFAULTS["partitioner"],
+            compression=BASE_PRODUCER_DEFAULTS["compression"],
+            max_retries=BASE_PRODUCER_DEFAULTS["max_retries"],
+            retry_backoff_ms=BASE_PRODUCER_DEFAULTS["retry_backoff_ms"],
+            topic_refresh_interval_ms=(
+                BASE_PRODUCER_DEFAULTS["topic_refresh_interval_ms"]),
+            required_acks=BASE_PRODUCER_DEFAULTS["required_acks"],
+            ack_timeout_ms=BASE_PRODUCER_DEFAULTS["ack_timeout_ms"],
+            batch_size=BASE_PRODUCER_DEFAULTS["batch_size"]):
+        self.client = client
+        self._topic = (topic
+                       if not isinstance(topic, basestring)
+                       else self.client.topics[topic])
         self._partitioner = partitioner
 
-        config, topic_config = self._configure()
-        rdk_producer = rd_kafka.Producer(config)
-        self.rdk_topic = rdk_producer.open_topic(self.topic.name, topic_config)
-
-    def _configure(self):
-        config = copy(self.topic.cluster.config)
-        topic_config = {} # TODO where do we expose this?
-        # TODO config.update( ...stuff specific to this Producer ...)
+        # Now, convert callargs to config dicts that we can pass to rd_kafka:
+        config_callargs = {k: v for k, v in vars().items() if (
+            k not in ("self", "client", "topic", "partitioner"))}
+        config, topic_config = convert_config(
+            config_callargs, base_config=self.topic.cluster.config)
 
         def delivery_callback(msg, **kwargs):
             # cf Producer.produce() below to get what this is for
@@ -37,12 +51,14 @@ class Producer(base.BaseProducer):
             logger.warning("Overwriting user-set delivery callback with ours.")
         config["dr_msg_cb"] = delivery_callback
 
-        # We'll reuse this librdkafka parameter to set how long we'll wait for
-        # delivery reports (300000 is the current librdkafka default):
-        # TODO move the default to some config header
-        self.message_timeout_ms = config.get("message.timeout.ms", 300 * 1000)
+        # Reuse this parameter to set how long to wait for delivery reports:
+        self.message_timeout_ms = int(
+                topic_config.get("message.timeout.ms",
+                                 default_topic_config()["message.timeout.ms"]))
 
-        return config, topic_config
+        # Finally... open topic:
+        rdk_producer = rd_kafka.Producer(config)
+        self.rdk_topic = rdk_producer.open_topic(self.topic.name, topic_config)
 
     @property
     def topic(self):
