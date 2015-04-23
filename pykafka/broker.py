@@ -27,12 +27,26 @@ class Broker(base.BaseBroker):
                  socket_timeout_ms,
                  offsets_channel_socket_timeout_ms,
                  buffer_size=64 * 1024):
-        """Init a Broker.
+        """Create a Broker instance
 
-        :param handler: TODO: Fill in
-        :type handler: TODO: Fill in
-        :param timeout: TODO: Fill in
-        :type timeout: :class:int
+        :param id_: The id number of this broker
+        :type id_: int
+        :param host: The host address to which to connect. An IP address or a
+            DNS name
+        :type host: str
+        :param port: The port on which to connect
+        :type port: int
+        :param handler: A Handler instance that will be used to service requests
+            and responses
+        :type handler: :class:`pykafka.handlers.Handler`
+        :param socket_timeout_ms: The socket timeout for network requests
+        :type socket_timeout_ms: int
+        :param offsets_channel_socket_timeout_ms: The socket timeout for network
+            requests on the offsets channel
+        :type offsets_channel_socket_timeout_ms: int
+        :param buffer_size: The size (bytes) of the internal buffer used to
+            receive network responses
+        :type buffer_size: int
         """
         self._connection = None
         self._offsets_channel_connection = None
