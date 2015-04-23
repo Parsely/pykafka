@@ -20,7 +20,7 @@ import sys
 import inspect
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
-sys.path.insert(0, parentdir)
+sys.path.append(parentdir)
 from version import version
 
 project = u'pykafka'
@@ -40,4 +40,5 @@ html_theme = 'nature'
 pygments_style = 'sphinx'
 htmlhelp_basename = 'pykafkadoc'
 
-autodoc_default_flags = ['special-members', 'show-inheritance']
+autodoc_default_flags = ['special-members', 'undoc-members', 'private-members',
+                         'show-inheritance']
