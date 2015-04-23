@@ -7,7 +7,7 @@ import random
 from .broker import Broker
 from .topic import Topic
 from .protocol import ConsumerMetadataRequest, ConsumerMetadataResponse
-from pykafka.exceptions import ConsumerCoordinatorNotAvailable
+from .exceptions import ConsumerCoordinatorNotAvailable
 
 
 logger = logging.getLogger(__name__)
