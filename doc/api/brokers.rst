@@ -1,5 +1,5 @@
-samsa.brokers
-=============
+pykafka.broker
+==============
 
-.. automodule:: samsa.brokers
+.. automodule:: pykafka.broker
    :members:
