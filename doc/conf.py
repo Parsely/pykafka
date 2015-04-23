@@ -15,11 +15,11 @@ limitations under the License.
 """
 
 # -*- coding: utf-8 -*-
-from pykafka import pykafka
+from version import version
 
 project = u'pykafka'
 copyright = u'2015, Parse.ly'
-version = release = pykafka.__version__
+version = release = version
 
 extensions = ['sphinx.ext.autodoc']
 
