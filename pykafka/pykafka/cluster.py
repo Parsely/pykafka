@@ -3,14 +3,36 @@ from __future__ import division
 import logging
 import time
 import random
+import weakref
 
 from .broker import Broker
 from .topic import Topic
 from .protocol import ConsumerMetadataRequest, ConsumerMetadataResponse
-from pykafka.exceptions import ConsumerCoordinatorNotAvailable
+from pykafka.exceptions import (ConsumerCoordinatorNotAvailable,
+                                UnknownTopicOrPartition)
 
 
 logger = logging.getLogger(__name__)
+
+
+class TopicDict(dict):
+    """Dictionary which will attempt to auto-create unknown topics."""
+
+    def __init__(self, cluster, *args, **kwargs):
+        super(TopicDict, self).__init__(*args, **kwargs)
+        self._cluster = weakref.proxy(cluster)
+
+    def __missing__(self, key):
+        logger.info('Topic %s not found. Attempting to auto-create.', key)
+        # Auto-creating will take a moment, so we try 3 times.
+        for i in xrange(3):
+            self._cluster.brokers[0].request_metadata(topics=[key])
+            self._cluster.update()
+            if key in self:
+                logger.info('Topic %s successfully created.', key)
+                return self[key]
+            time.sleep(0.1)
+        raise UnknownTopicOrPartition('Unknown topic: {}'.format(key))
 
 
 class Cluster(object):
@@ -28,7 +50,7 @@ class Cluster(object):
         self._offsets_channel_socket_timeout_ms = offsets_channel_socket_timeout_ms
         self._handler = handler
         self._brokers = {}
-        self._topics = {}
+        self._topics = TopicDict(self)
         self._socket_receive_buffer_bytes = socket_receive_buffer_bytes
         self._exclude_internal_topics = exclude_internal_topics
         self.update()
