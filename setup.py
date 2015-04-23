@@ -20,7 +20,7 @@ import sys
 
 from setuptools import setup, find_packages
 
-from pykafka import __version__
+from version import version
 
 install_requires = [
     'kazoo'
@@ -39,7 +39,7 @@ if 'nosetests' in sys.argv[1:]:
 
 setup(
     name='pykafka',
-    version=__version__,
+    version=version,
     author='Keith Bourgoin',
     author_email='pykafka-user@googlegroups.com',
     url='https://github.com/Parsely/pykafka',

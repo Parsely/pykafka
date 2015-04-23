@@ -14,7 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-__version__ = '1.0.0'
+from version import version
+__version__ = version
 
 from client import KafkaClient
 from balancedconsumer import BalancedConsumer
