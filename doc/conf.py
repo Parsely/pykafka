@@ -15,7 +15,7 @@ limitations under the License.
 """
 
 # -*- coding: utf-8 -*-
-import pykafka
+from pykafka import pykafka
 
 project = u'pykafka'
 copyright = u'2015, Parse.ly'
