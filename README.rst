@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/Parsely/pykafka.svg?branch=master)](https://travis-ci.org/Parsely/pykafka)
+![Build Status](https://travis-ci.org/Parsely/pykafka.svg?branch=master)](https://travis-ci.org/Parsely/pykafka)
 
 # What happened to Samsa?
 
