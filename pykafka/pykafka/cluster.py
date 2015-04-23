@@ -125,15 +125,13 @@ class Cluster(object):
                     self._topics[name].update(meta)
 
     def _should_exclude_topic(self, topic_name):
-        """Return a boolean indicating whether this topic should be exluded
-        """
+        """Return a boolean indicating whether this topic should be exluded."""
         if not self._exclude_internal_topics:
             return False
         return topic_name.startswith("__")
 
     def get_offset_manager(self, consumer_group):
-        """Get the broker designated as the offset manager for this consumer
-            group
+        """Get the designated as the offset manager for this consumer group.
 
         Based on Step 1 at https://cwiki.apache.org/confluence/display/KAFKA/Committing+and+fetching+consumer+offsets+in+Kafka
 
