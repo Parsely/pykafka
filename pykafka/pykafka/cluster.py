@@ -1,3 +1,5 @@
+from __future__ import division
+
 import logging
 import time
 import random
@@ -5,6 +7,7 @@ import random
 from .broker import Broker
 from .topic import Topic
 from .protocol import ConsumerMetadataRequest, ConsumerMetadataResponse
+from pykafka.exceptions import ConsumerCoordinatorNotAvailable
 
 
 logger = logging.getLogger(__name__)
@@ -45,23 +48,28 @@ class Cluster(object):
     def _get_metadata(self):
         """Get fresh cluster metadata from a broker"""
         # Works either on existing brokers or seed_hosts list
-        if self.brokers:
-            brokers = self.brokers.values()
-        else:
+        brokers = [b for b in self.brokers.values() if b.connected]
+        if brokers:
+            for broker in brokers:
+                response = broker.request_metadata()
+                if response is not None:
+                    return response
+        else:  # try seed hosts
             brokers = self._seed_hosts.split(',')
-
-        for broker in brokers:
-            try:
-                if isinstance(broker, basestring):
-                    h, p = broker.split(':')
-                    broker = Broker(-1, h, p, self._handler, self._socket_timeout_ms,
+            for broker_str in brokers:
+                try:
+                    h, p = broker_str.split(':')
+                    broker = Broker(-1, h, p, self._handler,
+                                    self._socket_timeout_ms,
                                     self._offsets_channel_socket_timeout_ms,
                                     buffer_size=self._socket_receive_buffer_bytes)
-                return broker.request_metadata()
-            # TODO: Change to typed exception
-            except Exception:
-                logger.exception('Unable to connect to broker %s', broker)
-                raise
+                    response = broker.request_metadata()
+                    if response is not None:
+                        return response
+                except:
+                    logger.exception('Unable to connect to broker %s',
+                                     broker_str)
+        # Couldn't connect anywhere. Raise an error.
         raise Exception('Unable to connect to a broker to fetch metadata.')
 
     def _update_brokers(self, broker_metadata):
@@ -134,20 +142,20 @@ class Cluster(object):
         """
         # arbitrarily choose a broker, since this request can go to any
         broker = self.brokers[random.choice(self.brokers.keys())]
-        backoff, retries = 2, 0
         MAX_RETRIES = 3
-        while True:
+
+        for i in xrange(MAX_RETRIES):
+            if i > 0:
+                logger.debug("Retrying")
+            time.sleep(i)
+
+            req = ConsumerMetadataRequest(consumer_group)
+            future = broker.handler.request(req)
             try:
-                retries += 1
-                req = ConsumerMetadataRequest(consumer_group)
-                future = broker.handler.request(req)
                 res = future.get(ConsumerMetadataResponse)
-            except Exception:
-                logger.debug('Error discovering offset manager. Sleeping for {}s'.format(backoff))
-                if retries < MAX_RETRIES:
-                    time.sleep(backoff)
-                    backoff = backoff ** 2
-                else:
+            except ConsumerCoordinatorNotAvailable:
+                logger.debug('Error discovering offset manager.')
+                if i == MAX_RETRIES - 1:
                     raise
             else:
                 coordinator = self.brokers.get(res.coordinator_id, None)

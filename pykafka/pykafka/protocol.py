@@ -318,9 +318,9 @@ class MetadataRequest(Request):
 
 
 BrokerMetadata = namedtuple('BrokerMetadata', ['id', 'host', 'port'])
-TopicMetadata = namedtuple('TopicMetadata', ['name', 'partitions'])
+TopicMetadata = namedtuple('TopicMetadata', ['name', 'partitions', 'err'])
 PartitionMetadata = namedtuple('PartitionMetadata',
-                               ['id', 'leader', 'replicas', 'isr'])
+                               ['id', 'leader', 'replicas', 'isr', 'err'])
 
 
 class MetadataResponse(Response):
@@ -356,14 +356,11 @@ class MetadataResponse(Response):
 
         self.topics = {}
         for (err, name, partitions) in topics:
-            if err != 0:
-                self.raise_error(err, response)
             part_metas = {}
             for (p_err, id_, leader, replicas, isr) in partitions:
-                if p_err != 0:
-                    self.raise_error(p_err, response)
-                part_metas[id_] = PartitionMetadata(id_, leader, replicas, isr)
-            self.topics[name] = TopicMetadata(name, part_metas)
+                part_metas[id_] = PartitionMetadata(id_, leader, replicas,
+                                                    isr, p_err)
+            self.topics[name] = TopicMetadata(name, part_metas, err)
 
 
 ##
@@ -401,7 +398,7 @@ class ProduceRequest(Request):
         :param timeout: timeout (in ms) to wait for the required acks
         """
         # {topic_name: {partition_id: MessageSet}}
-        self._msets = defaultdict(
+        self.msets = defaultdict(
             lambda: defaultdict(
                 lambda: MessageSet(compression_type=compression_type)
             ))
@@ -412,7 +409,7 @@ class ProduceRequest(Request):
     def __len__(self):
         """Length of the serialized message, in bytes"""
         size = self.HEADER_LEN + 2 + 4 + 4  # acks + timeout + len(topics)
-        for topic, parts in self._msets.iteritems():
+        for topic, parts in self.msets.iteritems():
             # topic name
             size += 2 + len(topic) + 4  # topic name + len(parts)
             # partition + mset size + len(mset)
@@ -429,7 +426,7 @@ class ProduceRequest(Request):
         """Iterable of all messages in the Request"""
         return itertools.chain.from_iterable(
             mset.messages
-            for topic, partitions in self._msets.iteritems()
+            for topic, partitions in self.msets.iteritems()
             for partition_id, mset in partitions.iteritems()
         )
 
@@ -440,7 +437,7 @@ class ProduceRequest(Request):
         :param topic_name: the name of the topic to publish to
         :param partition_id: the partition to publish to
         """
-        self._msets[topic_name][partition_id].messages.append(message)
+        self.msets[topic_name][partition_id].messages.append(message)
         self._message_count += 1
 
     def get_bytes(self):
@@ -453,9 +450,9 @@ class ProduceRequest(Request):
         self._write_header(output)
         offset = self.HEADER_LEN
         struct.pack_into('!hii', output, offset,
-                         self.required_acks, self.timeout, len(self._msets))
+                         self.required_acks, self.timeout, len(self.msets))
         offset += 10
-        for topic_name, partitions in self._msets.iteritems():
+        for topic_name, partitions in self.msets.iteritems():
             fmt = '!h%dsi' % len(topic_name)
             struct.pack_into(fmt, output, offset, len(topic_name), topic_name, len(partitions))
             offset += struct.calcsize(fmt)
@@ -494,9 +491,7 @@ class ProduceResponse(Response):
         for (topic, partitions) in response:
             self.topics[topic] = {}
             for partition in partitions:
-                if partition[1] != 0:
-                    self.raise_error(partition[1], response)
-                self.topics[topic][partition[0]] = partition[2]
+                self.topics[topic][partition[0]] = tuple(partition[1:3])
 
 
 ##
@@ -605,17 +600,10 @@ class FetchRequest(Request):
         return output
 
 
-class FetchPartitionResponse(object):
-    """Partition information that's part of a FetchResponse"""
-    def __init__(self, max_offset, messages, error):
-        """Create a new FetchPartitionResponse
-
-        :param max_offset: The offset at the end of this partition
-        :param messages: Messages in the response
-        """
-        self.max_offset = max_offset
-        self.messages = messages
-        self.error = error
+FetchPartitionResponse = namedtuple(
+    'FetchPartitionResponse',
+    ['max_offset', 'messages', 'error']
+)
 
 
 class FetchResponse(Response):
@@ -741,6 +729,12 @@ class OffsetRequest(Request):
         return output
 
 
+OffsetPartitionResponse = namedtuple(
+    'OffsetPartitionResponse',
+    ['offset', 'error']
+)
+
+
 class OffsetResponse(Response):
     """An offset response
 
@@ -763,9 +757,8 @@ class OffsetResponse(Response):
         for topic_name, partitions in response:
             self.topics[topic_name] = {}
             for partition in partitions:
-                if partition[1] != 0:
-                    self.raise_error(partition[1], response)
-                self.topics[topic_name][partition[0]] = partition[2]
+                self.topics[topic_name][partition[0]] = OffsetPartitionResponse(
+                    partition[2], partition[1])
 
 
 class ConsumerMetadataRequest(Request):
@@ -937,6 +930,12 @@ class OffsetCommitRequest(Request):
         return output
 
 
+OffsetCommitPartitionResponse = namedtuple(
+    'OffsetCommitPartitionResponse',
+    ['error']
+)
+
+
 class OffsetCommitResponse(Response):
     """An offset commit response
 
@@ -956,13 +955,9 @@ class OffsetCommitResponse(Response):
 
         self.topics = {}
         for topic_name, partitions in response:
-            # a list makes sense here instead of a dict since the only returned
-            # information about the partition is the name
-            self.topics[topic_name] = []
+            self.topics[topic_name] = {}
             for partition in partitions:
-                if partition[1] != 0:
-                    self.raise_error(partition[1], response)
-                self.topics[topic_name].append(partition[0])
+                self.topics[topic_name][partition[0]] = OffsetCommitPartitionResponse(partition[1])
 
 
 _PartitionOffsetFetchRequest = namedtuple(
@@ -1042,17 +1037,10 @@ class OffsetFetchRequest(Request):
         return output
 
 
-class OffsetFetchPartitionResponse(object):
-    """Partition information that's part of an OffsetFetchResponse"""
-    def __init__(self, offset, metadata, error):
-        """Create a new OffsetFetchPartitionResponse
-
-        :param offset:
-        :param metadata: arbitrary metadata that should be committed with this offset commit
-        """
-        self.offset = offset
-        self.metadata = metadata
-        self.error = error
+OffsetFetchPartitionResponse = namedtuple(
+    'OffsetFetchPartitionResponse',
+    ['offset', 'metadata', 'error']
+)
 
 
 class OffsetFetchResponse(Response):

@@ -36,6 +36,9 @@ class MessageTooLargeError(KafkaException):
 class SocketDisconnectedError(KafkaException):
     pass
 
+class ProduceFailureError(KafkaException):
+    pass
+
 
 
 ##
@@ -84,6 +87,15 @@ class StaleControllerEpoch(ProtocolClientError):
 
 class OffsetMetadataTooLarge(ProtocolClientError):
     ERROR_CODE = 12
+
+class OffsetsLoadInProgress(ProtocolClientError):
+    ERROR_CODE = 14
+
+class ConsumerCoordinatorNotAvailable(ProtocolClientError):
+    ERROR_CODE = 15
+
+class NotCoordinatorForConsumer(ProtocolClientError):
+    ERROR_CODE = 16
 
 ERROR_CODES = dict(
     (exc.ERROR_CODE, exc)

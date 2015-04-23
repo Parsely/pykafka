@@ -103,10 +103,10 @@ class Partition(base.BasePartition):
             # Check Replicas
             if sorted(r.id for r in self.replicas) != sorted(metadata.replicas):
                 logger.info('Updating replicas list for %s', self)
-                self.replicas = [brokers[b] for b in metadata.replicas]
+                self._replicas = [brokers[b] for b in metadata.replicas]
             # Check In-Sync-Replicas
             if sorted(i.id for i in self.isr) != sorted(metadata.isr):
                 logger.info('Updating in sync replicas list for %s', self)
-                self.isr = [brokers[b] for b in metadata.isr]
+                self._isr = [brokers[b] for b in metadata.isr]
         except KeyError:
             raise Exception("TODO: Type this exception")

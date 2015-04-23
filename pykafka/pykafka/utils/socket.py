@@ -41,26 +41,3 @@ def recvall_into(socket, bytea, size):
         bytea[offset:(offset + len(chunk))] = chunk
         offset += len(chunk)
     return bytea
-
-
-def recv_struct(socket, struct):
-    """
-    Reads enough data from the socket to unpack the given struct.
-
-    :type socket: :class:`socket.Socket`
-    :type struct: :class:`struct.Struct`
-    :rtype: ``tuple``
-    """
-    bytea = bytearray(struct.size)
-    recvall_into(socket, bytea)
-    return struct.unpack_from(buffer(bytea))
-
-
-def recv_framed(socket, framestruct):
-    """
-    :type socket: :class:`socket.Socket`
-    :type frame: :class:`struct.Struct`
-    :rtype: ``bytearray``
-    """
-    (size,) = recv_struct(socket, framestruct)
-    return recvall_into(socket, bytearray(size))

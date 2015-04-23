@@ -1,4 +1,5 @@
 import logging
+import time
 
 from pykafka import base
 from .connection import BrokerConnection
@@ -7,8 +8,10 @@ from .protocol import (
     FetchRequest, FetchResponse, OffsetRequest,
     OffsetResponse, MetadataRequest, MetadataResponse,
     OffsetCommitRequest, OffsetCommitResponse,
-    OffsetFetchRequest, OffsetFetchResponse
+    OffsetFetchRequest, OffsetFetchResponse,
+    ProduceResponse
 )
+from pykafka.exceptions import LeaderNotAvailable
 
 
 logger = logging.getLogger(__name__)
@@ -31,8 +34,8 @@ class Broker(base.BaseBroker):
         :param timeout: TODO: Fill in
         :type timeout: :class:int
         """
-        self._connected = False
-        self._offsets_channel_connected = False
+        self._connection = None
+        self._offsets_channel_connection = None
         self._id = int(id_)
         self._host = host
         self._port = port
@@ -64,12 +67,14 @@ class Broker(base.BaseBroker):
     @property
     def connected(self):
         """Returns True if the connected to the broker."""
-        return self._connected
+        return self._connection.connected
 
     @property
     def offsets_channel_connected(self):
         """Returns True if the connected to the broker."""
-        return self._offsets_channel_connected
+        if self._offsets_channel_connection:
+            return self._offsets_channel_connection.connected
+        return False
 
     @property
     def id(self):
@@ -104,19 +109,21 @@ class Broker(base.BaseBroker):
 
     def connect(self):
         """Establish a connection to the Broker."""
-        conn = BrokerConnection(self.host, self.port, self._buffer_size)
-        conn.connect(self._socket_timeout_ms)
-        self._req_handler = RequestHandler(self._handler, conn)
+        self._connection = BrokerConnection(self.host, self.port,
+                                            self._buffer_size)
+        self._connection.connect(self._socket_timeout_ms)
+        self._req_handler = RequestHandler(self._handler, self._connection)
         self._req_handler.start()
-        self._connected = True
 
     def connect_offsets_channel(self):
         """Establish a connection to the Broker for the offsets channel"""
-        conn = BrokerConnection(self.host, self.port, self._buffer_size)
-        conn.connect(self._offsets_channel_socket_timeout_ms)
-        self._offsets_channel_req_handler = RequestHandler(self._handler, conn)
+        self._offsets_channel_connection = BrokerConnection(self.host, self.port,
+                                                            self._buffer_size)
+        self._offsets_channel_connection.connect(self._offsets_channel_socket_timeout_ms)
+        self._offsets_channel_req_handler = RequestHandler(
+            self._handler, self._offsets_channel_connection
+        )
         self._offsets_channel_req_handler.start()
-        self._offsets_channel_connected = True
 
     def fetch_messages(self,
                        partition_requests,
@@ -145,9 +152,8 @@ class Broker(base.BaseBroker):
         if produce_request.required_acks == 0:
             self._req_handler.request(produce_request, has_response=False)
         else:
-            self._req_handler.request(produce_request).get()
-            # Any errors will be decoded and raised in the `.get()`
-        return None
+            future = self._req_handler.request(produce_request)
+            return future.get(ProduceResponse)
 
     def request_offset_limits(self, partition_requests):
         """Request offset information for a set of topic/partitions"""
@@ -155,8 +161,27 @@ class Broker(base.BaseBroker):
         return future.get(OffsetResponse)
 
     def request_metadata(self, topics=None):
-        future = self._req_handler.request(MetadataRequest(topics=topics))
-        return future.get(MetadataResponse)
+        max_retries = 3
+        for i in xrange(max_retries):
+            if i > 0:
+                logger.debug("Retrying")
+            time.sleep(i)
+
+            future = self._req_handler.request(MetadataRequest(topics=topics))
+            response = future.get(MetadataResponse)
+
+            errored = False
+            for name, topic_metadata in response.topics.iteritems():
+                if topic_metadata.err == LeaderNotAvailable.ERROR_CODE:
+                    logger.warning("Leader not available.")
+                    errored = True
+                for pid, partition_metadata in topic_metadata.partitions.iteritems():
+                    if partition_metadata.err == LeaderNotAvailable.ERROR_CODE:
+                        logger.warning("Leader not available.")
+                        errored = True
+
+            if not errored:
+                return response
 
     ######################
     #  Commit/Fetch API  #
@@ -180,14 +205,14 @@ class Broker(base.BaseBroker):
         :param preqs: a sequence of <protocol.PartitionOffsetCommitRequest>
         :type preqs: sequence
         """
-        if not self._offsets_channel_connected:
+        if not self.offsets_channel_connected:
             self.connect_offsets_channel()
         # TODO - exponential backoff
         req = OffsetCommitRequest(consumer_group,
                                   consumer_group_generation_id,
                                   consumer_id,
                                   partition_requests=preqs)
-        self._offsets_channel_req_handler.request(req).get(OffsetCommitResponse)
+        return self._offsets_channel_req_handler.request(req).get(OffsetCommitResponse)
 
     def fetch_consumer_group_offsets(self, consumer_group, preqs):
         """Fetch the offsets stored in Kafka with the Offset Commit/Fetch API
@@ -200,7 +225,7 @@ class Broker(base.BaseBroker):
         :param preqs: a sequence of <protocol.PartitionOffsetFetchRequest>
         :type preqs: sequence
         """
-        if not self._offsets_channel_connected:
+        if not self.offsets_channel_connected:
             self.connect_offsets_channel()
         # TODO - exponential backoff
         req = OffsetFetchRequest(consumer_group, partition_requests=preqs)

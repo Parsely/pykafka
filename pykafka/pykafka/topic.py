@@ -29,7 +29,7 @@ class Topic(base.BaseTopic):
         self._name = topic_metadata.name
         self._cluster = weakref.proxy(cluster)
         self._partitions = {}
-        self.update(cluster.brokers, topic_metadata)
+        self.update(topic_metadata)
 
     @property
     def name(self):
@@ -40,7 +40,7 @@ class Topic(base.BaseTopic):
         return self._partitions
 
     def get_producer(self):
-        return Producer(self)
+        return Producer(self._cluster, self)
 
     def fetch_offset_limits(self, offsets_before, max_offsets=1):
         """Get earliest or latest offset
@@ -72,11 +72,9 @@ class Topic(base.BaseTopic):
         """Get the latest offset for each partition of this topic."""
         return self.fetch_offset_limits(OffsetType.LATEST)
 
-    def update(self, brokers, metadata):
+    def update(self, metadata):
         """Update the Partitons with metadata about the cluster.
 
-        :param brokers: Brokers partitions exist on
-        :type brokers: List of :class:`kafka.pykafka.Broker`
         :param metadata: Metadata for all topics
         :type metadata: :class:`kafka.pykafka.protocol.TopicMetadata`
         """
@@ -89,6 +87,7 @@ class Topic(base.BaseTopic):
             self._partitons.pop(id_)
 
         # Add/update current partitions
+        brokers = self._cluster.brokers
         for id_, meta in p_metas.iteritems():
             if meta.id not in self._partitions:
                 logger.info('Adding partition %s/%s', self.name, meta.id)
@@ -99,7 +98,7 @@ class Topic(base.BaseTopic):
                     [brokers[b] for b in meta.isr],
                 )
             else:
-                self._partitions[id_].update(meta)
+                self._partitions[id_].update(brokers, meta)
 
     def get_simple_consumer(self, consumer_group=None, **kwargs):
         """Return a SimpleConsumer of this topic
