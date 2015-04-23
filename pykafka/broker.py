@@ -1,3 +1,22 @@
+"""
+@author Keith Bourgoin
+@author Emmett Butler
+"""
+__license__ = """
+Copyright 2015 Parse.ly, Inc.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
 import logging
 import time
 
@@ -68,10 +87,21 @@ class Broker(base.BaseBroker):
                       socket_timeout_ms,
                       offsets_channel_socket_timeout_ms,
                       buffer_size=64 * 1024):
-        """ Create a Broker using BrokerMetadata
+        """Create a Broker using BrokerMetadata
 
         :param metadata: Metadata that describes the broker.
-        :type metadata: :class:`kafka.pykafka.protocol.BrokerMetadata.`
+        :type metadata: :class:`pykafka.protocol.BrokerMetadata.`
+        :param handler: A Handler instance that will be used to service requests
+            and responses
+        :type handler: :class:`pykafka.handlers.Handler`
+        :param socket_timeout_ms: The socket timeout for network requests
+        :type socket_timeout_ms: int
+        :param offsets_channel_socket_timeout_ms: The socket timeout for network
+            requests on the offsets channel
+        :type offsets_channel_socket_timeout_ms: int
+        :param buffer_size: The size (bytes) of the internal buffer used to
+            receive network responses
+        :type buffer_size: int
         """
         return cls(metadata.id, metadata.host,
                    metadata.port, handler, socket_timeout_ms,
@@ -80,34 +110,38 @@ class Broker(base.BaseBroker):
 
     @property
     def connected(self):
-        """Returns True if the connected to the broker."""
+        """Returns True if this object's main connection to the Kafka broker
+            is active
+        """
         return self._connection.connected
 
     @property
     def offsets_channel_connected(self):
-        """Returns True if the connected to the broker."""
+        """Returns True if this object's offsets channel connection to the
+            Kafka broker is active
+        """
         if self._offsets_channel_connection:
             return self._offsets_channel_connection.connected
         return False
 
     @property
     def id(self):
-        """The broker's ID within the Kafka cluster."""
+        """The broker's ID within the Kafka cluster"""
         return self._id
 
     @property
     def host(self):
-        """The host where the broker is available."""
+        """The host to which this broker is connected"""
         return self._host
 
     @property
     def port(self):
-        """The port where the broker is available."""
+        """The port where the broker is available"""
         return self._port
 
     @property
     def handler(self):
-        """The primary :class:`kafka.handlers.RequestHandler` for this broker.
+        """The primary :class:`pykafka.handlers.RequestHandler` for this broker
 
         This handler handles all requests outside of the commit/fetch api
         """
@@ -115,14 +149,19 @@ class Broker(base.BaseBroker):
 
     @property
     def offsets_channel_handler(self):
-        """The offset channel :class:`kafka.handlers.RequestHandler` for this broker.
+        """The offset channel :class:`pykafka.handlers.RequestHandler` for this
+            broker
 
         This handler handles all requests that use the commit/fetch api
         """
         return self._offsets_channel_req_handler
 
     def connect(self):
-        """Establish a connection to the Broker."""
+        """Establish a connection to the broker server.
+
+        Creates a new :class:`pykafka.connection.BrokerConnection` and a new
+        :class:`pykafka.handlers.RequestHandler` for this broker
+        """
         self._connection = BrokerConnection(self.host, self.port,
                                             self._buffer_size)
         self._connection.connect(self._socket_timeout_ms)
@@ -130,7 +169,12 @@ class Broker(base.BaseBroker):
         self._req_handler.start()
 
     def connect_offsets_channel(self):
-        """Establish a connection to the Broker for the offsets channel"""
+        """Establish a connection to the Broker for the offsets channel
+
+        Creates a new :class:`pykafka.connection.BrokerConnection` and a new
+        :class:`pykafka.handlers.RequestHandler` for this broker's offsets
+        channel
+        """
         self._offsets_channel_connection = BrokerConnection(self.host, self.port,
                                                             self._buffer_size)
         self._offsets_channel_connection.connect(self._offsets_channel_socket_timeout_ms)
@@ -147,7 +191,15 @@ class Broker(base.BaseBroker):
 
         :param partition_requests: Requests of messages to fetch.
         :type partition_requests: Iterable of
-            :class:`kafka.pykafka.protocol.PartitionFetchRequest`
+            :class:`pykafka.protocol.PartitionFetchRequest`
+        :param timeout: the maximum amount of time (in milliseconds)
+            the server will block before answering the fetch request if there
+            isn't sufficient data to immediately satisfy min_bytes
+        :type timeout: int
+        :param min_bytes: the minimum amount of data (in bytes) the server
+            should return. If insufficient data is available the request will
+            block for up to `timeout` milliseconds.
+        :type min_bytes: int
         """
         future = self._req_handler.request(FetchRequest(
             partition_requests=partition_requests,
@@ -160,8 +212,9 @@ class Broker(base.BaseBroker):
     def produce_messages(self, produce_request):
         """Produce messages to a set of partitions.
 
-        :type partition_requests: Iterable of
-            :class:`kafka.pykafka.protocol.ProduceRequest`
+        :param produce_request: a request object indicating the messages to
+            produce
+        :type produce_request: :class:`pykafka.protocol.ProduceRequest`
         """
         if produce_request.required_acks == 0:
             self._req_handler.request(produce_request, has_response=False)
@@ -170,11 +223,22 @@ class Broker(base.BaseBroker):
             return future.get(ProduceResponse)
 
     def request_offset_limits(self, partition_requests):
-        """Request offset information for a set of topic/partitions"""
+        """Request offset information for a set of topic/partitions
+
+        :param partition_requests: requests specifying the partitions for which
+            to fetch offsets
+        :type partition_requests: Iterable of
+            :class:`pykafka.protocol.PartitionOffsetRequest`
+        """
         future = self._req_handler.request(OffsetRequest(partition_requests))
         return future.get(OffsetResponse)
 
     def request_metadata(self, topics=None):
+        """Request cluster metadata
+
+        :param topics: The topic ids for which to request metadata
+        :type topics: Iterable of int
+        """
         max_retries = 3
         for i in xrange(max_retries):
             if i > 0:
@@ -216,12 +280,17 @@ class Broker(base.BaseBroker):
         :param consumer_group: the name of the consumer group for which to
             commit offsets
         :type consumer_group: str
-        :param preqs: a sequence of <protocol.PartitionOffsetCommitRequest>
-        :type preqs: sequence
+        :param consumer_group_generation_id: The generation ID for this consumer
+            group
+        :type consumer_group_generation_id: int
+        :param consumer_id: The identifier for this consumer group
+        :type consumer_id: str
+        :param preqs: Requests indicating the partitions for which offsets
+            should be committed
+        :type preqs: Iterable of :class:`pykafka.protocol.PartitionOffsetCommitRequest`
         """
         if not self.offsets_channel_connected:
             self.connect_offsets_channel()
-        # TODO - exponential backoff
         req = OffsetCommitRequest(consumer_group,
                                   consumer_group_generation_id,
                                   consumer_id,
@@ -234,13 +303,13 @@ class Broker(base.BaseBroker):
         Based on Step 2 here https://cwiki.apache.org/confluence/display/KAFKA/Committing+and+fetching+consumer+offsets+in+Kafka
 
         :param consumer_group: the name of the consumer group for which to
-            commit offsets
+            fetch offsets
         :type consumer_group: str
-        :param preqs: a sequence of <protocol.PartitionOffsetFetchRequest>
-        :type preqs: sequence
+        :param preqs: Requests indicating the partitions for which offsets
+            should be fetched
+        :type preqs: Iterable of :class:`pykafka.protocol.PartitionOffsetFetchRequest`
         """
         if not self.offsets_channel_connected:
             self.connect_offsets_channel()
-        # TODO - exponential backoff
         req = OffsetFetchRequest(consumer_group, partition_requests=preqs)
         return self._offsets_channel_req_handler.request(req).get(OffsetFetchResponse)
