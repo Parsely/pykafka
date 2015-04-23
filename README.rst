@@ -1,6 +1,7 @@
 ![Build Status](https://travis-ci.org/Parsely/pykafka.svg?branch=master)](https://travis-ci.org/Parsely/pykafka)
 
-# What happened to Samsa?
+What happened to Samsa?
+=======================
 
 Samsa has been renamed PyKafka in anticipation of our next release, which will
 include support for Kafka 0.8.2 as well as optional integration with
