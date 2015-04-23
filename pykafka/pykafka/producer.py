@@ -1,4 +1,7 @@
+from __future__ import division
+
 import itertools
+import time
 import logging
 from collections import defaultdict
 
@@ -117,7 +120,8 @@ class Producer(base.BaseProducer):
                         continue
                     to_retry.extend(_get_partition_msgs(partition, req))
         except SocketDisconnectedError:
-            logger.warning('Broker %s:%s disconnected. Retrying produce')
+            logger.warning('Broker %s:%s disconnected. Retrying.',
+                            broker.host, broker.port)
             self._cluster.update()
             to_retry = [
                 ((message.partition_key, message.value), p_id)
@@ -129,6 +133,7 @@ class Producer(base.BaseProducer):
         if to_retry:
             attempt += 1
             if attempt < self._max_retries:
+                time.sleep(self._retry_backoff_ms / 1000)
                 self._produce(to_retry, attempt)
             else:
                 raise ProduceFailureError('Unable to produce messages. See log for details.')
