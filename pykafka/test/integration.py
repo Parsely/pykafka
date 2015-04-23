@@ -30,11 +30,11 @@ import uuid
 from kazoo.testing import KazooTestHarness
 from nose.plugins.attrib import attr
 
-from pykafka.pykafka import handlers
+from pykafka import handlers
 #from kafka.client import Client
 #from kafka.cluster import Cluster
 from pykafka.test.case import TestCase
-from pykafka.pykafka.utils.functional import methodmap
+from pykafka.utils.functional import methodmap
 
 
 logger = logging.getLogger(__name__)

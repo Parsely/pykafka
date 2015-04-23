@@ -7,9 +7,9 @@ from Queue import Queue, Empty
 import weakref
 import threading
 
-from pykafka import base
-from pykafka.common import OffsetType
-from pykafka.exceptions import (OffsetOutOfRangeError, UnknownTopicOrPartition,
+import base
+from .common import OffsetType
+from .exceptions import (OffsetOutOfRangeError, UnknownTopicOrPartition,
                                 OffsetMetadataTooLarge, OffsetsLoadInProgress,
                                 NotCoordinatorForConsumer)
 

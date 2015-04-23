@@ -1,7 +1,7 @@
 import logging
 import time
 
-from pykafka import base
+import base
 from .connection import BrokerConnection
 from .handlers import RequestHandler
 from .protocol import (
@@ -11,7 +11,7 @@ from .protocol import (
     OffsetFetchRequest, OffsetFetchResponse,
     ProduceResponse
 )
-from pykafka.exceptions import LeaderNotAvailable
+from .exceptions import LeaderNotAvailable
 
 
 logger = logging.getLogger(__name__)

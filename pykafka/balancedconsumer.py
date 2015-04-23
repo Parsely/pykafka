@@ -11,7 +11,7 @@ from kazoo.exceptions import NoNodeException, NodeExistsError
 from kazoo.recipe.watchers import ChildrenWatch
 
 from .common import OffsetType
-from .pykafka.simpleconsumer import SimpleConsumer
+from .simpleconsumer import SimpleConsumer
 from .exceptions import KafkaException
 
 

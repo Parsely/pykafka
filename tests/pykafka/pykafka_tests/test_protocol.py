@@ -1,7 +1,7 @@
 import unittest
 
 from pykafka import exceptions
-from pykafka.pykafka import protocol
+from pykafka import protocol
 from pykafka.common import CompressionType
 
 
