@@ -70,7 +70,8 @@ class KafkaInstance(ManagedInstance):
         self._kafka_version = kafka_version
         self._bin_dir = bin_dir
         self._processes = []
-        self._zookeeper = None
+        self.zookeeper = None
+        self.brokers = None
         # TODO: Need a better name so multiple can run at once.
         #       other ManagedInstances use things like 'name-port'
         ManagedInstance.__init__(self, name, use_gevent=use_gevent)
@@ -85,6 +86,8 @@ class KafkaInstance(ManagedInstance):
         os.makedirs(self._data_dir)
         os.makedirs(self._log_dir)
         os.makedirs(self._zk_dir)
+        # Needs to exist so that testinstances doesn't break
+        open(self.logfile, 'w').close()
 
     def _download_kafka(self):
         """Make sure the Kafka code has been downloaded to the right dir."""
@@ -113,7 +116,7 @@ class KafkaInstance(ManagedInstance):
 
         log.info('Downloaded Kafka to %s', self._bin_dir)
 
-    def _is_port_open(self, port):
+    def _is_port_free(self, port):
         """Check to see if a port is open"""
         try:
             s = socket.create_connection(('localhost', port))
@@ -126,7 +129,7 @@ class KafkaInstance(ManagedInstance):
         """Generate open ports, starting with `start`."""
         port = start
         while True:
-            if self._is_port_open(port):
+            if self._is_port_free(port):
                 yield port
             port += 1
 
@@ -134,25 +137,26 @@ class KafkaInstance(ManagedInstance):
         """Start the instance processes"""
         self._init_dirs()
         self._download_kafka()
-        self._start_zookeeper()
-        self._start_brokers()
-        return
 
-        # Connect to the shiny new instances
-        self.conn = None
-        fails = 0
-        while self.conn is None:
-            try:
-                conn = pymongo.MongoClient(port=self.port, use_greenlets=self.use_gevent)
-                if conn.alive():
-                    self.conn = conn
-            except:
-                if fails == 10:
-                    break
-                fails += 1
-                time.sleep(1)
-        if self.conn is None or self._process.poll() is not None:
-            raise ProcessNotStartingError("Unable to start mongod in 10 seconds.")
+        # Start all relevant processes and save which ports they use
+        zk_port = self._start_zookeeper()
+        self.zookeeper = 'localhost:{}'.format(zk_port)
+
+        broker_ports = self._start_brokers()
+        self.brokers = ','.join('localhost:{}'.format(port)
+                               for port in broker_ports)
+
+        # Process is started when the port isn't free anymore
+        all_ports = [zk_port] + broker_ports
+        for i in xrange(10):
+            if all(not self._is_port_free(port) for port in all_ports):
+                log.info('Kafka cluster started.')
+                return  # hooray! success
+            log.info('Waiting for cluster to start....')
+            time.sleep(6)  # Waits 60s total
+
+        # If it got this far, it's an error
+        raise ProcessNotStartingError('Unable to start Kafka cluster.')
 
     def _start_log_watcher(self):
         """Overridden because we have multiple files to watch."""
@@ -170,6 +174,7 @@ class KafkaInstance(ManagedInstance):
                 watch_thread.start()
 
     def _start_brokers(self):
+        """Start all brokers and return used ports."""
         self._broker_procs = []
         ports = self._port_generator(9092)
         used_ports = []
@@ -183,7 +188,7 @@ class KafkaInstance(ManagedInstance):
                 f.write(_kafka_properties.format(
                     broker_id=i,
                     port=port,
-                    zk_connstr=self._zookeeper,
+                    zk_connstr=self.zookeeper,
                     data_dir=self._data_dir + '_{}'.format(i),
                 ))
 
@@ -195,23 +200,7 @@ class KafkaInstance(ManagedInstance):
                 stdout=open(logfile, 'w'),
                 use_gevent=self.use_gevent
             ))
-
-        for port in used_ports:
-            # Wait for it to start and open the port before moving on
-            tries = 0
-            while True:
-                try:
-                    s = socket.create_connection(('localhost', port))
-                    s.close()
-                    break
-                except IOError, err:
-                    tries += 1
-                    if tries > 5:
-                        raise ProcessNotStartingError(
-                            'Unable to start Kafka on port %i', port
-                        )
-                    log.info('Waiting for broker to start....')
-                    time.sleep(5)
+        return used_ports
 
     def _start_zookeeper(self):
         port = self._port_generator(2181).next()
@@ -230,20 +219,45 @@ class KafkaInstance(ManagedInstance):
             stdout=open(logfile, 'w'),
             use_gevent=self.use_gevent
         )
-        self._zookeeper = 'localhost:{}'.format(port)
+        return port
+
+    def _run_topics_sh(self, args):
+        """Run kafka-topics.sh with the provided list of arguments."""
+        binfile = os.path.join(self._bin_dir, 'bin/kafka-topics.sh')
+        cmd = [binfile, '--zookeeper', self.zookeeper] + args
+        cmd = [str(c) for c in cmd]  # execv needs only strings
+        log.debug('running: %s', ' '.join(cmd))
+        return subprocess.check_output(cmd)
+
+    def create_topic(self, topic_name, num_partitions, replication_factor):
+        """Use kafka-topics.sh to create a topic."""
+        self._run_topics_sh(['--create',
+                             '--topic', topic_name,
+                             '--partitions', num_partitions,
+                             '--replication-factor', replication_factor])
+
+    def delete_topic(self, topic_name):
+        self._run_topics_sh(['--delete',
+                             '--topic', topic_name])
+
+    def list_topics(self):
+        """Use kafka-topics.sh to get topic information."""
+        res = self._run_topics_sh(['--list'])
+        return res.strip().split('\n')
 
     def terminate(self):
         """Override because we have many processes."""
         # Kill brokers before zookeeper
+        log.info('Stopping Kafka brokers.')
         for broker in self._broker_procs:
-            broker.terminate()
-            broker.wait()
-        self._zk_proc.terminate()
-        self._zk_proc.wait()
+            broker.kill()
+        log.info('Stopping Zookeeper.')
+        self._zk_proc.kill()
 
         shutil.rmtree(self._root_dir)
         self._processes = []
         super(KafkaInstance, self).terminate()
+        log.info('Cluster terminated and data cleaned up.')
 
     def flush(self):
         """Flush all data in the db"""
