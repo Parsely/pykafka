@@ -1,5 +1,8 @@
+"""
+Author: Keith Bourgoin, Emmett Butler
+"""
 __license__ = """
-Copyright 2012 DISQUS
+Copyright 2015 Parse.ly, Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,13 +25,13 @@ def recvall_into(socket, bytea, size):
     Reads `size` bytes from the socket into the provided bytearray (modifies
     in-place.)
 
-    This is basically a hack around the fact that ``socket.recv_into`` doesn't
+    This is basically a hack around the fact that `socket.recv_into` doesn't
     allow buffer offsets.
 
     :type socket: :class:`socket.Socket`
     :type bytea: ``bytearray``
     :type size: int
-    :rtype: ``bytearray``
+    :rtype: `bytearray`
     """
     offset = 0
     if size > len(bytea):
