@@ -1,5 +1,8 @@
+"""
+Author: Keith Bourgoin, Emmett Butler
+"""
 __license__ = """
-Copyright 2012 DISQUS
+Copyright 2015 Parse.ly, Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,6 +28,9 @@ class ResponseFuture(object):
     """A response which may have a value at some point."""
 
     def __init__(self, handler):
+        """
+        :type handler: :class:`pykafka.handlers.Handler`
+        """
         self.handler = handler
         self.error = False
         self._ready = handler.Event()
@@ -42,8 +48,7 @@ class ResponseFuture(object):
     def get(self, response_cls=None, timeout=None):
         """Block until data is ready and return.
 
-        Raises exception if there was an error.
-
+        Raises an exception if there was an error.
         """
         self._ready.wait(timeout)
         if self.error:
@@ -55,18 +60,17 @@ class ResponseFuture(object):
 
 
 class Handler(object):
+    """Base class for Handler classes"""
     def spawn(self, target, *args, **kwargs):
+        """Create the worker that will process the work to be handled"""
         raise NotImplementedError
 
 
 class ThreadingHandler(Handler):
+    """A handler. that uses a :class:`threading.Thread` to perform its work"""
     QueueEmptyError = Queue.Empty
     Queue = Queue.Queue
     Event = threading.Event
-
-    def get_semaphore(self, count=0):
-        """Get a semaphore (doesn't work as cls attribute)"""
-        return threading.Semaphore(count)
 
     def spawn(self, target, *args, **kwargs):
         t = threading.Thread(target=target, *args, **kwargs)
@@ -76,11 +80,15 @@ class ThreadingHandler(Handler):
 
 
 class RequestHandler(object):
-    """Uses a worker thread to dispatch requests."""
+    """Uses a Handler instance to dispatch requests."""
 
     Task = namedtuple('Task', ['request', 'future'])
 
     def __init__(self, handler, connection):
+        """
+        :type handler: :class:`pykafka.handlers.Handler`
+        :type connection: :class:`pykafka.connection.BrokerConnection`
+        """
         self.handler = handler
         self.connection = connection
         self._requests = handler.Queue()
@@ -90,7 +98,9 @@ class RequestHandler(object):
     def request(self, request, has_response=True):
         """Construct a new request
 
-        :returns: :class:`kafka.handlers.ResponseFuture`
+        :type request: :class:`pykafka.protocol.Request`
+        :param has_response: Whether this request will return a response
+        :returns: :class:`pykafka.handlers.ResponseFuture`
         """
         future = None
         if has_response:
@@ -110,6 +120,7 @@ class RequestHandler(object):
         self.ending.set()
 
     def _start_thread(self):
+        """Run the request processor"""
         def worker():
             while not self.ending.is_set():
                 task = self._requests.get()

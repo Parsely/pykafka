@@ -1,6 +1,8 @@
+"""
+Author: Keith Bourgoin, Emmett Butler
+"""
 __license__ = """
-Copyright 2012 DISQUS
-Copyright 2013,2014 Parse.ly, Inc.
+Copyright 2015 Parse.ly, Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,9 +17,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import logging
-
 import handlers
+import logging
 from cluster import Cluster
 
 try:
@@ -30,11 +31,6 @@ logger = logging.getLogger(__name__)
 
 
 class KafkaClient(object):
-    """Main entry point for a Kafka cluster
-
-    :ivar brokers: The :class:`kafka.common.Broker` map for this cluster.
-    :ivar topics: The :class:`kafka.common.Topic` map for this cluster.
-    """
     def __init__(self,
                  hosts='127.0.0.1:9092',
                  use_greenlets=False,
@@ -45,19 +41,24 @@ class KafkaClient(object):
                  exclude_internal_topics=True):
         """Create a connection to a Kafka cluster.
 
-        :param hosts: Comma separated list of seed hosts to used to connect.
+        :param hosts: Comma-separated list of kafka hosts to used to connect.
+        :type hosts: str
         :param use_greenlets: If True, use gevent instead of threading.
-        :param socket_timeout_ms: the socket timeout for network requests
+        :type use_greenlets: bool
+        :param socket_timeout_ms: The socket timeout (in milliseconds) for
+            network requests
         :type socket_timeout_ms: int
-        :param offsets_channel_socket_timeout_ms: Socket timeout when reading
-            responses for offset fetch/commit requests.
+        :param offsets_channel_socket_timeout_ms: The socket timeout (in
+            milliseconds) when reading responses for offset commit and
+            offset fetch requests.
         :type offsets_channel_socket_timeout_ms: int
         :param ignore_rdkafka: Don't use rdkafka, even if installed.
-        :param socket_receive_buffer_bytes: the size of the socket receive
-            buffer for network requests
+        :type ignore_rdkafka: bool
+        :param socket_receive_buffer_bytes: The size (in bytes) of the socket
+            receive buffer for network requests.
         :type socket_receive_buffer_bytes: int
         :param exclude_internal_topics: Whether messages from internal topics
-            (such as offsets) should be exposed to the consumer.
+            (specifically, the offsets topic) should be exposed to the consumer.
         :type exclude_internal_topics: bool
         """
         self._seed_hosts = hosts
@@ -67,7 +68,7 @@ class KafkaClient(object):
         self._use_rdkafka = rd_kafka and not ignore_rdkafka
         if self._use_rdkafka:
             logger.info('Using rd_kafka extensions.')
-            raise NotImplementedError('Not yet')
+            raise NotImplementedError('Not yet.')
         else:
             self.cluster = Cluster(
                 self._seed_hosts,
@@ -86,7 +87,4 @@ class KafkaClient(object):
         Updates each Topic and Broker, adding new ones as found,
         with current metadata from the cluster.
         """
-        # TODO: This is *so* not thread-safe, but updates should be rare.
-        #       Consider making a single lock while this runs to basically
-        #       stop the driver.
         self.cluster.update()

@@ -1,5 +1,8 @@
+"""
+Author: Keith Bourgoin
+"""
 __license__ = """
-Copyright 2014 Parse.ly, Inc.
+Copyright 2015 Parse.ly, Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -38,8 +41,9 @@ def encode_gzip(buff):
     sio.close()
     return output
 
+
 def decode_gzip(buff):
-    """Decode a gzip buffer"""
+    """Decode a buffer using gzip"""
     sio = StringIO(buff)
     f = gzip.GzipFile(fileobj=sio, mode='r')
     output = f.read()
@@ -47,12 +51,13 @@ def decode_gzip(buff):
     sio.close()
     return output
 
+
 def encode_snappy(buff):
     """Encode a buffer using Snappy"""
     if snappy is None:
         raise ImportError("Please install python-snappy")
-    output = snappy.compress(buff)
     return snappy.compress(buff)
+
 
 def decode_snappy(buff):
     """Decode a buffer using Snappy"""

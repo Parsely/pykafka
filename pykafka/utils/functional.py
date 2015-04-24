@@ -1,5 +1,10 @@
+"""
+Author: Keith Bourgoin, Emmett Butler
+
+This module is used only for testing.
+"""
 __license__ = """
-Copyright 2012 DISQUS
+Copyright 2015 Parse.ly, Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,7 +25,7 @@ from itertools import imap
 
 def methodmap(name, values, *args, **kwargs):
     """
-    Maps over all members in ``values``, invoking the method named ``name``.
+    Maps over all members in `values`, invoking the method named `name`.
 
     Usage:
     >>> methodmap('strip', ['hello ', 'world '])
@@ -32,7 +37,7 @@ def methodmap(name, values, *args, **kwargs):
 
 def methodimap(name, values, *args, **kwargs):
     """
-    Iterator-based implementation of :func:``.methodmap``.
+    Iterator-based implementation of :func:`.methodmap`.
     """
     fn = methodcaller(name, *args, **kwargs)
     return imap(fn, values)

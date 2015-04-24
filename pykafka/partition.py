@@ -1,3 +1,21 @@
+"""
+Author: Keith Bourgoin, Emmett Butler
+"""
+__license__ = """
+Copyright 2015 Parse.ly, Inc.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
 import logging
 
 import base
@@ -9,6 +27,24 @@ logger = logging.getLogger(__name__)
 
 class Partition(base.BasePartition):
     def __init__(self, topic, id_, leader, replicas, isr):
+        """Instantiate a new Partition
+
+        A Partition is an abstraction over the kafka concept of a partition.
+        A kafka partition is a logical division of the logs for a topic. Its
+        messages are totally ordered.
+
+        :param topic: The topic to which this Partition belongs
+        :type topic: :class:`pykafka.topic.Topic`
+        :param id_: The identifier for this partition
+        :type id_: int
+        :param leader: The broker that is currently acting as the leader for
+            this partition.
+        :type leader: :class:`pykafka.broker.Broker`
+        :param replicas: A list of brokers containing this partition's replicas
+        :type replicas: Iterable of :class:`pykafka.broker.Broker`
+        :param isr: The current set of in-sync replicas for this partition
+        :type isr: :class:`pykafka.broker.Broker`
+        """
         self._id = id_
         self._leader = leader
         self._replicas = replicas
@@ -17,51 +53,37 @@ class Partition(base.BasePartition):
 
     @property
     def id(self):
+        """The identifying int for this partition, unique within its topic"""
         return self._id
 
     @property
     def leader(self):
+        """The broker currently acting as leader for this partition"""
         return self._leader
 
     @property
     def replicas(self):
+        """The list of brokers currently holding replicas of this partition"""
         return self._replicas
 
     @property
     def isr(self):
+        """The current list of in-sync replicas for this partition"""
         return self._isr
 
     @property
     def topic(self):
+        """The topic to which this partition belongs"""
         return self._topic
-
-    def fetch_offset(self, consumer_group):
-        """Use the Offset Commit/Fetch API to get the current offset for this
-            partition for the given consumer group
-
-        :param consumer_group: the name of the consumer group for which to
-            fetch an offset
-        :type consumer_group: str
-        """
-        pass
-
-    def commit_offset(self, consumer_group):
-        """Use the Offset Commit/Fetch API to set the current offset for this
-            partition for the given consumer group
-
-        :param consumer_group: the name of the consumer group for which to
-            fetch an offset
-        :type consumer_group: str
-        """
-        pass
 
     def fetch_offset_limit(self, offsets_before, max_offsets=1):
         """Use the Offset API to find a limit of valid offsets
-            for this partition
+            for this partition.
 
-        :param offsets_before: return an offset from before this timestamp (milliseconds)
+        :param offsets_before: Return an offset from before this timestamp (in
+            milliseconds)
         :type offsets_before: int
-        :param max_offsets: the maximum number of offsets to return
+        :param max_offsets: The maximum number of offsets to return
         :type max_offsets: int
         """
         request = PartitionOffsetRequest(
@@ -88,12 +110,12 @@ class Partition(base.BasePartition):
         return not self == other
 
     def update(self, brokers, metadata):
-        """Update partition with fresh metadata.
+        """Update this partition with fresh metadata.
 
-        :param brokers: Brokers partitions exist on
-        :type brokers: List of :class:`kafka.pykafka.Broker`
+        :param brokers: Brokers on which partitions exist
+        :type brokers: List of :class:`pykafka.broker.Broker`
         :param metadata: Metadata for the partition
-        :type metadata: :class:`kafka.pykafka.protocol.PartitionMetadata`
+        :type metadata: :class:`pykafka.protocol.PartitionMetadata`
         """
         try:
             # Check leader

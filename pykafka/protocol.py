@@ -1,5 +1,23 @@
 # - coding: utf-8 -
-"""Protocol implementation for Kafka 0.8
+__license__ = """
+Copyright 2015 Parse.ly, Inc.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
+"""
+Author: Keith Bourgoin, Emmett Butler
+
+Protocol implementation for Kafka 0.8
 
 The implementation has been done with an attempt to minimize memory
 allocations in order to improve performance. With the exception of
@@ -26,25 +44,8 @@ Response => CorrelationId ResponseMessage
   CorrelationId => int32
   ResponseMessage => MetadataResponse | ProduceResponse | FetchResponse | OffsetResponse | OffsetCommitResponse | OffsetFetchResponse
 """
-
-__license__ = """
-Copyright 2014 Parse.ly, Inc.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-"""
-
-import logging
 import itertools
+import logging
 import struct
 from collections import defaultdict, namedtuple
 from zlib import crc32
@@ -63,7 +64,17 @@ class Request(Serializable):
     CLIENT_ID = 'pykafka'
 
     def _write_header(self, buff, api_version=1, correlation_id=0):
-        """Write the header for an outgoing message"""
+        """Write the header for an outgoing message.
+
+        :param buff: The buffer into which to write the header
+        :type buff: buffer
+        :param api_version: The "kafka api version id", used for feature flagging
+        :type api_version: int
+        :param correlation_id: This is a user-supplied integer. It will be
+            passed back in the response by the server, unmodified. It is useful
+            for matching request and response between the client and server.
+        :type correlation_id: int
+        """
         fmt = '!ihhih%ds' % len(self.CLIENT_ID)
         struct.pack_into(fmt, buff, 0,
                          len(buff) - 4,  # msglen excludes this int
@@ -74,7 +85,7 @@ class Request(Serializable):
                          self.CLIENT_ID)
 
     def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
+        """API key for this request, from the Kafka docs"""
         raise NotImplementedError()
 
     def get_bytes(self):

@@ -1,5 +1,8 @@
+"""
+Author: Keith Bourgoin, Emmett Butler
+"""
 __license__ = """
-Copyright 2012 DISQUS
+Copyright 2015 Parse.ly, Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,16 +20,20 @@ limitations under the License.
 import random
 
 
-def random_partitioner(partitions, key=None):
+def random_partitioner(partitions):
     """Returns a random partition out of all of the available partitions."""
     return random.choice(partitions)
 
 
 class BasePartitioner(object):
-    """Base class for custom class-based partitioners."""
+    """Base class for custom class-based partitioners.
+
+    A partitioner is used by the :class:`pykafka.producer.Producer` to
+    decide which partition to which to produce messages.
+    """
     def __call__(self, partitions, key=None):
         raise NotImplementedError('Subclasses must define their own '
-            ' partitioner implementation')
+                                  ' partitioner implementation')
 
 
 class HashingPartitioner(BasePartitioner):
@@ -41,32 +48,32 @@ class HashingPartitioner(BasePartitioner):
     aware of a topic, since the number of available partitions will be in flux
     until all brokers have accepted a write to that topic and have declared how
     many partitions that they are actually serving.
-
-    :param hash_func: hash function (defaults to :func:`hash`), should return
-        an `int`. If hash randomization (Python 2.7) is enabled, a custom
-        hashing function should be defined that is consistent between
-        interpreter restarts.
-    :type hash_func: function
     """
     def __init__(self, hash_func=hash):
+        """
+        :param hash_func: hash function (defaults to :func:`hash`), should return
+            an `int`. If hash randomization (Python 2.7) is enabled, a custom
+            hashing function should be defined that is consistent between
+            interpreter restarts.
+        :type hash_func: function
+        """
         self.hash_func = hash_func
 
     def __call__(self, partitions, key):
         """
-        :param partitions: the partitions to choose
-        :type partitions: sequence of partitions or
-            :class:`kafka.base.PartitionMap`
-        :param key: key used for routing
-        :type key: any hashable type if using the default :func:`hash`
+        :param partitions: The partitions from which to choose
+        :type partitions: sequence of :class:`pykafka.base.BasePartition`
+        :param key: Key used for routing
+        :type key: Any hashable type if using the default :func:`hash`
             implementation, any valid value for your custom hash function
-        :returns: a partition
-        :rtype: :class:`kafka.base.BasePartition`
+        :returns: A partition
+        :rtype: :class:`pykafka.base.BasePartition`
         """
         if key is None:
             raise ValueError(
                 'key cannot be `None` when using hashing partitioner'
             )
-        partitions = sorted(partitions) # sorting is VERY important
+        partitions = sorted(partitions)  # sorting is VERY important
         return partitions[abs(self.hash_func(key)) % len(partitions)]
 
 

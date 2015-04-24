@@ -1,14 +1,28 @@
-# TODO: Check all __repr__
-# TODO: __slots__ where appropriate
-# TODO: Use weak refs to avoid reference cycles?
+"""
+Author: Keith Bourgoin, Emmett Butler
+"""
+__license__ = """
+Copyright 2015 Parse.ly, Inc.
 
-from collections import defaultdict
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
 import logging
 import weakref
+from collections import defaultdict
 
 import base
-from .common import OffsetType
 from .balancedconsumer import BalancedConsumer
+from .common import OffsetType
 from .partition import Partition
 from .producer import Producer
 from .protocol import PartitionOffsetRequest
@@ -19,12 +33,16 @@ logger = logging.getLogger()
 
 
 class Topic(base.BaseTopic):
-
     def __init__(self, cluster, topic_metadata):
         """Create the Topic from metadata.
 
-        :param topic_metadata: Metadata for all topics
-        :type topic_metadata: :class:`kafka.pykafka.protocol.TopicMetadata`
+        A Topic is an abstraction over the kafka concept of a topic.
+        It contains a dictionary of partitions that comprise it.
+
+        :param cluster: The Cluster to use
+        :type cluster: :class:`pykafka.cluster.Cluster`
+        :param topic_metadata: Metadata for all topics.
+        :type topic_metadata: :class:`pykafka.protocol.TopicMetadata`
         """
         self._name = topic_metadata.name
         self._cluster = weakref.proxy(cluster)
@@ -33,24 +51,28 @@ class Topic(base.BaseTopic):
 
     @property
     def name(self):
+        """The name of this topic"""
         return self._name
 
     @property
     def partitions(self):
+        """A dictionary containing all known partitions for this topic"""
         return self._partitions
 
     def get_producer(self):
+        """Create a :class:`pykafka.producer.Producer` for this topic"""
         return Producer(self._cluster, self)
 
     def fetch_offset_limits(self, offsets_before, max_offsets=1):
-        """Get earliest or latest offset
+        """Get earliest or latest offset.
 
         Use the Offset API to find a limit of valid offsets for each partition
-        in this topic
+            in this topic.
 
-        :param offsets_before: return an offset from before this timestamp (milliseconds)
+        :param offsets_before: Return an offset from before this timestamp (in
+            milliseconds)
         :type offsets_before: int
-        :param max_offsets: the maximum number of offsets to return
+        :param max_offsets: The maximum number of offsets to return
         :type max_offsets: int
         """
         requests = defaultdict(list)  # one request for each broker
@@ -73,10 +95,10 @@ class Topic(base.BaseTopic):
         return self.fetch_offset_limits(OffsetType.LATEST)
 
     def update(self, metadata):
-        """Update the Partitons with metadata about the cluster.
+        """Update the Partitions with metadata about the cluster.
 
         :param metadata: Metadata for all topics
-        :type metadata: :class:`kafka.pykafka.protocol.TopicMetadata`
+        :type metadata: :class:`pykafka.protocol.TopicMetadata`
         """
         p_metas = metadata.partitions
 
@@ -102,11 +124,17 @@ class Topic(base.BaseTopic):
 
     def get_simple_consumer(self, consumer_group=None, **kwargs):
         """Return a SimpleConsumer of this topic
+
+        :param consumer_group: The name of the consumer group to join
+        :type consumer_group: str
         """
         return SimpleConsumer(self, self._cluster,
                               consumer_group=consumer_group, **kwargs)
 
     def get_balanced_consumer(self, consumer_group, **kwargs):
         """Return a BalancedConsumer of this topic
+
+        :param consumer_group: The name of the consumer group to join
+        :type consumer_group: str
         """
         return BalancedConsumer(self, self._cluster, consumer_group, **kwargs)

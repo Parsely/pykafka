@@ -1,3 +1,21 @@
+"""
+Author: Keith Bourgoin
+"""
+__license__ = """
+Copyright 2015 Parse.ly, Inc.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
 from common import CompressionType
 from partitioners import random_partitioner
 
@@ -13,7 +31,7 @@ class BaseCluster(object):
     def brokers(self):
         """Brokers associated with this cluster.
 
-        :type: `dict` of {broker_id: :class:`kafka.base.BaseBroker`}
+        :type: `dict` of {broker_id: :class:`pykafka.base.BaseBroker`}
         """
         return self._brokers
 
@@ -21,7 +39,7 @@ class BaseCluster(object):
     def topics(self):
         """Topics present in this cluster.
 
-        :type: `dict` of {topic_name: :class:`kafka.base.BaseTopic`}
+        :type: `dict` of {topic_name: :class:`pykafka.base.BaseTopic`}
         """
         return self._topics
 
@@ -91,7 +109,7 @@ class BasePartition(object):
     def leader(self):
         """The leader broker of the partition.
 
-        :type: :class:`kafka.base.BasePartition`
+        :type: :class:`pykafka.base.BasePartition`
         """
         return self._leader
 
@@ -99,7 +117,7 @@ class BasePartition(object):
     def replicas(self):
         """List of brokers which has replicas of this Partition.
 
-        :type: `list` of :class:`kafka.base.BaseBroker`
+        :type: `list` of :class:`pykafka.base.BaseBroker`
         """
         return self._replicas
 
@@ -107,7 +125,7 @@ class BasePartition(object):
     def isr(self):
         """List of brokers which have in-sync replicas of this partition.
 
-        :type: `list` of :class:`kafka.base.BaseBroker`
+        :type: `list` of :class:`pykafka.base.BaseBroker`
         """
         return self._isr
 
@@ -154,7 +172,7 @@ class BaseTopic(object):
     def partitions(self):
         """The partitions of this topic.
 
-        :type: `dict` of {`int`: :class:`kafka.base.BasePartition`}
+        :type: `dict` of {`int`: :class:`pykafka.base.BasePartition`}
         """
         return self._partitions
 
@@ -162,7 +180,7 @@ class BaseTopic(object):
         """Get the latest offset for all partitions.
 
         :returns: The latest offset for all partitions in the topic.
-        :rtype: `dict` of {:class:`kafka.base.BasePartition`: `int`}
+        :rtype: `dict` of {:class:`pykafka.base.BasePartition`: `int`}
         """
         raise NotImplementedError
 
@@ -173,7 +191,7 @@ class BaseTopic(object):
         this will get the earliest offset for which the partition has data.
 
         :returns: The earliest offset for all partitions in the topic.
-        :rtype: `dict` of {:class:`kafka.base.BasePartition`: `int`}
+        :rtype: `dict` of {:class:`pykafka.base.BasePartition`: `int`}
         """
         raise NotImplementedError
 
@@ -181,25 +199,25 @@ class BaseTopic(object):
 class BaseSimpleConsumer(object):
     """A simple consumer which reads data from a topic.
 
-    This is a simple reader useful for testing or single-process situation.
+    This is a simple consumer useful for testing or single-process situations.
     **If multiple processes use a SimpleConsumer and read the same topic,
     they will each read copies of the data.**  Instead, use a BalancedConsumer
     to ensure each message is only read once.
 
     The one advantage this implementation has over a BalancedConsumer is that
     the partitions to be read can be specified. Therefore, if one has hard
-    coded which process reads which partitions, this is a useful soluton.
+    coded which processes reads which partitions, this is a useful soluton.
     """
 
     def __init__(self, client, topic, partitions=None):
         """Create a consumer for a topic.
 
         :param client: Client connection to the cluster.
-        :type client: :class:`kafka.client.KafkaClient`
+        :type client: :class:`pykafka.client.KafkaClient`
         :param topic: The topic to consume from.
-        :type topic: :class:`kafka.abstract.Topic` or :class:`str`
+        :type topic: :class:`pykafka.base.BaseTopic` or :class:`str`
         :param partitions: List of partitions to consume from.
-        :type partitions: Iterable of :class:`kafka.abstract.Partition` or int
+        :type partitions: Iterable of :class:`pykafka.base.BasePartition` or int
         """
         raise NotImplementedError
 
@@ -211,7 +229,7 @@ class BaseSimpleConsumer(object):
     def topic(self):
         """The topic from which data is being read.
 
-        :type: :class:`kafka.base.BaseTopic`
+        :type: :class:`pykafka.base.BaseTopic`
         """
         return self._topic
 
@@ -237,7 +255,7 @@ class BaseProducer(object):
 
     This producer is synchronous, waiting for a response from Kafka
     before returning. For an asynchronous implementation, use
-    :class:`kafka.base.BaseAsyncProducer`
+    :class:`pykafka.base.BaseAsyncProducer`
     """
     def __init__(self,
                  client,
@@ -254,18 +272,23 @@ class BaseProducer(object):
 
         :param client: KafkaClient used to connect to cluster.
         :param topic: The topic to produce messages for.
-        :type topic: :class:`kafka.pykafka.topic.Topic`
+        :type topic: :class:`pykafka.topic.Topic`
         :para compression: Compression to use for messages.
         :type compression: :class:`kafka.common.CompressionType`
         :param max_retries: Number of times to retry sending messages.
-        :param retry_backoff_ms: Interval to wait between retries
-        :param topic_refresh_interval_ms: Time between queries to refresh
-            metadata about the topic. The Producer will also refresh this data
-            when the cluster changes (e.g. partitions missing, etc), but this
-            is the interval for how often it actively polls for changes.
-        :param required_acks:
-        :param ack_timeout_ms:
-        :param batch_size: Size of batches to send to brokers
+        :param retry_backoff_ms: Interval (in milliseconds) to wait between
+            retries
+        :param topic_refresh_interval_ms: Time (in milliseconds) between queries
+            to refresh metadata about the topic. The Producer will also refresh
+            this data when the cluster changes (e.g. partitions missing, etc),
+            but this is the interval for how often it actively polls for
+            changes.
+        :param required_acks: How many other brokers must have committed the
+            data to their log and acknowledged this to the leader before a
+            request is considered complete?
+        :param ack_timeout_ms: Amount of time (in milliseconds) to wait for
+            acknowledgment of a produce request.
+        :param batch_size: Size (in bytes) of batches to send to brokers.
         """
         raise NotImplementedError
 
@@ -273,7 +296,7 @@ class BaseProducer(object):
     def topic(self):
         """The topic to which data is being written.
 
-        :type: :class:`kafka.base.BaseTopic`
+        :type: :class:`pykafka.base.BaseTopic`
         """
         return self._topic
 
@@ -281,7 +304,7 @@ class BaseProducer(object):
     def partitioner(self):
         """The partitioner used to determine which partition used.
 
-        :type: :class:`kafka.partitioners.BasePartitioner`
+        :type: :class:`pykafka.partitioners.BasePartitioner`
         """
         return self._partitioner
 
