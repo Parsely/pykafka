@@ -35,7 +35,6 @@ logger = logging.getLogger(__name__)
 
 
 class Broker(base.BaseBroker):
-
     def __init__(self,
                  id_,
                  host,
