@@ -1,11 +1,11 @@
-import unittest
+import unittest2
 
 from pykafka import exceptions
 from pykafka import protocol
 from pykafka.common import CompressionType
 
 
-class TestMetadataAPI(unittest.TestCase):
+class TestMetadataAPI(unittest2.TestCase):
     def test_request(self):
         req = protocol.MetadataRequest()
         msg = req.get_bytes()
@@ -44,7 +44,7 @@ class TestMetadataAPI(unittest.TestCase):
         )
 
 
-class TestProduceAPI(unittest.TestCase):
+class TestProduceAPI(unittest2.TestCase):
     test_messages = [
         protocol.Message('this is a test message', partition_key='asdf'),
         protocol.Message('this is also a test message', partition_key='test_key'),
@@ -88,7 +88,7 @@ class TestProduceAPI(unittest.TestCase):
         self.assertEqual(response.topics, {'test': {0: 2}})
 
 
-class TestFetchAPI(unittest.TestCase):
+class TestFetchAPI(unittest2.TestCase):
     def test_request(self):
         preq = protocol.PartitionFetchRequest('test', 0, 1)
         req = protocol.FetchRequest(partition_requests=[preq, ])
@@ -152,7 +152,7 @@ class TestFetchAPI(unittest.TestCase):
         )
 
 
-class TestOffsetAPI(unittest.TestCase):
+class TestOffsetAPI(unittest2.TestCase):
     def test_request(self):
         preq = protocol.PartitionOffsetRequest('test', 0, -1, 1)
         req = protocol.OffsetRequest(partition_requests=[preq, ])
@@ -177,7 +177,7 @@ class TestOffsetAPI(unittest.TestCase):
         self.assertEqual(resp.topics['test'], {0: [2]})
 
 
-class TestOffsetCommitFetchAPI(unittest.TestCase):
+class TestOffsetCommitFetchAPI(unittest2.TestCase):
     def test_consumer_metadata_request(self):
         req = protocol.ConsumerMetadataRequest('test')
         msg = req.get_bytes()
@@ -228,4 +228,4 @@ class TestOffsetCommitFetchAPI(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    unittest.main()
+    unittest2.main()
