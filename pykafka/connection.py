@@ -1,5 +1,7 @@
 from __future__ import division
-
+"""
+Author: Keith Bourgoin, Emmett Butler
+"""
 __license__ = """
 Copyright 2015 Parse.ly, Inc.
 
@@ -16,8 +18,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-# TODO: Gevent support
-
 import logging
 import socket
 import struct
@@ -29,20 +29,33 @@ logger = logging.getLogger(__name__)
 
 
 class BrokerConnection(object):
-    """A socket connection to Kafka."""
-
     def __init__(self, host, port, buffer_size=64 * 1024):
+        """Initialize a socket connection to Kafka.
+
+        BrokerConnection thinly wraps a `socket.create_connection` call
+        and handles the sending and receiving of data that conform to the
+        kafka binary protocol over that socket.
+
+        :param host: The host to which to connect
+        :type host: str
+        :param port: The port on the host to which to connect
+        :type port: int
+        :param buffer_size: The size (in bytes) of the buffer in which to
+            hold response data.
+        :type buffer_size: int
+        """
         self._buff = bytearray(buffer_size)
         self.host = host
         self.port = port
         self._socket = None
 
     def __del__(self):
+        """Close this connection when the object is deleted."""
         self.disconnect()
 
     @property
     def connected(self):
-        """Do we think the socket is open."""
+        """Returns true if the socket connection is open."""
         return self._socket is not None
 
     def connect(self, timeout):
@@ -64,10 +77,12 @@ class BrokerConnection(object):
             self._socket = None
 
     def reconnect(self):
+        """Disconnect from the broker, then reconnect"""
         self.disconnect()
         self.connect()
 
     def request(self, request):
+        """Send a request over the socket connection"""
         bytes = request.get_bytes()
         if not self._socket:
             raise SocketDisconnectedError
