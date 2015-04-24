@@ -16,7 +16,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-__all__ = ["Topic", "BaseTopic"]
+__all__ = ["BaseTopic", "Topic"]
 import logging
 import weakref
 from collections import defaultdict
