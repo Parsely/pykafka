@@ -76,13 +76,16 @@ class TestProduceAPI(unittest2.TestCase):
         response = protocol.ProduceResponse(
                 buffer('\x00\x00\x00\x01\x00\x04test\x00\x00\x00\x01\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x02')
         )
-        self.assertEqual(response.topics['test'][0][0], 3)
+        self.assertEqual(response.topics['test'][0].err, 3)
 
     def test_response(self):
         response = protocol.ProduceResponse(
             buffer('\x00\x00\x00\x01\x00\x04test\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02')
         )
-        self.assertEqual(response.topics, {'test': {0: (0, 2)}})
+        self.assertEqual(
+            response.topics,
+            {'test': {0: protocol.ProducePartitionResponse(0, 2)}}
+        )
 
 
 class TestFetchAPI(unittest2.TestCase):

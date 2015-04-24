@@ -479,6 +479,12 @@ class ProduceRequest(Request):
         return self._message_count
 
 
+ProducePartitionResponse = namedtuple(
+    'ProducePartitionResponse',
+    ['err', 'offset']
+)
+
+
 class ProduceResponse(Response):
     """Produce Response. Checks to make sure everything went okay.
 
@@ -501,7 +507,8 @@ class ProduceResponse(Response):
         for (topic, partitions) in response:
             self.topics[topic] = {}
             for partition in partitions:
-                self.topics[topic][partition[0]] = tuple(partition[1:3])
+                pres = ProducePartitionResponse(partition[1], partition[2])
+                self.topics[topic][partition[0]] = pres
 
 
 ##
