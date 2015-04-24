@@ -16,12 +16,12 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-__all__ = ["Topic", "base.BaseTopic"]
+__all__ = ["Topic", "BaseTopic"]
 import logging
 import weakref
 from collections import defaultdict
 
-import base
+from base import BaseTopic
 from .balancedconsumer import BalancedConsumer
 from .common import OffsetType
 from .partition import Partition
@@ -33,7 +33,7 @@ from .simpleconsumer import SimpleConsumer
 logger = logging.getLogger()
 
 
-class Topic(base.BaseTopic):
+class Topic(BaseTopic):
     def __init__(self, cluster, topic_metadata):
         """Create the Topic from metadata.
 
