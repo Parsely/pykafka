@@ -45,10 +45,10 @@ class BrokerConnection(object):
             hold response data.
         :type buffer_size: int
         """
-        self._buff = bytearray(buffer_size)
         self.host = host
         self.port = port
         self._socket = None
+        self._buffer_size = buffer_size
 
     def __del__(self):
         """Close this connection when the object is deleted."""
@@ -97,5 +97,6 @@ class BrokerConnection(object):
             self.disconnect()
             raise SocketDisconnectedError
         size = struct.unpack('!i', size)[0]
-        recvall_into(self._socket, self._buff, size)
-        return buffer(self._buff[4:4 + size])
+        output = bytearray(size)
+        recvall_into(self._socket, output, self._buffer_size)
+        return memoryview(output)[4:]  # skip past correlation-id

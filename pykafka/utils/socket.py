@@ -20,9 +20,9 @@ __all__ = ["recvall_into"]
 from pykafka.exceptions import SocketDisconnectedError
 
 
-def recvall_into(socket, bytea, size):
+def recvall_into(socket, bytea, buffer_bytes):
     """
-    Reads `size` bytes from the socket into the provided bytearray (modifies
+    Reads enough data from the socket to fill the provided bytearray (modifies
     in-place.)
 
     This is basically a hack around the fact that `socket.recv_into` doesn't
@@ -30,17 +30,18 @@ def recvall_into(socket, bytea, size):
 
     :type socket: :class:`socket.Socket`
     :type bytea: ``bytearray``
-    :type size: int
+    :param buffer_bytes: Chunk size at which we read from socket
+    :type buffer_bytes: int
     :rtype: `bytearray`
     """
     offset = 0
-    if size > len(bytea):
-        raise ValueError("Buffer overflow in broker connection (buffer size is {})".format(len(bytea)))
+    size = len(bytea)
     while offset < size:
-        remaining = size - offset
-        chunk = socket.recv(remaining)
-        if not len(chunk):
+        nbytes_received = socket.recv_into(
+                memoryview(bytea)[offset:],
+                min(buffer_bytes, size - offset))
+        if not nbytes_received:
             raise SocketDisconnectedError
-        bytea[offset:(offset + len(chunk))] = chunk
-        offset += len(chunk)
+        offset += nbytes_received
+    assert(offset == size)
     return bytea
