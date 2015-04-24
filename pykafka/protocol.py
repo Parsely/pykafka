@@ -44,6 +44,16 @@ Response => CorrelationId ResponseMessage
   CorrelationId => int32
   ResponseMessage => MetadataResponse | ProduceResponse | FetchResponse | OffsetResponse | OffsetCommitResponse | OffsetFetchResponse
 """
+__all__ = [
+    "MetadataRequest", "MetadataResponse", "ProduceRequest", "ProduceResponse",
+    "OffsetRequest", "OffsetResponse", "OffsetCommitRequest",
+    "FetchRequest", "FetchResponse", "PartitionFetchRequest",
+    "OffsetCommitResponse", "OffsetFetchRequest", "OffsetFetchResponse",
+    "PartitionOffsetRequest", "ConsumerMetadataRequest",
+    "ConsumerMetadataResponse", "PartitionOffsetCommitRequest",
+    "PartitionOffsetFetchRequest",
+    "Request", "Response", "Message", "MessageSet"
+]
 import itertools
 import logging
 import struct
