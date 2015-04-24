@@ -36,7 +36,7 @@ html_static_path = ['_static']
 source_suffix = '.rst'
 master_doc = 'index'
 
-html_theme = 'nature'
+html_theme = 'sphinx_rtd_theme'
 pygments_style = 'sphinx'
 htmlhelp_basename = 'pykafkadoc'
 
