@@ -40,4 +40,5 @@ html_theme = 'sphinx_rtd_theme'
 pygments_style = 'sphinx'
 htmlhelp_basename = 'pykafkadoc'
 
-autodoc_default_flags = ['special-members', 'private-members', 'show-inheritance']
+autodoc_default_flags = ['special-members', 'private-members', 'inherited-members',
+                         'show-inheritance']
