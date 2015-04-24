@@ -234,7 +234,7 @@ class Producer(base.BaseProducer):
         """Produce a set of messages.
 
         :param messages: The messages to produce
-        :type messages: Iterable of :class:`pykafka.common.Message`
+        :type messages: Iterable of str or (str, str) tuples
         """
         # Do partition distribution here. We need to be able to retry producing
         # only *some* messages when a leader changes. Therefore, we don't want

@@ -20,7 +20,7 @@ limitations under the License.
 import random
 
 
-def random_partitioner(partitions):
+def random_partitioner(partitions, key):
     """Returns a random partition out of all of the available partitions."""
     return random.choice(partitions)
 

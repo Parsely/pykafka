@@ -17,7 +17,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import itertools
-import functools
 import logging as log
 import time
 import threading
@@ -136,13 +135,11 @@ class SimpleConsumer(base.BaseSimpleConsumer):
 
         self._discover_offset_manager()
 
-        owned_partition_partial = functools.partial(
-            OwnedPartition, consumer_group=self._consumer_group)
         if partitions:
-            self._partitions = {owned_partition_partial(p): p
+            self._partitions = {OwnedPartition(p): p
                                 for p in partitions}
         else:
-            self._partitions = {owned_partition_partial(p): topic.partitions[k]
+            self._partitions = {OwnedPartition(p): topic.partitions[k]
                                 for k, p in topic.partitions.iteritems()}
         self._partitions_by_id = {p.partition.id: p
                                   for p in self._partitions.iterkeys()}
@@ -158,8 +155,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
 
         if self._auto_commit_enable:
             self._autocommit_worker_thread = self._setup_autocommit_worker()
-        # we need to get the most up-to-date offsets before starting consumption
-        self.fetch_offsets()
+            # we need to get the most up-to-date offsets before starting consumption
+            self.fetch_offsets()
         self._fetch_workers = self._setup_fetch_workers()
 
     def _build_default_error_handlers(self):
