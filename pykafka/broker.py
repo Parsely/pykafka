@@ -21,15 +21,14 @@ import time
 
 import base
 from .connection import BrokerConnection
+from .exceptions import LeaderNotAvailable
 from .handlers import RequestHandler
 from .protocol import (
     FetchRequest, FetchResponse, OffsetRequest,
     OffsetResponse, MetadataRequest, MetadataResponse,
     OffsetCommitRequest, OffsetCommitResponse,
     OffsetFetchRequest, OffsetFetchResponse,
-    ProduceResponse
-)
-from .exceptions import LeaderNotAvailable
+    ProduceResponse)
 
 
 logger = logging.getLogger(__name__)
