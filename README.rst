@@ -76,6 +76,9 @@ For more information about Kafka itself, visit the `Kafka documentation`_.
 Usage and API Overview
 ----------------------
 
+Assuming you have a Kafka instance running on localhost, you can use PyKafka
+to connect to it.
+
 ::
 
     >>> from pykafka import KafkaClient
