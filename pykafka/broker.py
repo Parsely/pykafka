@@ -269,10 +269,9 @@ class Broker(base.BaseBroker):
                                       consumer_group_generation_id,
                                       consumer_id,
                                       preqs):
-        """Commit the offsets of all messages consumed
+        """Commit offsets to Kafka using the Offset Commit/Fetch API
 
-        Commit the offsets of all messages consumed so far by this consumer
-            group with the Offset Commit/Fetch API
+        Commit the offsets of all messages consumed so far by this consumer group with the Offset Commit/Fetch API
 
         Based on Step 2 here https://cwiki.apache.org/confluence/display/KAFKA/Committing+and+fetching+consumer+offsets+in+Kafka
 
