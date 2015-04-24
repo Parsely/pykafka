@@ -30,7 +30,6 @@ from .protocol import ConsumerMetadataRequest, ConsumerMetadataResponse
 from .topic import Topic
 
 
-
 logger = logging.getLogger(__name__)
 
 
