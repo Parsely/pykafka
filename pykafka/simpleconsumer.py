@@ -1,21 +1,38 @@
-import functools
+"""
+Author: Emmett Butler
+"""
+__license__ = """
+Copyright 2015 Parse.ly, Inc.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
 import itertools
-from collections import defaultdict
-import time
+import functools
 import logging as log
-from Queue import Queue, Empty
-import weakref
+import time
 import threading
+import weakref
+from collections import defaultdict
+from Queue import Queue, Empty
 
 import base
 from .common import OffsetType
 from .exceptions import (OffsetOutOfRangeError, UnknownTopicOrPartition,
                          OffsetMetadataTooLarge, OffsetsLoadInProgress,
                          NotCoordinatorForConsumer)
-
-from .utils.error_handlers import handle_partition_responses, raise_error
 from .protocol import (PartitionFetchRequest, PartitionOffsetCommitRequest,
                        PartitionOffsetFetchRequest, PartitionOffsetRequest)
+from .utils.error_handlers import handle_partition_responses, raise_error
 
 
 class SimpleConsumer(base.BaseSimpleConsumer):
@@ -44,49 +61,52 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         that this is a balancing consumer. Use a BalancedConsumer for
         that.
 
-        :param topic: the topic this consumer should consume
-        :type topic: pykafka.topic.Topic
-        :param cluster: the cluster this consumer should connect to
-        :type cluster: pykafka.cluster.Cluster
-        :param consumer_group: the name of the consumer group to join
+        :param topic: The topic this consumer should consume
+        :type topic: :class:`pykafka.topic.Topic`
+        :param cluster: The cluster to which this consumer should connect
+        :type cluster: :class:`pykafka.cluster.Cluster`
+        :param consumer_group: The name of the consumer group to join
         :type consumer_group: str
-        :param partitions: existing partitions to which to connect
-        :type partitions: list of pykafka.partition.Partition
-        :param fetch_message_max_bytes: the number of bytes of messages to
+        :param partitions: Existing partitions to which to connect
+        :type partitions: Iterable of :class:`pykafka.partition.Partition`
+        :param fetch_message_max_bytes: The number of bytes of messages to
             attempt to fetch
         :type fetch_message_max_bytes: int
-        :param num_consumer_fetchers: the number of threads used to fetch data
+        :param num_consumer_fetchers: The number of workers used to fetch data
         :type num_consumer_fetchers: int
-        :param auto_commit_enable: if true, periodically commit to kafka the
-            offset of messages already fetched by this consumer
+        :param auto_commit_enable: If true, periodically commit to kafka the
+            offset of messages already fetched by this consumer.
         :type auto_commit_enable: bool
-        :param auto_commit_interval_ms: the frequency in ms that the consumer
-            offsets are committed to kafka
+        :param auto_commit_interval_ms: The frequency (in milliseconds) at which the
+            consumer offsets are committed to kafka
         :type auto_commit_interval_ms: int
-        :param queued_max_messages: max number of messages buffered for
+        :param queued_max_messages: Maximum number of messages buffered for
             consumption
         :type queued_max_messages: int
-        :param fetch_min_bytes: the minimum amount of data the server should
-            return for a fetch request. If insufficient data is available the
-            request will block
+        :param fetch_min_bytes: The minimum amount of data (in bytes) the server
+            should return for a fetch request. If insufficient data is available
+            the request will block.
         :type fetch_min_bytes: int
-        :param fetch_wait_max_ms: the maximum amount of time the server will
-            block before answering the fetch request if there isn't sufficient
-            data to immediately satisfy fetch_min_bytes
+        :param fetch_wait_max_ms: The maximum amount of time (in milliseconds)
+            the server will block before answering the fetch request if there
+            isn't sufficient data to immediately satisfy fetch_min_bytes.
         :type fetch_wait_max_ms: int
-        :param refresh_leader_backoff_ms: backoff time to refresh the leader of
-            a partition after it loses the current leader
+        :param refresh_leader_backoff_ms: Backoff time (in milliseconds) to
+            refresh the leader of a partition after it loses the current leader.
         :type refresh_leader_backoff_ms: int
-        :param offsets_channel_backoff_ms: backoff time to retry offset
-            commits/fetches
+        :param offsets_channel_backoff_ms: Backoff time (in milliseconds) to
+            retry offset commits/fetches
         :type offsets_channel_backoff_ms: int
         :param offsets_commit_max_retries: Retry the offset commit up to this
             many times on failure.
         :type offsets_commit_max_retries: int
-        :param auto_offset_reset: what to do if an offset is out of range
-        :type auto_offset_reset: int
-        :param consumer_timeout_ms: throw a timeout exception to the consumer
-            if no message is available for consumption after the specified interval
+        :param auto_offset_reset: What to do if an offset is out of range. This
+            setting indicates how to reset the consumer's internal offset
+            counter when an OffsetOutOfRangeError is encountered.
+        :type auto_offset_reset: :class:`pykafka.common.OffsetType`
+        :param consumer_timeout_ms: Amount of time (in milliseconds) the
+            consumer may spend without messages available for consumption
+            before raising an error.
         :type consumer_timeout_ms: int
         """
         if not isinstance(cluster, weakref.ProxyType) and \
@@ -143,6 +163,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         self._fetch_workers = self._setup_fetch_workers()
 
     def _build_default_error_handlers(self):
+        """Set up the error handlers to use for partition errors."""
         def _handle_OffsetOutOfRangeError(parts):
             self._reset_offsets((owned_partition
                                  for owned_partition, pres in parts))
@@ -158,24 +179,34 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         }
 
     def _discover_offset_manager(self):
+        """Set the offset manager for this consumer.
+
+        If a consumer group is not supplied to __init__, this method does
+            nothing
+        """
         if self._consumer_group is not None:
             self._offset_manager = self._cluster.get_offset_manager(self._consumer_group)
 
     @property
     def topic(self):
+        """The topic this consumer consumes"""
         return self._topic
 
     @property
     def partitions(self):
+        """A list of the partitions that this consumer consumes"""
         return self._partitions
 
     def __del__(self):
+        """Stop consumption and workers when object is deleted"""
         self.stop()
 
     def stop(self):
+        """Flag all running workers for deletion."""
         self._running = False
 
     def _setup_autocommit_worker(self):
+        """Start the autocommitter thread"""
         def autocommitter():
             while True:
                 if not self._running:
@@ -186,6 +217,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         return self._cluster.handler.spawn(autocommitter)
 
     def _setup_fetch_workers(self):
+        """Start the fetcher threads"""
         def fetcher():
             while True:
                 if not self._running:
@@ -195,6 +227,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                 for i in xrange(self._num_consumer_fetchers)]
 
     def __iter__(self):
+        """Yield an infinite stream of messages until the consumer times out"""
         while True:
             message = self.consume()
             if not message and self._consumer_timed_out():
@@ -202,16 +235,14 @@ class SimpleConsumer(base.BaseSimpleConsumer):
             yield message
 
     def _consumer_timed_out(self):
+        """Indicates whether the consumer has received messages recently"""
         if self._consumer_timeout_ms == -1:
             return False
         disp = (time.time() - self._last_message_time) * 1000.0
         return disp > self._consumer_timeout_ms
 
     def consume(self):
-        """Get one message from the consumer.
-
-        :param timeout: Seconds to wait before returning None
-        """
+        """Get one message from the consumer."""
         owned_partition = self.partition_cycle.next()
         message = owned_partition.consume()
 
@@ -220,6 +251,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
             return message
 
     def _auto_commit(self):
+        """Commit offsets only if it's time to do so"""
         if not self._auto_commit_enable or self._auto_commit_interval_ms == 0:
             return
 
@@ -263,7 +295,6 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         """Fetch offsets for this consumer's topic
 
         Uses the offset commit/fetch API
-        Should be called when consumer starts and after any errors
         """
         if not self._consumer_group:
             raise Exception("consumer group must be specified to fetch offsets")
@@ -296,13 +327,14 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                     for p in parts_by_error.get(OffsetsLoadInProgress.ERROR_CODE, [])]
 
     def _reset_offsets(self, errored_partitions):
-        """Reset offsets after an OffsetOutOfRangeError
+        """Reset offsets after an error
 
         Issue an OffsetRequest for each partition and set the appropriate
         returned offset in the OwnedPartition per self._auto_offset_reset
 
         :param errored_partitions: the partitions with out-of-range offsets
-        :type errored_partitions: Iterable of OwnedPartition
+        :type errored_partitions: Iterable of
+            :class:`pykafka.simpleconsumer.OwnedPartition`
         """
         def _handle_success(parts):
             for owned_partition, pres in parts:
@@ -365,8 +397,11 @@ class OwnedPartition(object):
     """
 
     def __init__(self,
-                 partition,
-                 consumer_group=None):
+                 partition):
+        """
+        :param partition: The partition to hold
+        :type partition: :class:`pykafka.partition.Partition`
+        """
         self.partition = partition
         self._messages = Queue()
         self.last_offset_consumed = 0
@@ -375,12 +410,13 @@ class OwnedPartition(object):
 
     @property
     def message_count(self):
+        """Count of messages currently in this partition's internal queue"""
         return self._messages.qsize()
 
     def set_offset(self, last_offset_consumed):
-        """Set the internal offset counters from an OffsetFetchResponse
+        """Set the internal offset counters
 
-        :param last_offset_consumed: the last committed offset for this
+        :param last_offset_consumed: The last committed offset for this
             partition
         :type last_offset_consumed: int
         """
@@ -388,21 +424,33 @@ class OwnedPartition(object):
         self.next_offset = last_offset_consumed + 1
 
     def build_offset_request(self, auto_offset_reset):
-        """Create a PartitionOffsetRequest for this partition
+        """Create a :class:`pykafka.protocol.PartitionOffsetRequest` for this
+            partition
+
+        :param auto_offset_reset: What to do if an offset is out of range. This
+            setting indicates how to reset the consumer's internal offset
+            counter when an OffsetOutOfRangeError is encountered.
+        :type auto_offset_reset: :class:`pykafka.common.OffsetType`
         """
         return PartitionOffsetRequest(
             self.partition.topic.name, self.partition.id,
             auto_offset_reset, 1)
 
     def build_fetch_request(self, max_bytes):
-        """Create a FetchPartitionRequest for this partition
+        """Create a :class:`pykafka.protocol.FetchPartitionRequest` for this
+            partition.
+
+        :param max_bytes: The number of bytes of messages to
+            attempt to fetch
+        :type max_bytes: int
         """
         return PartitionFetchRequest(
             self.partition.topic.name, self.partition.id,
             self.next_offset, max_bytes)
 
     def build_offset_commit_request(self):
-        """Create a PartitionOffsetCommitRequest for this partition
+        """Create a :class:`pykafka.protocol.PartitionOffsetCommitRequest`
+            for this partition
         """
         return PartitionOffsetCommitRequest(
             self.partition.topic.name,
@@ -421,8 +469,7 @@ class OwnedPartition(object):
         )
 
     def consume(self):
-        """Get a single message from this partition
-        """
+        """Get a single message from this partition"""
         try:
             message = self._messages.get_nowait()
             self.last_offset_consumed = message.offset
@@ -431,6 +478,11 @@ class OwnedPartition(object):
             return None
 
     def enqueue_messages(self, messages):
+        """Put a set of messages into the internal message queue
+
+        :param messages: The messages to enqueue
+        :type messages: Iterable of :class:`pykafka.common.Message`
+        """
         for message in messages:
             if message.offset < self.last_offset_consumed:
                 continue
