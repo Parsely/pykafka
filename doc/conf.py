@@ -15,12 +15,17 @@ limitations under the License.
 """
 
 # -*- coding: utf-8 -*-
-import sys, os
-import samsa
+import os
+import sys
+import inspect
+currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+parentdir = os.path.dirname(currentdir)
+sys.path.append(parentdir)
+from version import version
 
-project = u'samsa'
-copyright = u'2012, DISQUS'
-version = release = samsa.__version__
+project = u'pykafka'
+copyright = u'2015, Parse.ly'
+version = release = version
 
 extensions = ['sphinx.ext.autodoc']
 
@@ -33,6 +38,7 @@ master_doc = 'index'
 
 html_theme = 'nature'
 pygments_style = 'sphinx'
-htmlhelp_basename = 'samsadoc'
+htmlhelp_basename = 'pykafkadoc'
 
-autodoc_default_flags = ['special-members', 'show-inheritance']
+autodoc_default_flags = ['special-members', 'undoc-members', 'private-members',
+                         'show-inheritance']

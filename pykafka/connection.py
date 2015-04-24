@@ -1,8 +1,7 @@
 from __future__ import division
 
 __license__ = """
-Copyright 2012 DISQUS
-Copyright 2013,2014 Parse.ly, Inc.
+Copyright 2015 Parse.ly, Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,7 +22,7 @@ import logging
 import socket
 import struct
 
-from pykafka.exceptions import SocketDisconnectedError
+from .exceptions import SocketDisconnectedError
 from .utils.socket import recvall_into
 
 logger = logging.getLogger(__name__)

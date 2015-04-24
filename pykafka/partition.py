@@ -1,7 +1,7 @@
 import logging
 
-from pykafka import base
-from pykafka.common import OffsetType
+import base
+from .common import OffsetType
 from .protocol import PartitionOffsetRequest
 
 logger = logging.getLogger(__name__)

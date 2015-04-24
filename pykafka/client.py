@@ -17,8 +17,8 @@ limitations under the License.
 
 import logging
 
-import pykafka
-from pykafka import handlers
+import handlers
+from cluster import Cluster
 
 try:
     import rd_kafka
@@ -69,7 +69,7 @@ class KafkaClient(object):
             logger.info('Using rd_kafka extensions.')
             raise NotImplementedError('Not yet')
         else:
-            self.cluster = pykafka.Cluster(
+            self.cluster = Cluster(
                 self._seed_hosts,
                 self._handler,
                 socket_timeout_ms=self._socket_timeout_ms,

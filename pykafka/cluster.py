@@ -8,8 +8,8 @@ import weakref
 from .broker import Broker
 from .topic import Topic
 from .protocol import ConsumerMetadataRequest, ConsumerMetadataResponse
-from pykafka.exceptions import (ConsumerCoordinatorNotAvailable,
-                                UnknownTopicOrPartition)
+from .exceptions import (ConsumerCoordinatorNotAvailable,
+                         UnknownTopicOrPartition)
 
 
 logger = logging.getLogger(__name__)

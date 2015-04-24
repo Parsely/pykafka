@@ -7,11 +7,11 @@ from Queue import Queue, Empty
 import weakref
 import threading
 
-from pykafka import base
-from pykafka.common import OffsetType
-from pykafka.exceptions import (OffsetOutOfRangeError, UnknownTopicOrPartition,
-                                OffsetMetadataTooLarge, OffsetsLoadInProgress,
-                                NotCoordinatorForConsumer)
+import base
+from .common import OffsetType
+from .exceptions import (OffsetOutOfRangeError, UnknownTopicOrPartition,
+                         OffsetMetadataTooLarge, OffsetsLoadInProgress,
+                         NotCoordinatorForConsumer)
 
 from .utils.error_handlers import handle_partition_responses, raise_error
 from .protocol import (PartitionFetchRequest, PartitionOffsetCommitRequest,
@@ -158,7 +158,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         }
 
     def _discover_offset_manager(self):
-        self._offset_manager = self._cluster.get_offset_manager(self._consumer_group)
+        if self._consumer_group is not None:
+            self._offset_manager = self._cluster.get_offset_manager(self._consumer_group)
 
     @property
     def topic(self):

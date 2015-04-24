@@ -1,2 +1,0 @@
-include kafka/test/kafka-run-class.sh
-recursive-exclude tests *

@@ -2,7 +2,7 @@ import mock
 import time
 import unittest2
 
-from pykafka.pykafka.simpleconsumer import OwnedPartition
+from pykafka.simpleconsumer import OwnedPartition
 
 
 class TestOwnedPartition(unittest2.TestCase):

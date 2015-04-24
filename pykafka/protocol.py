@@ -49,9 +49,8 @@ import struct
 from collections import defaultdict, namedtuple
 from zlib import crc32
 
-from pykafka import common
-from pykafka.common import CompressionType
-from pykafka.exceptions import ERROR_CODES
+from .common import CompressionType, Message
+from .exceptions import ERROR_CODES
 from .utils import Serializable, compression, struct_helpers
 
 
@@ -101,7 +100,7 @@ class Response(object):
                 clsname, response))
 
 
-class Message(common.Message, Serializable):
+class Message(Message, Serializable):
     """Representation of a Kafka Message
 
     NOTE: Compression is handled in the protocol because

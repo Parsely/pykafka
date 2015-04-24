@@ -5,14 +5,14 @@ import time
 import logging
 from collections import defaultdict
 
-from pykafka import base
-from pykafka.common import CompressionType
-from pykafka.exceptions import (
+import base
+from .common import CompressionType
+from .exceptions import (
     UnknownTopicOrPartition, NotLeaderForPartition, RequestTimedOut,
     ProduceFailureError, SocketDisconnectedError, InvalidMessageError,
     InvalidMessageSize, MessageSizeTooLarge
 )
-from pykafka.partitioners import random_partitioner
+from .partitioners import random_partitioner
 from .protocol import Message, ProduceRequest
 
 
