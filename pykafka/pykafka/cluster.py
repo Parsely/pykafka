@@ -24,15 +24,30 @@ class TopicDict(dict):
 
     def __missing__(self, key):
         logger.info('Topic %s not found. Attempting to auto-create.', key)
-        # Auto-creating will take a moment, so we try 3 times.
-        for i in xrange(3):
-            self._cluster.brokers[0].request_metadata(topics=[key])
+        if self._create_topic(key):
+            return self[key]
+        else:
+            raise UnknownTopicOrPartition('Unknown topic: {}'.format(key))
+
+    def _create_topic(self, topic_name):
+        """Auto-create a topic.
+
+        Not exposed in the cluster or broker because this is *only*
+        auto-creation.  When there's a real API for creating topics,
+        with settings and everything, we'll implement that. To expose just
+        this now would be disingenuous, since it's features would be hobbled.
+        """
+        # Auto-creating will take a moment, so we try 5 times.
+        for i in xrange(5):
+            # Auto-creating is as simple as issuing a metadata request
+            # solely for that topic.  The update is just to be sure
+            # our `Cluster` knows about it.
+            self._cluster.brokers[0].request_metadata(topics=[topic_name])
             self._cluster.update()
-            if key in self:
-                logger.info('Topic %s successfully created.', key)
-                return self[key]
+            if topic_name in self:
+                logger.info('Topic %s successfully auto-created.', topic_name)
+                return True
             time.sleep(0.1)
-        raise UnknownTopicOrPartition('Unknown topic: {}'.format(key))
 
 
 class Cluster(object):
