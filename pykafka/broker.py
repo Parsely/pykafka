@@ -43,7 +43,10 @@ class Broker(base.BaseBroker):
                  socket_timeout_ms,
                  offsets_channel_socket_timeout_ms,
                  buffer_size=64 * 1024):
-        """Create a Broker instance
+        """Create a Broker instance.
+
+        A Broker is an abstraction over a real kafka server instance.
+        It is used to perform requests to these servers.
 
         :param id_: The id number of this broker
         :type id_: int
