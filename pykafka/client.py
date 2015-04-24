@@ -17,7 +17,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-__all__ = ["KafkaClient"]
 import handlers
 import logging
 from cluster import Cluster
