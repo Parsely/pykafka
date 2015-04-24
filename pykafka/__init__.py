@@ -10,5 +10,7 @@ from topic import Topic
 from client import KafkaClient
 from balancedconsumer import BalancedConsumer
 
-__all__ = ["Broker", "SimpleConsumer", "Cluster", "Partition", "Producer",
-           "Topic", "KafkaClient", "BalancedConsumer"]
+__all__ = ["broker", "Broker", "simpleconsumer", "SimpleConsumer", "cluster",
+           "Cluster", "partition", "Partition", "producer", "Producer",
+           "topic", "Topic", "client", "KafkaClient", "balancedconsumer",
+           "BalancedConsumer"]
