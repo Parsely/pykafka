@@ -1,6 +1,5 @@
 """
-@author Keith Bourgoin
-@author Emmett Butler
+Author: Keith Bourgoin, Emmett Butler
 """
 __license__ = """
 Copyright 2015 Parse.ly, Inc.
