@@ -18,6 +18,7 @@ API Documentation
    :glob:
 
    api/*
+   utils/*
 
 ******************
 Indices and tables
