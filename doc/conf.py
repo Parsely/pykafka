@@ -1,5 +1,5 @@
 __license__ = """
-Copyright 2012 DISQUS
+Copyright 2015 Parse.ly, Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -40,5 +40,4 @@ html_theme = 'sphinx_rtd_theme'
 pygments_style = 'sphinx'
 htmlhelp_basename = 'pykafkadoc'
 
-autodoc_default_flags = ['special-members', 'undoc-members', 'private-members',
-                         'show-inheritance']
+autodoc_default_flags = ['special-members', 'private-members', 'show-inheritance']
