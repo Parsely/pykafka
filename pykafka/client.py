@@ -41,7 +41,7 @@ class KafkaClient(object):
                  exclude_internal_topics=True):
         """Create a connection to a Kafka cluster.
 
-        :param hosts: Comma-separated list of seed hosts to used to connect.
+        :param hosts: Comma-separated list of kafka hosts to used to connect.
         :type hosts: str
         :param use_greenlets: If True, use gevent instead of threading.
         :type use_greenlets: bool

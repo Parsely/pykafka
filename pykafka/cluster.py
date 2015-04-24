@@ -1,21 +1,37 @@
 from __future__ import division
+"""
+Author: Keith Bourgoin
+"""
+__license__ = """
+Copyright 2015 Parse.ly, Inc.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
 
 import logging
-import time
 import random
+import time
 
 from .broker import Broker
-from .topic import Topic
-from .protocol import ConsumerMetadataRequest, ConsumerMetadataResponse
 from .exceptions import ConsumerCoordinatorNotAvailable
+from .protocol import ConsumerMetadataRequest, ConsumerMetadataResponse
+from .topic import Topic
 
 
 logger = logging.getLogger(__name__)
 
 
 class Cluster(object):
-    """Cluster implementation used to populate the KafkaClient."""
-
     def __init__(self,
                  hosts,
                  handler,
@@ -23,6 +39,29 @@ class Cluster(object):
                  offsets_channel_socket_timeout_ms=10 * 1000,
                  socket_receive_buffer_bytes=64 * 1024,
                  exclude_internal_topics=True):
+        """Create a new Cluster instance.
+
+        A Cluster is a high-level abstraction of the collection of brokers and
+        topics that makes up a real kafka cluster.
+
+        :param hosts: Comma-separated list of kafka hosts to used to connect.
+        :type hosts: str
+        :param handler: The concurrency handler for network requests.
+        :type handler: :class:`pykafka.handlers.Handler`
+        :param socket_timeout_ms: The socket timeout (in milliseconds) for
+            network requests
+        :type socket_timeout_ms: int
+        :param offsets_channel_socket_timeout_ms: The socket timeout (in
+            milliseconds) when reading responses for offset commit and
+            offset fetch requests.
+        :type offsets_channel_socket_timeout_ms: int
+        :param socket_receive_buffer_bytes: The size (in bytes) of the socket
+            receive buffer for network requests.
+        :type socket_receive_buffer_bytes: int
+        :param exclude_internal_topics: Whether messages from internal topics
+            (specifically, the offsets topic) should be exposed to consumers.
+        :type exclude_internal_topics: bool
+        """
         self._seed_hosts = hosts
         self._socket_timeout_ms = socket_timeout_ms
         self._offsets_channel_socket_timeout_ms = offsets_channel_socket_timeout_ms
@@ -35,18 +74,21 @@ class Cluster(object):
 
     @property
     def brokers(self):
+        """The dict of known brokers for this cluster"""
         return self._brokers
 
     @property
     def topics(self):
+        """The dict of known topics for this cluster"""
         return self._topics
 
     @property
     def handler(self):
+        """The concurrency handler for network requests"""
         return self._handler
 
     def _get_metadata(self):
-        """Get fresh cluster metadata from a broker"""
+        """Get fresh cluster metadata from a broker."""
         # Works either on existing brokers or seed_hosts list
         brokers = [b for b in self.brokers.values() if b.connected]
         if brokers:
@@ -75,9 +117,9 @@ class Cluster(object):
     def _update_brokers(self, broker_metadata):
         """Update brokers with fresh metadata.
 
-        :param broker_metadata: Metadata for all brokers
-        :type broker_metadata: Dict of `{name: metadata}` where `metadata is
-            :class:`kafka.pykafka.protocol.BrokerMetadata`
+        :param broker_metadata: Metadata for all brokers.
+        :type broker_metadata: Dict of `{name: metadata}` where `metadata` is
+            :class:`pykafka.protocol.BrokerMetadata` and `name` is str.
         """
         # FIXME: A cluster with no topics returns no brokers in metadata
         # Remove old brokers
@@ -106,9 +148,9 @@ class Cluster(object):
     def _update_topics(self, metadata):
         """Update topics with fresh metadata.
 
-        :param metadata: Metadata for all topics
+        :param metadata: Metadata for all topics.
         :type metadata: Dict of `{name, metadata}` where `metadata` is
-            :class:`kafka.pykafka.protocol.TopicMetadata`
+            :class:`pykafka.protocol.TopicMetadata` and `name` is str.
         """
         # Remove old topics
         removed = set(self._topics.keys()) - set(metadata.keys())
@@ -125,17 +167,18 @@ class Cluster(object):
                     self._topics[name].update(meta)
 
     def _should_exclude_topic(self, topic_name):
-        """Return a boolean indicating whether this topic should be exluded."""
+        """Should this topic be excluded from the list shown to the client?"""
         if not self._exclude_internal_topics:
             return False
         return topic_name.startswith("__")
 
     def get_offset_manager(self, consumer_group):
-        """Get the designated as the offset manager for this consumer group.
+        """Get the broker designated as the offset manager for this consumer group.
 
         Based on Step 1 at https://cwiki.apache.org/confluence/display/KAFKA/Committing+and+fetching+consumer+offsets+in+Kafka
 
-        :param consumer_group: the name of the consumer group
+        :param consumer_group: The name of the consumer group for which to
+            find the offset manager.
         :type consumer_group: str
         """
         # arbitrarily choose a broker, since this request can go to any
@@ -166,4 +209,3 @@ class Cluster(object):
         metadata = self._get_metadata()
         self._update_brokers(metadata.brokers)
         self._update_topics(metadata.topics)
-        # N.B.: Partitions are updated as part of Topic updates.
