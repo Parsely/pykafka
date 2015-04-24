@@ -27,12 +27,13 @@ logger = logging.getLogger(__name__)
 
 
 class Partition(base.BasePartition):
+    """
+    A Partition is an abstraction over the kafka concept of a partition.
+    A kafka partition is a logical division of the logs for a topic. Its
+    messages are totally ordered.
+    """
     def __init__(self, topic, id_, leader, replicas, isr):
         """Instantiate a new Partition
-
-        A Partition is an abstraction over the kafka concept of a partition.
-        A kafka partition is a logical division of the logs for a topic. Its
-        messages are totally ordered.
 
         :param topic: The topic to which this Partition belongs
         :type topic: :class:`pykafka.topic.Topic`

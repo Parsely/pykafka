@@ -35,6 +35,11 @@ from .simpleconsumer import SimpleConsumer
 
 
 class BalancedConsumer():
+    """
+    Maintains a single instance of SimpleConsumer, periodically using the
+    consumer rebalancing algorithm to reassign partitions to this
+    SimpleConsumer.
+    """
     def __init__(self,
                  topic,
                  cluster,
@@ -58,10 +63,6 @@ class BalancedConsumer():
                  zookeeper=None,
                  auto_start=True):
         """Create a BalancedConsumer instance
-
-        Maintains a single instance of SimpleConsumer, periodically using the
-        consumer rebalancing algorithm to reassign partitions to this
-        SimpleConsumer.
 
         :param topic: The topic this consumer should consume
         :type topic: :class:`pykafka.topic.Topic`

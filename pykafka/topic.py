@@ -34,11 +34,12 @@ logger = logging.getLogger()
 
 
 class Topic(BaseTopic):
+    """
+    A Topic is an abstraction over the kafka concept of a topic.
+    It contains a dictionary of partitions that comprise it.
+    """
     def __init__(self, cluster, topic_metadata):
         """Create the Topic from metadata.
-
-        A Topic is an abstraction over the kafka concept of a topic.
-        It contains a dictionary of partitions that comprise it.
 
         :param cluster: The Cluster to use
         :type cluster: :class:`pykafka.cluster.Cluster`

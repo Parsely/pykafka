@@ -29,12 +29,13 @@ logger = logging.getLogger(__name__)
 
 
 class BrokerConnection(object):
+    """
+    BrokerConnection thinly wraps a `socket.create_connection` call
+    and handles the sending and receiving of data that conform to the
+    kafka binary protocol over that socket.
+    """
     def __init__(self, host, port, buffer_size=64 * 1024):
         """Initialize a socket connection to Kafka.
-
-        BrokerConnection thinly wraps a `socket.create_connection` call
-        and handles the sending and receiving of data that conform to the
-        kafka binary protocol over that socket.
 
         :param host: The host to which to connect
         :type host: str

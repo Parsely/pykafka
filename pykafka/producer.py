@@ -55,6 +55,10 @@ class AsyncProducer(base.BaseAsyncProducer):
 
 
 class Producer(base.BaseProducer):
+    """
+    This class implements the synchronous producer logic found in the
+    JVM driver.
+    """
     def __init__(self,
                  cluster,
                  topic,
@@ -67,9 +71,6 @@ class Producer(base.BaseProducer):
                  ack_timeout_ms=10000,
                  batch_size=200):
         """Instantiate a new Producer.
-
-        This class implements the synchronous producer logic found in the
-        JVM driver.
 
         :param cluster: The cluster to which to connect
         :type cluster: :class:`pykafka.cluster.Cluster`

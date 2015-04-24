@@ -69,6 +69,10 @@ class TopicDict(dict):
 
 
 class Cluster(object):
+    """
+    A Cluster is a high-level abstraction of the collection of brokers and
+    topics that makes up a real kafka cluster.
+    """
     def __init__(self,
                  hosts,
                  handler,
@@ -77,9 +81,6 @@ class Cluster(object):
                  socket_receive_buffer_bytes=64 * 1024,
                  exclude_internal_topics=True):
         """Create a new Cluster instance.
-
-        A Cluster is a high-level abstraction of the collection of brokers and
-        topics that makes up a real kafka cluster.
 
         :param hosts: Comma-separated list of kafka hosts to used to connect.
         :type hosts: str

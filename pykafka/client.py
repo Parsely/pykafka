@@ -32,6 +32,9 @@ logger = logging.getLogger(__name__)
 
 
 class KafkaClient(object):
+    """
+    A high-level pythonic client for Kafka
+    """
     def __init__(self,
                  hosts='127.0.0.1:9092',
                  use_greenlets=False,

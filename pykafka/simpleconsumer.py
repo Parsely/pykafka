@@ -36,6 +36,9 @@ from .utils.error_handlers import handle_partition_responses, raise_error
 
 
 class SimpleConsumer(base.BaseSimpleConsumer):
+    """
+    A non-balancing consumer for Kafka
+    """
     def __init__(self,
                  topic,
                  cluster,
