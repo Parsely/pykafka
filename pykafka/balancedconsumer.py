@@ -20,6 +20,7 @@ limitations under the License.
 __all__ = ["BalancedConsumer"]
 import itertools
 import logging as log
+import math
 import socket
 import time
 import weakref
@@ -246,32 +247,28 @@ class BalancedConsumer():
         """
         # Freeze and sort partitions so we always have the same results
         p_to_str = lambda p: '-'.join([p.topic.name, str(p.leader.id), str(p.id)])
-        all_partitions = self._topic.partitions.values()
-        all_partitions.sort(key=p_to_str)
+        all_parts = self._topic.partitions.values()
+        all_parts.sort(key=p_to_str)
 
         # get start point, # of partitions, and remainder
         participants.sort()  # just make sure it's sorted.
         idx = participants.index(self._consumer_id)
-        parts_per_consumer = len(all_partitions) / len(participants)
-        remainder_ppc = len(all_partitions) % len(participants)
+        parts_per_consumer = math.floor(len(all_parts) / len(participants))
+        remainder_ppc = len(all_parts) % len(participants)
 
         start = parts_per_consumer * idx + min(idx, remainder_ppc)
         num_parts = parts_per_consumer + (0 if (idx + 1 > remainder_ppc) else 1)
 
         # assign partitions from i*N to (i+1)*N - 1 to consumer Ci
-        new_partitions = itertools.islice(
-            all_partitions,
-            start,
-            start + num_parts
-        )
+        new_partitions = itertools.islice(all_parts, start, start + num_parts)
         new_partitions = set(new_partitions)
         log.info(
             'Balancing %i participants for %i partitions. '
             'My Partitions: %s -- Consumers: %s --- All Partitions: %s',
-            len(participants), len(all_partitions),
+            len(participants), len(all_parts),
             [p_to_str(p) for p in new_partitions],
             str(participants),
-            [p_to_str(p) for p in all_partitions]
+            [p_to_str(p) for p in all_parts]
         )
         return new_partitions
 
