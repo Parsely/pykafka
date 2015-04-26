@@ -103,7 +103,7 @@ class TestFetchAPI(unittest2.TestCase):
         response = protocol.FetchResponse(
             buffer('\x00\x00\x00\x01\x00\x04test\x00\x00\x00\x01\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00B\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x006\xa3 ^B\x00\x00\x00\x00\x00\x12test_partition_key\x00\x00\x00\x16this is a test message')
         )
-        self.assertEqual(response.topics['test'][0].error, 3)
+        self.assertEqual(response.topics['test'][0].err, 3)
 
     def test_response(self):
         resp = protocol.FetchResponse(
@@ -166,7 +166,7 @@ class TestOffsetAPI(unittest2.TestCase):
         response = protocol.OffsetResponse(
             buffer('\x00\x00\x00\x01\x00\x04test\x00\x00\x00\x01\x00\x00\x00\x00\x00\x03\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x02')
         )
-        self.assertEqual(response.topics['test'][0].error, 3)
+        self.assertEqual(response.topics['test'][0].err, 3)
 
     def test_response(self):
         resp = protocol.OffsetResponse(
@@ -206,7 +206,7 @@ class TestOffsetCommitFetchAPI(unittest2.TestCase):
         response = protocol.OffsetCommitResponse(
             buffer('\x00\x00\x00\x01\x00\x0cemmett.dummy\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00')
         )
-        self.assertEqual(response.topics['emmett.dummy'][0].error, 0)
+        self.assertEqual(response.topics['emmett.dummy'][0].err, 0)
 
     def test_offset_fetch_request(self):
         preq = protocol.PartitionOffsetFetchRequest('testtopic', 0)
