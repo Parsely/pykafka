@@ -48,7 +48,7 @@ def handle_partition_responses(response,
             owned_partition = None
             if partitions_by_id is not None:
                 owned_partition = partitions_by_id[partition_id]
-            parts_by_error[pres.error].append((owned_partition, pres))
+            parts_by_error[pres.err].append((owned_partition, pres))
 
     for errcode, parts in parts_by_error.iteritems():
         if errcode in error_handlers:

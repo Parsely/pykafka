@@ -22,7 +22,7 @@ Protocol implementation for Kafka 0.8
 The implementation has been done with an attempt to minimize memory
 allocations in order to improve performance. With the exception of
 compressed messages, we can calculate the size of the entire message
-to send and do only a single allocation.
+to send and do only a single memory allocation.
 
 For Reference:
 
@@ -489,6 +489,12 @@ class ProduceRequest(Request):
         return self._message_count
 
 
+ProducePartitionResponse = namedtuple(
+    'ProducePartitionResponse',
+    ['err', 'offset']
+)
+
+
 class ProduceResponse(Response):
     """Produce Response. Checks to make sure everything went okay.
 
@@ -511,7 +517,8 @@ class ProduceResponse(Response):
         for (topic, partitions) in response:
             self.topics[topic] = {}
             for partition in partitions:
-                self.topics[topic][partition[0]] = tuple(partition[1:3])
+                pres = ProducePartitionResponse(partition[1], partition[2])
+                self.topics[topic][partition[0]] = pres
 
 
 ##
@@ -622,7 +629,7 @@ class FetchRequest(Request):
 
 FetchPartitionResponse = namedtuple(
     'FetchPartitionResponse',
-    ['max_offset', 'messages', 'error']
+    ['max_offset', 'messages', 'err']
 )
 
 
@@ -751,7 +758,7 @@ class OffsetRequest(Request):
 
 OffsetPartitionResponse = namedtuple(
     'OffsetPartitionResponse',
-    ['offset', 'error']
+    ['offset', 'err']
 )
 
 
@@ -952,7 +959,7 @@ class OffsetCommitRequest(Request):
 
 OffsetCommitPartitionResponse = namedtuple(
     'OffsetCommitPartitionResponse',
-    ['error']
+    ['err']
 )
 
 
@@ -1059,7 +1066,7 @@ class OffsetFetchRequest(Request):
 
 OffsetFetchPartitionResponse = namedtuple(
     'OffsetFetchPartitionResponse',
-    ['offset', 'metadata', 'error']
+    ['offset', 'metadata', 'err']
 )
 
 

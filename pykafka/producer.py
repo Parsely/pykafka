@@ -141,28 +141,29 @@ class Producer(base.BaseProducer):
             response = broker.produce_messages(req)
 
             # Figure out if we need to retry any messages
+            # TODO: Convert to using utils.handle_partition_responses
             to_retry = []
             for topic, partitions in response.topics.iteritems():
-                for partition, (error, offset) in partitions.iteritems():
-                    if error == 0:
+                for partition, presponse in partitions.iteritems():
+                    if presponse.err == 0:
                         continue  # All's well
-                    if error == UnknownTopicOrPartition.ERROR_CODE:
-                        logger.warning('Unknown topic: %s or partition: %s. Retrying.',
-                                       self._topic, partition)
-                    elif error == NotLeaderForPartition.ERROR_CODE:
+                    if presponse.err == UnknownTopicOrPartition.ERROR_CODE:
+                        logger.warning('Unknown topic: %s or partition: %s. '
+                                       'Retrying.', topic, partition)
+                    elif presponse.err == NotLeaderForPartition.ERROR_CODE:
                         logger.warning('Partition leader for %s/%s changed. '
                                        'Retrying.', topic, partition)
                         # Update cluster metadata to get new leader
                         self._cluster.update()
-                    elif error == RequestTimedOut.ERROR_CODE:
+                    elif presponse.err == RequestTimedOut.ERROR_CODE:
                         logger.warning('Produce request to %s:%s timed out. '
                                        'Retrying.', broker.host, broker.port)
-                    elif error == InvalidMessageError.ERROR_CODE:
+                    elif presponse.err == InvalidMessageError.ERROR_CODE:
                         logger.warning('Encountered InvalidMessageError')
-                    elif error == InvalidMessageSize.ERROR_CODE:
+                    elif presponse.err == InvalidMessageSize.ERROR_CODE:
                         logger.warning('Encountered InvalidMessageSize')
                         continue
-                    elif error == MessageSizeTooLarge.ERROR_CODE:
+                    elif pres == MessageSizeTooLarge.ERROR_CODE:
                         logger.warning('Encountered MessageSizeTooLarge')
                         continue
                     to_retry.extend(_get_partition_msgs(partition, req))
