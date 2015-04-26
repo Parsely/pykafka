@@ -8,7 +8,7 @@ from pykafka.simpleconsumer import OwnedPartition
 class TestOwnedPartition(unittest2.TestCase):
     def test_partition_saves_offset(self):
         msgval = "test"
-        op = OwnedPartition(None, None)
+        op = OwnedPartition(None)
 
         message = mock.Mock()
         message.value = msgval
@@ -24,7 +24,7 @@ class TestOwnedPartition(unittest2.TestCase):
 
     def test_partition_rejects_old_message(self):
         last_offset = 400
-        op = OwnedPartition(None, None)
+        op = OwnedPartition(None)
         op.last_offset_consumed = last_offset
 
         message = mock.Mock()
@@ -37,7 +37,7 @@ class TestOwnedPartition(unittest2.TestCase):
         self.assertEqual(op.last_offset_consumed, last_offset)
 
     def test_partition_consume_empty_queue(self):
-        op = OwnedPartition(None, None)
+        op = OwnedPartition(None)
 
         message = op.consume()
         self.assertEqual(message, None)
@@ -49,7 +49,7 @@ class TestOwnedPartition(unittest2.TestCase):
         partition.topic = topic
         partition.id = 12345
 
-        op = OwnedPartition(partition, None)
+        op = OwnedPartition(partition)
         op.last_offset_consumed = 200
 
         rqtime = int(time.time())
@@ -69,7 +69,7 @@ class TestOwnedPartition(unittest2.TestCase):
         partition.topic = topic
         partition.id = 12345
 
-        op = OwnedPartition(partition, None)
+        op = OwnedPartition(partition)
 
         request = op.build_offset_fetch_request()
 
@@ -80,7 +80,7 @@ class TestOwnedPartition(unittest2.TestCase):
         res = mock.Mock()
         res.offset = 400
 
-        op = OwnedPartition(None, None)
+        op = OwnedPartition(None)
         op.set_offset(res.offset)
 
         self.assertEqual(op.last_offset_consumed, res.offset)
