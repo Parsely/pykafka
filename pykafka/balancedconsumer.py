@@ -250,6 +250,7 @@ class BalancedConsumer():
         all_partitions.sort(key=p_to_str)
 
         # get start point, # of partitions, and remainder
+        participants.sort()  # just make sure it's sorted.
         idx = participants.index(self._consumer_id)
         parts_per_consumer = len(all_partitions) / len(participants)
         remainder_ppc = len(all_partitions) % len(participants)
