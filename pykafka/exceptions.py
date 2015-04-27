@@ -144,5 +144,8 @@ ERROR_CODES = dict(
                 NotLeaderForPartition,
                 RequestTimedOut,
                 MessageSizeTooLarge,
-                OffsetMetadataTooLarge)
+                OffsetMetadataTooLarge,
+                OffsetsLoadInProgress,
+                ConsumerCoordinatorNotAvailable,
+                NotCoordinatorForConsumer)
 )
