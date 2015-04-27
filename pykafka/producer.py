@@ -163,7 +163,7 @@ class Producer(base.BaseProducer):
                     elif presponse.err == InvalidMessageSize.ERROR_CODE:
                         logger.warning('Encountered InvalidMessageSize')
                         continue
-                    elif pres == MessageSizeTooLarge.ERROR_CODE:
+                    elif presponse.err == MessageSizeTooLarge.ERROR_CODE:
                         logger.warning('Encountered MessageSizeTooLarge')
                         continue
                     to_retry.extend(_get_partition_msgs(partition, req))
