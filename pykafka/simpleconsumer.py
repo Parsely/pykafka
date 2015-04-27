@@ -163,6 +163,14 @@ class SimpleConsumer(base.BaseSimpleConsumer):
             self.fetch_offsets()
         self._fetch_workers = self._setup_fetch_workers()
 
+    def __repr__(self):
+        return "<{}.{} at {} (consumer_group={})>".format(
+            self.__class__.__module__,
+            self.__class__.__name__,
+            hex(id(self)),
+            self._consumer_group
+        )
+
     def _build_default_error_handlers(self):
         """Set up the error handlers to use for partition errors."""
         def _handle_OffsetOutOfRangeError(parts):

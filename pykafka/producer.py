@@ -113,6 +113,13 @@ class Producer(base.BaseProducer):
         self._ack_timeout_ms = ack_timeout_ms
         self._batch_size = batch_size
 
+    def __repr__(self):
+        return "<{}.{} at {}>".format(
+            self.__class__.__module__,
+            self.__class__.__name__,
+            hex(id(self))
+        )
+
     def _send_request(self, broker, req, attempt):
         """Send the produce request to the broker and handle the response.
 

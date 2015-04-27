@@ -51,6 +51,14 @@ class Topic(BaseTopic):
         self._partitions = {}
         self.update(topic_metadata)
 
+    def __repr__(self):
+        return "<{}.{} at {} (name={})>".format(
+            self.__class__.__module__,
+            self.__class__.__name__,
+            hex(id(self)),
+            self._name
+        )
+
     @property
     def name(self):
         """The name of this topic"""

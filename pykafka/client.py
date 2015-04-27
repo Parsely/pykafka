@@ -85,6 +85,14 @@ class KafkaClient(object):
         self.brokers = self.cluster.brokers
         self.topics = self.cluster.topics
 
+    def __repr__(self):
+        return "<{}.{} at {} (hosts={})>".format(
+            self.__class__.__module__,
+            self.__class__.__name__,
+            hex(id(self)),
+            self._seed_hosts,
+        )
+
     def update_cluster(self):
         """Update known brokers and topics.
 

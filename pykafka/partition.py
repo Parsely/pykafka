@@ -53,6 +53,14 @@ class Partition(base.BasePartition):
         self._isr = isr
         self._topic = topic
 
+    def __repr__(self):
+        return "<{}.{} at {} (id={})>".format(
+            self.__class__.__module__,
+            self.__class__.__name__,
+            hex(id(self)),
+            self._id,
+        )
+
     @property
     def id(self):
         """The identifying int for this partition, unique within its topic"""

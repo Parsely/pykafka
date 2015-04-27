@@ -110,6 +110,14 @@ class Cluster(object):
         self._exclude_internal_topics = exclude_internal_topics
         self.update()
 
+    def __repr__(self):
+        return "<{}.{} at {} (hosts={})>".format(
+            self.__class__.__module__,
+            self.__class__.__name__,
+            hex(id(self)),
+            self._seed_hosts,
+        )
+
     @property
     def brokers(self):
         """The dict of known brokers for this cluster"""

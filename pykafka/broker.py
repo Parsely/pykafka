@@ -82,6 +82,16 @@ class Broker(base.BaseBroker):
         self._buffer_size = buffer_size
         self.connect()
 
+    def __repr__(self):
+        return "<{}.{} at {} (host={}, port={}, id={})>".format(
+            self.__class__.__module__,
+            self.__class__.__name__,
+            hex(id(self)),
+            self._host,
+            self._port,
+            self._id
+        )
+
     @classmethod
     def from_metadata(cls,
                       metadata,
