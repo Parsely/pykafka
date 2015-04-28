@@ -99,4 +99,4 @@ class BrokerConnection(object):
         size = struct.unpack('!i', size)[0]
         output = bytearray(size)
         recvall_into(self._socket, output, self._buffer_size)
-        return memoryview(output)[4:]  # skip past correlation-id
+        return buffer(output)[4:]  # skip past correlation-id
