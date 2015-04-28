@@ -176,7 +176,7 @@ class Cluster(object):
         # Add/update current brokers
         for id_, meta in broker_metadata.iteritems():
             if id_ not in self._brokers:
-                logger.info('Discovered broker %s:%s', meta.host, meta.port)
+                logger.info('Discovered broker id_: %s:%s', id_, meta.host, meta.port)
                 self._brokers[id_] = Broker.from_metadata(
                     meta, self._handler, self._socket_timeout_ms,
                     self._offsets_channel_socket_timeout_ms,
