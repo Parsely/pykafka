@@ -60,7 +60,7 @@ class TopicDict(dict):
             # Auto-creating is as simple as issuing a metadata request
             # solely for that topic.  The update is just to be sure
             # our `Cluster` knows about it.
-            self._cluster.brokers[0].request_metadata(topics=[topic_name])
+            self._cluster.brokers[self._cluster.brokers.keys()[0]].request_metadata(topics=[topic_name])
             self._cluster.update()
             if topic_name in self:
                 logger.info('Topic %s successfully auto-created.', topic_name)
