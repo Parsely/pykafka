@@ -61,7 +61,7 @@ from collections import defaultdict, namedtuple
 from zlib import crc32
 
 from .common import CompressionType, Message
-from .exceptions import ERROR_CODES
+from .exceptions import ERROR_CODES, NoMessagesConsumedError
 from .utils import Serializable, compression, struct_helpers
 
 
@@ -259,16 +259,21 @@ class MessageSet(Serializable):
         """Decode a serialized MessageSet."""
         messages = []
         offset = 0
+        attempted = False
         while offset < len(buff):
             # TODO: Check we have enough bytes to get msg offset/size
             msg_offset, size = struct.unpack_from('!qi', buff, offset)
             offset += 12
+            attempted = True
+            if len(buff) - offset < size:
+                break
             # TODO: Check we have all the requisite bytes
-            # TODO: Handle messages larger than ``max_bytes``
             message = Message.decode(buff[offset:offset + size], msg_offset)
             # print '[%d] (%s) %s' % (message.offset, message.partition_key, message.value)
             messages.append(message)
             offset += size
+        if len(messages) == 0 and attempted:
+            raise NoMessagesConsumedError()
         return MessageSet(messages=messages)
 
     def pack_into(self, buff, offset):

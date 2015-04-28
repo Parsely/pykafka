@@ -34,6 +34,10 @@ class ProduceFailureError(KafkaException):
     """Indicates a generic failure in the producer"""
     pass
 
+class NoMessagesConsumedError(KafkaException):
+    """Indicates that no messages were returned from a MessageSet"""
+    pass
+
 
 # Protocol Client Exceptions
 # https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol#AGuideToTheKafkaProtocol-ErrorCodes

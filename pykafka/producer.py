@@ -206,6 +206,7 @@ class Producer(base.BaseProducer):
                 value = message
             else:
                 key, value = message
+            value = str(value)
             yield (key, value), self._partitioner(partitions, message).id
 
     def _produce(self, message_partition_tups, attempt):
