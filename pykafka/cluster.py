@@ -78,7 +78,6 @@ class Cluster(object):
                  handler,
                  socket_timeout_ms=30 * 1000,
                  offsets_channel_socket_timeout_ms=10 * 1000,
-                 socket_receive_buffer_bytes=64 * 1024,
                  exclude_internal_topics=True):
         """Create a new Cluster instance.
 
@@ -93,9 +92,6 @@ class Cluster(object):
             milliseconds) when reading responses for offset commit and
             offset fetch requests.
         :type offsets_channel_socket_timeout_ms: int
-        :param socket_receive_buffer_bytes: The size (in bytes) of the socket
-            receive buffer for network requests.
-        :type socket_receive_buffer_bytes: int
         :param exclude_internal_topics: Whether messages from internal topics
             (specifically, the offsets topic) should be exposed to consumers.
         :type exclude_internal_topics: bool
@@ -106,7 +102,6 @@ class Cluster(object):
         self._handler = handler
         self._brokers = {}
         self._topics = TopicDict(self)
-        self._socket_receive_buffer_bytes = socket_receive_buffer_bytes
         self._exclude_internal_topics = exclude_internal_topics
         self.update()
 
@@ -150,7 +145,7 @@ class Cluster(object):
                     broker = Broker(-1, h, p, self._handler,
                                     self._socket_timeout_ms,
                                     self._offsets_channel_socket_timeout_ms,
-                                    buffer_size=self._socket_receive_buffer_bytes)
+                                    buffer_size=1024 * 1024)
                     response = broker.request_metadata()
                     if response is not None:
                         return response
@@ -180,7 +175,7 @@ class Cluster(object):
                 self._brokers[id_] = Broker.from_metadata(
                     meta, self._handler, self._socket_timeout_ms,
                     self._offsets_channel_socket_timeout_ms,
-                    buffer_size=self._socket_receive_buffer_bytes
+                    buffer_size=1024 * 1024
                 )
             else:
                 broker = self._brokers[id_]

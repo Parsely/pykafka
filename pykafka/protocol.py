@@ -545,7 +545,7 @@ class PartitionFetchRequest(_PartitionFetchRequest):
     :ivar offset: Offset at which to start reading
     :ivar max_bytes: Max bytes to read from this partition (default: 300kb)
     """
-    def __new__(cls, topic, partition, offset, max_bytes=307200):
+    def __new__(cls, topic, partition, offset, max_bytes=1024*1024):
         return super(PartitionFetchRequest, cls).__new__(
             cls, topic, partition, offset, max_bytes)
 

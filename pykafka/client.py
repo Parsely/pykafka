@@ -41,7 +41,6 @@ class KafkaClient(object):
                  socket_timeout_ms=30 * 1000,
                  offsets_channel_socket_timeout_ms=10 * 1000,
                  ignore_rdkafka=False,
-                 socket_receive_buffer_bytes=64 * 1024,
                  exclude_internal_topics=True):
         """Create a connection to a Kafka cluster.
 
@@ -58,9 +57,6 @@ class KafkaClient(object):
         :type offsets_channel_socket_timeout_ms: int
         :param ignore_rdkafka: Don't use rdkafka, even if installed.
         :type ignore_rdkafka: bool
-        :param socket_receive_buffer_bytes: The size (in bytes) of the socket
-            receive buffer for network requests.
-        :type socket_receive_buffer_bytes: int
         :param exclude_internal_topics: Whether messages from internal topics
             (specifically, the offsets topic) should be exposed to the consumer.
         :type exclude_internal_topics: bool
@@ -79,7 +75,6 @@ class KafkaClient(object):
                 self._handler,
                 socket_timeout_ms=self._socket_timeout_ms,
                 offsets_channel_socket_timeout_ms=self._offsets_channel_socket_timeout_ms,
-                socket_receive_buffer_bytes=socket_receive_buffer_bytes,
                 exclude_internal_topics=exclude_internal_topics
             )
         self.brokers = self.cluster.brokers

@@ -47,7 +47,7 @@ class Broker(base.BaseBroker):
                  handler,
                  socket_timeout_ms,
                  offsets_channel_socket_timeout_ms,
-                 buffer_size=64 * 1024):
+                 buffer_size=1024 * 1024):
         """Create a Broker instance.
 
         :param id_: The id number of this broker
