@@ -89,6 +89,8 @@ them with:
 
 ::
 
+    >>> client.topics
+    {'my.test': <pykafka.topic.Topic at 0x19bc8c0 (name=my.test)>}
     >>> topic = client.topics['my.test']
 
 Once you've got a `Topic`, you can create a `Producer` for it and start
