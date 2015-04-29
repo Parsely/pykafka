@@ -208,9 +208,8 @@ class BalancedConsumer():
         :param timeout: Connection timeout (in milliseconds)
         :type timeout: int
         """
-        zk = KazooClient(zookeeper_connect, timeout=timeout / 1000)
-        zk.start()
-        return zk
+        self._zookeeper = KazooClient(zookeeper_connect, timeout=timeout / 1000)
+        self._zookeeper.start()
 
     def _setup_internal_consumer(self):
         """Instantiate an internal SimpleConsumer.
