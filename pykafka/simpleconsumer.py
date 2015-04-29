@@ -376,17 +376,18 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                 owned_partition.enqueue_messages(pres.messages)
 
         for broker, owned_partitions in self._partitions_by_leader.iteritems():
-            partition_reqs = []
+            partition_reqs = {}
             for owned_partition in owned_partitions:
                 # attempt to acquire lock, just pass if we can't
-                if owned_partition.lock.acquire(False) and \
-                        owned_partition.message_count < self._queued_max_messages:
-                    fetch_req = owned_partition.build_fetch_request(
-                        self._fetch_message_max_bytes)
-                    partition_reqs.append((owned_partition, fetch_req))
+                if owned_partition.lock.acquire(False):
+                    partition_reqs[owned_partition] = None
+                    if owned_partition.message_count < self._queued_max_messages:
+                        fetch_req = owned_partition.build_fetch_request(
+                            self._fetch_message_max_bytes)
+                        partition_reqs[owned_partition] = fetch_req
             if partition_reqs:
                 response = broker.fetch_messages(
-                    [a[1] for a in partition_reqs],
+                    [a for a in partition_reqs.itervalues() if a],
                     timeout=self._fetch_wait_max_ms,
                     min_bytes=self._fetch_min_bytes
                 )
@@ -395,7 +396,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                     self._default_error_handlers,
                     success_handler=_handle_success,
                     partitions_by_id=self._partitions_by_id)
-            for owned_partition, _ in partition_reqs:
+            for owned_partition in partition_reqs.iterkeys():
                 owned_partition.lock.release()
 
 
