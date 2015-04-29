@@ -261,7 +261,8 @@ class MessageSet(Serializable):
         offset = 0
         attempted = False
         while offset < len(buff):
-            # TODO: Check we have enough bytes to get msg offset/size
+            if len(buff) - offset < 12:
+                break
             msg_offset, size = struct.unpack_from('!qi', buff, offset)
             offset += 12
             attempted = True
