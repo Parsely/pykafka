@@ -240,7 +240,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
     def __iter__(self):
         """Yield an infinite stream of messages until the consumer times out"""
         while True:
-            message = self.consume()
+            message = self.consume(block=False)
             if not message and self._consumer_timed_out():
                 raise StopIteration
             yield message
@@ -252,14 +252,23 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         disp = (time.time() - self._last_message_time) * 1000.0
         return disp > self._consumer_timeout_ms
 
-    def consume(self):
-        """Get one message from the consumer."""
-        owned_partition = self.partition_cycle.next()
-        message = owned_partition.consume()
+    def consume(self, block=True):
+        """Get one message from the consumer.
 
-        if message:
-            self._last_message_time = time.time()
-            return message
+        :param block: Whether to block while waiting for a message
+        :type block: bool
+        """
+        self._last_message_time = time.time()
+        message = None
+        while not message and not self._consumer_timed_out():
+            owned_partition = self.partition_cycle.next()
+            message = owned_partition.consume()
+
+            if message:
+                self._last_message_time = time.time()
+                return message
+            if not block:
+                break
 
     def _auto_commit(self):
         """Commit offsets only if it's time to do so"""
