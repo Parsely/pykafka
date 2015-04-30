@@ -235,7 +235,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                     break
                 self.fetch()
                 time.sleep(.01)
-        log.info("Starting {} fetcher threads".format(self._num_consumer_fetchers))
+        log.info("Starting %s fetcher threads", self._num_consumer_fetchers)
         return [self._cluster.handler.spawn(fetcher)
                 for i in xrange(self._num_consumer_fetchers)]
 
@@ -331,7 +331,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
 
         for i in xrange(self._offsets_fetch_max_retries):
             if i > 0:
-                log.debug("Retrying")
+                log.info("Retrying")
 
             res = self._offset_manager.fetch_consumer_group_offsets(self._consumer_group, reqs)
             parts_by_error = handle_partition_responses(
@@ -342,7 +342,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
 
             if len(parts_by_error) == 1 and 0 in parts_by_error:
                 break
-            log.error("Error fetching offsets for topic %s", self._topic.name)
+            log.error("Error fetching offsets for topic %s (error codes: %s)",
+                      self._topic.name, parts_by_error.keys())
 
             # retry only OffsetsLoadInProgress responses
             reqs = [p.build_offset_fetch_request()
@@ -388,8 +389,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
 
         def _handle_success(parts):
             for owned_partition, pres in parts:
-                log.info("Fetched {} messages for partition {}"
-                         .format(len(pres.messages), owned_partition.partition.id))
+                log.info("Fetched %s messages for partition %s",
+                         len(pres.messages), owned_partition.partition.id)
                 owned_partition.enqueue_messages(pres.messages)
 
         for broker, owned_partitions in self._partitions_by_leader.iteritems():
