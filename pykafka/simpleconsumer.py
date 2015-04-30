@@ -1,3 +1,4 @@
+from __future__ import division
 """
 Author: Emmett Butler
 """
@@ -222,6 +223,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                     break
                 if self._auto_commit_enable:
                     self._auto_commit()
+                time.sleep(self._auto_commit_interval_ms / 1000)
         log.debug("Starting autocommitter thread")
         return self._cluster.handler.spawn(autocommitter)
 
