@@ -141,10 +141,10 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         self._discover_offset_manager()
 
         if partitions:
-            self._partitions = {OwnedPartition(p, self._consumer_timeout_ms): p
+            self._partitions = {OwnedPartition(p): p
                                 for p in partitions}
         else:
-            self._partitions = {OwnedPartition(p, self._consumer_timeout_ms): topic.partitions[k]
+            self._partitions = {OwnedPartition(p): topic.partitions[k]
                                 for k, p in topic.partitions.iteritems()}
         self._partitions_by_id = {p.partition.id: p
                                   for p in self._partitions.iterkeys()}
@@ -262,7 +262,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         message = None
         while not message and not self._consumer_timed_out():
             owned_partition = self.partition_cycle.next()
-            message = owned_partition.consume(block=block)
+            message = owned_partition.consume()
 
             if message:
                 self._last_message_time = time.time()
@@ -418,17 +418,12 @@ class OwnedPartition(object):
     """
 
     def __init__(self,
-                 partition,
-                 timeout):
+                 partition):
         """
         :param partition: The partition to hold
         :type partition: :class:`pykafka.partition.Partition`
-        :param timeout: Amount of time (in milliseconds) to block before
-            returning an empty result from consume()
-        :type timeout: int
         """
         self.partition = partition
-        self._timeout = timeout
         self._messages = Queue()
         self.last_offset_consumed = 0
         self.next_offset = 0
@@ -494,14 +489,10 @@ class OwnedPartition(object):
             self.partition.id
         )
 
-    def consume(self, block=True):
-        """Get a single message from this partition
-
-        :param block: Whether to block while waiting for a message
-        :type block: bool
-        """
+    def consume(self):
+        """Get a single message from this partition"""
         try:
-            message = self._messages.get(block, self._consumer_timeout_ms / 1000)
+            message = self._messages.get_nowait()
             self.last_offset_consumed = message.offset
             return message
         except Empty:
