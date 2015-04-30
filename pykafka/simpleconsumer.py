@@ -307,7 +307,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
             if 0 in parts_by_error:
                 parts_by_error.pop(0)
             errored_partitions = [op for code, err_group in parts_by_error.iteritems()
-                                  for op, res in err_group.iteritems()]
+                                  for op, res in err_group]
             reqs = [p.build_offset_commit_request() for p in errored_partitions]
 
     def fetch_offsets(self):
