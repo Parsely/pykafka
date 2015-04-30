@@ -222,13 +222,15 @@ class Cluster(object):
             find the offset manager.
         :type consumer_group: str
         """
+        logger.info("Attempting to discover offset manager for consumer group '%s'",
+                    consumer_group)
         # arbitrarily choose a broker, since this request can go to any
         broker = self.brokers[random.choice(self.brokers.keys())]
         MAX_RETRIES = 3
 
         for i in xrange(MAX_RETRIES):
             if i > 0:
-                logger.debug("Retrying")
+                logger.info("Retrying")
             time.sleep(i)
 
             req = ConsumerMetadataRequest(consumer_group)
@@ -236,13 +238,14 @@ class Cluster(object):
             try:
                 res = future.get(ConsumerMetadataResponse)
             except ConsumerCoordinatorNotAvailable:
-                logger.debug('Error discovering offset manager.')
+                logger.error('Error discovering offset manager.')
                 if i == MAX_RETRIES - 1:
                     raise
             else:
                 coordinator = self.brokers.get(res.coordinator_id, None)
                 if coordinator is None:
                     raise Exception('Coordinator broker with id {} not found'.format(res.coordinator_id))
+                logger.info("Found coordinatoe broker with id %s", res.coordinator_id)
                 return coordinator
 
     def update(self):
