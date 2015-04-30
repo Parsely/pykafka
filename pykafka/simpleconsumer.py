@@ -344,7 +344,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
             to_retry = []
             to_retry.extend(parts_by_error.get(OffsetsLoadInProgress.ERROR_CODE, []))
             to_retry.extend(parts_by_error.get(NotCoordinatorForConsumer.ERROR_CODE, []))
-            reqs = [p.build_offset_fetch_request() for p in to_retry]
+            reqs = [p.build_offset_fetch_request() for p, _ in to_retry]
 
     def _reset_offsets(self, errored_partitions):
         """Reset offsets after an error
