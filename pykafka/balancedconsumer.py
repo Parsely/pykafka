@@ -431,11 +431,15 @@ class BalancedConsumer():
         log.debug("Rebalance triggered by topic change")
         self._rebalance()
 
-    def consume(self):
-        """Get one message from the consumer"""
-        return self._consumer.consume()
+    def consume(self, block=True):
+        """Get one message from the consumer
+
+        :param block: Whether to block while waiting for a message
+        :type block: bool
+        """
+        return self._consumer.consume(block=block)
 
     def __iter__(self):
         """Yield an infinite stream of messages from this consumer."""
         while True:
-            yield self._consumer.consume()
+            yield self._consumer.consume(block=False)
