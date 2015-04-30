@@ -382,8 +382,6 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         Create a FetchRequest for each broker and send it. Enqueue each of the
         returned messages in the approprate OwnedPartition.
         """
-        log.info("Fetching messages")
-
         def _handle_success(parts):
             for owned_partition, pres in parts:
                 log.info("Fetched %s messages for partition %s",
