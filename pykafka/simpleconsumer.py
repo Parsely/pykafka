@@ -287,7 +287,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
             raise Exception("consumer group must be specified to commit offsets")
 
         reqs = [p.build_offset_commit_request() for p in self._partitions.keys()]
-        log.info("Committing offsets for %d partitions", len(reqs))
+        log.info("Committing offsets for %d partitions to broker id %s", len(reqs),
+                 self._offset_manager.id)
         for i in xrange(self._offsets_commit_max_retries):
             if i > 0:
                 log.debug("Retrying")

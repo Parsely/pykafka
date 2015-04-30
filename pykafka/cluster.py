@@ -245,7 +245,7 @@ class Cluster(object):
                 coordinator = self.brokers.get(res.coordinator_id, None)
                 if coordinator is None:
                     raise Exception('Coordinator broker with id {} not found'.format(res.coordinator_id))
-                logger.info("Found coordinatoe broker with id %s", res.coordinator_id)
+                logger.info("Found coordinator broker with id %s", res.coordinator_id)
                 return coordinator
 
     def update(self):
