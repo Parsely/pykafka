@@ -301,7 +301,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                 partitions_by_id=self._partitions_by_id)
             if len(parts_by_error) == 1 and 0 in parts_by_error:
                 break
-            log.error("Error committing offsets for topic %s", self._topic.name)
+            log.error("Error committing offsets for topic %s (error codes: %s)",
+                      self._topic.name, parts_by_error.keys())
 
             # retry only the partitions that errored
             if 0 in parts_by_error:
