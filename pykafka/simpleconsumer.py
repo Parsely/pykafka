@@ -501,7 +501,7 @@ class OwnedPartition(object):
         :type block: bool
         """
         try:
-            message = self._messages.get(block, self._timeout / 1000)
+            message = self._messages.get(block, self._consumer_timeout_ms / 1000)
             self.last_offset_consumed = message.offset
             return message
         except Empty:
