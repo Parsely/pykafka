@@ -22,7 +22,6 @@ import itertools
 import logging as log
 import time
 import threading
-import weakref
 from collections import defaultdict
 from Queue import Queue, Empty
 
@@ -113,11 +112,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
             before raising an error.
         :type consumer_timeout_ms: int
         """
-        if not isinstance(cluster, weakref.ProxyType) and \
-                not isinstance(cluster, weakref.CallableProxyType):
-            self._cluster = weakref.proxy(cluster)
-        else:
-            self._cluster = cluster
+        self._cluster = cluster
         self._consumer_group = consumer_group
         self._topic = topic
         self._fetch_message_max_bytes = fetch_message_max_bytes

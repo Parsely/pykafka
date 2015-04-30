@@ -23,7 +23,6 @@ import logging as log
 import math
 import socket
 import time
-import weakref
 from uuid import uuid4
 
 from kazoo.client import KazooClient
@@ -134,11 +133,7 @@ class BalancedConsumer():
             can be started with `start()`.
         :type auto_start: bool
         """
-        if not isinstance(cluster, weakref.ProxyType) and \
-                not isinstance(cluster, weakref.CallableProxyType):
-            self._cluster = weakref.proxy(cluster)
-        else:
-            self._cluster = cluster
+        self._cluster = cluster
         self._consumer_group = consumer_group
         self._topic = topic
 

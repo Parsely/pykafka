@@ -18,7 +18,6 @@ limitations under the License.
 """
 __all__ = ["Topic"]
 import logging
-import weakref
 from collections import defaultdict
 
 from base import BaseTopic
@@ -47,7 +46,7 @@ class Topic(BaseTopic):
         :type topic_metadata: :class:`pykafka.protocol.TopicMetadata`
         """
         self._name = topic_metadata.name
-        self._cluster = weakref.proxy(cluster)
+        self._cluster = cluster
         self._partitions = {}
         self.update(topic_metadata)
 
