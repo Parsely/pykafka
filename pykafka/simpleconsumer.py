@@ -345,9 +345,11 @@ class SimpleConsumer(base.BaseSimpleConsumer):
             log.error("Error fetching offsets for topic %s (error codes: %s)",
                       self._topic.name, parts_by_error.keys())
 
-            # retry only OffsetsLoadInProgress responses
-            reqs = [p.build_offset_fetch_request()
-                    for p in parts_by_error.get(OffsetsLoadInProgress.ERROR_CODE, [])]
+            # retry only specific error responses
+            to_retry = []
+            to_retry.extend(parts_by_error.get(OffsetsLoadInProgress.ERROR_CODE, []))
+            to_retry.extend(parts_by_error.get(NotCoordinatorForConsumer.ERROR_CODE, []))
+            reqs = [p.build_offset_fetch_request() for p in to_retry]
 
     def _reset_offsets(self, errored_partitions):
         """Reset offsets after an error
