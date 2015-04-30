@@ -304,7 +304,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
             log.error("Error committing offsets for topic %s", self._topic.name)
 
             # retry only the partitions that errored
-            parts_by_error.pop(0)
+            if 0 in parts_by_error:
+                parts_by_error.pop(0)
             errored_partitions = [op for err_group in parts_by_error.iteritems() for op in err_group]
             reqs = [p.build_offset_commit_request() for p in errored_partitions]
 
