@@ -388,8 +388,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         """
         def _handle_success(parts):
             for owned_partition, pres in parts:
-                log.info("Fetched %s messages for partition %s",
-                         len(pres.messages), owned_partition.partition.id)
+                log.debug("Fetched %s messages for partition %s",
+                          len(pres.messages), owned_partition.partition.id)
                 owned_partition.enqueue_messages(pres.messages)
 
         for broker, owned_partitions in self._partitions_by_leader.iteritems():
