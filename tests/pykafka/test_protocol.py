@@ -181,7 +181,7 @@ class TestOffsetCommitFetchAPI(unittest2.TestCase):
         msg = req.get_bytes()
         self.assertEqual(
             msg,
-            bytearray(b'\x00\x00\x00\x1b\x00\n\x00\x01\x00\x00\x00\x00\x00\x07pykafka\x00\x00\x00\x00\x00\x04test')
+            bytearray(b'\x00\x00\x00\x17\x00\n\x00\x01\x00\x00\x00\x00\x00\x07pykafka\x00\x04test')
         )
 
     def test_consumer_metadata_response(self):
