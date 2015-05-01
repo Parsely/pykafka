@@ -68,9 +68,12 @@ class Topic(BaseTopic):
         """A dictionary containing all known partitions for this topic"""
         return self._partitions
 
-    def get_producer(self):
-        """Create a :class:`pykafka.producer.Producer` for this topic"""
-        return Producer(self._cluster, self)
+    def get_producer(self, **kwargs):
+        """Create a :class:`pykafka.producer.Producer` for this topic.
+
+        For a description of all available `kwargs`, see the Producer docstring.
+        """
+        return Producer(self._cluster, self, **kwargs)
 
     def fetch_offset_limits(self, offsets_before, max_offsets=1):
         """Get earliest or latest offset.
