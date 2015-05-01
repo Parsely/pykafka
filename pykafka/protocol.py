@@ -806,8 +806,8 @@ class ConsumerMetadataRequest(Request):
 
     def __len__(self):
         """Length of the serialized message, in bytes"""
-        # Header + replicaId + len(self.consumer_group)
-        return self.HEADER_LEN + 4 + len(self.consumer_group) + 2
+        # Header + len(self.consumer_group)
+        return self.HEADER_LEN + 2 + len(self.consumer_group)
 
     @property
     def API_KEY(self):
@@ -823,7 +823,7 @@ class ConsumerMetadataRequest(Request):
         output = bytearray(len(self))
         self._write_header(output)
         cglen = len(self.consumer_group)
-        struct.pack_into('!h%ds' % cglen, output, self.HEADER_LEN + 4, cglen,
+        struct.pack_into('!h%ds' % cglen, output, self.HEADER_LEN, cglen,
                          self.consumer_group)
         return output
 
