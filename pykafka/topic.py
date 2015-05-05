@@ -94,7 +94,7 @@ class Topic(BaseTopic):
             ))
         output = {}
         for broker, reqs in requests.iteritems():
-            res = broker.request_offsets(reqs)
+            res = broker.request_offset_limits(reqs)
             output.update(res.topics[self.name])
         return output
 
