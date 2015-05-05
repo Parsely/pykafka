@@ -156,7 +156,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         if self._auto_commit_enable:
             self._autocommit_worker_thread = self._setup_autocommit_worker()
             # we need to get the most up-to-date offsets before starting consumption
-            self.fetch_offsets()
+            self._fetch_offsets()
         self._fetch_workers = self._setup_fetch_workers()
 
     def __repr__(self):
@@ -312,7 +312,18 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                                   for op, res in err_group]
             reqs = [p.build_offset_commit_request() for p in errored_partitions]
 
-    def fetch_offsets(self):
+    def get_committed_offsets(self):
+        """Return the last offset committed for each partition in this consumer
+
+        :return: dict mapping partition ids to last committed offset
+        """
+        self._fetch_offsets()
+        ret_offsets = {}
+        for owned_partition in self._partitions.keys():
+            ret_offsets[owned_partition.partition.id] = owned_partition.last_offset_consumed
+        return ret_offsets
+
+    def _fetch_offsets(self):
         """Fetch offsets for this consumer's topic
 
         Uses the offset commit/fetch API
