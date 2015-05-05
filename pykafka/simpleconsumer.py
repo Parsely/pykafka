@@ -355,9 +355,9 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                 success_handler=_handle_success,
                 partitions_by_id=self._partitions_by_id)
 
+            success_responses.extend([r for _, r in parts_by_error.get(0, [])])
             if len(parts_by_error) == 1 and 0 in parts_by_error:
                 return success_responses
-            success_responses.extend([r for _, r in parts_by_error.get(0, [])])
             log.error("Error fetching offsets for topic %s (error codes: %s)",
                       self._topic.name, parts_by_error.keys())
 
