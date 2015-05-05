@@ -331,6 +331,9 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         """Fetch offsets for this consumer's topic
 
         Uses the offset commit/fetch API
+
+        :return: List of (id, :class:`pykafka.protocol.OffsetFetchPartitionResponse`)
+            tuples
         """
         if not self._consumer_group:
             raise Exception("consumer group must be specified to fetch offsets")
@@ -355,7 +358,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                 success_handler=_handle_success,
                 partitions_by_id=self._partitions_by_id)
 
-            success_responses.extend([r for _, r in parts_by_error.get(0, [])])
+            success_responses.extend([(op.partition.id, r)
+                                      for op, r in parts_by_error.get(0, [])])
             if len(parts_by_error) == 1 and 0 in parts_by_error:
                 return success_responses
             log.error("Error fetching offsets for topic %s (error codes: %s)",
