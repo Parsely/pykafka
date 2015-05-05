@@ -55,7 +55,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                  offsets_channel_backoff_ms=1000,
                  offsets_commit_max_retries=5,
                  auto_offset_reset=OffsetType.LATEST,
-                 consumer_timeout_ms=-1):
+                 consumer_timeout_ms=-1,
+                 auto_start=True):
         """Create a SimpleConsumer.
 
         Settings and default values are taken from the Scala
@@ -111,6 +112,10 @@ class SimpleConsumer(base.BaseSimpleConsumer):
             consumer may spend without messages available for consumption
             before raising an error.
         :type consumer_timeout_ms: int
+        :param auto_start: Whether the consumer should begin communicating
+            with kafka after __init__ is complete. If false, communication
+            can be started with `start()`.
+        :type auto_start: bool
         """
         self._cluster = cluster
         self._consumer_group = consumer_group
@@ -126,6 +131,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         self._offsets_commit_max_retries = offsets_commit_max_retries
         # not directly configurable
         self._offsets_fetch_max_retries = offsets_commit_max_retries
+        self._auto_start = auto_start
 
         self._last_message_time = time.time()
 
@@ -151,13 +157,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
 
         self._default_error_handlers = self._build_default_error_handlers()
 
-        self._running = True
-
-        if self._auto_commit_enable:
-            self._autocommit_worker_thread = self._setup_autocommit_worker()
-            # we need to get the most up-to-date offsets before starting consumption
-            self._fetch_offsets()
-        self._fetch_workers = self._setup_fetch_workers()
+        if self._auto_start:
+            self.start()
 
     def __repr__(self):
         return "<{}.{} at {} (consumer_group={})>".format(
@@ -166,6 +167,20 @@ class SimpleConsumer(base.BaseSimpleConsumer):
             hex(id(self)),
             self._consumer_group
         )
+
+    def start(self):
+        """Begin communicating with Kafka, including setting up worker threads
+
+        Fetches offsets, starts an offset autocommitter worker pool, and
+        starts a message fetcher worker pool.
+        """
+        self._running = True
+
+        if self._auto_commit_enable:
+            self._autocommit_worker_thread = self._setup_autocommit_worker()
+            # we need to get the most up-to-date offsets before starting consumption
+            self._fetch_offsets()
+        self._fetch_workers = self._setup_fetch_workers()
 
     def _build_default_error_handlers(self):
         """Set up the error handlers to use for partition errors."""
