@@ -179,7 +179,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         if self._auto_commit_enable:
             self._autocommit_worker_thread = self._setup_autocommit_worker()
             # we need to get the most up-to-date offsets before starting consumption
-            self._fetch_offsets()
+            self.fetch_offsets()
         self._fetch_workers = self._setup_fetch_workers()
 
     def _build_default_error_handlers(self):
@@ -327,18 +327,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                                   for op, res in err_group]
             reqs = [p.build_offset_commit_request() for p in errored_partitions]
 
-    def get_committed_offsets(self):
-        """Return the last offset committed for each partition in this consumer
-
-        :return: dict mapping partition ids to last committed offset
-        """
-        self._fetch_offsets()
-        ret_offsets = {}
-        for owned_partition in self._partitions.keys():
-            ret_offsets[owned_partition.partition.id] = owned_partition.last_offset_consumed
-        return ret_offsets
-
-    def _fetch_offsets(self):
+    def fetch_offsets(self):
         """Fetch offsets for this consumer's topic
 
         Uses the offset commit/fetch API
@@ -353,6 +342,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         log.info("Fetching offsets")
 
         reqs = [p.build_offset_fetch_request() for p in self._partitions.keys()]
+        success_responses = []
 
         for i in xrange(self._offsets_fetch_max_retries):
             if i > 0:
@@ -366,7 +356,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                 partitions_by_id=self._partitions_by_id)
 
             if len(parts_by_error) == 1 and 0 in parts_by_error:
-                break
+                return success_responses
+            success_responses.extend([r for _, r in parts_by_error.get(0, [])])
             log.error("Error fetching offsets for topic %s (error codes: %s)",
                       self._topic.name, parts_by_error.keys())
 
