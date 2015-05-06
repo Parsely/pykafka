@@ -182,13 +182,14 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         """
         self._running = True
 
-        if self._reset_offset_on_start:
-            self._reset_offsets()
 
         if self._auto_commit_enable:
             self._autocommit_worker_thread = self._setup_autocommit_worker()
             # we need to get the most up-to-date offsets before starting consumption
-            self.fetch_offsets()
+            if self._reset_offset_on_start:
+                self._reset_offsets()
+            else:
+                self.fetch_offsets()
         self._fetch_workers = self._setup_fetch_workers()
 
     def _build_default_error_handlers(self):
