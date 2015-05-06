@@ -29,7 +29,7 @@ import base
 from .common import OffsetType
 from .exceptions import (OffsetOutOfRangeError, UnknownTopicOrPartition,
                          OffsetMetadataTooLarge, OffsetsLoadInProgress,
-                         NotCoordinatorForConsumer)
+                         NotCoordinatorForConsumer, ERROR_CODES)
 from .protocol import (PartitionFetchRequest, PartitionOffsetCommitRequest,
                        PartitionOffsetFetchRequest, PartitionOffsetRequest)
 from .utils.error_handlers import handle_partition_responses, raise_error
@@ -317,8 +317,10 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                 partitions_by_id=self._partitions_by_id)
             if len(parts_by_error) == 1 and 0 in parts_by_error:
                 break
-            log.error("Error committing offsets for topic %s (error codes: %s)",
-                      self._topic.name, parts_by_error.keys())
+            log.error("Error committing offsets for topic %s (errors: %s)",
+                      self._topic.name,
+                      {ERROR_CODES[err]: [op.partition.id for op, _ in parts]
+                       for err, parts in parts_by_error.iteritems()})
 
             # retry only the partitions that errored
             if 0 in parts_by_error:
@@ -362,8 +364,10 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                                       for op, r in parts_by_error.get(0, [])])
             if len(parts_by_error) == 1 and 0 in parts_by_error:
                 return success_responses
-            log.error("Error fetching offsets for topic %s (error codes: %s)",
-                      self._topic.name, parts_by_error.keys())
+            log.error("Error fetching offsets for topic %s (errors: %s)",
+                      self._topic.name,
+                      {ERROR_CODES[err]: [op.partition.id for op, _ in parts]
+                       for err, parts in parts_by_error.iteritems()})
 
             # retry only specific error responses
             to_retry = []
