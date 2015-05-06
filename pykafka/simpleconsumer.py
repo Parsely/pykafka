@@ -401,7 +401,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         if partitions is None:
             partitions = self._partitions.keys()
 
-        log.info("Resetting offsets for %s partitions".format(len(partitions)))
+        log.info("Resetting offsets for %s partitions", len(partitions))
 
         # group partitions by leader
         by_leader = defaultdict(list)
