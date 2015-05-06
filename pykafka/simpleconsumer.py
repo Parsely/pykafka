@@ -401,7 +401,9 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         if partitions is None:
             partitions = self._partitions.keys()
 
-        # group out-of-range partitions by leader
+        log.info("Resetting offsets for %s partitions".format(len(partitions)))
+
+        # group partitions by leader
         by_leader = defaultdict(list)
         for p in partitions:
             by_leader[p.partition.leader].append(p)

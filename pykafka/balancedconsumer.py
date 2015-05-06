@@ -219,8 +219,13 @@ class BalancedConsumer():
         disable its workers and mark it for garbage collection before
         creating a new one.
         """
+        reset_offset_on_start = self._reset_offset_on_start
         if self._consumer is not None:
             self._consumer.stop()
+            # only use this setting for the first call to
+            # _setup_internal_consumer. subsequent calls should not
+            # reset the offsets, since they can happen at any time
+            reset_offset_on_start = False
         self._consumer = SimpleConsumer(
             self._topic, self._cluster,
             consumer_group=self._consumer_group,
@@ -236,7 +241,7 @@ class BalancedConsumer():
             offsets_channel_backoff_ms=self._offsets_channel_backoff_ms,
             offsets_commit_max_retries=self._offsets_commit_max_retries,
             auto_offset_reset=self._auto_offset_reset,
-            reset_offset_on_start=self._reset_offset_on_start
+            reset_offset_on_start=reset_offset_on_start
         )
 
     def _decide_partitions(self, participants):
