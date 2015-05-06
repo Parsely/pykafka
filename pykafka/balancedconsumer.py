@@ -61,7 +61,8 @@ class BalancedConsumer():
                  zookeeper_connection_timeout_ms=6 * 1000,
                  zookeeper_connect='127.0.0.1:2181',
                  zookeeper=None,
-                 auto_start=True):
+                 auto_start=True,
+                 reset_offset_on_start=False):
         """Create a BalancedConsumer instance
 
         :param topic: The topic this consumer should consume
@@ -132,6 +133,10 @@ class BalancedConsumer():
             with zookeeper after __init__ is complete. If false, communication
             can be started with `start()`.
         :type auto_start: bool
+        :param reset_offset_on_start: Whether the consumer should reset its
+            internal offset counter to `self._auto_offset_reset` immediately
+            upon starting up
+        :type reset_offset_on_start: bool
         """
         self._cluster = cluster
         self._consumer_group = consumer_group
@@ -152,6 +157,7 @@ class BalancedConsumer():
         self._auto_offset_reset = auto_offset_reset
         self._zookeeper_connect = zookeeper_connect
         self._zookeeper_connection_timeout_ms = zookeeper_connection_timeout_ms
+        self._reset_offset_on_start = reset_offset_on_start
 
         self._consumer = None
         self._consumer_id = "{}:{}".format(socket.gethostname(), uuid4())
@@ -229,7 +235,8 @@ class BalancedConsumer():
             consumer_timeout_ms=self._consumer_timeout_ms,
             offsets_channel_backoff_ms=self._offsets_channel_backoff_ms,
             offsets_commit_max_retries=self._offsets_commit_max_retries,
-            auto_offset_reset=self._auto_offset_reset
+            auto_offset_reset=self._auto_offset_reset,
+            reset_offset_on_start=self._reset_offset_on_start
         )
 
     def _decide_partitions(self, participants):
