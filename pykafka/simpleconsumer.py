@@ -182,7 +182,6 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         """
         self._running = True
 
-
         if self._auto_commit_enable:
             self._autocommit_worker_thread = self._setup_autocommit_worker()
             # we need to get the most up-to-date offsets before starting consumption
@@ -402,7 +401,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         if partitions is None:
             partitions = self._partitions.keys()
 
-        log.info("Resetting offsets for %s partitions", len(partitions))
+        log.info("Resetting offsets for %s partitions", len(list(partitions)))
 
         # group partitions by leader
         by_leader = defaultdict(list)
