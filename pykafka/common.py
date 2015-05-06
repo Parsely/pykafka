@@ -36,12 +36,21 @@ class Message(object):
     pass
 
 class CompressionType(object):
-    """Enum for the various compressions supported."""
+    """Enum for the various compressions supported.
+
+    :cvar NONE: Indicates no compression in use
+    :cvar GZIP: Indicates gzip compression in use
+    :cvar SNAPPY: Indicates snappy compression in use
+    """
     NONE = 0
     GZIP = 1
     SNAPPY = 2
 
 class OffsetType(object):
-    """Enum for special values for earliest/latest offsets."""
+    """Enum for special values for earliest/latest offsets.
+
+    :cvar EARLIEST: Indicates the earliest offset available for a partition
+    :cvar LATEST: Indicates the latest offset available for a partition
+    """
     EARLIEST = -2
     LATEST = -1
