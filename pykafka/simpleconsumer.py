@@ -56,7 +56,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                  offsets_commit_max_retries=5,
                  auto_offset_reset=OffsetType.LATEST,
                  consumer_timeout_ms=-1,
-                 auto_start=True):
+                 auto_start=True,
+                 reset_offset_on_start=False):
         """Create a SimpleConsumer.
 
         Settings and default values are taken from the Scala
@@ -116,6 +117,10 @@ class SimpleConsumer(base.BaseSimpleConsumer):
             with kafka after __init__ is complete. If false, communication
             can be started with `start()`.
         :type auto_start: bool
+        :param reset_offset_on_start: Whether the consumer should reset its
+            internal offset counter to `self._auto_offset_reset` immediately
+            upon starting up
+        :type reset_offset_on_start: bool
         """
         self._cluster = cluster
         self._consumer_group = consumer_group
@@ -132,6 +137,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         # not directly configurable
         self._offsets_fetch_max_retries = offsets_commit_max_retries
         self._auto_start = auto_start
+        self._reset_offset_on_start = reset_offset_on_start
 
         self._last_message_time = time.time()
 
@@ -175,6 +181,9 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         starts a message fetcher worker pool.
         """
         self._running = True
+
+        if self._reset_offset_on_start:
+            self._reset_offsets()
 
         if self._auto_commit_enable:
             self._autocommit_worker_thread = self._setup_autocommit_worker()
@@ -375,23 +384,26 @@ class SimpleConsumer(base.BaseSimpleConsumer):
             to_retry.extend(parts_by_error.get(NotCoordinatorForConsumer.ERROR_CODE, []))
             reqs = [p.build_offset_fetch_request() for p, _ in to_retry]
 
-    def _reset_offsets(self, errored_partitions):
+    def _reset_offsets(self, partitions=None):
         """Reset offsets after an error
 
         Issue an OffsetRequest for each partition and set the appropriate
         returned offset in the OwnedPartition per self._auto_offset_reset
 
-        :param errored_partitions: the partitions with out-of-range offsets
-        :type errored_partitions: Iterable of
+        :param partitions: the partitions for which to reset offsets
+        :type partitions: Iterable of
             :class:`pykafka.simpleconsumer.OwnedPartition`
         """
         def _handle_success(parts):
             for owned_partition, pres in parts:
                 owned_partition.set_offset(pres.offset[0])
 
+        if partitions is None:
+            partitions = self._partitions.keys()
+
         # group out-of-range partitions by leader
         by_leader = defaultdict(list)
-        for p in errored_partitions:
+        for p in partitions:
             by_leader[p.partition.leader].append(p)
 
         # get valid offset ranges for each partition
