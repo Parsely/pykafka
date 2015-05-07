@@ -676,8 +676,7 @@ class FetchResponse(Response):
                 decompressed = compression.decode_gzip(message.value)
                 output += self._unpack_message_set(decompressed)
             elif message.compression_type == CompressionType.SNAPPY:
-                # Kafka is sending incompatible headers. Strip it off.
-                decompressed = compression.decode_snappy(message.value[20:])
+                decompressed = compression.decode_snappy(message.value)
                 output += self._unpack_message_set(decompressed)
         return output
 
