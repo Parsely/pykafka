@@ -303,7 +303,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
             self._last_auto_commit = time.time()
 
     def commit_offsets(self):
-        """Commit offsets for this consumer's topic
+        """Commit offsets for this consumer's partitions
 
         Uses the offset commit/fetch API
         """

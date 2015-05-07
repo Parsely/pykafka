@@ -446,6 +446,13 @@ class BalancedConsumer():
         """
         return self._consumer.consume(block=block)
 
+    def commit_offsets(self):
+        """Commit offsets for this consumer's partitions
+
+        Uses the offset commit/fetch API
+        """
+        self._consumer.commit_offsets()
+
     def __iter__(self):
         """Yield an infinite stream of messages from this consumer."""
         while True:
