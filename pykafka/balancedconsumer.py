@@ -455,5 +455,4 @@ class BalancedConsumer():
 
     def __iter__(self):
         """Yield an infinite stream of messages from this consumer."""
-        while True:
-            yield self._consumer.consume()
+        return self._consumer.__iter__()
