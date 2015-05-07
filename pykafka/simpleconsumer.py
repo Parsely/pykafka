@@ -252,7 +252,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                 if not self._running:
                     break
                 self.fetch()
-                time.sleep(.01)
+                time.sleep(.0001)
         log.info("Starting %s fetcher threads", self._num_consumer_fetchers)
         return [self._cluster.handler.spawn(fetcher)
                 for i in xrange(self._num_consumer_fetchers)]
