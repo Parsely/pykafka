@@ -451,7 +451,7 @@ class BalancedConsumer():
 
         Uses the offset commit/fetch API
         """
-        self._consumer.commit_offsets()
+        return self._consumer.commit_offsets()
 
     def __iter__(self):
         """Yield an infinite stream of messages from this consumer."""
