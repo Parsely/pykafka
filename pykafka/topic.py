@@ -79,7 +79,7 @@ class Topic(BaseTopic):
         """Get earliest or latest offset.
 
         Use the Offset API to find a limit of valid offsets for each partition
-            in this topic.
+        in this topic.
 
         :param offsets_before: Return an offset from before this timestamp (in
             milliseconds)

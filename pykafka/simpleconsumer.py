@@ -210,8 +210,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
     def _discover_offset_manager(self):
         """Set the offset manager for this consumer.
 
-        If a consumer group is not supplied to __init__, this method does
-            nothing
+        If a consumer group is not supplied to __init__, this method does nothing
         """
         if self._consumer_group is not None:
             self._offset_manager = self._cluster.get_offset_manager(self._consumer_group)
