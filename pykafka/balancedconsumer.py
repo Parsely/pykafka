@@ -226,6 +226,8 @@ class BalancedConsumer():
             # _setup_internal_consumer. subsequent calls should not
             # reset the offsets, since they can happen at any time
             reset_offset_on_start = False
+        if not self._partitions:
+            raise ValueError("No partitions assigned")
         self._consumer = SimpleConsumer(
             self._topic, self._cluster,
             consumer_group=self._consumer_group,
