@@ -278,9 +278,10 @@ class BalancedConsumer():
         new_partitions = set(new_partitions)
         log.info(
             'Balancing %i participants for %i partitions. '
-            'My Partitions: %s -- Consumers: %s --- All Partitions: %s',
+            '\nOwning %i partitions. '
+            '\nMy Partitions: %s -- Consumers: %s --- All Partitions: %s',
             len(participants), len(all_parts),
-            [p_to_str(p) for p in new_partitions],
+            len(new_partitions), [p_to_str(p) for p in new_partitions],
             str(participants),
             [p_to_str(p) for p in all_parts]
         )
