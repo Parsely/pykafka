@@ -367,21 +367,10 @@ class BalancedConsumer():
             self._consumer_id, self._topic.name)
         )
 
-        for i in xrange(self._rebalance_max_retries):
-            participants = self._get_participants()
-            new_partitions = self._decide_partitions(participants)
-
-            self._remove_partitions(self._partitions - new_partitions)
-
-            try:
-                self._add_partitions(new_partitions - self._partitions)
-                break
-            except NodeExistsError:
-                log.debug("Partition still owned")
-
-            log.debug("Retrying")
-            time.sleep(i * (self._rebalance_backoff_ms / 1000))
-
+        participants = self._get_participants()
+        new_partitions = self._decide_partitions(participants)
+        self._remove_partitions(self._partitions - new_partitions)
+        self._add_partitions(new_partitions - self._partitions)
         self._setup_internal_consumer()
 
     def _path_from_partition(self, p):
@@ -410,14 +399,39 @@ class BalancedConsumer():
 
         Also add these partitions to the consumer's internal partition registry.
 
+        Uses a retry loop for each partition individually. If a single retry
+        loop is used for the entire partition reassignment process, the
+        following error mode can occur: During the outer loop, at least one
+        partition is marked as owned by this consumer in zookeeper. Then, a
+        partition is encountered that has not yet been released by another
+        consumer. This causes the NodeExistsError. The entire outer loop is
+        later retried due to this failure. On the retry, the first partition
+        attempted has already been marked as owned by this consumer on the
+        previous try, so it again causes a NodeExistsError. This behavior
+        continues until _max_rebalance_retries has been reached, and the
+        consumer defaults to owning all of the partitions.
+
+        There may be a way to batch or otherwise optimize these partition-wise
+        retries.
+
         :param partitions: The partitions to add.
         :type partitions: Iterable of :class:`pykafka.partition.Partition`
         """
         for p in partitions:
-            self._zookeeper.create(
-                self._path_from_partition(p), self._consumer_id,
-                ephemeral=True
-            )
+            for i in xrange(self._rebalance_max_retries):
+                try:
+                    self._zookeeper.create(
+                        self._path_from_partition(p),
+                        value=self._consumer_id,
+                        ephemeral=True
+                    )
+                    break  # continue to next partition
+                except NodeExistsError:
+                    log.debug("Partition %s still owned", p.id)
+                    if i == self._rebalance_max_retries - 1:
+                        raise
+                log.debug("Retrying")
+                time.sleep(i * (self._rebalance_backoff_ms / 1000))
         self._partitions |= partitions
 
     def _brokers_changed(self, brokers):
