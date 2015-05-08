@@ -370,22 +370,10 @@ class BalancedConsumer():
             self._consumer_id, self._topic.name)
         )
 
-        for i in xrange(self._rebalance_max_retries):
-            participants = self._get_participants()
-            new_partitions = self._decide_partitions(participants)
-
-            self._remove_partitions(self._partitions - new_partitions)
-
-            try:
-                self._add_partitions(new_partitions - self._partitions)
-                break
-            except NodeExistsError:
-                log.debug("Partition still owned")
-
-            log.debug("Retrying")
-            self._remove_partitions()
-            time.sleep(i * (self._rebalance_backoff_ms / 1000))
-
+        participants = self._get_participants()
+        new_partitions = self._decide_partitions(participants)
+        self._remove_partitions(self._partitions - new_partitions)
+        self._add_partitions(new_partitions - self._partitions)
         self._setup_internal_consumer()
 
     def _path_from_partition(self, p):
@@ -395,7 +383,7 @@ class BalancedConsumer():
         """
         return "%s/%s-%s" % (self._topic_path, p.leader.id, p.id)
 
-    def _remove_partitions(self, partitions=None):
+    def _remove_partitions(self, partitions):
         """Remove partitions from the zookeeper registry for this consumer.
 
         Also remove these partitions from the consumer's internal
@@ -404,8 +392,6 @@ class BalancedConsumer():
         :param partitions: The partitions to remove.
         :type partitions: Iterable of :class:`pykafka.partition.Partition`
         """
-        if partitions is None:
-            partitions = self._partitions
         for p in partitions:
             assert p in self._partitions
             self._zookeeper.delete(self._path_from_partition(p))
