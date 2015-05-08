@@ -242,6 +242,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                 if self._auto_commit_enable:
                     self._auto_commit()
                 time.sleep(self._auto_commit_interval_ms / 1000)
+            log.debug("Autocommitter thread exiting")
         log.debug("Starting autocommitter thread")
         return self._cluster.handler.spawn(autocommitter)
 
@@ -253,6 +254,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                     break
                 self.fetch()
                 time.sleep(.0001)
+            log.debug("Fetcher thread exiting")
         log.info("Starting %s fetcher threads", self._num_consumer_fetchers)
         return [self._cluster.handler.spawn(fetcher)
                 for i in xrange(self._num_consumer_fetchers)]
@@ -440,6 +442,10 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                         fetch_req = owned_partition.build_fetch_request(
                             self._fetch_message_max_bytes)
                         partition_reqs[owned_partition] = fetch_req
+                    else:
+                        log.debug("Partition %s above max queued count (queue has %d)",
+                                  owned_partition.partition.id,
+                                  owned_partition.message_count)
             if partition_reqs:
                 response = broker.fetch_messages(
                     [a for a in partition_reqs.itervalues() if a],
