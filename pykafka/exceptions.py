@@ -34,9 +34,18 @@ class ProduceFailureError(KafkaException):
     """Indicates a generic failure in the producer"""
     pass
 
+
 class NoMessagesConsumedError(KafkaException):
     """Indicates that no messages were returned from a MessageSet"""
     pass
+
+
+class PartitionOwnedError(KafkaException):
+    """Indicates a given partition is still owned in Zookeeper."""
+
+    def __init__(self, partition, *args, **kwargs):
+        super(PartitionOwnedError, self).__init__(*args, **kwargs)
+        self.partition = partition
 
 
 # Protocol Client Exceptions

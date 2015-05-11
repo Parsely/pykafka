@@ -71,6 +71,7 @@ class ThreadingHandler(Handler):
     QueueEmptyError = Queue.Empty
     Queue = Queue.Queue
     Event = threading.Event
+    Lock = threading.Lock
 
     def spawn(self, target, *args, **kwargs):
         t = threading.Thread(target=target, *args, **kwargs)
