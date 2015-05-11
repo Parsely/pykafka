@@ -73,7 +73,7 @@ class Request(Serializable):
     HEADER_LEN = 21  # constant for all messages
     CLIENT_ID = 'pykafka'
 
-    def _write_header(self, buff, api_version=1, correlation_id=0):
+    def _write_header(self, buff, api_version=0, correlation_id=0):
         """Write the header for an outgoing message.
 
         :param buff: The buffer into which to write the header
@@ -932,7 +932,7 @@ class OffsetCommitRequest(Request):
         :rtype: :class:`bytearray`
         """
         output = bytearray(len(self))
-        self._write_header(output)
+        self._write_header(output, api_version=1)
         offset = self.HEADER_LEN
         fmt = '!h%dsih%dsi' % (len(self.consumer_group), len(self.consumer_id))
         struct.pack_into(fmt, output, offset,
@@ -1050,7 +1050,7 @@ class OffsetFetchRequest(Request):
         :rtype: :class:`bytearray`
         """
         output = bytearray(len(self))
-        self._write_header(output)
+        self._write_header(output, api_version=1)
         offset = self.HEADER_LEN
         fmt = '!h%dsi' % len(self.consumer_group)
         struct.pack_into(fmt, output, offset,
