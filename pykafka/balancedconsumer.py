@@ -30,7 +30,7 @@ from kazoo.exceptions import NoNodeException, NodeExistsError
 from kazoo.recipe.watchers import ChildrenWatch
 
 from .common import OffsetType
-from .exceptions import KafkaException
+from .exceptions import KafkaException, PartitionOwnedError
 from .simpleconsumer import SimpleConsumer
 
 
@@ -159,6 +159,7 @@ class BalancedConsumer():
         self._zookeeper_connection_timeout_ms = zookeeper_connection_timeout_ms
         self._reset_offset_on_start = reset_offset_on_start
 
+        self._rebalancing_lock = cluster.handler.Lock()
         self._consumer = None
         self._consumer_id = "{}:{}".format(socket.gethostname(), uuid4())
         self._partitions = set()
@@ -276,14 +277,12 @@ class BalancedConsumer():
         # assign partitions from i*N to (i+1)*N - 1 to consumer Ci
         new_partitions = itertools.islice(all_parts, start, start + num_parts)
         new_partitions = set(new_partitions)
-        log.info(
-            'Balancing %i participants for %i partitions. '
-            '\nOwning %i partitions. '
-            '\nMy Partitions: %s -- Consumers: %s --- All Partitions: %s',
-            len(participants), len(all_parts),
-            len(new_partitions), [p_to_str(p) for p in new_partitions],
-            str(participants),
-            [p_to_str(p) for p in all_parts]
+        log.info('Balancing %i participants for %i partitions. '
+                  '\nOwning %i partitions.'
+                  '\nMy Partitions: %s',
+                  len(participants), len(all_parts),
+                  len(new_partitions),
+                  [p_to_str(p) for p in new_partitions],
         )
         return new_partitions
 
@@ -364,15 +363,34 @@ class BalancedConsumer():
 
         This method is called whenever a zookeeper watch is triggered.
         """
-        log.info('Rebalancing consumer %s for topic %s.' % (
-            self._consumer_id, self._topic.name)
-        )
+        with self._rebalancing_lock:
+            log.info('Rebalancing consumer %s for topic %s.' % (
+                self._consumer_id, self._topic.name)
+            )
 
-        participants = self._get_participants()
-        new_partitions = self._decide_partitions(participants)
-        self._remove_partitions(self._partitions - new_partitions)
-        self._add_partitions(new_partitions - self._partitions)
-        self._setup_internal_consumer()
+            for i in xrange(self._rebalance_max_retries):
+                try:
+                    # If retrying, be sure to make sure the
+                    # partition allocation is correct.
+                    participants = self._get_participants()
+                    partitions = self._decide_partitions(participants)
+
+                    old_partitions = self._partitions - partitions
+                    self._remove_partitions(old_partitions)
+
+                    new_partitions = partitions - self._partitions
+                    self._add_partitions(new_partitions)
+
+                    # Only re-create internal consumer if something changed.
+                    if old_partitions or new_partitions:
+                        self._setup_internal_consumer()
+
+                    log.info('Rebalancing Complete.')
+                except PartitionOwnedError as ex:
+                    if i == self._rebalance_max_retries - 1:
+                        raise
+                    log.info('Unable to acquire partition %s. Retrying', ex.partition)
+                    time.sleep(i * (self._rebalance_backoff_ms / 1000))
 
     def _path_from_partition(self, p):
         """Given a partition, return its path in zookeeper.
@@ -400,40 +418,19 @@ class BalancedConsumer():
 
         Also add these partitions to the consumer's internal partition registry.
 
-        Uses a retry loop for each partition individually. If a single retry
-        loop is used for the entire partition reassignment process, the
-        following error mode can occur: During the outer loop, at least one
-        partition is marked as owned by this consumer in zookeeper. Then, a
-        partition is encountered that has not yet been released by another
-        consumer. This causes the NodeExistsError. The entire outer loop is
-        later retried due to this failure. On the retry, the first partition
-        attempted has already been marked as owned by this consumer on the
-        previous try, so it again causes a NodeExistsError. This behavior
-        continues until _max_rebalance_retries has been reached, and the
-        consumer defaults to owning all of the partitions.
-
-        There may be a way to batch or otherwise optimize these partition-wise
-        retries.
-
         :param partitions: The partitions to add.
         :type partitions: Iterable of :class:`pykafka.partition.Partition`
         """
         for p in partitions:
-            for i in xrange(self._rebalance_max_retries):
-                try:
-                    self._zookeeper.create(
-                        self._path_from_partition(p),
-                        value=self._consumer_id,
-                        ephemeral=True
-                    )
-                    break  # continue to next partition
-                except NodeExistsError:
-                    log.debug("Partition %s still owned", p.id)
-                    if i == self._rebalance_max_retries - 1:
-                        raise
-                log.debug("Retrying")
-                time.sleep(i * (self._rebalance_backoff_ms / 1000))
-        self._partitions |= partitions
+            try:
+                self._zookeeper.create(
+                    self._path_from_partition(p),
+                    value=self._consumer_id,
+                    ephemeral=True
+                )
+                self._partitions.add(p)
+            except NodeExistsError:
+                raise PartitionOwnedError(p)
 
     def _brokers_changed(self, brokers):
         if self._setting_watches:
