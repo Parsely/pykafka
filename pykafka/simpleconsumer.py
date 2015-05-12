@@ -196,8 +196,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
     def _build_default_error_handlers(self):
         """Set up the error handlers to use for partition errors."""
         def _handle_OffsetOutOfRangeError(parts):
-            self._reset_offsets((owned_partition
-                                 for owned_partition, pres in parts))
+            self._reset_offsets([owned_partition
+                                 for owned_partition, pres in parts])
 
         def _handle_NotCoordinatorForConsumer(parts):
             self._discover_offset_manager()
