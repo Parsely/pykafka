@@ -381,6 +381,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                       {ERROR_CODES[err]: [op.partition.id for op, _ in parts]
                        for err, parts in parts_by_error.iteritems()})
 
+            time.sleep(i * (self._offsets_channel_backoff_ms / 1000))
+
             # retry only specific error responses
             to_retry = []
             to_retry.extend(parts_by_error.get(OffsetsLoadInProgress.ERROR_CODE, []))
