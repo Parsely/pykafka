@@ -231,10 +231,12 @@ class KafkaInstance(ManagedInstance):
 
     def create_topic(self, topic_name, num_partitions, replication_factor):
         """Use kafka-topics.sh to create a topic."""
+        log.info('Creating topic %s', topic_name)
         self._run_topics_sh(['--create',
                              '--topic', topic_name,
                              '--partitions', num_partitions,
                              '--replication-factor', replication_factor])
+        time.sleep(2)
 
     def delete_topic(self, topic_name):
         self._run_topics_sh(['--delete',
@@ -244,6 +246,19 @@ class KafkaInstance(ManagedInstance):
         """Use kafka-topics.sh to get topic information."""
         res = self._run_topics_sh(['--list'])
         return res.strip().split('\n')
+
+    def produce_messages(self, topic_name, messages):
+        """Produce some messages to a topic."""
+        binfile = os.path.join(self._bin_dir, 'bin/kafka-console-producer.sh')
+        cmd = [binfile,
+               '--broker-list', self.brokers,
+               '--topic', topic_name]
+        cmd = [str(c) for c in cmd]  # execv needs only strings
+        log.debug('running: %s', ' '.join(cmd))
+        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+        proc.communicate(input='\n'.join(messages))
+        if proc.poll() is None:
+            proc.kill()
 
     def terminate(self):
         """Override because we have many processes."""
@@ -260,5 +275,5 @@ class KafkaInstance(ManagedInstance):
         log.info('Cluster terminated and data cleaned up.')
 
     def flush(self):
-        """Flush all data in the db"""
+        """Flush all data in the cluster"""
         raise NotImplementedError()

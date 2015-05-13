@@ -2,7 +2,36 @@ import mock
 import time
 import unittest2
 
+from pykafka import KafkaClient
 from pykafka.simpleconsumer import OwnedPartition
+from pykafka.test.kafka_instance import KafkaInstance
+
+
+class TestSimpleConsumer(unittest2.TestCase):
+    maxDiff = None
+
+    @classmethod
+    def setUpClass(cls):
+        cls.kafka = KafkaInstance(num_instances=3)
+        cls.topic_name = 'test-data'
+        cls.kafka.create_topic(cls.topic_name, 3, 2)
+        cls.kafka.produce_messages(
+            cls.topic_name,
+            ('msg {}'.format(i) for i in xrange(1000))
+        )
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.kafka.terminate()
+
+    def test_consume(self):
+        client = KafkaClient(self.kafka.brokers)
+        consumer = client.topics[self.topic_name].get_simple_consumer()
+        try:
+            messages = [consumer.consume() for _ in xrange(1000)]
+            self.assertEquals(len(messages), 1000)
+        finally:
+            consumer.stop()
 
 
 class TestOwnedPartition(unittest2.TestCase):
