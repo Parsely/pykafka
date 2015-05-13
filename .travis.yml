@@ -1,8 +1,6 @@
 language: python
 python:
-  #- "2.6"
   - "2.7"
-  #- "pypy"
 
 notifications:
   email:
@@ -12,10 +10,17 @@ notifications:
 before_install:
     - sudo apt-get install -qq libev-dev libsnappy-dev
 
+cache:
+    directories:
+        # Cache venv
+        - /home/travis/virtualenv/python2.7.9/lib/python2.7/site-packages
+
 install:
     - pip install python-snappy kazoo
     - python setup.py develop
 
-env: ZOOKEEPER_PATH=/usr/share/java KAFKA_PATH=/usr/local/kafka KAFKA_START_TIMEOUT=30
+branches:
+  only:
+    - master
 
 script: make test
