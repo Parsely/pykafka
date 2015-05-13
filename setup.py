@@ -17,6 +17,7 @@ limitations under the License.
 import sys
 
 from setuptools import setup, find_packages
+from setuptools.extension import Extension
 
 from version import version
 
@@ -34,6 +35,11 @@ dependency_links = []
 setup_requires = []
 if 'nosetests' in sys.argv[1:]:
     setup_requires.append('nose')
+
+rd_kafkamodule = Extension(
+    'rd_kafka',
+    libraries=['rdkafka'],
+    sources=['pykafka/rd_kafkamodule.c'])
 
 setup(
     name='pykafka',
@@ -53,6 +59,7 @@ setup(
         'docs': ['sphinx'] + tests_require,
         'lint': lint_requires
     },
+    ext_modules=[rd_kafkamodule],
     dependency_links=dependency_links,
     zip_safe=False,
     test_suite='nose.collector',
