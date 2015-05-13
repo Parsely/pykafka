@@ -14,7 +14,8 @@ before_install:
     - sudo apt-get install -qq libev-dev libsnappy-dev
 
 install:
-    - pip install python-snappy kazoo
+    - pip install python-snappy kazoo unittest2 mock nose
+    - pip install python-coveralls coverage nose-cov
     - pip install testinstances
     - python setup.py develop
 
@@ -22,8 +23,13 @@ before_script:
     - "python -m pykafka.test.kafka_instance 3 --download-dir /home/travis/kafka-bin &"
     - "sleep 10"
 
+script:
+    - nosetests -v --with-cov --cov pykafka --cov-config  .coveragerc --logging-level=DEBUG
+
+# Calculate coverage on success
+after_success:
+    - coveralls --config_file .coveragerc
+
 branches:
   only:
     - master
-
-script: make test
