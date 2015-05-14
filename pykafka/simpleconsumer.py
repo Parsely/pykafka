@@ -435,9 +435,13 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         """
         def _handle_success(parts):
             for owned_partition, pres in parts:
-                log.debug("Fetched %s messages for partition %s",
-                          len(pres.messages), owned_partition.partition.id)
-                owned_partition.enqueue_messages(pres.messages)
+                if len(pres.messages) > 0:
+                    log.debug("Fetched %s messages for partition %s",
+                              len(pres.messages), owned_partition.partition.id)
+                    owned_partition.enqueue_messages(pres.messages)
+                    log.debug("Partition %s queue holds %s messages",
+                              owned_partition.partition.id,
+                              owned_partition.message_count)
 
         for broker, owned_partitions in self._partitions_by_leader.iteritems():
             partition_reqs = {}
@@ -571,6 +575,9 @@ class OwnedPartition(object):
         """
         for message in messages:
             if message.offset < self.last_offset_consumed:
+                log.debug("Skipping enqueue for offset (%s) "
+                          "less than last_offset_consumed (%s)",
+                          message.offset, self.last_offset_consumed)
                 continue
             self._messages.put(message)
             self.next_offset = message.offset + 1
