@@ -14,12 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import argparse
 import errno
 import logging
 import os
+import signal
 import shutil
 import socket
 import subprocess
+import sys
 import tempfile
 import time
 
@@ -56,6 +59,68 @@ clientPort={zk_port}
 maxClientCnxns=0
 """
 
+class KafkaConnection(object):
+    """Connection to a Kafka cluster.
+
+    Provides handy access to the shell scripts Kafka is bundled with.
+    """
+
+    def __init__(self, bin_dir, brokers, zookeeper):
+        """Create a connection to the cluster.
+
+        :param bin_dir:   Location of downloaded kafka bin
+        :param brokers:   Comma-separated list of brokers
+        :param zookeeper: Connection straing for ZK
+        """
+        self._bin_dir = bin_dir
+        self.brokers = brokers
+        self.zookeeper = zookeeper
+
+    def _run_topics_sh(self, args):
+        """Run kafka-topics.sh with the provided list of arguments."""
+        binfile = os.path.join(self._bin_dir, 'bin/kafka-topics.sh')
+        cmd = [binfile, '--zookeeper', self.zookeeper] + args
+        cmd = [str(c) for c in cmd]  # execv needs only strings
+        log.debug('running: %s', ' '.join(cmd))
+        return subprocess.check_output(cmd)
+
+    def create_topic(self, topic_name, num_partitions, replication_factor):
+        """Use kafka-topics.sh to create a topic."""
+        log.info('Creating topic %s', topic_name)
+        self._run_topics_sh(['--create',
+                             '--topic', topic_name,
+                             '--partitions', num_partitions,
+                             '--replication-factor', replication_factor])
+        time.sleep(2)
+
+    def delete_topic(self, topic_name):
+        self._run_topics_sh(['--delete',
+                             '--topic', topic_name])
+
+    def flush(self):
+        """Delete all topics."""
+        for topic in self.list_topics():
+            self.delete_topic(topic)
+
+    def list_topics(self):
+        """Use kafka-topics.sh to get topic information."""
+        res = self._run_topics_sh(['--list'])
+        return res.strip().split('\n')
+
+    def produce_messages(self, topic_name, messages):
+        """Produce some messages to a topic."""
+        binfile = os.path.join(self._bin_dir, 'bin/kafka-console-producer.sh')
+        cmd = [binfile,
+               '--broker-list', self.brokers,
+               '--topic', topic_name]
+        cmd = [str(c) for c in cmd]  # execv needs only strings
+        log.debug('running: %s', ' '.join(cmd))
+        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+        proc.communicate(input='\n'.join(messages))
+        if proc.poll() is None:
+            proc.kill()
+
+
 class KafkaInstance(ManagedInstance):
     """A managed kafka instance for testing"""
 
@@ -75,6 +140,7 @@ class KafkaInstance(ManagedInstance):
         # TODO: Need a better name so multiple can run at once.
         #       other ManagedInstances use things like 'name-port'
         ManagedInstance.__init__(self, name, use_gevent=use_gevent)
+        self.connection = KafkaConnection(bin_dir, self.brokers, self.zookeeper)
 
     def _init_dirs(self):
         """Set up directories in the temp folder."""
@@ -221,30 +287,6 @@ class KafkaInstance(ManagedInstance):
         )
         return port
 
-    def _run_topics_sh(self, args):
-        """Run kafka-topics.sh with the provided list of arguments."""
-        binfile = os.path.join(self._bin_dir, 'bin/kafka-topics.sh')
-        cmd = [binfile, '--zookeeper', self.zookeeper] + args
-        cmd = [str(c) for c in cmd]  # execv needs only strings
-        log.debug('running: %s', ' '.join(cmd))
-        return subprocess.check_output(cmd)
-
-    def create_topic(self, topic_name, num_partitions, replication_factor):
-        """Use kafka-topics.sh to create a topic."""
-        self._run_topics_sh(['--create',
-                             '--topic', topic_name,
-                             '--partitions', num_partitions,
-                             '--replication-factor', replication_factor])
-
-    def delete_topic(self, topic_name):
-        self._run_topics_sh(['--delete',
-                             '--topic', topic_name])
-
-    def list_topics(self):
-        """Use kafka-topics.sh to get topic information."""
-        res = self._run_topics_sh(['--list'])
-        return res.strip().split('\n')
-
     def terminate(self):
         """Override because we have many processes."""
         # Kill brokers before zookeeper
@@ -260,5 +302,55 @@ class KafkaInstance(ManagedInstance):
         log.info('Cluster terminated and data cleaned up.')
 
     def flush(self):
-        """Flush all data in the db"""
+        """Flush all data in the cluster"""
         raise NotImplementedError()
+
+    def create_topic(self, topic_name, num_partitions, replication_factor):
+        """Use kafka-topics.sh to create a topic."""
+        return self.connection.create_topic(topic_name, num_partitions, replication_factor)
+
+    def delete_topic(self, topic_name):
+        return self.connection.delete_topic(topic_name)
+
+    def list_topics(self):
+        """Use kafka-topics.sh to get topic information."""
+        return self.connection.list_topics()
+
+    def produce_messages(self, topic_name, messages):
+        """Produce some messages to a topic."""
+        return self.connection.produce_messages(topic_name, messages)
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(
+        prog='kafka_instance',
+        usage='foo bars',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument('num_brokers', type=int, default=3,
+                        help='Numbers of brokers in the cluster.')
+    parser.add_argument('--download-dir', type=str, default='/tmp/kafka-bin',
+                        help='Download destination for Kafka')
+    parser.add_argument('--kafka-version', type=str, default='0.8.2.1',
+                        help='Kafka version to download')
+    args = parser.parse_args()
+
+    _exiting = False
+    def _catch_sigint(signum, frame):
+        global _exiting
+        _exiting = True
+        print 'SIGINT received.'
+    signal.signal(signal.SIGINT, _catch_sigint)
+
+    cluster = KafkaInstance(num_instances=args.num_brokers,
+                            kafka_version=args.kafka_version,
+                            bin_dir=args.download_dir)
+    print 'Cluster started.'
+    print 'Brokers: {}'.format(cluster.brokers)
+    print 'Zookeeper: {}'.format(cluster.zookeeper)
+    print 'Waiting for SIGINT to exit.'
+    while True:
+        if _exiting:
+            print 'Exiting.'
+            sys.exit(0)
+        time.sleep(1)

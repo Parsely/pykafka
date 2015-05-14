@@ -29,7 +29,8 @@ import base
 from .common import OffsetType
 from .exceptions import (OffsetOutOfRangeError, UnknownTopicOrPartition,
                          OffsetMetadataTooLarge, OffsetsLoadInProgress,
-                         NotCoordinatorForConsumer, ERROR_CODES)
+                         NotCoordinatorForConsumer, SocketDisconnectedError,
+                         ERROR_CODES)
 from .protocol import (PartitionFetchRequest, PartitionOffsetCommitRequest,
                        PartitionOffsetFetchRequest, PartitionOffsetRequest)
 from .utils.error_handlers import handle_partition_responses, raise_error
@@ -451,11 +452,19 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                                   owned_partition.partition.id,
                                   owned_partition.message_count)
             if partition_reqs:
-                response = broker.fetch_messages(
-                    [a for a in partition_reqs.itervalues() if a],
-                    timeout=self._fetch_wait_max_ms,
-                    min_bytes=self._fetch_min_bytes
-                )
+                try:
+                    response = broker.fetch_messages(
+                        [a for a in partition_reqs.itervalues() if a],
+                        timeout=self._fetch_wait_max_ms,
+                        min_bytes=self._fetch_min_bytes
+                    )
+                except SocketDisconnectedError:
+                    # If the broker dies while we're supposed to stop,
+                    # it's fine, and probably an integration test.
+                    if not self._running:
+                        return
+                    else:
+                        raise
                 handle_partition_responses(
                     response,
                     self._default_error_handlers,

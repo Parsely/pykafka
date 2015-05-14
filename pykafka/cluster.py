@@ -226,12 +226,12 @@ class Cluster(object):
                     consumer_group)
         # arbitrarily choose a broker, since this request can go to any
         broker = self.brokers[random.choice(self.brokers.keys())]
-        MAX_RETRIES = 3
+        MAX_RETRIES = 5
 
         for i in xrange(MAX_RETRIES):
             if i > 0:
                 logger.info("Retrying")
-            time.sleep(i)
+            time.sleep(i * 2)
 
             req = ConsumerMetadataRequest(consumer_group)
             future = broker.handler.request(req)
