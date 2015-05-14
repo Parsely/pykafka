@@ -1,4 +1,7 @@
 .. image:: https://travis-ci.org/Parsely/pykafka.svg?branch=master
+    :target: https://travis-ci.org/Parsely/pykafka
+.. image:: https://coveralls.io/repos/Parsely/pykafka/badge.svg?branch=master
+    :target: https://coveralls.io/r/Parsely/pykafka?branch=master 
 
 PyKafka
 =======
