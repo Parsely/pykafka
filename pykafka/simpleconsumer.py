@@ -358,6 +358,9 @@ class SimpleConsumer(base.BaseSimpleConsumer):
 
         def _handle_success(parts):
             for owned_partition, pres in parts:
+                log.info("Set offset for partition %s to %s",
+                         owned_partition.partition.id,
+                         pres.offset)
                 owned_partition.set_offset(pres.offset)
 
         log.info("Fetching offsets")
