@@ -364,6 +364,8 @@ class BalancedConsumer():
 
         This method is called whenever a zookeeper watch is triggered.
         """
+        if self._consumer is not None:
+            self.commit_offsets()
         with self._rebalancing_lock:
             log.info('Rebalancing consumer %s for topic %s.' % (
                 self._consumer_id, self._topic.name)
