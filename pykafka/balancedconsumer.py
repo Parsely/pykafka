@@ -30,7 +30,8 @@ from kazoo.exceptions import NoNodeException, NodeExistsError
 from kazoo.recipe.watchers import ChildrenWatch
 
 from .common import OffsetType
-from .exceptions import KafkaException, PartitionOwnedError
+from .exceptions import (KafkaException, PartitionOwnedError,
+                         ConsumerStoppedException)
 from .simpleconsumer import SimpleConsumer
 
 
@@ -456,7 +457,15 @@ class BalancedConsumer():
         :param block: Whether to block while waiting for a message
         :type block: bool
         """
-        return self._consumer.consume(block=block)
+        message = None
+        while message is None:
+            try:
+                message = self._consumer.consume(block=block)
+            except ConsumerStoppedException:
+                continue
+            if not block:
+                return
+        return message
 
     def commit_offsets(self):
         """Commit offsets for this consumer's partitions

@@ -35,6 +35,11 @@ class ProduceFailureError(KafkaException):
     pass
 
 
+class ConsumerStoppedException(KafkaException):
+    """Indicates that the consumer was stopped when an operation was attempted that required it to be running"""
+    pass
+
+
 class NoMessagesConsumedError(KafkaException):
     """Indicates that no messages were returned from a MessageSet"""
     pass

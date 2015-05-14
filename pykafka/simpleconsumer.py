@@ -30,7 +30,7 @@ from .common import OffsetType
 from .exceptions import (OffsetOutOfRangeError, UnknownTopicOrPartition,
                          OffsetMetadataTooLarge, OffsetsLoadInProgress,
                          NotCoordinatorForConsumer, SocketDisconnectedError,
-                         ERROR_CODES)
+                         ConsumerStoppedException, ERROR_CODES)
 from .protocol import (PartitionFetchRequest, PartitionOffsetCommitRequest,
                        PartitionOffsetFetchRequest, PartitionOffsetRequest)
 from .utils.error_handlers import handle_partition_responses, raise_error
@@ -293,8 +293,10 @@ class SimpleConsumer(base.BaseSimpleConsumer):
             if message:
                 self._last_message_time = time.time()
                 return message
-            if not self._running or not block:
+            if not block:
                 break
+            if not self._running:
+                raise ConsumerStoppedException()
 
     def _auto_commit(self):
         """Commit offsets only if it's time to do so"""
