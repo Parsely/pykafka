@@ -164,6 +164,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
 
         self._default_error_handlers = self._build_default_error_handlers()
 
+        self._running = False
         if self._auto_start:
             self.start()
 
@@ -292,7 +293,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
             if message:
                 self._last_message_time = time.time()
                 return message
-            if not block:
+            if not self._running or not block:
                 break
 
     def _auto_commit(self):
