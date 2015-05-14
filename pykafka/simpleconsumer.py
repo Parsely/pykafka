@@ -137,6 +137,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         self._offsets_commit_max_retries = offsets_commit_max_retries
         # not directly configurable
         self._offsets_fetch_max_retries = offsets_commit_max_retries
+        self._offsets_reset_max_retries = offsets_commit_max_retries
         self._auto_start = auto_start
         self._reset_offset_on_start = reset_offset_on_start
 
@@ -417,21 +418,38 @@ class SimpleConsumer(base.BaseSimpleConsumer):
 
         log.info("Resetting offsets for %s partitions", len(list(partitions)))
 
-        # group partitions by leader
-        by_leader = defaultdict(list)
-        for p in partitions:
-            by_leader[p.partition.leader].append(p)
+        for i in xrange(self._offsets_reset_max_retries):
+            # group partitions by leader
+            by_leader = defaultdict(list)
+            for p in partitions:
+                by_leader[p.partition.leader].append(p)
 
-        # get valid offset ranges for each partition
-        for broker, owned_partitions in by_leader.iteritems():
-            reqs = [owned_partition.build_offset_request(self._auto_offset_reset)
-                    for owned_partition in owned_partitions]
-            response = broker.request_offset_limits(reqs)
-            handle_partition_responses(
-                response,
-                self._default_error_handlers,
-                success_handler=_handle_success,
-                partitions_by_id=self._partitions_by_id)
+            # get valid offset ranges for each partition
+            for broker, owned_partitions in by_leader.iteritems():
+                reqs = [owned_partition.build_offset_request(self._auto_offset_reset)
+                        for owned_partition in owned_partitions]
+                response = broker.request_offset_limits(reqs)
+                parts_by_error = handle_partition_responses(
+                    response,
+                    self._default_error_handlers,
+                    success_handler=_handle_success,
+                    partitions_by_id=self._partitions_by_id)
+
+                if len(parts_by_error) == 1 and 0 in parts_by_error:
+                    break
+                log.error("Error resetting offsets for topic %s (errors: %s)",
+                          self._topic.name,
+                          {ERROR_CODES[err]: [op.partition.id for op, _ in parts]
+                           for err, parts in parts_by_error.iteritems()})
+
+                time.sleep(i * (self._offsets_channel_backoff_ms / 1000))
+
+                if 0 in parts_by_error:
+                    parts_by_error.pop(0)
+                partitions = []
+                partitions.extend(
+                    [part for errcode, parts in parts_by_error.iteritems()
+                     for part in parts])
 
     def fetch(self):
         """Fetch new messages for all partitions
