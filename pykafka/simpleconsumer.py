@@ -552,7 +552,7 @@ class OwnedPartition(object):
             self.partition.topic.name,
             self.partition.id,
             self.last_offset_consumed,
-            int(time.time()),
+            int(time.time() * 1000),
             'pykafka'
         )
 
