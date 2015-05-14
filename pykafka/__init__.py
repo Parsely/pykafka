@@ -7,7 +7,7 @@ from topic import Topic
 from client import KafkaClient
 from balancedconsumer import BalancedConsumer
 
-__version__ = '0.8.2.1.01'
+__version__ = '1.0.0-dev'
 
 
 __all__ = ["Broker", "SimpleConsumer", "Cluster", "Partition", "Producer",
