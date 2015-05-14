@@ -466,7 +466,7 @@ class BalancedConsumer():
             except ConsumerStoppedException:
                 continue
             if not block:
-                return
+                return message
         return message
 
     def commit_offsets(self):
