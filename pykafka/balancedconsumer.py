@@ -228,7 +228,8 @@ class BalancedConsumer():
             # reset the offsets, since they can happen at any time
             reset_offset_on_start = False
         self._consumer = SimpleConsumer(
-            self._topic, self._cluster,
+            self._topic,
+            self._cluster,
             consumer_group=self._consumer_group,
             partitions=list(self._partitions),
             auto_commit_enable=self._auto_commit_enable,
@@ -278,12 +279,11 @@ class BalancedConsumer():
         new_partitions = itertools.islice(all_parts, start, start + num_parts)
         new_partitions = set(new_partitions)
         log.info('Balancing %i participants for %i partitions. '
-                  '\nOwning %i partitions.'
-                  '\nMy Partitions: %s',
-                  len(participants), len(all_parts),
-                  len(new_partitions),
-                  [p_to_str(p) for p in new_partitions],
-        )
+                 '\nOwning %i partitions.'
+                 '\nMy Partitions: %s',
+                 len(participants), len(all_parts),
+                 len(new_partitions),
+                 [p_to_str(p) for p in new_partitions])
         return new_partitions
 
     def _get_participants(self):
