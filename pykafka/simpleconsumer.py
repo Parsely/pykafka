@@ -402,7 +402,9 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         """
         def _handle_success(parts):
             for owned_partition, pres in parts:
-                owned_partition.set_offset(pres.offset[0])
+                # offset_latest requests return the next offset to consume,
+                # so account for this here by passing offset - 1
+                owned_partition.set_offset(pres.offset[0] - 1)
 
         if partitions is None:
             partitions = self._partitions.keys()
