@@ -322,8 +322,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
             raise Exception("consumer group must be specified to commit offsets")
 
         reqs = [p.build_offset_commit_request() for p in self._partitions.keys()]
-        log.info("Committing offsets for %d partitions to broker id %s", len(reqs),
-                 self._offset_manager.id)
+        log.debug("Committing offsets for %d partitions to broker id %s", len(reqs),
+                  self._offset_manager.id)
         for i in xrange(self._offsets_commit_max_retries):
             if i > 0:
                 log.debug("Retrying")
@@ -362,19 +362,20 @@ class SimpleConsumer(base.BaseSimpleConsumer):
 
         def _handle_success(parts):
             for owned_partition, pres in parts:
-                log.info("Set offset for partition %s to %s",
-                         owned_partition.partition.id,
-                         pres.offset)
+                log.debug("Set offset for partition %s to %s",
+                          owned_partition.partition.id,
+                          pres.offset)
                 owned_partition.set_offset(pres.offset)
-
-        log.info("Fetching offsets")
 
         reqs = [p.build_offset_fetch_request() for p in self._partitions.keys()]
         success_responses = []
 
+        log.debug("Fetching offsets for %d partitions from broker id %s", len(reqs),
+                  self._offset_manager.id)
+
         for i in xrange(self._offsets_fetch_max_retries):
             if i > 0:
-                log.info("Retrying")
+                log.debug("Retrying offset fetch")
 
             res = self._offset_manager.fetch_consumer_group_offsets(self._consumer_group, reqs)
             parts_by_error = handle_partition_responses(

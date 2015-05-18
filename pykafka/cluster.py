@@ -41,7 +41,7 @@ class TopicDict(dict):
         self._cluster = weakref.proxy(cluster)
 
     def __missing__(self, key):
-        log.info('Topic %s not found. Attempting to auto-create.', key)
+        log.warning('Topic %s not found. Attempting to auto-create.', key)
         if self._create_topic(key):
             return self[key]
         else:
@@ -165,13 +165,17 @@ class Cluster(object):
         # FIXME: A cluster with no topics returns no brokers in metadata
         # Remove old brokers
         removed = set(self._brokers.keys()) - set(broker_metadata.keys())
+        if len(removed) > 0:
+            log.info('Removing %d brokers', len(removed))
         for id_ in removed:
-            log.info('Removing broker %s', self._brokers[id_])
+            log.debug('Removing broker %s', self._brokers[id_])
             self._brokers.pop(id_)
         # Add/update current brokers
+        if len(broker_metadata) > 0:
+            log.info('Discovered %d brokers', len(broker_metadata))
         for id_, meta in broker_metadata.iteritems():
             if id_ not in self._brokers:
-                log.info('Discovered broker id %s: %s:%s', id_, meta.host, meta.port)
+                log.debug('Discovered broker id %s: %s:%s', id_, meta.host, meta.port)
                 self._brokers[id_] = Broker.from_metadata(
                     meta, self._handler, self._socket_timeout_ms,
                     self._offsets_channel_socket_timeout_ms,
@@ -195,15 +199,19 @@ class Cluster(object):
         """
         # Remove old topics
         removed = set(self._topics.keys()) - set(metadata.keys())
+        if len(removed) > 0:
+            log.info("Removing %d topics", len(removed))
         for name in removed:
-            log.info('Removing topic %s', self._topics[name])
+            log.debug('Removing topic %s', self._topics[name])
             self._topics.pop(name)
         # Add/update partition information
+        if len(metadata) > 0:
+            log.info("Discovered %d topics", len(metadata))
         for name, meta in metadata.iteritems():
             if not self._should_exclude_topic(name):
                 if name not in self._topics:
                     self._topics[name] = Topic(self, meta)
-                    log.info('Discovered topic %s', self._topics[name])
+                    log.debug('Discovered topic %s', self._topics[name])
                 else:
                     self._topics[name].update(meta)
 
@@ -230,7 +238,7 @@ class Cluster(object):
 
         for i in xrange(MAX_RETRIES):
             if i > 0:
-                log.info("Retrying")
+                log.debug("Retrying offset manager discovery")
             time.sleep(i * 2)
 
             req = ConsumerMetadataRequest(consumer_group)
