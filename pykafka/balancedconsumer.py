@@ -19,7 +19,7 @@ limitations under the License.
 """
 __all__ = ["BalancedConsumer"]
 import itertools
-import logging as log
+import logging
 import math
 import socket
 import time
@@ -35,8 +35,14 @@ from .exceptions import (KafkaException, PartitionOwnedError,
 from .simpleconsumer import SimpleConsumer
 
 
+log = logging.getLogger(__name__)
+
+
 class BalancedConsumer():
     """
+    A self-balancing consumer for Kafka that uses ZooKeeper to communicate
+    with other balancing consumers.
+
     Maintains a single instance of SimpleConsumer, periodically using the
     consumer rebalancing algorithm to reassign partitions to this
     SimpleConsumer.

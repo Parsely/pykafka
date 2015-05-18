@@ -27,7 +27,7 @@ try:
 except ImportError:
     snappy = None
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 def encode_gzip(buff):

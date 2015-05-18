@@ -32,7 +32,7 @@ from .protocol import (
     ProduceResponse)
 
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 class Broker(base.BaseBroker):
@@ -254,7 +254,7 @@ class Broker(base.BaseBroker):
         max_retries = 3
         for i in xrange(max_retries):
             if i > 0:
-                logger.debug("Retrying")
+                log.debug("Retrying")
             time.sleep(i)
 
             future = self._req_handler.request(MetadataRequest(topics=topics))
@@ -263,11 +263,11 @@ class Broker(base.BaseBroker):
             errored = False
             for name, topic_metadata in response.topics.iteritems():
                 if topic_metadata.err == LeaderNotAvailable.ERROR_CODE:
-                    logger.warning("Leader not available.")
+                    log.warning("Leader not available.")
                     errored = True
                 for pid, partition_metadata in topic_metadata.partitions.iteritems():
                     if partition_metadata.err == LeaderNotAvailable.ERROR_CODE:
-                        logger.warning("Leader not available.")
+                        log.warning("Leader not available.")
                         errored = True
 
             if not errored:

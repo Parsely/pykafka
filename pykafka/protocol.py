@@ -65,7 +65,7 @@ from .exceptions import ERROR_CODES, NoMessagesConsumedError
 from .utils import Serializable, compression, struct_helpers
 
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 class Request(Serializable):

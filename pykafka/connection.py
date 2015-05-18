@@ -25,7 +25,7 @@ import struct
 from .exceptions import SocketDisconnectedError
 from .utils.socket import recvall_into
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 class BrokerConnection(object):

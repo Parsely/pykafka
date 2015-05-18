@@ -29,7 +29,7 @@ from .protocol import PartitionOffsetRequest
 from .simpleconsumer import SimpleConsumer
 
 
-logger = logging.getLogger()
+log = logging.getlog()
 
 
 class Topic(BaseTopic):
@@ -117,14 +117,14 @@ class Topic(BaseTopic):
         # Remove old partitions
         removed = set(self._partitions.keys()) - set(p_metas.keys())
         for id_ in removed:
-            logger.info('Removing partiton %s', self._partitons[id_])
+            log.info('Removing partiton %s', self._partitons[id_])
             self._partitons.pop(id_)
 
         # Add/update current partitions
         brokers = self._cluster.brokers
         for id_, meta in p_metas.iteritems():
             if meta.id not in self._partitions:
-                logger.info('Adding partition %s/%s', self.name, meta.id)
+                log.info('Adding partition %s/%s', self.name, meta.id)
                 self._partitions[meta.id] = Partition(
                     self, meta.id,
                     brokers[meta.leader],

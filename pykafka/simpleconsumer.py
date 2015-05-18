@@ -19,7 +19,7 @@ limitations under the License.
 """
 __all__ = ["SimpleConsumer"]
 import itertools
-import logging as log
+import logging
 import time
 import threading
 from collections import defaultdict
@@ -34,6 +34,9 @@ from .exceptions import (OffsetOutOfRangeError, UnknownTopicOrPartition,
 from .protocol import (PartitionFetchRequest, PartitionOffsetCommitRequest,
                        PartitionOffsetFetchRequest, PartitionOffsetRequest)
 from .utils.error_handlers import handle_partition_responses, raise_error
+
+
+log = logging.getLogger(__name__)
 
 
 class SimpleConsumer(base.BaseSimpleConsumer):

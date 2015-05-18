@@ -21,7 +21,7 @@ __all__ = ["Message", "CompressionType", "OffsetType"]
 import logging
 
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 class Message(object):
