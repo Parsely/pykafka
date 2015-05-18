@@ -29,7 +29,7 @@ from .protocol import PartitionOffsetRequest
 from .simpleconsumer import SimpleConsumer
 
 
-log = logging.getlog()
+log = logging.getLogger(__name__)
 
 
 class Topic(BaseTopic):

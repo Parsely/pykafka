@@ -30,7 +30,7 @@ from .protocol import ConsumerMetadataRequest, ConsumerMetadataResponse
 from .topic import Topic
 
 
-log = logging.getlog(__name__)
+log = logging.getLogger(__name__)
 
 
 class TopicDict(dict):
@@ -151,7 +151,7 @@ class Cluster(object):
                         return response
                 except:
                     log.exception('Unable to connect to broker %s',
-                                     broker_str)
+                                  broker_str)
         # Couldn't connect anywhere. Raise an error.
         raise Exception('Unable to connect to a broker to fetch metadata.')
 
@@ -223,7 +223,7 @@ class Cluster(object):
         :type consumer_group: str
         """
         log.info("Attempting to discover offset manager for consumer group '%s'",
-                    consumer_group)
+                 consumer_group)
         # arbitrarily choose a broker, since this request can go to any
         broker = self.brokers[random.choice(self.brokers.keys())]
         MAX_RETRIES = 5
@@ -253,10 +253,10 @@ class Cluster(object):
         metadata = self._get_metadata()
         if len(metadata.brokers) == 0 and len(metadata.topics) == 0:
             log.warning('No broker metadata found. If this is a fresh cluster, '
-                           'this may be due to a bug in Kafka. You can force '
-                           'broker metadata to be returned by manually creating '
-                           'a topic in the cluster. See '
-                           'https://issues.apache.org/jira/browse/KAFKA-2154 '
-                           'for information.')
+                        'this may be due to a bug in Kafka. You can force '
+                        'broker metadata to be returned by manually creating '
+                        'a topic in the cluster. See '
+                        'https://issues.apache.org/jira/browse/KAFKA-2154 '
+                        'for information.')
         self._update_brokers(metadata.brokers)
         self._update_topics(metadata.topics)

@@ -28,7 +28,7 @@ except ImportError:
     rd_kafka = None
 
 
-log = logging.getlog(__name__)
+log = logging.getLogger(__name__)
 
 
 class KafkaClient(object):
