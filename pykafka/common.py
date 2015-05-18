@@ -35,6 +35,7 @@ class Message(object):
     """
     pass
 
+
 class CompressionType(object):
     """Enum for the various compressions supported.
 
@@ -45,6 +46,7 @@ class CompressionType(object):
     NONE = 0
     GZIP = 1
     SNAPPY = 2
+
 
 class OffsetType(object):
     """Enum for special values for earliest/latest offsets.
