@@ -190,6 +190,19 @@ class BalancedConsumer():
             self._consumer_group
         )
 
+    def _setup_checker_worker(self):
+        """Start the zookeeper partition checker thread"""
+        def checker():
+            while True:
+                if not self._running:
+                    break
+                self._check_held_partitions()
+                # run every other autocommit cycle
+                time.sleep((self._auto_commit_interval_ms * 2) / 1000)
+            log.debug("Checker thread exiting")
+        log.debug("Starting checker thread")
+        return self._cluster.handler.spawn(checker)
+
     def start(self):
         """Open connections and join a cluster."""
         if self._zookeeper is None:
@@ -199,6 +212,7 @@ class BalancedConsumer():
         self._add_self()
         self._set_watches()
         self._rebalance()
+        self._setup_checker_worker()
 
     def stop(self):
         """Close the zookeeper connection and stop consuming.
@@ -439,6 +453,29 @@ class BalancedConsumer():
                 self._partitions.add(p)
             except NodeExistsError:
                 raise PartitionOwnedError(p)
+
+    def _check_held_partitions(self):
+        """Double-check held partitions against zookeeper
+
+        Ensure that the partitions held by this consumer are the ones that
+        zookeeper thinks it's holding. If not, rebalance.
+        """
+        # build a set of partition ids zookeeper says we own
+        zk_partition_ids = set()
+        all_partitions = self._zookeeper.get_children(self._topic_path)
+        for partition_slug in all_partitions:
+            owner_id, stat = self._zookeeper.get(
+                '{}/{}'.format(self._topic_path, partition_slug))
+            if owner_id == self._consumer_id:
+                zk_partition_ids.add(partition_slug.split('-')[1])
+        # build a set of partition ids we think we own
+        internal_partition_ids = set([p.id for p in self._partitions])
+        # compare the two sets, rebalance if necessary
+        if internal_partition_ids != zk_partition_ids:
+            log.warning("Internal partition registry doesn't match ZooKeeper!")
+            log.debug("Internal partition ids: %s\nZooKeeper partition ids: %s",
+                      internal_partition_ids, zk_partition_ids)
+            self.rebalance()
 
     def _brokers_changed(self, brokers):
         if self._setting_watches:
