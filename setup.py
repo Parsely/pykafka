@@ -37,7 +37,7 @@ if 'nosetests' in sys.argv[1:]:
     setup_requires.append('nose')
 
 rd_kafkamodule = Extension(
-    'rd_kafka',
+    'pykafka.rd_kafka',
     libraries=['rdkafka'],
     sources=['pykafka/rd_kafkamodule.c'])
 

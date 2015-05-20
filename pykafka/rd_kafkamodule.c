@@ -117,7 +117,7 @@ static PyTypeObject ConsumerType = {
 
 PyMODINIT_FUNC
 initrd_kafka(void) {
-    PyObject *mod = Py_InitModule("rd_kafka", NULL);
+    PyObject *mod = Py_InitModule("pykafka.rd_kafka", NULL);
     if (mod == NULL) return;
 
     ConsumerType.tp_new = PyType_GenericNew;
