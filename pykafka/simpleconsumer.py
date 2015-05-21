@@ -250,6 +250,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
 
     def _setup_fetch_workers(self):
         """Start the fetcher threads"""
+        # NB this gets overridden in rdkafka.RdKafkaSimpleConsumer
         def fetcher():
             while True:
                 if not self._running:
