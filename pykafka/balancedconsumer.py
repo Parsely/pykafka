@@ -394,8 +394,10 @@ class BalancedConsumer():
                     log.info('Rebalancing Complete.')
                 except PartitionOwnedError as ex:
                     if i == self._rebalance_max_retries - 1:
+                        log.warning('Failed to acquire partition %s after %d retries.',
+                                    ex.partition, i)
                         raise
-                    log.warning('Unable to acquire partition %s. Retrying', ex.partition)
+                    log.info('Unable to acquire partition %s. Retrying', ex.partition)
                     time.sleep(i * (self._rebalance_backoff_ms / 1000))
 
     def _path_from_partition(self, p):
