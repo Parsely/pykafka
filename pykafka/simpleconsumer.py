@@ -285,43 +285,27 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         :param block: Whether to block while waiting for a message
         :type block: bool
         """
-
         timeout = None
         if block:
-            # only set a timeout if block is True.
-            # The Semaphore class is picky about
-            # specifying a timeout with blocking=False
             if self._consumer_timeout_ms > 0:
                 timeout = float(self._consumer_timeout_ms) / 1000
             else:
-                # Always operate with some long but finite
-                # timeout when blocking on a Semaphore since python
-                # locking cannot be interrputed by signals like
-                # KeyboardInterrupt in py2k.  (Also allows for
-                # ConsumerStopped() to be raised)
                 timeout = 1.0
 
         while True:
-            # this will go to sleep until a message is in some queue
-            # or the timeout expires.
             if self._messages_arrived.acquire(blocking=block, timeout=timeout):
                 # by passing through this semaphore, we know that at
                 # least one message is waiting in some queue.
-                # find the next waiting message in cycle order.
                 message = None
                 while not message:
                     owned_partition = self.partition_cycle.next()
                     message = owned_partition.consume()
                 return message
             else:
-                # there was no message waiting within the timeout
-                # period (or immmediately if block=False)
                 if not self._running:
                     raise ConsumerStoppedException()
                 elif not block or self._consumer_timeout_ms > 0:
                     return None
-                # otherwise, keep on trucking, its a block=True with
-                # no timeout.
 
     def _auto_commit(self):
         """Commit offsets only if it's time to do so"""
@@ -541,8 +525,9 @@ class OwnedPartition(object):
         """
         :param partition: The partition to hold
         :type partition: :class:`pykafka.partition.Partition`
-        :param semaphore: A Semaphore to notify when messages arrive
-        :type semaphore: :class:`pykafka.compat.Semaphore`
+        :param semaphore: A Semaphore that counts available messages and
+            facilitates non-busy blocking
+        :type semaphore: :class:`pykafka.utils.compat.Semaphore`
         """
         self.partition = partition
         self._messages = Queue()
@@ -635,7 +620,5 @@ class OwnedPartition(object):
             self._messages.put(message)
             self.next_offset = message.offset + 1
 
-            # release consumer if waiting for message arrival
-            # by incremnted this messages_arrived sempahore
             if self._messages_arrived is not None:
                 self._messages_arrived.release()
