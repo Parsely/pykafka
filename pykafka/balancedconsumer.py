@@ -197,8 +197,7 @@ class BalancedConsumer():
                 if not self._running:
                     break
                 self._check_held_partitions()
-                # run every other autocommit cycle
-                time.sleep((self._auto_commit_interval_ms * 2) / 1000)
+                time.sleep(120)
             log.debug("Checker thread exiting")
         log.debug("Starting checker thread")
         return self._cluster.handler.spawn(checker)
