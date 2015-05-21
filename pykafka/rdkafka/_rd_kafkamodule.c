@@ -39,6 +39,7 @@ Consumer_init(Consumer *self, PyObject *args, PyObject *kwds) {
         return 0;
     }
 
+    // TODO disable offset-storage etc
     rd_kafka_topic_conf_t *topic_conf = rd_kafka_topic_conf_new();
     self->rdk_topic_handle =
         rd_kafka_topic_new(self->rdk_handle, topic_name, topic_conf);
@@ -116,8 +117,8 @@ static PyTypeObject ConsumerType = {
 
 
 PyMODINIT_FUNC
-initrd_kafka(void) {
-    PyObject *mod = Py_InitModule("pykafka.rd_kafka", NULL);
+init_rd_kafka(void) {
+    PyObject *mod = Py_InitModule("pykafka.rdkafka._rd_kafka", NULL);
     if (mod == NULL) return;
 
     ConsumerType.tp_new = PyType_GenericNew;
