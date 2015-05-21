@@ -5,29 +5,73 @@
 typedef struct {
     PyObject_HEAD
     rd_kafka_t *rdk_handle;
+    rd_kafka_queue_t *rdk_queue_handle;
     rd_kafka_topic_t *rdk_topic_handle;
+    PyObject *partition_ids;
 } Consumer;
 
 
 static void
 Consumer_dealloc(Consumer *self) {
+    // Call stop on all partitions, then destroy all handles
+
     if (self->rdk_topic_handle != NULL) {
-        rd_kafka_consume_stop(self->rdk_topic_handle, 0); // TODO partitions
+        Py_ssize_t i, len = PyList_Size(self->partition_ids);
+        for (i = 0; i != len; ++i) {
+            long part_id = PyInt_AsLong(PyList_GetItem(self->partition_ids, i));
+            if (part_id == -1) {
+                // An error occurred, but we'll have to try mop op the rest
+                // as best we can.  TODO log this
+                continue;
+            }
+            if (-1 == rd_kafka_consume_stop(self->rdk_topic_handle, part_id)) {
+                // TODO check errno, log this
+                continue;
+            }
+        }
+        Py_CLEAR(self->partition_ids);
         rd_kafka_topic_destroy(self->rdk_topic_handle);
+        self->rdk_topic_handle = NULL;
     }
-    if (self->rdk_handle != NULL) rd_kafka_destroy(self->rdk_handle);
+    if (self->rdk_queue_handle != NULL) {
+        rd_kafka_queue_destroy(self->rdk_queue_handle);
+        self->rdk_queue_handle = NULL;
+    }
+    if (self->rdk_handle != NULL) {
+        rd_kafka_destroy(self->rdk_handle);
+        self->rdk_handle = NULL;
+    }
     self->ob_type->tp_free((PyObject*)self);
 }
 
 
 static int
 Consumer_init(Consumer *self, PyObject *args, PyObject *kwds) {
-    char *keywords[] = {"brokers", "topic_name", NULL};
+    char *keywords[] = {"brokers", "topic_name", "partition_ids", NULL};
     const char *brokers = NULL;
     const char *topic_name = NULL;
-    if (! PyArg_ParseTupleAndKeywords(
-                args, kwds, "ss", keywords, &brokers, &topic_name)) return -1;
+    PyObject *partition_ids = NULL;
+    if (! PyArg_ParseTupleAndKeywords(args,
+                                      kwds,
+                                      "ssO",
+                                      keywords,
+                                      &brokers,
+                                      &topic_name,
+                                      &partition_ids)) {
+        return -1;
+    }
 
+    // We'll keep our own copy of partition_ids, because the one handed to us
+    // might be mutable, and weird things could happen if the list used on init
+    // is different than that on dealloc
+    if (self->partition_ids) {
+        // TODO set exception, expected a fresh Consumer
+        return -1;
+    }
+    self->partition_ids = PySequence_List(partition_ids);
+    if (! self->partition_ids) return -1;
+
+    // Configure and start a new RD_KAFKA_CONSUMER
     rd_kafka_conf_t *conf = rd_kafka_conf_new();
     char errstr[512];
     self->rdk_handle = rd_kafka_new(
@@ -39,15 +83,29 @@ Consumer_init(Consumer *self, PyObject *args, PyObject *kwds) {
         return 0;
     }
 
+    // Configure and take out a topic handle
     // TODO disable offset-storage etc
     rd_kafka_topic_conf_t *topic_conf = rd_kafka_topic_conf_new();
     self->rdk_topic_handle =
         rd_kafka_topic_new(self->rdk_handle, topic_name, topic_conf);
-    if (rd_kafka_consume_start(self->rdk_topic_handle, 0, 0) == -1) {  // TODO partition, offset
-        // TODO set exception
-        return 0;
-    }
 
+    // Start a queue and add all partition_ids to it
+    self->rdk_queue_handle = rd_kafka_queue_new(self->rdk_handle);
+    if (! self->rdk_queue_handle) return 0;  // TODO set exception, return -1
+    Py_ssize_t i, len = PyList_Size(self->partition_ids);
+    for (i = 0; i != len; ++i) {
+        // We didn't/won't do much type-checking on partition_ids, as this
+        // module is intended solely for use with the py class that wraps it
+        long part_id = PyInt_AsLong(PyList_GetItem(self->partition_ids, i));
+        if (part_id == -1 && PyErr_Occurred()) return -1;
+        if (-1 == rd_kafka_consume_start_queue(self->rdk_topic_handle,
+                                               part_id,
+                                               0,  // TODO offset
+                                               self->rdk_queue_handle)) {
+            // TODO set exception
+            return -1;
+        }
+    }
     return 0;
 }
 
@@ -55,7 +113,8 @@ Consumer_init(Consumer *self, PyObject *args, PyObject *kwds) {
 static PyObject *
 Consumer_consume(PyObject *self, PyObject *args) {
     rd_kafka_message_t *rkmessage;
-    rkmessage = rd_kafka_consume(((Consumer *)self)->rdk_topic_handle, 0, 1000); // TODO partition, timeout
+    rkmessage = rd_kafka_consume_queue(((Consumer *)self)->rdk_queue_handle,
+                                       1000); // TODO timeout_ms
     if (!rkmessage) {
         // TODO exception
         return NULL;

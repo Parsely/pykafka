@@ -7,7 +7,9 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
     def _setup_fetch_workers(self):
         brokers = ','.join(map(lambda b: ':'.join((b.host, str(b.port))),
                                self._cluster.brokers.values()))
-        return _rd_kafka.Consumer(brokers, self._topic.name)
+        return _rd_kafka.Consumer(brokers,
+                                  self._topic.name,
+                                  self._partitions_by_id.keys())
 
     def consume(self, block=True):
         timeout_ms = -1 if block else self._consumer_timeout_ms
