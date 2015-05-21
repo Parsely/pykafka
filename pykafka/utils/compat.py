@@ -21,6 +21,8 @@ else:
         blocks if necessary until it can return without making the counter
         negative. If not given, value defaults to 1.
 
+        Copyright (c) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011,
+        2012, 2013, 2014, 2015 Python Software Foundation.  All rights reserved.
         """
 
         # After Tim Peters' semaphore class, but not quite the same (no maximum)
