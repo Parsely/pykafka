@@ -27,7 +27,7 @@ from Queue import Queue, Empty
 
 import base
 from .common import OffsetType
-from .compat import Semaphore
+from .utils.compat import Semaphore
 from .exceptions import (OffsetOutOfRangeError, UnknownTopicOrPartition,
                          OffsetMetadataTooLarge, OffsetsLoadInProgress,
                          NotCoordinatorForConsumer, SocketDisconnectedError,
