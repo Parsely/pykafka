@@ -27,6 +27,7 @@ from Queue import Queue, Empty
 
 import base
 from .common import OffsetType
+from .compat import Semaphore
 from .exceptions import (OffsetOutOfRangeError, UnknownTopicOrPartition,
                          OffsetMetadataTooLarge, OffsetsLoadInProgress,
                          NotCoordinatorForConsumer, SocketDisconnectedError,
@@ -144,7 +145,9 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         self._auto_start = auto_start
         self._reset_offset_on_start = reset_offset_on_start
 
-        self._last_message_time = time.time()
+        # incremented for any message arrival from any partition
+        # the initial value is 0 (no messages waiting)
+        self._messages_arrived = Semaphore(value=0)
 
         self._auto_commit_enable = auto_commit_enable
         self._auto_commit_interval_ms = auto_commit_interval_ms
@@ -153,10 +156,11 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         self._discover_offset_manager()
 
         if partitions:
-            self._partitions = {OwnedPartition(p): p
+            self._partitions = {OwnedPartition(p, self._messages_arrived): p
                                 for p in partitions}
         else:
-            self._partitions = {OwnedPartition(p): topic.partitions[k]
+            self._partitions = {OwnedPartition(p, self._messages_arrived):
+                                topic.partitions[k]
                                 for k, p in topic.partitions.iteritems()}
         self._partitions_by_id = {p.partition.id: p
                                   for p in self._partitions.iterkeys()}
@@ -270,17 +274,10 @@ class SimpleConsumer(base.BaseSimpleConsumer):
     def __iter__(self):
         """Yield an infinite stream of messages until the consumer times out"""
         while True:
-            message = self.consume(block=False)
-            if not message and self._consumer_timed_out():
+            message = self.consume(block=True)
+            if not message:
                 raise StopIteration
             yield message
-
-    def _consumer_timed_out(self):
-        """Indicates whether the consumer has received messages recently"""
-        if self._consumer_timeout_ms == -1:
-            return False
-        disp = (time.time() - self._last_message_time) * 1000.0
-        return disp > self._consumer_timeout_ms
 
     def consume(self, block=True):
         """Get one message from the consumer.
@@ -288,19 +285,43 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         :param block: Whether to block while waiting for a message
         :type block: bool
         """
-        self._last_message_time = time.time()
-        message = None
-        while not message and not self._consumer_timed_out():
-            owned_partition = self.partition_cycle.next()
-            message = owned_partition.consume()
 
-            if message:
-                self._last_message_time = time.time()
+        timeout = None
+        if block:
+            # only set a timeout if block is True.
+            # The Semaphore class is picky about
+            # specifying a timeout with blocking=False
+            if self._consumer_timeout_ms > 0:
+                timeout = float(self._consumer_timeout_ms) / 1000
+            else:
+                # Always operate with some long but finite
+                # timeout when blocking on a Semaphore since python
+                # locking cannot be interrputed by signals like
+                # KeyboardInterrupt in py2k.  (Also allows for
+                # ConsumerStopped() to be raised)
+                timeout = 1.0
+
+        while True:
+            # this will go to sleep until a message is in some queue
+            # or the timeout expires.
+            if self._messages_arrived.acquire(blocking=block, timeout=timeout):
+                # by passing through this semaphore, we know that at
+                # least one message is waiting in some queue.
+                # find the next waiting message in cycle order.
+                message = None
+                while not message:
+                    owned_partition = self.partition_cycle.next()
+                    message = owned_partition.consume()
                 return message
-            if not block:
-                break
-            if not self._running:
-                raise ConsumerStoppedException()
+            else:
+                # there was no message waiting within the timeout
+                # period (or immmediately if block=False)
+                if not self._running:
+                    raise ConsumerStoppedException()
+                elif not block or self._consumer_timeout_ms > 0:
+                    return None
+                # otherwise, keep on trucking, its a block=True with
+                # no timeout.
 
     def _auto_commit(self):
         """Commit offsets only if it's time to do so"""
@@ -515,13 +536,17 @@ class OwnedPartition(object):
     """
 
     def __init__(self,
-                 partition):
+                 partition,
+                 semaphore=None):
         """
         :param partition: The partition to hold
         :type partition: :class:`pykafka.partition.Partition`
+        :param semaphore: A Semaphore to notify when messages arrive
+        :type semaphore: :class:`pykafka.compat.Semaphore`
         """
         self.partition = partition
         self._messages = Queue()
+        self._messages_arrived = semaphore
         self.last_offset_consumed = 0
         self.next_offset = 0
         self.lock = threading.Lock()
@@ -609,3 +634,8 @@ class OwnedPartition(object):
                 continue
             self._messages.put(message)
             self.next_offset = message.offset + 1
+
+            # release consumer if waiting for message arrival
+            # by incremnted this messages_arrived sempahore
+            if self._messages_arrived is not None:
+                self._messages_arrived.release()
