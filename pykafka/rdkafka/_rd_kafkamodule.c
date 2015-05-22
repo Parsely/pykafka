@@ -47,17 +47,24 @@ Consumer_dealloc(Consumer *self) {
 
 static int
 Consumer_init(Consumer *self, PyObject *args, PyObject *kwds) {
-    char *keywords[] = {"brokers", "topic_name", "partition_ids", NULL};
+    char *keywords[] = {
+        "brokers",
+        "topic_name",
+        "partition_ids",
+        "start_offsets",  // same order as partition_ids
+        NULL};
     const char *brokers = NULL;
     const char *topic_name = NULL;
     PyObject *partition_ids = NULL;
+    PyObject *start_offsets= NULL;
     if (! PyArg_ParseTupleAndKeywords(args,
                                       kwds,
-                                      "ssO",
+                                      "ssOO",
                                       keywords,
                                       &brokers,
                                       &topic_name,
-                                      &partition_ids)) {
+                                      &partition_ids,
+                                      &start_offsets)) {
         return -1;
     }
 
@@ -94,13 +101,16 @@ Consumer_init(Consumer *self, PyObject *args, PyObject *kwds) {
     if (! self->rdk_queue_handle) return 0;  // TODO set exception, return -1
     Py_ssize_t i, len = PyList_Size(self->partition_ids);
     for (i = 0; i != len; ++i) {
-        // We didn't/won't do much type-checking on partition_ids, as this
+        // We don't do much type-checking on partition_ids/start_offsets as this
         // module is intended solely for use with the py class that wraps it
-        long part_id = PyInt_AsLong(PyList_GetItem(self->partition_ids, i));
+        int32_t part_id = PyInt_AsLong(PyList_GetItem(self->partition_ids, i));
         if (part_id == -1 && PyErr_Occurred()) return -1;
+        PyObject *offset_obj = PySequence_GetItem(start_offsets, i);
+        if (! offset_obj) return -1;  // shorter seq than partition_ids?
+        int64_t offset = PyLong_AsLongLong(offset_obj);
         if (-1 == rd_kafka_consume_start_queue(self->rdk_topic_handle,
                                                part_id,
-                                               0,  // TODO offset
+                                               offset,
                                                self->rdk_queue_handle)) {
             // TODO set exception
             return -1;
@@ -124,6 +134,7 @@ Consumer_consume(PyObject *self, PyObject *args) {
                                      rkmessage->payload, rkmessage->len,
                                      rkmessage->key, rkmessage->key_len,
                                      rkmessage->offset);
+                                     // TODO return part_id
     rd_kafka_message_destroy(rkmessage);
     return retval;
 }
