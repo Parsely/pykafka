@@ -122,9 +122,12 @@ Consumer_init(Consumer *self, PyObject *args, PyObject *kwds) {
 
 static PyObject *
 Consumer_consume(PyObject *self, PyObject *args) {
+    int timeout_ms = 0;
+    if (! PyArg_ParseTuple(args, "i", &timeout_ms)) return NULL;
+
     rd_kafka_message_t *rkmessage;
     rkmessage = rd_kafka_consume_queue(((Consumer *)self)->rdk_queue_handle,
-                                       1000); // TODO timeout_ms
+                                       timeout_ms);
     if (!rkmessage) {
         // TODO exception
         return NULL;

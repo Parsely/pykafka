@@ -24,8 +24,7 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
 
     def consume(self, block=True):
         timeout_ms = -1 if block else self._consumer_timeout_ms
-        # TODO check '-1' is supported in librdkafka (not clearly documented)
-        msg = Message(* self._fetch_workers.consume())  # TODO pass timeout arg
+        msg = Message(* self._fetch_workers.consume(timeout_ms))
 
         # set offset in OwnedPartition so the autocommit_worker can find it
         self._partitions_by_id[msg.partition_id].set_offset(msg.offset)
