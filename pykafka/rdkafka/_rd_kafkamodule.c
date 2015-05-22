@@ -129,12 +129,12 @@ Consumer_consume(PyObject *self, PyObject *args) {
         // TODO exception
         return NULL;
     }
-    // TODO check rkmessage->err
-    PyObject *retval = Py_BuildValue("s#s#i",
+    // TODO check rkmessage->err - especially handle PARTITION_EOF!
+    PyObject *retval = Py_BuildValue("s#s#lL",
                                      rkmessage->payload, rkmessage->len,
                                      rkmessage->key, rkmessage->key_len,
+                                     rkmessage->partition,
                                      rkmessage->offset);
-                                     // TODO return part_id
     rd_kafka_message_destroy(rkmessage);
     return retval;
 }
