@@ -135,12 +135,22 @@ Consumer_consume(PyObject *self, PyObject *args) {
         Py_INCREF(Py_None);
         return Py_None;
     }
-    // TODO check rkmessage->err - especially handle PARTITION_EOF!
-    PyObject *retval = Py_BuildValue("s#s#lL",
-                                     rkmessage->payload, rkmessage->len,
-                                     rkmessage->key, rkmessage->key_len,
-                                     rkmessage->partition,
-                                     rkmessage->offset);
+    PyObject *retval = NULL;
+    if (rkmessage->err == RD_KAFKA_RESP_ERR_NO_ERROR) {
+        retval = Py_BuildValue("s#s#lL",
+                               rkmessage->payload, rkmessage->len,
+                               rkmessage->key, rkmessage->key_len,
+                               rkmessage->partition,
+                               rkmessage->offset);
+    } else if (rkmessage->err == RD_KAFKA_RESP_ERR__PARTITION_EOF) {
+        // Whenever we get to the head of a partition, we get this.  There may
+        // be messages available in other partitions, so if we want to match
+        // pykafka.SimpleConsumer behaviour, we ought to avoid breaking any
+        // iteration loops, and simply skip over this one altogether:
+        retval = Consumer_consume(self, args);
+    } else {
+        // TODO set exception
+    }
     rd_kafka_message_destroy(rkmessage);
     return retval;
 }
