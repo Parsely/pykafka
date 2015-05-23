@@ -24,11 +24,12 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
 
     def consume(self, block=True):
         timeout_ms = -1 if block else self._consumer_timeout_ms
-        msg = Message(* self._fetch_workers.consume(timeout_ms))
-
-        # set offset in OwnedPartition so the autocommit_worker can find it
-        self._partitions_by_id[msg.partition_id].set_offset(msg.offset)
-        return msg
+        msg = self._fetch_workers.consume(timeout_ms)
+        if msg:
+            msg = Message(*msg)
+            # set offset in OwnedPartition so the autocommit_worker can find it
+            self._partitions_by_id[msg.partition_id].set_offset(msg.offset)
+            return msg
 
     def stop(self):
         super(RdKafkaSimpleConsumer, self).stop()

@@ -129,8 +129,11 @@ Consumer_consume(PyObject *self, PyObject *args) {
     rkmessage = rd_kafka_consume_queue(((Consumer *)self)->rdk_queue_handle,
                                        timeout_ms);
     if (!rkmessage) {
-        // TODO exception
-        return NULL;
+        // Either ETIMEDOUT or ENOENT occurred, but the latter would imply we
+        // forgot to call rd_kafka_consume_start_queue, which is unlikely in
+        // this setup.  We'll assume it was ETIMEDOUT then:
+        Py_INCREF(Py_None);
+        return Py_None;
     }
     // TODO check rkmessage->err - especially handle PARTITION_EOF!
     PyObject *retval = Py_BuildValue("s#s#lL",
