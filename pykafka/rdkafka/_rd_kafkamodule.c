@@ -1,5 +1,38 @@
 #include <Python.h>
+#include <structseq.h>
 #include <librdkafka/rdkafka.h>
+
+
+/**
+ * Message type
+ */
+
+// The PyStructSequence we will use here is the C API equivalent of namedtuple;
+// it is available in python 2.7 even though undocumented until python 3.3
+static PyTypeObject MessageType;
+
+
+static PyStructSequence_Field Message_fields[] = {
+    // field names compatible with pykafka.protocol.Message:
+    {"value", "message payload"},
+    {"partition_key", "message key (used for partitioning)"},
+    {"partition_id", "partition that message originates from"},
+    {"offset", "message offset within partition"},
+    {NULL}
+};
+
+
+static PyStructSequence_Desc Message_desc = {
+    "pykafka.rdkafka.Message",
+    NULL,  // TODO docstring
+    Message_fields,
+    4
+};
+
+
+/**
+ * Consumer type
+ */
 
 
 typedef struct {
@@ -137,11 +170,15 @@ Consumer_consume(PyObject *self, PyObject *args) {
     }
     PyObject *retval = NULL;
     if (rkmessage->err == RD_KAFKA_RESP_ERR_NO_ERROR) {
-        retval = Py_BuildValue("s#s#lL",
-                               rkmessage->payload, rkmessage->len,
-                               rkmessage->key, rkmessage->key_len,
-                               rkmessage->partition,
-                               rkmessage->offset);
+        retval = PyStructSequence_New(&MessageType);
+        PyStructSequence_SET_ITEM(retval, 0, PyBytes_FromStringAndSize(
+                                  rkmessage->payload, rkmessage->len));
+        PyStructSequence_SET_ITEM(retval, 1, PyBytes_FromStringAndSize(
+                                  rkmessage->key, rkmessage->key_len));
+        PyStructSequence_SET_ITEM(retval, 2, PyLong_FromLong(
+                                  rkmessage->partition));
+        PyStructSequence_SET_ITEM(retval, 3, PyLong_FromLongLong(
+                                  rkmessage->offset));
     } else if (rkmessage->err == RD_KAFKA_RESP_ERR__PARTITION_EOF) {
         // Whenever we get to the head of a partition, we get this.  There may
         // be messages available in other partitions, so if we want to match
@@ -207,9 +244,14 @@ init_rd_kafka(void) {
     PyObject *mod = Py_InitModule("pykafka.rdkafka._rd_kafka", NULL);
     if (mod == NULL) return;
 
+    if (MessageType.tp_name == NULL) {
+        PyStructSequence_InitType(&MessageType, &Message_desc);
+    }
+    Py_INCREF(&MessageType);
+    PyModule_AddObject(mod, "Message", (PyObject *)&MessageType);
+
     ConsumerType.tp_new = PyType_GenericNew;
     if (PyType_Ready(&ConsumerType) != 0) return;
     Py_INCREF(&ConsumerType);
-
     PyModule_AddObject(mod, "Consumer", (PyObject *)&ConsumerType);
 }
