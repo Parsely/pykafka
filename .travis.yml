@@ -11,6 +11,10 @@ notifications:
 
 before_install:
     - sudo apt-get install -qq libev-dev libsnappy-dev
+    - sudo apt-get install -qq zlib1g-dev  # for librdkafka
+    - wget https://github.com/edenhill/librdkafka/archive/0.8.6.tar.gz
+    - tar -xzf 0.8.6.tar.gz
+    - cd librdkafka-0.8.6/ && ./configure && make && sudo make install
 
 install:
     - pip install python-snappy kazoo
