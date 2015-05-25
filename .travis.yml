@@ -14,7 +14,7 @@ before_install:
     - sudo apt-get install -qq zlib1g-dev  # for librdkafka
     - wget https://github.com/edenhill/librdkafka/archive/0.8.6.tar.gz
     - tar -xzf 0.8.6.tar.gz
-    - cd librdkafka-0.8.6/ && ./configure && make && sudo make install
+    - cd librdkafka-0.8.6/ && ./configure && make && sudo make install && cd -
 
 install:
     - pip install python-snappy kazoo
