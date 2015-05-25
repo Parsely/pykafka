@@ -29,7 +29,8 @@ import base
 from .common import OffsetType
 from .exceptions import (OffsetOutOfRangeError, UnknownTopicOrPartition,
                          OffsetMetadataTooLarge, OffsetsLoadInProgress,
-                         NotCoordinatorForConsumer, ERROR_CODES)
+                         NotCoordinatorForConsumer, SocketDisconnectedError,
+                         ConsumerStoppedException, ERROR_CODES)
 from .protocol import (PartitionFetchRequest, PartitionOffsetCommitRequest,
                        PartitionOffsetFetchRequest, PartitionOffsetRequest)
 from .utils.error_handlers import handle_partition_responses, raise_error
@@ -163,6 +164,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
 
         self._default_error_handlers = self._build_default_error_handlers()
 
+        self._running = False
         if self._auto_start:
             self.start()
 
@@ -182,9 +184,6 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         """
         self._running = True
 
-        if self._auto_commit_enable:
-            self._autocommit_worker_thread = self._setup_autocommit_worker()
-
         # Figure out which offset wer're starting on
         if self._reset_offset_on_start:
             self._reset_offsets()
@@ -192,6 +191,9 @@ class SimpleConsumer(base.BaseSimpleConsumer):
             self.fetch_offsets()
 
         self._fetch_workers = self._setup_fetch_workers()
+
+        if self._auto_commit_enable:
+            self._autocommit_worker_thread = self._setup_autocommit_worker()
 
     def _build_default_error_handlers(self):
         """Set up the error handlers to use for partition errors."""
@@ -294,6 +296,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                 return message
             if not block:
                 break
+            if not self._running:
+                raise ConsumerStoppedException()
 
     def _auto_commit(self):
         """Commit offsets only if it's time to do so"""
@@ -355,6 +359,9 @@ class SimpleConsumer(base.BaseSimpleConsumer):
 
         def _handle_success(parts):
             for owned_partition, pres in parts:
+                log.info("Set offset for partition %s to %s",
+                         owned_partition.partition.id,
+                         pres.offset)
                 owned_partition.set_offset(pres.offset)
 
         log.info("Fetching offsets")
@@ -402,7 +409,9 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         """
         def _handle_success(parts):
             for owned_partition, pres in parts:
-                owned_partition.set_offset(pres.offset[0])
+                # offset_latest requests return the next offset to consume,
+                # so account for this here by passing offset - 1
+                owned_partition.set_offset(pres.offset[0] - 1)
 
         if partitions is None:
             partitions = self._partitions.keys()
@@ -433,9 +442,13 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         """
         def _handle_success(parts):
             for owned_partition, pres in parts:
-                log.debug("Fetched %s messages for partition %s",
-                          len(pres.messages), owned_partition.partition.id)
-                owned_partition.enqueue_messages(pres.messages)
+                if len(pres.messages) > 0:
+                    log.debug("Fetched %s messages for partition %s",
+                              len(pres.messages), owned_partition.partition.id)
+                    owned_partition.enqueue_messages(pres.messages)
+                    log.debug("Partition %s queue holds %s messages",
+                              owned_partition.partition.id,
+                              owned_partition.message_count)
 
         for broker, owned_partitions in self._partitions_by_leader.iteritems():
             partition_reqs = {}
@@ -452,11 +465,19 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                                   owned_partition.partition.id,
                                   owned_partition.message_count)
             if partition_reqs:
-                response = broker.fetch_messages(
-                    [a for a in partition_reqs.itervalues() if a],
-                    timeout=self._fetch_wait_max_ms,
-                    min_bytes=self._fetch_min_bytes
-                )
+                try:
+                    response = broker.fetch_messages(
+                        [a for a in partition_reqs.itervalues() if a],
+                        timeout=self._fetch_wait_max_ms,
+                        min_bytes=self._fetch_min_bytes
+                    )
+                except SocketDisconnectedError:
+                    # If the broker dies while we're supposed to stop,
+                    # it's fine, and probably an integration test.
+                    if not self._running:
+                        return
+                    else:
+                        raise
                 handle_partition_responses(
                     response,
                     self._default_error_handlers,
@@ -561,6 +582,9 @@ class OwnedPartition(object):
         """
         for message in messages:
             if message.offset < self.last_offset_consumed:
+                log.debug("Skipping enqueue for offset (%s) "
+                          "less than last_offset_consumed (%s)",
+                          message.offset, self.last_offset_consumed)
                 continue
             self._messages.put(message)
             self.next_offset = message.offset + 1

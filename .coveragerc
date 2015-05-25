@@ -1,0 +1,7 @@
+[run]
+source = pykafka
+omit =
+    */python?.?/*
+    */lib-python/?.?/*.py
+    */site-packages/nose/*
+    */unittest2/*

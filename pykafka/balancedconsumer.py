@@ -30,7 +30,8 @@ from kazoo.exceptions import NoNodeException, NodeExistsError
 from kazoo.recipe.watchers import ChildrenWatch
 
 from .common import OffsetType
-from .exceptions import KafkaException, PartitionOwnedError
+from .exceptions import (KafkaException, PartitionOwnedError,
+                         ConsumerStoppedException)
 from .simpleconsumer import SimpleConsumer
 
 
@@ -228,7 +229,8 @@ class BalancedConsumer():
             # reset the offsets, since they can happen at any time
             reset_offset_on_start = False
         self._consumer = SimpleConsumer(
-            self._topic, self._cluster,
+            self._topic,
+            self._cluster,
             consumer_group=self._consumer_group,
             partitions=list(self._partitions),
             auto_commit_enable=self._auto_commit_enable,
@@ -278,12 +280,11 @@ class BalancedConsumer():
         new_partitions = itertools.islice(all_parts, start, start + num_parts)
         new_partitions = set(new_partitions)
         log.info('Balancing %i participants for %i partitions. '
-                  '\nOwning %i partitions.'
-                  '\nMy Partitions: %s',
-                  len(participants), len(all_parts),
-                  len(new_partitions),
-                  [p_to_str(p) for p in new_partitions],
-        )
+                 '\nOwning %i partitions.'
+                 '\nMy Partitions: %s',
+                 len(participants), len(all_parts),
+                 len(new_partitions),
+                 [p_to_str(p) for p in new_partitions])
         return new_partitions
 
     def _get_participants(self):
@@ -363,6 +364,8 @@ class BalancedConsumer():
 
         This method is called whenever a zookeeper watch is triggered.
         """
+        if self._consumer is not None:
+            self.commit_offsets()
         with self._rebalancing_lock:
             log.info('Rebalancing consumer %s for topic %s.' % (
                 self._consumer_id, self._topic.name)
@@ -456,7 +459,15 @@ class BalancedConsumer():
         :param block: Whether to block while waiting for a message
         :type block: bool
         """
-        return self._consumer.consume(block=block)
+        message = None
+        while message is None:
+            try:
+                message = self._consumer.consume(block=block)
+            except ConsumerStoppedException:
+                continue
+            if not block:
+                return
+        return message
 
     def commit_offsets(self):
         """Commit offsets for this consumer's partitions

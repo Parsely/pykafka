@@ -14,12 +14,17 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+import re
 import sys
 
 from setuptools import setup, find_packages
 from setuptools.extension import Extension
 
-from version import version
+# Get version without importing, which avoids dependency issues
+def get_version():
+    with open('pykafka/__init__.py') as version_file:
+        return re.search(r"""__version__\s+=\s+(['"])(?P<version>.+?)\1""",
+                         version_file.read()).group('version')
 
 install_requires = [
     'kazoo'
@@ -43,7 +48,7 @@ rd_kafkamodule = Extension(
 
 setup(
     name='pykafka',
-    version=version,
+    version=get_version(),
     author='Keith Bourgoin',
     author_email='pykafka-user@googlegroups.com',
     url='https://github.com/Parsely/pykafka',

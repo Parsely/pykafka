@@ -1,8 +1,69 @@
 import mock
+import os
 import time
 import unittest2
 
+from pykafka import KafkaClient
 from pykafka.simpleconsumer import OwnedPartition
+from pykafka.test.kafka_instance import KafkaInstance, KafkaConnection
+from pykafka.test.utils import get_cluster, stop_cluster
+
+
+class TestSimpleConsumer(unittest2.TestCase):
+    maxDiff = None
+
+    @classmethod
+    def setUpClass(cls):
+        cls.kafka = get_cluster()
+        cls.topic_name = 'test-data'
+        cls.kafka.create_topic(cls.topic_name, 3, 2)
+        cls.kafka.produce_messages(
+            cls.topic_name,
+            ('msg {}'.format(i) for i in xrange(1000))
+        )
+        cls.client = KafkaClient(cls.kafka.brokers)
+
+    @classmethod
+    def tearDownClass(cls):
+        stop_cluster(cls.kafka)
+
+    def test_consume(self):
+        consumer = self.client.topics[self.topic_name].get_simple_consumer()
+        try:
+            messages = [consumer.consume() for _ in xrange(1000)]
+            self.assertEquals(len(messages), 1000)
+        finally:
+            consumer.stop()
+
+    def test_offset_commit(self):
+        consumer = self.client.topics[self.topic_name].get_simple_consumer('test_offset_commit')
+        try:
+            [consumer.consume() for _ in xrange(100)]
+            consumer.commit_offsets()
+            res = consumer.fetch_offsets()
+            offset_sum = sum(r[1].offset for r in res if r[1].offset >= 0)
+            self.assertEquals(offset_sum, 99)  # 0-indexed
+        finally:
+            consumer.stop()
+
+
+    def test_offset_resume(self):
+        consumer = self.client.topics[self.topic_name].get_simple_consumer('test_offset_resume')
+        try:
+            [consumer.consume() for _ in xrange(100)]
+            consumer.commit_offsets()
+        finally:
+            consumer.stop()
+
+        consumer = self.client.topics[self.topic_name].get_simple_consumer('test_offset_resume')
+        try:
+            res = consumer.fetch_offsets()
+            offset_sum = sum(p.last_offset_consumed
+                             for p in consumer.partitions
+                             if p.last_offset_consumed >= 0)
+            self.assertEquals(offset_sum, 99)  # 0-indexed
+        finally:
+            consumer.stop()
 
 
 class TestOwnedPartition(unittest2.TestCase):

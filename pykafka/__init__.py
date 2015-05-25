@@ -1,6 +1,3 @@
-from version import version
-__version__ = version
-
 from broker import Broker
 from simpleconsumer import SimpleConsumer
 from cluster import Cluster
@@ -9,6 +6,9 @@ from producer import Producer
 from topic import Topic
 from client import KafkaClient
 from balancedconsumer import BalancedConsumer
+
+__version__ = '1.0.0-dev'
+
 
 __all__ = ["Broker", "SimpleConsumer", "Cluster", "Partition", "Producer",
            "Topic", "KafkaClient", "BalancedConsumer"]
