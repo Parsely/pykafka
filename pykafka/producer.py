@@ -17,11 +17,11 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-__all__ = ["Producer", "AsyncProducer"]
+__all__ = ["Producer"]
 import itertools
 import logging
 import time
-from collections import defaultdict
+from Queue import Queue, Empty
 
 from .common import CompressionType
 from .exceptions import (
@@ -54,7 +54,7 @@ class AsyncProducer():
 
 class Producer():
     """
-    This class implements the synchronous producer logic found in the
+    This class implements the asynchronous producer logic found in the
     JVM driver.
     """
     def __init__(self,
@@ -103,6 +103,12 @@ class Producer():
         self._required_acks = required_acks
         self._ack_timeout_ms = ack_timeout_ms
         self._batch_size = batch_size
+
+        self._owned_brokers = {}
+        for partition in self._topic.partitions.values():
+            if partition.leader.id not in self._owned_brokers:
+                self._owned_brokers[partition.leader.id] = OwnedBroker(self,
+                                                                       partition.leader)
 
     def __repr__(self):
         return "<{module}.{name} at {id_}>".format(
@@ -206,30 +212,12 @@ class Producer():
         :param message_partition_tups: Messages with partitions assigned.
         :type message_partition_tups:  tuples of ((key, value), partition_id)
         """
-        # Requests grouped by broker
-        requests = defaultdict(lambda: ProduceRequest(
-            compression_type=self._compression,
-            required_acks=self._required_acks,
-            timeout=self._ack_timeout_ms,
-        ))
-
-        for ((key, value), partition_id) in message_partition_tups:
+        for tup in message_partition_tups:
+            _, partition_id = tup
             # N.B. This handles retries, so the leader lookup is needed
             leader = self._topic.partitions[partition_id].leader
-            requests[leader].add_message(
-                Message(value, partition_key=key),
-                self._topic.name,
-                partition_id
-            )
-            # Send requests at the batch size
-            if requests[leader].message_count() >= self._batch_size:
-                self._send_request(leader,
-                                   requests.pop(leader),
-                                   attempt)
-
-        # Send any still not sent
-        for leader, req in requests.iteritems():
-            self._send_request(leader, req, attempt)
+            self._owned_brokers[leader.id].enqueue_message(tup)
+            log.debug("Enqueued %s", tup)
 
     def produce(self, messages):
         """Produce a set of messages.
@@ -241,3 +229,44 @@ class Producer():
         # only *some* messages when a leader changes. Therefore, we don't want
         # a random partition distribution changing that on the retry.
         self._produce(self._partition_messages(messages), 0)
+
+
+class OwnedBroker():
+    def __init__(self, producer, broker):
+        self._broker = broker
+        self._producer = producer
+        self._msg_queue = Queue()
+
+        def worker():
+            while True:
+                self._get_message()
+        log.debug("Starting new produce worker thread for broker %s", self._broker.id)
+        self._worker = self._producer._cluster.handler.spawn(worker)
+
+        self.reset_request()
+
+    def enqueue_message(self, message):
+        self._msg_queue.put(message)
+
+    def reset_request(self):
+        self.request = ProduceRequest(
+            compression_type=self._producer._compression,
+            required_acks=self._producer._required_acks,
+            timeout=self._producer._ack_timeout_ms,
+        )
+
+    def _get_message(self):
+        try:
+            msg_partition_tup = self._msg_queue.get_nowait()
+        except Empty:
+            return
+        (key, value), partition_id = msg_partition_tup
+
+        self.request.add_message(
+            Message(value, partition_key=key),
+            self._producer._topic.name,
+            partition_id
+        )
+        #if self.request.message_count() >= self._producer._batch_size:
+        self._producer._send_request(self._broker, self.request, 0)
+        self.reset_request()
