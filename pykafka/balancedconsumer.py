@@ -19,7 +19,7 @@ limitations under the License.
 """
 __all__ = ["BalancedConsumer"]
 import itertools
-import logging as log
+import logging
 import math
 import socket
 import time
@@ -35,8 +35,14 @@ from .exceptions import (KafkaException, PartitionOwnedError,
 from .simpleconsumer import SimpleConsumer
 
 
+log = logging.getLogger(__name__)
+
+
 class BalancedConsumer():
     """
+    A self-balancing consumer for Kafka that uses ZooKeeper to communicate
+    with other balancing consumers.
+
     Maintains a single instance of SimpleConsumer, periodically using the
     consumer rebalancing algorithm to reassign partitions to this
     SimpleConsumer.
@@ -184,6 +190,18 @@ class BalancedConsumer():
             self._consumer_group
         )
 
+    def _setup_checker_worker(self):
+        """Start the zookeeper partition checker thread"""
+        def checker():
+            while True:
+                time.sleep(120)
+                if not self._running:
+                    break
+                self._check_held_partitions()
+            log.debug("Checker thread exiting")
+        log.debug("Starting checker thread")
+        return self._cluster.handler.spawn(checker)
+
     def start(self):
         """Open connections and join a cluster."""
         if self._zookeeper is None:
@@ -193,6 +211,8 @@ class BalancedConsumer():
         self._add_self()
         self._set_watches()
         self._rebalance()
+        self._running = True
+        self._setup_checker_worker()
 
     def stop(self):
         """Close the zookeeper connection and stop consuming.
@@ -201,6 +221,7 @@ class BalancedConsumer():
         """
         self._zookeeper.stop()
         self._consumer.stop()
+        self._running = False
 
     def _setup_zookeeper(self, zookeeper_connect, timeout):
         """Open a connection to a ZooKeeper host.
@@ -279,12 +300,9 @@ class BalancedConsumer():
         # assign partitions from i*N to (i+1)*N - 1 to consumer Ci
         new_partitions = itertools.islice(all_parts, start, start + num_parts)
         new_partitions = set(new_partitions)
-        log.info('Balancing %i participants for %i partitions. '
-                 '\nOwning %i partitions.'
-                 '\nMy Partitions: %s',
-                 len(participants), len(all_parts),
-                 len(new_partitions),
-                 [p_to_str(p) for p in new_partitions])
+        log.info('Balancing %i participants for %i partitions.\nOwning %i partitions.',
+                 len(participants), len(all_parts), len(new_partitions))
+        log.debug('My partitions: %s', [p_to_str(p) for p in new_partitions])
         return new_partitions
 
     def _get_participants(self):
@@ -391,6 +409,8 @@ class BalancedConsumer():
                     log.info('Rebalancing Complete.')
                 except PartitionOwnedError as ex:
                     if i == self._rebalance_max_retries - 1:
+                        log.warning('Failed to acquire partition %s after %d retries.',
+                                    ex.partition, i)
                         raise
                     log.info('Unable to acquire partition %s. Retrying', ex.partition)
                     time.sleep(i * (self._rebalance_backoff_ms / 1000))
@@ -435,6 +455,30 @@ class BalancedConsumer():
             except NodeExistsError:
                 raise PartitionOwnedError(p)
 
+    def _check_held_partitions(self):
+        """Double-check held partitions against zookeeper
+
+        Ensure that the partitions held by this consumer are the ones that
+        zookeeper thinks it's holding. If not, rebalance.
+        """
+        log.info("Checking held partitions against ZooKeeper")
+        # build a set of partition ids zookeeper says we own
+        zk_partition_ids = set()
+        all_partitions = self._zookeeper.get_children(self._topic_path)
+        for partition_slug in all_partitions:
+            owner_id, stat = self._zookeeper.get(
+                '{}/{}'.format(self._topic_path, partition_slug))
+            if owner_id == self._consumer_id:
+                zk_partition_ids.add(int(partition_slug.split('-')[1]))
+        # build a set of partition ids we think we own
+        internal_partition_ids = set([p.id for p in self._partitions])
+        # compare the two sets, rebalance if necessary
+        if internal_partition_ids != zk_partition_ids:
+            log.warning("Internal partition registry doesn't match ZooKeeper!")
+            log.debug("Internal partition ids: %s\nZooKeeper partition ids: %s",
+                      internal_partition_ids, zk_partition_ids)
+            self._rebalance()
+
     def _brokers_changed(self, brokers):
         if self._setting_watches:
             return
@@ -466,7 +510,7 @@ class BalancedConsumer():
             except ConsumerStoppedException:
                 continue
             if not block:
-                return
+                return message
         return message
 
     def commit_offsets(self):

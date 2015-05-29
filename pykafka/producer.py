@@ -34,7 +34,7 @@ from .partitioners import random_partitioner
 from .protocol import Message, ProduceRequest
 
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 class AsyncProducer(base.BaseAsyncProducer):
@@ -155,28 +155,28 @@ class Producer(base.BaseProducer):
                     if presponse.err == 0:
                         continue  # All's well
                     if presponse.err == UnknownTopicOrPartition.ERROR_CODE:
-                        logger.warning('Unknown topic: %s or partition: %s. '
-                                       'Retrying.', topic, partition)
+                        log.warning('Unknown topic: %s or partition: %s. '
+                                    'Retrying.', topic, partition)
                     elif presponse.err == NotLeaderForPartition.ERROR_CODE:
-                        logger.warning('Partition leader for %s/%s changed. '
-                                       'Retrying.', topic, partition)
+                        log.warning('Partition leader for %s/%s changed. '
+                                    'Retrying.', topic, partition)
                         # Update cluster metadata to get new leader
                         self._cluster.update()
                     elif presponse.err == RequestTimedOut.ERROR_CODE:
-                        logger.warning('Produce request to %s:%s timed out. '
-                                       'Retrying.', broker.host, broker.port)
+                        log.warning('Produce request to %s:%s timed out. '
+                                    'Retrying.', broker.host, broker.port)
                     elif presponse.err == InvalidMessageError.ERROR_CODE:
-                        logger.warning('Encountered InvalidMessageError')
+                        log.warning('Encountered InvalidMessageError')
                     elif presponse.err == InvalidMessageSize.ERROR_CODE:
-                        logger.warning('Encountered InvalidMessageSize')
+                        log.warning('Encountered InvalidMessageSize')
                         continue
                     elif presponse.err == MessageSizeTooLarge.ERROR_CODE:
-                        logger.warning('Encountered MessageSizeTooLarge')
+                        log.warning('Encountered MessageSizeTooLarge')
                         continue
                     to_retry.extend(_get_partition_msgs(partition, req))
         except SocketDisconnectedError:
-            logger.warning('Broker %s:%s disconnected. Retrying.',
-                           broker.host, broker.port)
+            log.warning('Broker %s:%s disconnected. Retrying.',
+                        broker.host, broker.port)
             self._cluster.update()
             to_retry = [
                 ((message.partition_key, message.value), p_id)

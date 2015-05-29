@@ -19,6 +19,7 @@ limitations under the License.
 __all__ = ["encode_gzip", "decode_gzip", "encode_snappy", "decode_snappy"]
 import gzip
 import logging
+import struct
 
 from cStringIO import StringIO
 
@@ -27,7 +28,10 @@ try:
 except ImportError:
     snappy = None
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
+# constants used in snappy xerial encoding/decoding
+_XERIAL_V1_HEADER = (-126, 'S', 'N', 'A', 'P', 'P', 'Y', 0, 1, 1)
+_XERIAL_V1_FORMAT = 'bccccccBii'
 
 
 def encode_gzip(buff):
@@ -52,15 +56,104 @@ def decode_gzip(buff):
     return output
 
 
-def encode_snappy(buff):
-    """Encode a buffer using Snappy"""
+def encode_snappy(buff, xerial_compatible=False, xerial_blocksize=32 * 1024):
+    """Encode a buffer using snappy
+
+    If xerial_compatible is set, the buffer is encoded in a fashion compatible
+    with the xerial snappy library.
+
+    The block size (xerial_blocksize) controls how frequently the blocking
+    occurs. 32k is the default in the xerial library.
+
+    The format is as follows:
+    +-------------+------------+--------------+------------+--------------+
+    |   Header    | Block1 len | Block1 data  | Blockn len | Blockn data  |
+    |-------------+------------+--------------+------------+--------------|
+    |  16 bytes   |  BE int32  | snappy bytes |  BE int32  | snappy bytes |
+    +-------------+------------+--------------+------------+--------------+
+
+    It is important to note that `blocksize` is the amount of uncompressed
+    data presented to snappy at each block, whereas `blocklen` is the
+    number of bytes that will be present in the stream.
+
+    Adapted from kafka-python
+    https://github.com/mumrah/kafka-python/pull/127/files
+    """
     if snappy is None:
         raise ImportError("Please install python-snappy")
-    return snappy.compress(buff)
+    if xerial_compatible:
+        def _chunker():
+            for i in xrange(0, len(buff), xerial_blocksize):
+                yield buff[i:i + xerial_blocksize]
+        out = StringIO()
+        header = ''.join([struct.pack('!' + fmt, dat) for fmt, dat
+                          in zip(_XERIAL_V1_FORMAT, _XERIAL_V1_HEADER)])
+        out.write(header)
+        for chunk in _chunker():
+            block = snappy.compress(chunk)
+            block_size = len(block)
+            out.write(struct.pack('!i', block_size))
+            out.write(block)
+        out.seek(0)
+        return out.read()
+    else:
+        return snappy.compress(buff)
 
 
 def decode_snappy(buff):
-    """Decode a buffer using Snappy"""
+    """Decode a buffer using Snappy
+
+    If xerial is found to be in use, the buffer is decoded in a fashion
+    compatible with the xerial snappy library.
+
+    Adapted from kafka-python
+    https://github.com/mumrah/kafka-python/pull/127/files
+    """
     if snappy is None:
         raise ImportError("Please install python-snappy")
-    return snappy.decompress(buff)
+    if _detect_xerial_stream(buff):
+        out = StringIO()
+        body = buffer(buff[16:])
+        length = len(body)
+        cursor = 0
+        while cursor < length:
+            block_size = struct.unpack_from('!i', body[cursor:])[0]
+            cursor += 4
+            end = cursor + block_size
+            out.write(snappy.decompress(body[cursor:end]))
+            cursor = end
+        out.seek(0)
+        return out.read()
+    else:
+        return snappy.decompress(buff)
+
+
+def _detect_xerial_stream(buff):
+    """Detects the use of the xerial snappy library
+
+    Returns True if the data given might have been encoded with the blocking
+    mode of the xerial snappy library.
+
+    This mode writes a magic header of the format:
+        +--------+--------------+------------+---------+--------+
+        | Marker | Magic String | Null / Pad | Version | Compat |
+        |--------+--------------+------------+---------+--------|
+        |  byte  |   c-string   |    byte    |  int32  | int32  |
+        |--------+--------------+------------+---------+--------|
+        |  -126  |   'SNAPPY'   |     \0     |         |        |
+        +--------+--------------+------------+---------+--------+
+
+    `pad` appears to be to ensure that SNAPPY is a valid c-string.
+    `version` is the version of this format as written by xerial.
+    In the wild, this is currently 1, and as such we only support v1.
+
+    `compat` is there to claim the miniumum supported version that
+    can read a xerial block stream; presently in the wild this is 1.
+
+    Adapted from kafka-python
+    https://github.com/mumrah/kafka-python/pull/127/files
+    """
+    if len(buff) > 16:
+        header = struct.unpack('!' + _XERIAL_V1_FORMAT, bytes(buff)[:16])
+        return header == _XERIAL_V1_HEADER
+    return False

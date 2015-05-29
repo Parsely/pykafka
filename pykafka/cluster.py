@@ -30,7 +30,7 @@ from .protocol import ConsumerMetadataRequest, ConsumerMetadataResponse
 from .topic import Topic
 
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 class TopicDict(dict):
@@ -41,7 +41,7 @@ class TopicDict(dict):
         self._cluster = weakref.proxy(cluster)
 
     def __missing__(self, key):
-        logger.info('Topic %s not found. Attempting to auto-create.', key)
+        log.warning('Topic %s not found. Attempting to auto-create.', key)
         if self._create_topic(key):
             return self[key]
         else:
@@ -63,7 +63,7 @@ class TopicDict(dict):
             self._cluster.brokers[self._cluster.brokers.keys()[0]].request_metadata(topics=[topic_name])
             self._cluster.update()
             if topic_name in self:
-                logger.info('Topic %s successfully auto-created.', topic_name)
+                log.info('Topic %s successfully auto-created.', topic_name)
                 return True
             time.sleep(0.1)
 
@@ -150,8 +150,8 @@ class Cluster(object):
                     if response is not None:
                         return response
                 except:
-                    logger.exception('Unable to connect to broker %s',
-                                     broker_str)
+                    log.exception('Unable to connect to broker %s',
+                                  broker_str)
         # Couldn't connect anywhere. Raise an error.
         raise Exception('Unable to connect to a broker to fetch metadata.')
 
@@ -165,13 +165,17 @@ class Cluster(object):
         # FIXME: A cluster with no topics returns no brokers in metadata
         # Remove old brokers
         removed = set(self._brokers.keys()) - set(broker_metadata.keys())
+        if len(removed) > 0:
+            log.info('Removing %d brokers', len(removed))
         for id_ in removed:
-            logger.info('Removing broker %s', self._brokers[id_])
+            log.debug('Removing broker %s', self._brokers[id_])
             self._brokers.pop(id_)
         # Add/update current brokers
+        if len(broker_metadata) > 0:
+            log.info('Discovered %d brokers', len(broker_metadata))
         for id_, meta in broker_metadata.iteritems():
             if id_ not in self._brokers:
-                logger.info('Discovered broker id %s: %s:%s', id_, meta.host, meta.port)
+                log.debug('Discovered broker id %s: %s:%s', id_, meta.host, meta.port)
                 self._brokers[id_] = Broker.from_metadata(
                     meta, self._handler, self._socket_timeout_ms,
                     self._offsets_channel_socket_timeout_ms,
@@ -195,15 +199,19 @@ class Cluster(object):
         """
         # Remove old topics
         removed = set(self._topics.keys()) - set(metadata.keys())
+        if len(removed) > 0:
+            log.info("Removing %d topics", len(removed))
         for name in removed:
-            logger.info('Removing topic %s', self._topics[name])
+            log.debug('Removing topic %s', self._topics[name])
             self._topics.pop(name)
         # Add/update partition information
+        if len(metadata) > 0:
+            log.info("Discovered %d topics", len(metadata))
         for name, meta in metadata.iteritems():
             if not self._should_exclude_topic(name):
                 if name not in self._topics:
                     self._topics[name] = Topic(self, meta)
-                    logger.info('Discovered topic %s', self._topics[name])
+                    log.debug('Discovered topic %s', self._topics[name])
                 else:
                     self._topics[name].update(meta)
 
@@ -222,15 +230,15 @@ class Cluster(object):
             find the offset manager.
         :type consumer_group: str
         """
-        logger.info("Attempting to discover offset manager for consumer group '%s'",
-                    consumer_group)
+        log.info("Attempting to discover offset manager for consumer group '%s'",
+                 consumer_group)
         # arbitrarily choose a broker, since this request can go to any
         broker = self.brokers[random.choice(self.brokers.keys())]
         MAX_RETRIES = 5
 
         for i in xrange(MAX_RETRIES):
             if i > 0:
-                logger.info("Retrying")
+                log.debug("Retrying offset manager discovery")
             time.sleep(i * 2)
 
             req = ConsumerMetadataRequest(consumer_group)
@@ -238,25 +246,25 @@ class Cluster(object):
             try:
                 res = future.get(ConsumerMetadataResponse)
             except ConsumerCoordinatorNotAvailable:
-                logger.error('Error discovering offset manager.')
+                log.error('Error discovering offset manager.')
                 if i == MAX_RETRIES - 1:
                     raise
             else:
                 coordinator = self.brokers.get(res.coordinator_id, None)
                 if coordinator is None:
                     raise Exception('Coordinator broker with id {} not found'.format(res.coordinator_id))
-                logger.info("Found coordinator broker with id %s", res.coordinator_id)
+                log.info("Found coordinator broker with id %s", res.coordinator_id)
                 return coordinator
 
     def update(self):
         """Update known brokers and topics."""
         metadata = self._get_metadata()
         if len(metadata.brokers) == 0 and len(metadata.topics) == 0:
-            logger.warning('No broker metadata found. If this is a fresh cluster, '
-                           'this may be due to a bug in Kafka. You can force '
-                           'broker metadata to be returned by manually creating '
-                           'a topic in the cluster. See '
-                           'https://issues.apache.org/jira/browse/KAFKA-2154 '
-                           'for information.')
+            log.warning('No broker metadata found. If this is a fresh cluster, '
+                        'this may be due to a bug in Kafka. You can force '
+                        'broker metadata to be returned by manually creating '
+                        'a topic in the cluster. See '
+                        'https://issues.apache.org/jira/browse/KAFKA-2154 '
+                        'for information.')
         self._update_brokers(metadata.brokers)
         self._update_topics(metadata.topics)

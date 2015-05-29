@@ -119,8 +119,6 @@ class TestOwnedPartition(unittest2.TestCase):
         self.assertEqual(request.topic_name, topic.name)
         self.assertEqual(request.partition_id, partition.id)
         self.assertEqual(request.offset, op.last_offset_consumed)
-        # sketchy, but it works because of second resolution
-        self.assertEqual(request.timestamp, rqtime)
         self.assertEqual(request.metadata, 'pykafka')
 
     def test_partition_offset_fetch_request(self):

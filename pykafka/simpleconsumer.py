@@ -19,7 +19,7 @@ limitations under the License.
 """
 __all__ = ["SimpleConsumer"]
 import itertools
-import logging as log
+import logging
 import time
 import threading
 from collections import defaultdict
@@ -27,6 +27,7 @@ from Queue import Queue, Empty
 
 import base
 from .common import OffsetType
+from .utils.compat import Semaphore
 from .exceptions import (OffsetOutOfRangeError, UnknownTopicOrPartition,
                          OffsetMetadataTooLarge, OffsetsLoadInProgress,
                          NotCoordinatorForConsumer, SocketDisconnectedError,
@@ -34,6 +35,9 @@ from .exceptions import (OffsetOutOfRangeError, UnknownTopicOrPartition,
 from .protocol import (PartitionFetchRequest, PartitionOffsetCommitRequest,
                        PartitionOffsetFetchRequest, PartitionOffsetRequest)
 from .utils.error_handlers import handle_partition_responses, raise_error
+
+
+log = logging.getLogger(__name__)
 
 
 class SimpleConsumer(base.BaseSimpleConsumer):
@@ -137,10 +141,13 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         self._offsets_commit_max_retries = offsets_commit_max_retries
         # not directly configurable
         self._offsets_fetch_max_retries = offsets_commit_max_retries
+        self._offsets_reset_max_retries = offsets_commit_max_retries
         self._auto_start = auto_start
         self._reset_offset_on_start = reset_offset_on_start
 
-        self._last_message_time = time.time()
+        # incremented for any message arrival from any partition
+        # the initial value is 0 (no messages waiting)
+        self._messages_arrived = Semaphore(value=0)
 
         self._auto_commit_enable = auto_commit_enable
         self._auto_commit_interval_ms = auto_commit_interval_ms
@@ -149,10 +156,11 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         self._discover_offset_manager()
 
         if partitions:
-            self._partitions = {OwnedPartition(p): p
+            self._partitions = {OwnedPartition(p, self._messages_arrived): p
                                 for p in partitions}
         else:
-            self._partitions = {OwnedPartition(p): topic.partitions[k]
+            self._partitions = {OwnedPartition(p, self._messages_arrived):
+                                topic.partitions[k]
                                 for k, p in topic.partitions.iteritems()}
         self._partitions_by_id = {p.partition.id: p
                                   for p in self._partitions.iterkeys()}
@@ -267,17 +275,10 @@ class SimpleConsumer(base.BaseSimpleConsumer):
     def __iter__(self):
         """Yield an infinite stream of messages until the consumer times out"""
         while True:
-            message = self.consume(block=False)
-            if not message and self._consumer_timed_out():
+            message = self.consume(block=True)
+            if not message:
                 raise StopIteration
             yield message
-
-    def _consumer_timed_out(self):
-        """Indicates whether the consumer has received messages recently"""
-        if self._consumer_timeout_ms == -1:
-            return False
-        disp = (time.time() - self._last_message_time) * 1000.0
-        return disp > self._consumer_timeout_ms
 
     def consume(self, block=True):
         """Get one message from the consumer.
@@ -285,19 +286,27 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         :param block: Whether to block while waiting for a message
         :type block: bool
         """
-        self._last_message_time = time.time()
-        message = None
-        while not message and not self._consumer_timed_out():
-            owned_partition = self.partition_cycle.next()
-            message = owned_partition.consume()
+        timeout = None
+        if block:
+            if self._consumer_timeout_ms > 0:
+                timeout = float(self._consumer_timeout_ms) / 1000
+            else:
+                timeout = 1.0
 
-            if message:
-                self._last_message_time = time.time()
+        while True:
+            if self._messages_arrived.acquire(blocking=block, timeout=timeout):
+                # by passing through this semaphore, we know that at
+                # least one message is waiting in some queue.
+                message = None
+                while not message:
+                    owned_partition = self.partition_cycle.next()
+                    message = owned_partition.consume()
                 return message
-            if not block:
-                break
-            if not self._running:
-                raise ConsumerStoppedException()
+            else:
+                if not self._running:
+                    raise ConsumerStoppedException()
+                elif not block or self._consumer_timeout_ms > 0:
+                    return None
 
     def _auto_commit(self):
         """Commit offsets only if it's time to do so"""
@@ -319,8 +328,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
             raise Exception("consumer group must be specified to commit offsets")
 
         reqs = [p.build_offset_commit_request() for p in self._partitions.keys()]
-        log.info("Committing offsets for %d partitions to broker id %s", len(reqs),
-                 self._offset_manager.id)
+        log.debug("Committing offsets for %d partitions to broker id %s", len(reqs),
+                  self._offset_manager.id)
         for i in xrange(self._offsets_commit_max_retries):
             if i > 0:
                 log.debug("Retrying")
@@ -359,19 +368,20 @@ class SimpleConsumer(base.BaseSimpleConsumer):
 
         def _handle_success(parts):
             for owned_partition, pres in parts:
-                log.info("Set offset for partition %s to %s",
-                         owned_partition.partition.id,
-                         pres.offset)
+                log.debug("Set offset for partition %s to %s",
+                          owned_partition.partition.id,
+                          pres.offset)
                 owned_partition.set_offset(pres.offset)
-
-        log.info("Fetching offsets")
 
         reqs = [p.build_offset_fetch_request() for p in self._partitions.keys()]
         success_responses = []
 
+        log.debug("Fetching offsets for %d partitions from broker id %s", len(reqs),
+                  self._offset_manager.id)
+
         for i in xrange(self._offsets_fetch_max_retries):
             if i > 0:
-                log.info("Retrying")
+                log.debug("Retrying offset fetch")
 
             res = self._offset_manager.fetch_consumer_group_offsets(self._consumer_group, reqs)
             parts_by_error = handle_partition_responses(
@@ -418,21 +428,38 @@ class SimpleConsumer(base.BaseSimpleConsumer):
 
         log.info("Resetting offsets for %s partitions", len(list(partitions)))
 
-        # group partitions by leader
-        by_leader = defaultdict(list)
-        for p in partitions:
-            by_leader[p.partition.leader].append(p)
+        for i in xrange(self._offsets_reset_max_retries):
+            # group partitions by leader
+            by_leader = defaultdict(list)
+            for p in partitions:
+                by_leader[p.partition.leader].append(p)
 
-        # get valid offset ranges for each partition
-        for broker, owned_partitions in by_leader.iteritems():
-            reqs = [owned_partition.build_offset_request(self._auto_offset_reset)
-                    for owned_partition in owned_partitions]
-            response = broker.request_offset_limits(reqs)
-            handle_partition_responses(
-                response,
-                self._default_error_handlers,
-                success_handler=_handle_success,
-                partitions_by_id=self._partitions_by_id)
+            # get valid offset ranges for each partition
+            for broker, owned_partitions in by_leader.iteritems():
+                reqs = [owned_partition.build_offset_request(self._auto_offset_reset)
+                        for owned_partition in owned_partitions]
+                response = broker.request_offset_limits(reqs)
+                parts_by_error = handle_partition_responses(
+                    response,
+                    self._default_error_handlers,
+                    success_handler=_handle_success,
+                    partitions_by_id=self._partitions_by_id)
+
+                if len(parts_by_error) == 1 and 0 in parts_by_error:
+                    break
+                log.error("Error resetting offsets for topic %s (errors: %s)",
+                          self._topic.name,
+                          {ERROR_CODES[err]: [op.partition.id for op, _ in parts]
+                           for err, parts in parts_by_error.iteritems()})
+
+                time.sleep(i * (self._offsets_channel_backoff_ms / 1000))
+
+                if 0 in parts_by_error:
+                    parts_by_error.pop(0)
+                partitions = []
+                partitions.extend(
+                    [part for errcode, parts in parts_by_error.iteritems()
+                     for part in parts])
 
     def fetch(self):
         """Fetch new messages for all partitions
@@ -494,13 +521,18 @@ class OwnedPartition(object):
     """
 
     def __init__(self,
-                 partition):
+                 partition,
+                 semaphore=None):
         """
         :param partition: The partition to hold
         :type partition: :class:`pykafka.partition.Partition`
+        :param semaphore: A Semaphore that counts available messages and
+            facilitates non-busy blocking
+        :type semaphore: :class:`pykafka.utils.compat.Semaphore`
         """
         self.partition = partition
         self._messages = Queue()
+        self._messages_arrived = semaphore
         self.last_offset_consumed = 0
         self.next_offset = 0
         self.lock = threading.Lock()
@@ -553,7 +585,7 @@ class OwnedPartition(object):
             self.partition.topic.name,
             self.partition.id,
             self.last_offset_consumed,
-            int(time.time()),
+            int(time.time() * 1000),
             'pykafka'
         )
 
@@ -588,3 +620,6 @@ class OwnedPartition(object):
                 continue
             self._messages.put(message)
             self.next_offset = message.offset + 1
+
+            if self._messages_arrived is not None:
+                self._messages_arrived.release()

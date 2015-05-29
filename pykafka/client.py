@@ -28,7 +28,7 @@ except ImportError:
     rd_kafka = None
 
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 class KafkaClient(object):
@@ -67,7 +67,7 @@ class KafkaClient(object):
         self._handler = None if use_greenlets else handlers.ThreadingHandler()
         self._use_rdkafka = rd_kafka and not ignore_rdkafka
         if self._use_rdkafka:
-            logger.info('Using rd_kafka extensions.')
+            log.info('Using rd_kafka extensions.')
             raise NotImplementedError('Not yet.')
         else:
             self.cluster = Cluster(

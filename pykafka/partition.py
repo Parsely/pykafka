@@ -23,7 +23,7 @@ import base
 from .common import OffsetType
 from .protocol import PartitionOffsetRequest
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 class Partition(base.BasePartition):
@@ -130,15 +130,15 @@ class Partition(base.BasePartition):
         try:
             # Check leader
             if metadata.leader != self._leader.id:
-                logger.info('Updating leader for %s', self)
+                log.info('Updating leader for %s', self)
                 self._leader = brokers[metadata.leader]
             # Check Replicas
             if sorted(r.id for r in self.replicas) != sorted(metadata.replicas):
-                logger.info('Updating replicas list for %s', self)
+                log.info('Updating replicas list for %s', self)
                 self._replicas = [brokers[b] for b in metadata.replicas]
             # Check In-Sync-Replicas
             if sorted(i.id for i in self.isr) != sorted(metadata.isr):
-                logger.info('Updating in sync replicas list for %s', self)
+                log.info('Updating in sync replicas list for %s', self)
                 self._isr = [brokers[b] for b in metadata.isr]
         except KeyError:
             raise Exception("TODO: Type this exception")
