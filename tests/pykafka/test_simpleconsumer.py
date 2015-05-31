@@ -1,11 +1,9 @@
 import mock
-import os
 import time
 import unittest2
 
 from pykafka import KafkaClient
 from pykafka.simpleconsumer import OwnedPartition
-from pykafka.test.kafka_instance import KafkaInstance, KafkaConnection
 from pykafka.test.utils import get_cluster, stop_cluster
 
 
@@ -27,8 +25,12 @@ class TestSimpleConsumer(unittest2.TestCase):
     def tearDownClass(cls):
         stop_cluster(cls.kafka)
 
+    def _get_simple_consumer(self, **kwargs):
+        # Mostly spun out so we can override it in TestRdKafkaSimpleConsumer
+        return self.client.topics[self.topic_name].get_simple_consumer(**kwargs)
+
     def test_consume(self):
-        consumer = self.client.topics[self.topic_name].get_simple_consumer()
+        consumer = self._get_simple_consumer()
         try:
             messages = [consumer.consume() for _ in xrange(1000)]
             self.assertEquals(len(messages), 1000)
@@ -36,7 +38,8 @@ class TestSimpleConsumer(unittest2.TestCase):
             consumer.stop()
 
     def test_offset_commit(self):
-        consumer = self.client.topics[self.topic_name].get_simple_consumer('test_offset_commit')
+        consumer = self._get_simple_consumer(
+            consumer_group='test_offset_commit')
         try:
             [consumer.consume() for _ in xrange(100)]
             consumer.commit_offsets()
@@ -46,16 +49,17 @@ class TestSimpleConsumer(unittest2.TestCase):
         finally:
             consumer.stop()
 
-
     def test_offset_resume(self):
-        consumer = self.client.topics[self.topic_name].get_simple_consumer('test_offset_resume')
+        consumer = self._get_simple_consumer(
+            consumer_group='test_offset_resume')
         try:
             [consumer.consume() for _ in xrange(100)]
             consumer.commit_offsets()
         finally:
             consumer.stop()
 
-        consumer = self.client.topics[self.topic_name].get_simple_consumer('test_offset_resume')
+        consumer = self._get_simple_consumer(
+            consumer_group='test_offset_resume')
         try:
             res = consumer.fetch_offsets()
             offset_sum = sum(p.last_offset_consumed
