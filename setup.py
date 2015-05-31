@@ -47,6 +47,7 @@ setup(
     author_email='pykafka-user@googlegroups.com',
     url='https://github.com/Parsely/pykafka',
     description='Full-Featured Pure-Python Kafka Client',
+    keywords='apache kafka client driver',
     license='Apache License 2.0',
     packages=find_packages(),
     install_requires=install_requires,
@@ -62,4 +63,15 @@ setup(
     zip_safe=False,
     test_suite='nose.collector',
     include_package_data=True,
+    classifiers=[
+            "Development Status :: 5 - Production/Stable",
+            "Intended Audience :: Developers",
+            "License :: OSI Approved :: Apache Software License",
+            "Programming Language :: Python",
+            "Programming Language :: Python :: 2",
+            "Programming Language :: Python :: 2.7",
+            "Topic :: Database",
+            "Topic :: Database :: Front-Ends",
+            "Topic :: Software Development :: Libraries :: Python Modules",
+        ]
 )
