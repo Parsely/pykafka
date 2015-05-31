@@ -1,6 +1,14 @@
 Changelog
 =========
 
+1.0.0 (2015-05-31)
+------------------
+
+Features
+********
+
+Completely re-wrote almost everything and renamed to PyKafka.
+
 
 0.3.8 (2013-07-30)
 ------------------

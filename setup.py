@@ -43,7 +43,7 @@ if 'nosetests' in sys.argv[1:]:
 setup(
     name='pykafka',
     version=get_version(),
-    author='Keith Bourgoin',
+    author='Keith Bourgoin and Emmett Butler',
     author_email='pykafka-user@googlegroups.com',
     url='https://github.com/Parsely/pykafka',
     description='Featureful Kafka client.',
