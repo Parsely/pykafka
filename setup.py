@@ -46,7 +46,7 @@ setup(
     author='Keith Bourgoin and Emmett Butler',
     author_email='pykafka-user@googlegroups.com',
     url='https://github.com/Parsely/pykafka',
-    description='Featureful Kafka client.',
+    description='Full-Featured Pure-Python Kafka Client',
     license='Apache License 2.0',
     packages=find_packages(),
     install_requires=install_requires,
