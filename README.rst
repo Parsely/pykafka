@@ -15,18 +15,13 @@ PyKafka's primary goal is to provide a similar level of abstraction to the
 `JVM Kafka client`_ using idioms familiar to python programmers and exposing
 the most pythonic API possible.
 
-.. _JVM Kafka client: https://github.com/apache/kafka/tree/0.8.2/clients/src/main/java/org/apache/kafka
-
-
-Documentation
--------------
-
 Full documentation for PyKafka can be found on `readthedocs`_.
 
+.. _JVM Kafka client: https://github.com/apache/kafka/tree/0.8.2/clients/src/main/java/org/apache/kafka
 .. _readthedocs: http://pykafka.readthedocs.org/en/latest/
 
-Quickstart
-----------
+Getting Started
+---------------
 
 Assuming you have a Kafka instance running on localhost, you can use PyKafka
 to connect to it.
