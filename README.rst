@@ -15,6 +15,12 @@ PyKafka's primary goal is to provide a similar level of abstraction to the
 `JVM Kafka client`_ using idioms familiar to python programmers and exposing
 the most pythonic API possible.
 
+You can install PyKafka from PyPI with
+
+::
+
+    $ pip install pykafka
+
 Full documentation for PyKafka can be found on `readthedocs`_.
 
 .. _JVM Kafka client: https://github.com/apache/kafka/tree/0.8.2/clients/src/main/java/org/apache/kafka
