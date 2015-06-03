@@ -23,7 +23,7 @@ from collections import defaultdict
 from .balancedconsumer import BalancedConsumer
 from .common import OffsetType
 from .partition import Partition
-from .producer import Producer
+from .producer import Producer, AsyncProducer
 from .protocol import PartitionOffsetRequest
 from .simpleconsumer import SimpleConsumer
 
@@ -73,6 +73,13 @@ class Topic():
         For a description of all available `kwargs`, see the Producer docstring.
         """
         return Producer(self._cluster, self, **kwargs)
+
+    def get_async_producer(self, **kwargs):
+        """Create a :class:`pykafka.producer.AsyncProducer` for this topic.
+
+        For a description of all available `kwargs`, see the Producer docstring.
+        """
+        return AsyncProducer(self._cluster, self, **kwargs)
 
     def fetch_offset_limits(self, offsets_before, max_offsets=1):
         """Get earliest or latest offset.
