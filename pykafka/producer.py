@@ -280,12 +280,12 @@ class AsyncProducer(Producer):
         """
         def worker():
             while True:
+                time.sleep(.0001)
                 try:
                     request, attempt = request_queue.get_nowait()
                 except Empty:
                     continue
                 self._send_request(broker, request, attempt)
-                time.sleep(.0001)
         request_queue = Queue()
         log.info("Starting new produce worker thread for broker %s", broker.id)
         self._cluster.handler.spawn(worker)
