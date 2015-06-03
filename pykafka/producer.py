@@ -18,6 +18,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 __all__ = ["Producer"]
+from collections import defaultdict
 import itertools
 import logging
 import time
@@ -104,11 +105,10 @@ class Producer():
         self._ack_timeout_ms = ack_timeout_ms
         self._batch_size = batch_size
 
-        self._owned_brokers = {}
+        self._queue_requests = {}
         for partition in self._topic.partitions.values():
-            if partition.leader.id not in self._owned_brokers:
-                self._owned_brokers[partition.leader.id] = OwnedBroker(self,
-                                                                       partition.leader)
+            if partition.leader.id not in self._queue_requests:
+                self._queue_requests[partition.leader.id] = self._setup_queue_request(partition.leader)
 
     def __repr__(self):
         return "<{module}.{name} at {id_}>".format(
@@ -116,6 +116,35 @@ class Producer():
             name=self.__class__.__name__,
             id_=hex(id(self))
         )
+
+    def _build_new_request(self):
+        return ProduceRequest(
+            compression_type=self._compression,
+            required_acks=self._required_acks,
+            timeout=self._ack_timeout_ms,
+        )
+
+    def _setup_queue_request(self, broker):
+        request = self._build_new_request()
+        qr = {'request': request, 'queue': Queue()}
+
+        def worker():
+            while True:
+                try:
+                    msg_partition_tups = qr['queue'].get_nowait()
+                except Empty:
+                    continue
+                for (key, value), partition_id in msg_partition_tups:
+                    qr['request'].add_message(
+                        Message(value, partition_key=key),
+                        self._topic.name,
+                        partition_id
+                    )
+                self._send_request(broker, qr['request'], 0)
+                qr['request'] = self._build_new_request()
+        log.debug("Starting new produce worker thread for broker %s", broker.id)
+        self._cluster.handler.spawn(worker)
+        return qr
 
     def _send_request(self, broker, req, attempt):
         """Send the produce request to the broker and handle the response.
@@ -212,12 +241,20 @@ class Producer():
         :param message_partition_tups: Messages with partitions assigned.
         :type message_partition_tups:  tuples of ((key, value), partition_id)
         """
+        batches_by_leader = defaultdict(list)
         for tup in message_partition_tups:
             _, partition_id = tup
-            # N.B. This handles retries, so the leader lookup is needed
             leader = self._topic.partitions[partition_id].leader
-            self._owned_brokers[leader.id].enqueue_message(tup)
-            log.debug("Enqueued %s", tup)
+            cur_batch = batches_by_leader[leader.id]
+            cur_batch.append(tup)
+            if len(cur_batch) >= self._batch_size:
+                self._queue_requests[leader.id]['queue'].put(cur_batch)
+                log.debug("Enqueued %d messages for broker %s", len(cur_batch), leader.id)
+                batches_by_leader[leader.id] = []
+        for leader_id, batch in batches_by_leader.iteritems():
+            if batch:
+                self._queue_requests[leader.id]['queue'].put(batch)
+                log.debug("Enqueued %d messages for broker %s", len(batch), leader_id)
 
     def produce(self, messages):
         """Produce a set of messages.
@@ -229,44 +266,3 @@ class Producer():
         # only *some* messages when a leader changes. Therefore, we don't want
         # a random partition distribution changing that on the retry.
         self._produce(self._partition_messages(messages), 0)
-
-
-class OwnedBroker():
-    def __init__(self, producer, broker):
-        self._broker = broker
-        self._producer = producer
-        self._msg_queue = Queue()
-
-        def worker():
-            while True:
-                self._get_message()
-        log.debug("Starting new produce worker thread for broker %s", self._broker.id)
-        self._worker = self._producer._cluster.handler.spawn(worker)
-
-        self.reset_request()
-
-    def enqueue_message(self, message):
-        self._msg_queue.put(message)
-
-    def reset_request(self):
-        self.request = ProduceRequest(
-            compression_type=self._producer._compression,
-            required_acks=self._producer._required_acks,
-            timeout=self._producer._ack_timeout_ms,
-        )
-
-    def _get_message(self):
-        try:
-            msg_partition_tup = self._msg_queue.get_nowait()
-        except Empty:
-            return
-        (key, value), partition_id = msg_partition_tup
-
-        self.request.add_message(
-            Message(value, partition_key=key),
-            self._producer._topic.name,
-            partition_id
-        )
-        #if self.request.message_count() >= self._producer._batch_size:
-        self._producer._send_request(self._broker, self.request, 0)
-        self.reset_request()
