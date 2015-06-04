@@ -59,7 +59,7 @@ class TopicDict(dict):
         if len(self._cluster.brokers) == 0:
             log.warning("No brokers found. This is probably because of "
                         "KAFKA-2154, which will be fixed in Kafka 0.8.3")
-            raise KafkaException("No brokers configured. Can't auto-create topic.")
+            raise KafkaException("Unable to retrieve metdata. Can't auto-create topic. See log for details.")
         # Auto-creating will take a moment, so we try 5 times.
         for i in xrange(5):
             # Auto-creating is as simple as issuing a metadata request
