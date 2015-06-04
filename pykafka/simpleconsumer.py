@@ -195,6 +195,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         # Figure out which offset wer're starting on
         if self._reset_offset_on_start:
             self._reset_offsets()
+            # make sure the reset is saved in kafka before it can rebalance
+            self.commit_offsets()
         elif self._consumer_group is not None:
             self.fetch_offsets()
 
