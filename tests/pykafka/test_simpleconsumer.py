@@ -5,7 +5,6 @@ import unittest2
 
 from pykafka import KafkaClient
 from pykafka.simpleconsumer import OwnedPartition
-from pykafka.test.kafka_instance import KafkaInstance, KafkaConnection
 from pykafka.test.utils import get_cluster, stop_cluster
 
 

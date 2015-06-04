@@ -4,7 +4,9 @@ from uuid import uuid4
 import mock
 import unittest2
 
+from pykafka import KafkaClient
 from pykafka.balancedconsumer import BalancedConsumer
+from pykafka.test.utils import get_cluster, stop_cluster
 
 
 class TestBalancedConsumer(unittest2.TestCase):
@@ -56,6 +58,50 @@ class TestBalancedConsumer(unittest2.TestCase):
             all_partitions.sort()
             assigned_parts.sort()
             self.assertListEqual(assigned_parts, all_partitions)
+
+
+class BalancedConsumerIntegrationTests(unittest2.TestCase):
+    maxDiff = None
+
+    @classmethod
+    def setUpClass(cls):
+        cls.kafka = get_cluster()
+        cls.topic_name = 'test-data'
+        cls.kafka.create_topic(cls.topic_name, 3, 2)
+        cls.client = KafkaClient(cls.kafka.brokers)
+        prod = cls.client.topics[cls.topic_name].get_producer(batch_size=5)
+        prod.produce('msg {}'.format(i) for i in xrange(1000))
+
+    @classmethod
+    def tearDownClass(cls):
+        stop_cluster(cls.kafka)
+
+    def test_consume(self):
+        try:
+            consumer_a = self.client.topics[self.topic_name].get_balanced_consumer('test_consume', zookeeper_connect=self.kafka.zookeeper)
+            consumer_b = self.client.topics[self.topic_name].get_balanced_consumer('test_consume', zookeeper_connect=self.kafka.zookeeper)
+
+            # Consume from both a few times
+            messages = [consumer_a.consume() for i in xrange(1)]
+            self.assertTrue(len(messages) == 1)
+            messages = [consumer_b.consume() for i in xrange(1)]
+            self.assertTrue(len(messages) == 1)
+
+            # Validate they aren't sharing partitions
+            self.assertSetEqual(
+                consumer_a._partitions & consumer_b._partitions,
+                set()
+            )
+
+            # Validate all partitions are here
+            self.assertSetEqual(
+                consumer_a._partitions | consumer_b._partitions,
+                set(self.client.topics[self.topic_name].partitions.values())
+            )
+        finally:
+            consumer_a.stop()
+            consumer_b.stop()
+
 
 
 if __name__ == "__main__":

@@ -107,12 +107,13 @@ class KafkaConnection(object):
         res = self._run_topics_sh(['--list'])
         return res.strip().split('\n')
 
-    def produce_messages(self, topic_name, messages):
+    def produce_messages(self, topic_name, messages, batch_size=200):
         """Produce some messages to a topic."""
         binfile = os.path.join(self._bin_dir, 'bin/kafka-console-producer.sh')
         cmd = [binfile,
                '--broker-list', self.brokers,
-               '--topic', topic_name]
+               '--topic', topic_name,
+               '--batch-size', batch_size]
         cmd = [str(c) for c in cmd]  # execv needs only strings
         log.debug('running: %s', ' '.join(cmd))
         proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
