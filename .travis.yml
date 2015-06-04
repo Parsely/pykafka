@@ -24,7 +24,7 @@ before_script:
     - "sleep 10"
 
 script:
-    - nosetests -v --with-cov --cov pykafka --cov-config  .coveragerc --logging-level=DEBUG
+    - nosetests -v --with-cov --cov pykafka --cover-branches --cov-config  .coveragerc --logging-level=DEBUG
 
 # Calculate coverage on success
 after_success:
