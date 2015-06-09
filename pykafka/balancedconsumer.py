@@ -76,20 +76,22 @@ class BalancedConsumer():
         :type topic: :class:`pykafka.topic.Topic`
         :param cluster: The cluster to which this consumer should connect
         :type cluster: :class:`pykafka.cluster.Cluster`
-        :param consumer_group: The name of the consumer group to join
+        :param consumer_group: The name of the consumer group this consumer
+            should join.
         :type consumer_group: str
         :param fetch_message_max_bytes: The number of bytes of messages to
             attempt to fetch with each fetch request
         :type fetch_message_max_bytes: int
-        :param num_consumer_fetchers: The number of threads used to fetch data
+        :param num_consumer_fetchers: The number of workers used to make
+            FetchRequests
         :type num_consumer_fetchers: int
         :param auto_commit_enable: If true, periodically commit to kafka the
             offset of messages already fetched by this consumer. This also
-            requires that consumer_group is not None.
+            requires that `consumer_group` is not `None`.
         :type auto_commit_enable: bool
         :param auto_commit_interval_ms: The frequency (in milliseconds) at which
             the consumer's offsets are committed to kafka. This setting is
-            ignored if auto_commit_enable is False.
+            ignored if `auto_commit_enable` is `False`.
         :type auto_commit_interval_ms: int
         :param queued_max_messages: The maximum number of messages buffered for
             consumption in the internal
@@ -97,14 +99,15 @@ class BalancedConsumer():
         :type queued_max_messages: int
         :param fetch_min_bytes: The minimum amount of data (in bytes) that the
             server should return for a fetch request. If insufficient data is
-            available, the request will block.
+            available, the request will block until sufficient data is available.
         :type fetch_min_bytes: int
         :param fetch_wait_max_ms: The maximum amount of time (in milliseconds)
             that the server will block before answering a fetch request if
-            there isn't sufficient data to immediately satisfy fetch_min_bytes.
+            there isn't sufficient data to immediately satisfy `fetch_min_bytes`.
         :type fetch_wait_max_ms: int
         :param refresh_leader_backoff_ms: Backoff time (in milliseconds) to
-            refresh the leader of a partition after it loses the current leader.
+            refresh the leader of a partition after the consumer loses the
+            current leader.
         :type refresh_leader_backoff_ms: int
         :param offsets_channel_backoff_ms: Backoff time to retry failed offset
             commits and fetches.
@@ -114,7 +117,7 @@ class BalancedConsumer():
         :type offsets_commit_max_retries: int
         :param auto_offset_reset: What to do if an offset is out of range. This
             setting indicates how to reset the consumer's internal offset
-            counter when an OffsetOutOfRangeError is encountered.
+            counter when an `OffsetOutOfRangeError` is encountered.
         :type auto_offset_reset: :class:`pykafka.common.OffsetType`
         :param consumer_timeout_ms: Amount of time (in milliseconds) the
             consumer may spend without messages available for consumption
@@ -141,8 +144,8 @@ class BalancedConsumer():
             can be started with `start()`.
         :type auto_start: bool
         :param reset_offset_on_start: Whether the consumer should reset its
-            internal offset counter to `self._auto_offset_reset` immediately
-            upon starting up
+            internal offset counter to `self._auto_offset_reset` and commit that
+            offset immediately upon starting up
         :type reset_offset_on_start: bool
         """
         self._cluster = cluster
