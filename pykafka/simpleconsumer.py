@@ -75,34 +75,39 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         :type topic: :class:`pykafka.topic.Topic`
         :param cluster: The cluster to which this consumer should connect
         :type cluster: :class:`pykafka.cluster.Cluster`
-        :param consumer_group: The name of the consumer group to join
+        :param consumer_group: The name of the consumer group this consumer
+            should use for offset committing and fetching.
         :type consumer_group: str
         :param partitions: Existing partitions to which to connect
         :type partitions: Iterable of :class:`pykafka.partition.Partition`
         :param fetch_message_max_bytes: The number of bytes of messages to
             attempt to fetch
         :type fetch_message_max_bytes: int
-        :param num_consumer_fetchers: The number of workers used to fetch data
+        :param num_consumer_fetchers: The number of workers used to make
+            FetchRequests
         :type num_consumer_fetchers: int
         :param auto_commit_enable: If true, periodically commit to kafka the
-            offset of messages already fetched by this consumer.
+            offset of messages already fetched by this consumer. This also
+            requires that `consumer_group` is not `None`.
         :type auto_commit_enable: bool
         :param auto_commit_interval_ms: The frequency (in milliseconds) at which the
-            consumer offsets are committed to kafka
+            consumer offsets are committed to kafka. This setting is ignored if
+            `auto_commit_enable` is `False`.
         :type auto_commit_interval_ms: int
         :param queued_max_messages: Maximum number of messages buffered for
             consumption
         :type queued_max_messages: int
         :param fetch_min_bytes: The minimum amount of data (in bytes) the server
             should return for a fetch request. If insufficient data is available
-            the request will block.
+            the request will block until sufficient data is available.
         :type fetch_min_bytes: int
         :param fetch_wait_max_ms: The maximum amount of time (in milliseconds)
             the server will block before answering the fetch request if there
-            isn't sufficient data to immediately satisfy fetch_min_bytes.
+            isn't sufficient data to immediately satisfy `fetch_min_bytes`.
         :type fetch_wait_max_ms: int
         :param refresh_leader_backoff_ms: Backoff time (in milliseconds) to
-            refresh the leader of a partition after it loses the current leader.
+            refresh the leader of a partition after the consumer loses the
+            current leader.
         :type refresh_leader_backoff_ms: int
         :param offsets_channel_backoff_ms: Backoff time (in milliseconds) to
             retry offset commits/fetches
@@ -112,7 +117,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         :type offsets_commit_max_retries: int
         :param auto_offset_reset: What to do if an offset is out of range. This
             setting indicates how to reset the consumer's internal offset
-            counter when an OffsetOutOfRangeError is encountered.
+            counter when an `OffsetOutOfRangeError` is encountered.
         :type auto_offset_reset: :class:`pykafka.common.OffsetType`
         :param consumer_timeout_ms: Amount of time (in milliseconds) the
             consumer may spend without messages available for consumption
@@ -123,8 +128,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
             can be started with `start()`.
         :type auto_start: bool
         :param reset_offset_on_start: Whether the consumer should reset its
-            internal offset counter to `self._auto_offset_reset` immediately
-            upon starting up
+            internal offset counter to `self._auto_offset_reset` and commit that
+            offset immediately upon starting up
         :type reset_offset_on_start: bool
         """
         self._cluster = cluster
@@ -195,6 +200,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         # Figure out which offset wer're starting on
         if self._reset_offset_on_start:
             self._reset_offsets()
+            # make sure the reset is saved in kafka before it can rebalance
+            self.commit_offsets()
         elif self._consumer_group is not None:
             self.fetch_offsets()
 

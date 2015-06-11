@@ -25,6 +25,7 @@ import weakref
 
 from .broker import Broker
 from .exceptions import (ConsumerCoordinatorNotAvailable,
+                         KafkaException,
                          UnknownTopicOrPartition)
 from .protocol import ConsumerMetadataRequest, ConsumerMetadataResponse
 from .topic import Topic
@@ -55,6 +56,10 @@ class TopicDict(dict):
         with settings and everything, we'll implement that. To expose just
         this now would be disingenuous, since it's features would be hobbled.
         """
+        if len(self._cluster.brokers) == 0:
+            log.warning("No brokers found. This is probably because of "
+                        "KAFKA-2154, which will be fixed in Kafka 0.8.3")
+            raise KafkaException("Unable to retrieve metdata. Can't auto-create topic. See log for details.")
         # Auto-creating will take a moment, so we try 5 times.
         for i in xrange(5):
             # Auto-creating is as simple as issuing a metadata request
@@ -265,6 +270,8 @@ class Cluster(object):
                         'broker metadata to be returned by manually creating '
                         'a topic in the cluster. See '
                         'https://issues.apache.org/jira/browse/KAFKA-2154 '
-                        'for information.')
+                        'for information. Please note: topic auto-creation '
+                        'will NOT work. You need to create at least one topic '
+                        'manually using the Kafka CLI tools.')
         self._update_brokers(metadata.brokers)
         self._update_topics(metadata.topics)

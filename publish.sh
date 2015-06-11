@@ -1,7 +1,7 @@
 #!/bin/bash
 
 
-VERSION=$(python -c "import kafka; print kafka.__version__")
+VERSION=$(python -c "import pykafka; print pykafka.__version__")
 
 echo "creating tag $VERSION"
 git tag $VERSION

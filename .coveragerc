@@ -5,3 +5,4 @@ omit =
     */lib-python/?.?/*.py
     */site-packages/nose/*
     */unittest2/*
+    */pykafka/test/*
