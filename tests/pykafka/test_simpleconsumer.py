@@ -38,28 +38,29 @@ class TestSimpleConsumer(unittest2.TestCase):
             consumer.stop()
 
     def test_offset_commit(self):
+        """Check fetched offsets match pre-commit internal state"""
         consumer = self._get_simple_consumer(
             consumer_group='test_offset_commit')
         try:
-            offsets_before = {r[0]: r[1].offset
-                              for r in consumer.fetch_offsets()}
             [consumer.consume() for _ in xrange(100)]
+            offsets_committed = self._currently_held_offsets(consumer)
             consumer.commit_offsets()
-            offsets_after = {r[0]: r[1].offset
-                             for r in consumer.fetch_offsets()}
-            offset_diff = sum(offsets_after[i] - offsets_before[i]
-                              for i in offsets_before)
-            self.assertEquals(offset_diff, 100)
+
+            offsets_fetched = {r[0]: r[1].offset
+                               for r in consumer.fetch_offsets()}
+            offset_diff = sum(offsets_fetched[i] - offsets_committed[i]
+                              for i in offsets_committed)
+            self.assertEquals(offset_diff, 0)
         finally:
             consumer.stop()
 
     def test_offset_resume(self):
+        """Check resumed internal state matches committed offsets"""
         consumer = self._get_simple_consumer(
             consumer_group='test_offset_resume')
         try:
-            offsets_before = {r[0]: r[1].offset
-                              for r in consumer.fetch_offsets()}
             [consumer.consume() for _ in xrange(100)]
+            offsets_committed = self._currently_held_offsets(consumer)
             consumer.commit_offsets()
         finally:
             consumer.stop()
@@ -67,13 +68,17 @@ class TestSimpleConsumer(unittest2.TestCase):
         consumer = self._get_simple_consumer(
             consumer_group='test_offset_resume')
         try:
-            offsets_resumed = {p.partition.id: p.last_offset_consumed
-                               for p in consumer.partitions}
-            offset_diff = sum(offsets_resumed[i] - offsets_before[i]
-                              for i in offsets_before)
-            self.assertEquals(offset_diff, 100)
+            offsets_resumed = self._currently_held_offsets(consumer)
+            offset_diff = sum(offsets_resumed[i] - offsets_committed[i]
+                              for i in offsets_committed)
+            self.assertEquals(offset_diff, 0)
         finally:
             consumer.stop()
+
+    @staticmethod
+    def _currently_held_offsets(consumer):
+        return {p.partition.id: p.last_offset_consumed
+                for p in consumer.partitions}
 
 
 class TestOwnedPartition(unittest2.TestCase):
