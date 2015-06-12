@@ -16,7 +16,7 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
                                   start_offsets)
 
     def consume(self, block=True):
-        timeout_ms = -1 if block else self._consumer_timeout_ms
+        timeout_ms = self._consumer_timeout_ms if block else 1
         msg = self._fetch_workers.consume(timeout_ms)
         if msg is not None:
             # set offset in OwnedPartition so the autocommit_worker can find it
