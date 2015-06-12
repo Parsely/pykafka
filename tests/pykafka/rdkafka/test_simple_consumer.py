@@ -24,6 +24,8 @@ class TestRdKafkaSimpleConsumer(test_simpleconsumer.TestSimpleConsumer):
 
         consumer.commit_offsets()
         res = consumer.fetch_offsets()
+        consumer.stop()
+
         # Discard any empty partitions (which thus won't be in latest_offs):
         retrieved_offs = {r[0]: r[1].offset for r in res if r[1].offset != -1}
         self.assertEquals(retrieved_offs, latest_offs)
@@ -47,6 +49,7 @@ class TestRdKafkaSimpleConsumer(test_simpleconsumer.TestSimpleConsumer):
             expected_offset = latest_offs[msg.partition_id] + 1
             self.assertEquals(msg.offset, expected_offset)
             del latest_offs[msg.partition_id]
+        consumer.stop()
 
 
 def _latest_partition_offsets_by_reading(consumer, n_reads):
