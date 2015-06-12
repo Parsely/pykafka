@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 import mock
 import time
 import unittest2
@@ -25,23 +26,23 @@ class TestSimpleConsumer(unittest2.TestCase):
     def tearDownClass(cls):
         stop_cluster(cls.kafka)
 
+    @contextmanager
     def _get_simple_consumer(self, **kwargs):
         # Mostly spun out so we can override it in TestRdKafkaSimpleConsumer
-        return self.client.topics[self.topic_name].get_simple_consumer(**kwargs)
+        topic = self.client.topics[self.topic_name]
+        consumer = topic.get_simple_consumer(**kwargs)
+        yield consumer
+        consumer.stop()
 
     def test_consume(self):
-        consumer = self._get_simple_consumer()
-        try:
+        with self._get_simple_consumer() as consumer:
             messages = [consumer.consume() for _ in xrange(1000)]
             self.assertEquals(len(messages), 1000)
-        finally:
-            consumer.stop()
 
     def test_offset_commit(self):
         """Check fetched offsets match pre-commit internal state"""
-        consumer = self._get_simple_consumer(
-            consumer_group='test_offset_commit')
-        try:
+        with self._get_simple_consumer(
+                consumer_group='test_offset_commit') as consumer:
             [consumer.consume() for _ in xrange(100)]
             offsets_committed = self._currently_held_offsets(consumer)
             consumer.commit_offsets()
@@ -51,29 +52,21 @@ class TestSimpleConsumer(unittest2.TestCase):
             offset_diff = sum(offsets_fetched[i] - offsets_committed[i]
                               for i in offsets_committed)
             self.assertEquals(offset_diff, 0)
-        finally:
-            consumer.stop()
 
     def test_offset_resume(self):
         """Check resumed internal state matches committed offsets"""
-        consumer = self._get_simple_consumer(
-            consumer_group='test_offset_resume')
-        try:
+        with self._get_simple_consumer(
+                consumer_group='test_offset_resume') as consumer:
             [consumer.consume() for _ in xrange(100)]
             offsets_committed = self._currently_held_offsets(consumer)
             consumer.commit_offsets()
-        finally:
-            consumer.stop()
 
-        consumer = self._get_simple_consumer(
-            consumer_group='test_offset_resume')
-        try:
+        with self._get_simple_consumer(
+                consumer_group='test_offset_resume') as consumer:
             offsets_resumed = self._currently_held_offsets(consumer)
             offset_diff = sum(offsets_resumed[i] - offsets_committed[i]
                               for i in offsets_committed)
             self.assertEquals(offset_diff, 0)
-        finally:
-            consumer.stop()
 
     @staticmethod
     def _currently_held_offsets(consumer):
