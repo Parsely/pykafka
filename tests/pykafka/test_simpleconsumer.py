@@ -49,9 +49,7 @@ class TestSimpleConsumer(unittest2.TestCase):
 
             offsets_fetched = {r[0]: r[1].offset
                                for r in consumer.fetch_offsets()}
-            offset_diff = sum(offsets_fetched[i] - offsets_committed[i]
-                              for i in offsets_committed)
-            self.assertEquals(offset_diff, 0)
+            self.assertEquals(offsets_fetched, offsets_committed)
 
     def test_offset_resume(self):
         """Check resumed internal state matches committed offsets"""
@@ -64,9 +62,7 @@ class TestSimpleConsumer(unittest2.TestCase):
         with self._get_simple_consumer(
                 consumer_group='test_offset_resume') as consumer:
             offsets_resumed = self._currently_held_offsets(consumer)
-            offset_diff = sum(offsets_resumed[i] - offsets_committed[i]
-                              for i in offsets_committed)
-            self.assertEquals(offset_diff, 0)
+            self.assertEquals(offsets_resumed, offsets_committed)
 
     @staticmethod
     def _currently_held_offsets(consumer):
