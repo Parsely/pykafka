@@ -41,11 +41,15 @@ class TestSimpleConsumer(unittest2.TestCase):
         consumer = self._get_simple_consumer(
             consumer_group='test_offset_commit')
         try:
+            offsets_before = {r[0]: r[1].offset
+                              for r in consumer.fetch_offsets()}
             [consumer.consume() for _ in xrange(100)]
             consumer.commit_offsets()
-            res = consumer.fetch_offsets()
-            offset_sum = sum(r[1].offset for r in res if r[1].offset >= 0)
-            self.assertEquals(offset_sum, 99)  # 0-indexed
+            offsets_after = {r[0]: r[1].offset
+                             for r in consumer.fetch_offsets()}
+            offset_diff = sum(offsets_after[i] - offsets_before[i]
+                              for i in offsets_before)
+            self.assertEquals(offset_diff, 100)
         finally:
             consumer.stop()
 
@@ -53,6 +57,8 @@ class TestSimpleConsumer(unittest2.TestCase):
         consumer = self._get_simple_consumer(
             consumer_group='test_offset_resume')
         try:
+            offsets_before = {r[0]: r[1].offset
+                              for r in consumer.fetch_offsets()}
             [consumer.consume() for _ in xrange(100)]
             consumer.commit_offsets()
         finally:
@@ -61,11 +67,11 @@ class TestSimpleConsumer(unittest2.TestCase):
         consumer = self._get_simple_consumer(
             consumer_group='test_offset_resume')
         try:
-            res = consumer.fetch_offsets()
-            offset_sum = sum(p.last_offset_consumed
-                             for p in consumer.partitions
-                             if p.last_offset_consumed >= 0)
-            self.assertEquals(offset_sum, 99)  # 0-indexed
+            offsets_resumed = {p.partition.id: p.last_offset_consumed
+                               for p in consumer.partitions}
+            offset_diff = sum(offsets_resumed[i] - offsets_before[i]
+                              for i in offsets_before)
+            self.assertEquals(offset_diff, 100)
         finally:
             consumer.stop()
 
