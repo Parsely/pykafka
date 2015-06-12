@@ -45,7 +45,22 @@ typedef struct {
 
 
 static void
-Consumer_dealloc(Consumer *self) {
+Consumer_dealloc(PyObject *self) {
+    // calling PyObject_CallMethod with refcount at zero causes recursive calls
+    // to Consumer_dealloc, so lets up the refcount just for now:
+    Py_INCREF(self);
+    PyObject *stop_result = PyObject_CallMethod(self, "stop", NULL);
+    if (!stop_result) {
+        // TODO log exception but do not re-raise
+    } else {
+        Py_DECREF(stop_result);
+    }
+    self->ob_type->tp_free(self);
+}
+
+
+static PyObject *
+Consumer_stop(Consumer *self, PyObject *args) {
     // Call stop on all partitions, then destroy all handles
 
     if (self->rdk_topic_handle != NULL) {
@@ -53,7 +68,7 @@ Consumer_dealloc(Consumer *self) {
         for (i = 0; i != len; ++i) {
             long part_id = PyInt_AsLong(PyList_GetItem(self->partition_ids, i));
             if (part_id == -1) {
-                // An error occurred, but we'll have to try mop op the rest
+                // An error occurred, but we'll have to try mop up the rest
                 // as best we can.  TODO log this
                 continue;
             }
@@ -74,7 +89,8 @@ Consumer_dealloc(Consumer *self) {
         rd_kafka_destroy(self->rdk_handle);
         self->rdk_handle = NULL;
     }
-    self->ob_type->tp_free((PyObject*)self);
+    Py_INCREF(Py_None);
+    return Py_None;
 }
 
 
@@ -195,6 +211,7 @@ Consumer_consume(PyObject *self, PyObject *args) {
 
 static PyMethodDef Consumer_methods[] = {
     {"consume", Consumer_consume, METH_VARARGS, "Consume from kafka."},
+    {"stop", (PyCFunction)Consumer_stop, METH_NOARGS, "Destroy consumer."},
     {NULL, NULL, 0, NULL}
 };
 

@@ -24,7 +24,7 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
         return msg
 
     def stop(self):
-        super(RdKafkaSimpleConsumer, self).stop()
+        # Call _rd_kafka.Consumer.stop explicitly, so that we may catch errors:
+        self._fetch_workers.stop()
         self._fetch_workers = None
-        # TODO _rd_kafka.Consumer needs an explicit stop() method; relying on
-        # gc here doesn't tell us whether stopping succeeded
+        super(RdKafkaSimpleConsumer, self).stop()
