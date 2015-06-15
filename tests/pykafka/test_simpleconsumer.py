@@ -1,5 +1,5 @@
+from contextlib import contextmanager
 import mock
-import os
 import time
 import unittest2
 
@@ -26,43 +26,48 @@ class TestSimpleConsumer(unittest2.TestCase):
     def tearDownClass(cls):
         stop_cluster(cls.kafka)
 
+    @contextmanager
+    def _get_simple_consumer(self, **kwargs):
+        # Mostly spun out so we can override it in TestRdKafkaSimpleConsumer
+        topic = self.client.topics[self.topic_name]
+        consumer = topic.get_simple_consumer(**kwargs)
+        yield consumer
+        consumer.stop()
+
     def test_consume(self):
-        consumer = self.client.topics[self.topic_name].get_simple_consumer()
-        try:
+        with self._get_simple_consumer() as consumer:
             messages = [consumer.consume() for _ in xrange(1000)]
             self.assertEquals(len(messages), 1000)
-        finally:
-            consumer.stop()
 
     def test_offset_commit(self):
-        consumer = self.client.topics[self.topic_name].get_simple_consumer('test_offset_commit')
-        try:
+        """Check fetched offsets match pre-commit internal state"""
+        with self._get_simple_consumer(
+                consumer_group='test_offset_commit') as consumer:
             [consumer.consume() for _ in xrange(100)]
+            offsets_committed = self._currently_held_offsets(consumer)
             consumer.commit_offsets()
-            res = consumer.fetch_offsets()
-            offset_sum = sum(r[1].offset for r in res if r[1].offset >= 0)
-            self.assertEquals(offset_sum, 99)  # 0-indexed
-        finally:
-            consumer.stop()
 
+            offsets_fetched = {r[0]: r[1].offset
+                               for r in consumer.fetch_offsets()}
+            self.assertEquals(offsets_fetched, offsets_committed)
 
     def test_offset_resume(self):
-        consumer = self.client.topics[self.topic_name].get_simple_consumer('test_offset_resume')
-        try:
+        """Check resumed internal state matches committed offsets"""
+        with self._get_simple_consumer(
+                consumer_group='test_offset_resume') as consumer:
             [consumer.consume() for _ in xrange(100)]
+            offsets_committed = self._currently_held_offsets(consumer)
             consumer.commit_offsets()
-        finally:
-            consumer.stop()
 
-        consumer = self.client.topics[self.topic_name].get_simple_consumer('test_offset_resume')
-        try:
-            res = consumer.fetch_offsets()
-            offset_sum = sum(p.last_offset_consumed
-                             for p in consumer.partitions
-                             if p.last_offset_consumed >= 0)
-            self.assertEquals(offset_sum, 99)  # 0-indexed
-        finally:
-            consumer.stop()
+        with self._get_simple_consumer(
+                consumer_group='test_offset_resume') as consumer:
+            offsets_resumed = self._currently_held_offsets(consumer)
+            self.assertEquals(offsets_resumed, offsets_committed)
+
+    @staticmethod
+    def _currently_held_offsets(consumer):
+        return {p.partition.id: p.last_offset_consumed
+                for p in consumer.partitions}
 
 
 class TestOwnedPartition(unittest2.TestCase):
