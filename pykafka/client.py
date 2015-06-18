@@ -81,11 +81,11 @@ class KafkaClient(object):
         self.topics = self.cluster.topics
 
     def __repr__(self):
-        return "<{}.{} at {} (hosts={})>".format(
-            self.__class__.__module__,
-            self.__class__.__name__,
-            hex(id(self)),
-            self._seed_hosts,
+        return "<{module}.{name} at {id_} (hosts={hosts})>".format(
+            module=self.__class__.__module__,
+            name=self.__class__.__name__,
+            id_=hex(id(self)),
+            hosts=self._seed_hosts,
         )
 
     def update_cluster(self):

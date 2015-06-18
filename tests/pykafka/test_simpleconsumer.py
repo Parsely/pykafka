@@ -18,7 +18,7 @@ class TestSimpleConsumer(unittest2.TestCase):
         cls.kafka.create_topic(cls.topic_name, 3, 2)
         cls.kafka.produce_messages(
             cls.topic_name,
-            ('msg {}'.format(i) for i in xrange(1000))
+            ('msg {i}'.format(i=i) for i in xrange(1000))
         )
         cls.client = KafkaClient(cls.kafka.brokers)
 

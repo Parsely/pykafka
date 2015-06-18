@@ -182,11 +182,11 @@ class SimpleConsumer(base.BaseSimpleConsumer):
             self.start()
 
     def __repr__(self):
-        return "<{}.{} at {} (consumer_group={})>".format(
-            self.__class__.__module__,
-            self.__class__.__name__,
-            hex(id(self)),
-            self._consumer_group
+        return "<{module}.{name} at {id_} (consumer_group={group})>".format(
+            module=self.__class__.__module__,
+            name=self.__class__.__name__,
+            id_=hex(id(self)),
+            group=self._consumer_group
         )
 
     def start(self):

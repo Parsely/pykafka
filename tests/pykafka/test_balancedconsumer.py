@@ -18,13 +18,13 @@ class TestBalancedConsumer(unittest2.TestCase):
             # Set up partitions, cluster, etc
             num_participants = i + 1
             num_partitions = 100 - i
-            participants = ['test-debian:{}'.format(p)
+            participants = ['test-debian:{p}'.format(p=p)
                             for p in xrange(num_participants)]
             topic = mock.Mock()
             topic.name = 'testtopic'
             topic.partitions = {}
             for k in xrange(num_partitions):
-                part = mock.Mock(name='part-{}'.format(k))
+                part = mock.Mock(name='part-{part}'.format(part=k))
                 part.id = k
                 part.topic = topic
                 part.leader = mock.Mock()
@@ -70,7 +70,7 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
         cls.kafka.create_topic(cls.topic_name, 3, 2)
         cls.client = KafkaClient(cls.kafka.brokers)
         prod = cls.client.topics[cls.topic_name].get_producer(batch_size=5)
-        prod.produce('msg {}'.format(i) for i in xrange(1000))
+        prod.produce('msg {num}'.format(num=i) for i in xrange(1000))
 
     @classmethod
     def tearDownClass(cls):

@@ -46,7 +46,7 @@ class TopicDict(dict):
         if self._create_topic(key):
             return self[key]
         else:
-            raise UnknownTopicOrPartition('Unknown topic: {}'.format(key))
+            raise UnknownTopicOrPartition('Unknown topic: {topic}'.format(topic=key))
 
     def _create_topic(self, topic_name):
         """Auto-create a topic.
@@ -111,11 +111,11 @@ class Cluster(object):
         self.update()
 
     def __repr__(self):
-        return "<{}.{} at {} (hosts={})>".format(
-            self.__class__.__module__,
-            self.__class__.__name__,
-            hex(id(self)),
-            self._seed_hosts,
+        return "<{module}.{name} at {id_} (hosts={hosts})>".format(
+            module=self.__class__.__module__,
+            name=self.__class__.__name__,
+            id_=hex(id(self)),
+            hosts=self._seed_hosts,
         )
 
     @property
@@ -257,7 +257,7 @@ class Cluster(object):
             else:
                 coordinator = self.brokers.get(res.coordinator_id, None)
                 if coordinator is None:
-                    raise Exception('Coordinator broker with id {} not found'.format(res.coordinator_id))
+                    raise Exception('Coordinator broker with id {id_} not found'.format(id_=res.coordinator_id))
                 log.info("Found coordinator broker with id %s", res.coordinator_id)
                 return coordinator
 

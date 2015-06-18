@@ -207,10 +207,10 @@ class KafkaInstance(ManagedInstance):
 
         # Start all relevant processes and save which ports they use
         zk_port = self._start_zookeeper()
-        self.zookeeper = 'localhost:{}'.format(zk_port)
+        self.zookeeper = 'localhost:{port}'.format(port=zk_port)
 
         broker_ports = self._start_brokers()
-        self.brokers = ','.join('localhost:{}'.format(port)
+        self.brokers = ','.join('localhost:{port}'.format(port=port)
                                for port in broker_ports)
 
         # Process is started when the port isn't free anymore
@@ -250,17 +250,18 @@ class KafkaInstance(ManagedInstance):
             used_ports.append(port)
             log.info('Starting Kafka on port %i.', port)
 
-            conf = os.path.join(self._conf_dir, 'kafka_{}.properties'.format(i))
+            conf = os.path.join(self._conf_dir,
+                                'kafka_{instance}.properties'.format(instance=i))
             with open(conf, 'w') as f:
                 f.write(_kafka_properties.format(
                     broker_id=i,
                     port=port,
                     zk_connstr=self.zookeeper,
-                    data_dir=self._data_dir + '_{}'.format(i),
+                    data_dir=self._data_dir + '_{instance}'.format(instance=i),
                 ))
 
             binfile = os.path.join(self._bin_dir, 'bin/kafka-server-start.sh')
-            logfile = os.path.join(self._log_dir, 'kafka_{}.log'.format(i))
+            logfile = os.path.join(self._log_dir, 'kafka_{instance}.log'.format(instance=i))
             self._broker_procs.append(utils.Popen(
                 args=[binfile, conf],
                 stderr=utils.STDOUT,
@@ -347,8 +348,8 @@ if __name__ == '__main__':
                             kafka_version=args.kafka_version,
                             bin_dir=args.download_dir)
     print 'Cluster started.'
-    print 'Brokers: {}'.format(cluster.brokers)
-    print 'Zookeeper: {}'.format(cluster.zookeeper)
+    print 'Brokers: {brokers}'.format(brokers=cluster.brokers)
+    print 'Zookeeper: {zk}'.format(zk=cluster.zookeeper)
     print 'Waiting for SIGINT to exit.'
     while True:
         if _exiting:

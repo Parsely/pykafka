@@ -54,11 +54,11 @@ class Partition(base.BasePartition):
         self._topic = topic
 
     def __repr__(self):
-        return "<{}.{} at {} (id={})>".format(
-            self.__class__.__module__,
-            self.__class__.__name__,
-            hex(id(self)),
-            self._id,
+        return "<{module}.{name} at {id_} (id={my_id})>".format(
+            module=self.__class__.__module__,
+            name=self.__class__.__name__,
+            id_=hex(id(self)),
+            my_id=self._id,
         )
 
     @property

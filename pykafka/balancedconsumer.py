@@ -171,13 +171,18 @@ class BalancedConsumer():
 
         self._rebalancing_lock = cluster.handler.Lock()
         self._consumer = None
-        self._consumer_id = "{}:{}".format(socket.gethostname(), uuid4())
+        self._consumer_id = "{hostname}:{uuid}".format(
+            hostname=socket.gethostname(),
+            uuid=uuid4()
+        )
         self._partitions = set()
         self._setting_watches = True
 
-        self._topic_path = '/consumers/{}/owners/{}'.format(self._consumer_group,
-                                                            self._topic.name)
-        self._consumer_id_path = '/consumers/{}/ids'.format(self._consumer_group)
+        self._topic_path = '/consumers/{group}/owners/{topic}'.format(
+            group=self._consumer_group,
+            topic=self._topic.name)
+        self._consumer_id_path = '/consumers/{group}/ids'.format(
+            group=self._consumer_group)
 
         self._zookeeper = None
         if zookeeper is not None:
@@ -186,11 +191,11 @@ class BalancedConsumer():
             self.start()
 
     def __repr__(self):
-        return "<{}.{} at {} (consumer_group={})>".format(
-            self.__class__.__module__,
-            self.__class__.__name__,
-            hex(id(self)),
-            self._consumer_group
+        return "<{module}.{name} at {id_} (consumer_group={group})>".format(
+            module=self.__class__.__module__,
+            name=self.__class__.__name__,
+            id_=hex(id(self)),
+            group=self._consumer_group
         )
 
     def _setup_checker_worker(self):
@@ -376,7 +381,10 @@ class BalancedConsumer():
         if len(self._topic.partitions) <= len(participants):
             raise KafkaException("Cannot add consumer: more consumers than partitions")
 
-        path = '{}/{}'.format(self._consumer_id_path, self._consumer_id)
+        path = '{path}/{id_}'.format(
+            path=self._consumer_id_path,
+            id_=self._consumer_id
+        )
         self._zookeeper.create(
             path, self._topic.name, ephemeral=True, makepath=True)
 
@@ -470,7 +478,8 @@ class BalancedConsumer():
         all_partitions = self._zookeeper.get_children(self._topic_path)
         for partition_slug in all_partitions:
             owner_id, stat = self._zookeeper.get(
-                '{}/{}'.format(self._topic_path, partition_slug))
+                '{path}/{slug}'.format(
+                    path=self._topic_path, slug=partition_slug))
             if owner_id == self._consumer_id:
                 zk_partition_ids.add(int(partition_slug.split('-')[1]))
         # build a set of partition ids we think we own

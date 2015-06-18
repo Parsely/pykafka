@@ -114,10 +114,10 @@ class Producer(base.BaseProducer):
         self._batch_size = batch_size
 
     def __repr__(self):
-        return "<{}.{} at {}>".format(
-            self.__class__.__module__,
-            self.__class__.__name__,
-            hex(id(self))
+        return "<{module}.{name} at {id_}>".format(
+            module=self.__class__.__module__,
+            name=self.__class__.__name__,
+            id_=hex(id(self))
         )
 
     def _send_request(self, broker, req, attempt):
