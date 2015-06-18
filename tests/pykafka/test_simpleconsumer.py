@@ -46,8 +46,8 @@ class TestSimpleConsumer(unittest2.TestCase):
             offsets_committed = self._currently_held_offsets(consumer)
             consumer.commit_offsets()
 
-            offsets_fetched = {r[0]: r[1].offset
-                               for r in consumer.fetch_offsets()}
+            offsets_fetched = dict((r[0], r[1].offset)
+                                   for r in consumer.fetch_offsets())
             self.assertEquals(offsets_fetched, offsets_committed)
 
     def test_offset_resume(self):
@@ -65,8 +65,8 @@ class TestSimpleConsumer(unittest2.TestCase):
 
     @staticmethod
     def _currently_held_offsets(consumer):
-        return {p.partition.id: p.last_offset_consumed
-                for p in consumer.partitions}
+        return dict((p.partition.id, p.last_offset_consumed)
+                    for p in consumer.partitions)
 
 
 class TestOwnedPartition(unittest2.TestCase):
