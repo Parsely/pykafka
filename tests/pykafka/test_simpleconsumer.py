@@ -1,6 +1,5 @@
 from contextlib import contextmanager
 import mock
-import time
 import unittest2
 
 from pykafka import KafkaClient
@@ -117,7 +116,6 @@ class TestOwnedPartition(unittest2.TestCase):
         op = OwnedPartition(partition)
         op.last_offset_consumed = 200
 
-        rqtime = int(time.time())
         request = op.build_offset_commit_request()
 
         self.assertEqual(request.topic_name, topic.name)
