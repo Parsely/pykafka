@@ -1,5 +1,8 @@
 #include <Python.h>
 #include <structseq.h>
+
+#include <errno.h>
+
 #include <librdkafka/rdkafka.h>
 
 
@@ -79,17 +82,20 @@ static PyObject *
 Consumer_stop(Consumer *self, PyObject *args) {
     // Call stop on all partitions, then destroy all handles
 
+    PyObject *retval = Py_None;
     if (self->rdk_topic_handle != NULL) {
         Py_ssize_t i, len = PyList_Size(self->partition_ids);
         for (i = 0; i != len; ++i) {
+            // Error handling here is a bit poor; we cannot bail out directly
+            // if we want to clean up as much as we can.  TODO logging
             long part_id = PyInt_AsLong(PyList_GetItem(self->partition_ids, i));
             if (part_id == -1) {
-                // An error occurred, but we'll have to try mop up the rest
-                // as best we can.  TODO log this
+                retval = NULL;
                 continue;
             }
             if (-1 == rd_kafka_consume_stop(self->rdk_topic_handle, part_id)) {
-                // TODO check errno, log this
+                set_PyRdKafkaError(rd_kafka_errno2err(errno));
+                retval = NULL;
                 continue;
             }
         }
@@ -105,8 +111,8 @@ Consumer_stop(Consumer *self, PyObject *args) {
         rd_kafka_destroy(self->rdk_handle);
         self->rdk_handle = NULL;
     }
-    Py_INCREF(Py_None);
-    return Py_None;
+    Py_XINCREF(retval);
+    return retval;
 }
 
 
