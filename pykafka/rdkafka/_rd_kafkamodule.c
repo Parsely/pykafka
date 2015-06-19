@@ -163,7 +163,7 @@ Consumer_init(Consumer *self, PyObject *args, PyObject *kwds) {
     if (rd_kafka_brokers_add(self->rdk_handle, brokers) == 0) {
         // XXX add brokers via conf setting instead?
         set_PyRdKafkaError(RD_KAFKA_RESP_ERR__FAIL, "adding brokers failed");
-        return -1;  // TODO clean up handles
+        goto fail;
     }
 
     // Configure and take out a topic handle
@@ -173,33 +173,45 @@ Consumer_init(Consumer *self, PyObject *args, PyObject *kwds) {
         rd_kafka_topic_new(self->rdk_handle, topic_name, topic_conf);
     if (! self->rdk_topic_handle) {
         set_PyRdKafkaError(rd_kafka_errno2err(errno), NULL);
-        return -1;  // TODO clean up handles
+        goto fail;
     }
 
     // Start a queue and add all partition_ids to it
     self->rdk_queue_handle = rd_kafka_queue_new(self->rdk_handle);
     if (! self->rdk_queue_handle) {
         set_PyRdKafkaError(RD_KAFKA_RESP_ERR__FAIL, "could not get queue");
-        return -1;  // TODO clean up handles
+        goto fail;
     }
     Py_ssize_t i, len = PyList_Size(self->partition_ids);
     for (i = 0; i != len; ++i) {
         // We don't do much type-checking on partition_ids/start_offsets as this
         // module is intended solely for use with the py class that wraps it
         int32_t part_id = PyInt_AsLong(PyList_GetItem(self->partition_ids, i));
-        if (part_id == -1 && PyErr_Occurred()) return -1;
+        if (part_id == -1 && PyErr_Occurred()) goto fail;
         PyObject *offset_obj = PySequence_GetItem(start_offsets, i);
-        if (! offset_obj) return -1;  // shorter seq than partition_ids?
+        if (! offset_obj) goto fail;  // shorter seq than partition_ids?
         int64_t offset = PyLong_AsLongLong(offset_obj);
         if (-1 == rd_kafka_consume_start_queue(self->rdk_topic_handle,
                                                part_id,
                                                offset,
                                                self->rdk_queue_handle)) {
             set_PyRdKafkaError(rd_kafka_errno2err(errno), NULL);
-            return -1;  // TODO clean up handles
+            goto fail;
         }
     }
     return 0;
+
+fail:  ;
+    PyObject *err_type, *err_value, *err_traceback;
+    PyErr_Fetch(&err_type, &err_value, &err_traceback);
+
+    PyObject *stop_result = Consumer_stop(self, NULL);
+    // Consumer_stop is likely to raise exceptions, since init was incomplete:
+    if (! stop_result) PyErr_Clear();
+    else Py_DECREF(stop_result);
+
+    PyErr_Restore(err_type, err_value, err_traceback);
+    return -1;
 }
 
 
@@ -290,9 +302,45 @@ static PyTypeObject ConsumerType = {
 };
 
 
+/**
+ * Debugging helpers
+ */
+
+static PyObject *
+debug_thread_cnt(PyObject *self, PyObject *args) {
+    return PyLong_FromLong(rd_kafka_thread_cnt());
+}
+
+
+static PyObject *
+debug_wait_destroyed(PyObject *self, PyObject *arg) {
+    int timeout_ms = PyLong_AsLong(arg);
+    if (timeout_ms == -1 && PyErr_Occurred()) return NULL;
+    int res = rd_kafka_wait_destroyed(timeout_ms);
+    if (res == -1) {
+        set_PyRdKafkaError(RD_KAFKA_RESP_ERR__FAIL,
+                           "rd_kafka_wait_destroyed timed out");
+        return NULL;
+    }
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
+
+/**
+ * Module init
+ */
+
+static PyMethodDef pyrdk_methods[] = {
+    {"_thread_cnt", debug_thread_cnt, METH_NOARGS, NULL},
+    {"_wait_destroyed", debug_wait_destroyed, METH_O, NULL},
+    {NULL, NULL, 0, NULL}
+};
+
+
 PyMODINIT_FUNC
 init_rd_kafka(void) {
-    PyObject *mod = Py_InitModule("pykafka.rdkafka._rd_kafka", NULL);
+    PyObject *mod = Py_InitModule("pykafka.rdkafka._rd_kafka", pyrdk_methods);
     if (mod == NULL) return;
 
     PyRdKafkaError = PyErr_NewException("pykafka.rdkafka.Error", NULL, NULL);
