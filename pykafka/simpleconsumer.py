@@ -161,14 +161,14 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         self._discover_offset_manager()
 
         if partitions:
-            self._partitions = {OwnedPartition(p, self._messages_arrived): p
-                                for p in partitions}
+            self._partitions = dict((OwnedPartition(p, self._messages_arrived), p)
+                                    for p in partitions)
         else:
-            self._partitions = {OwnedPartition(p, self._messages_arrived):
-                                topic.partitions[k]
-                                for k, p in topic.partitions.iteritems()}
-        self._partitions_by_id = {p.partition.id: p
-                                  for p in self._partitions.iterkeys()}
+            self._partitions = dict((OwnedPartition(p, self._messages_arrived),
+                                    topic.partitions[k])
+                                    for k, p in topic.partitions.iteritems())
+        self._partitions_by_id = dict((p.partition.id, p)
+                                      for p in self._partitions.iterkeys())
         # Organize partitions by leader for efficient queries
         self._partitions_by_leader = defaultdict(list)
         for p in self._partitions.iterkeys():
@@ -182,11 +182,11 @@ class SimpleConsumer(base.BaseSimpleConsumer):
             self.start()
 
     def __repr__(self):
-        return "<{}.{} at {} (consumer_group={})>".format(
-            self.__class__.__module__,
-            self.__class__.__name__,
-            hex(id(self)),
-            self._consumer_group
+        return "<{module}.{name} at {id_} (consumer_group={group})>".format(
+            module=self.__class__.__module__,
+            name=self.__class__.__name__,
+            id_=hex(id(self)),
+            group=self._consumer_group
         )
 
     def start(self):
@@ -352,8 +352,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                 break
             log.error("Error committing offsets for topic %s (errors: %s)",
                       self._topic.name,
-                      {ERROR_CODES[err]: [op.partition.id for op, _ in parts]
-                       for err, parts in parts_by_error.iteritems()})
+                      dict((ERROR_CODES[err], [op.partition.id for op, _ in parts])
+                           for err, parts in parts_by_error.iteritems()))
 
             # retry only the partitions that errored
             if 0 in parts_by_error:
@@ -403,8 +403,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                 return success_responses
             log.error("Error fetching offsets for topic %s (errors: %s)",
                       self._topic.name,
-                      {ERROR_CODES[err]: [op.partition.id for op, _ in parts]
-                       for err, parts in parts_by_error.iteritems()})
+                      dict((ERROR_CODES[err], [op.partition.id for op, _ in parts])
+                           for err, parts in parts_by_error.iteritems()))
 
             time.sleep(i * (self._offsets_channel_backoff_ms / 1000))
 
@@ -456,8 +456,8 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                     break
                 log.error("Error resetting offsets for topic %s (errors: %s)",
                           self._topic.name,
-                          {ERROR_CODES[err]: [op.partition.id for op, _ in parts]
-                           for err, parts in parts_by_error.iteritems()})
+                          dict((ERROR_CODES[err], [op.partition.id for op, _ in parts])
+                               for err, parts in parts_by_error.iteritems()))
 
                 time.sleep(i * (self._offsets_channel_backoff_ms / 1000))
 

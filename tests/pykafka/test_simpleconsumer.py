@@ -1,6 +1,5 @@
 from contextlib import contextmanager
 import mock
-import time
 import unittest2
 
 from pykafka import KafkaClient
@@ -18,7 +17,7 @@ class TestSimpleConsumer(unittest2.TestCase):
         cls.kafka.create_topic(cls.topic_name, 3, 2)
         cls.kafka.produce_messages(
             cls.topic_name,
-            ('msg {}'.format(i) for i in xrange(1000))
+            ('msg {i}'.format(i=i) for i in xrange(1000))
         )
         cls.client = KafkaClient(cls.kafka.brokers)
 
@@ -47,11 +46,9 @@ class TestSimpleConsumer(unittest2.TestCase):
             offsets_committed = self._currently_held_offsets(consumer)
             consumer.commit_offsets()
 
-            offsets_fetched = {r[0]: r[1].offset
-                               for r in consumer.fetch_offsets()}
-            offset_diff = sum(offsets_fetched[i] - offsets_committed[i]
-                              for i in offsets_committed)
-            self.assertEquals(offset_diff, 0)
+            offsets_fetched = dict((r[0], r[1].offset)
+                                   for r in consumer.fetch_offsets())
+            self.assertEquals(offsets_fetched, offsets_committed)
 
     def test_offset_resume(self):
         """Check resumed internal state matches committed offsets"""
@@ -64,14 +61,12 @@ class TestSimpleConsumer(unittest2.TestCase):
         with self._get_simple_consumer(
                 consumer_group='test_offset_resume') as consumer:
             offsets_resumed = self._currently_held_offsets(consumer)
-            offset_diff = sum(offsets_resumed[i] - offsets_committed[i]
-                              for i in offsets_committed)
-            self.assertEquals(offset_diff, 0)
+            self.assertEquals(offsets_resumed, offsets_committed)
 
     @staticmethod
     def _currently_held_offsets(consumer):
-        return {p.partition.id: p.last_offset_consumed
-                for p in consumer.partitions}
+        return dict((p.partition.id, p.last_offset_consumed)
+                    for p in consumer.partitions)
 
 
 class TestOwnedPartition(unittest2.TestCase):
@@ -121,7 +116,6 @@ class TestOwnedPartition(unittest2.TestCase):
         op = OwnedPartition(partition)
         op.last_offset_consumed = 200
 
-        rqtime = int(time.time())
         request = op.build_offset_commit_request()
 
         self.assertEqual(request.topic_name, topic.name)

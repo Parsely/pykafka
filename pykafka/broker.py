@@ -83,13 +83,13 @@ class Broker(base.BaseBroker):
         self.connect()
 
     def __repr__(self):
-        return "<{}.{} at {} (host={}, port={}, id={})>".format(
-            self.__class__.__module__,
-            self.__class__.__name__,
-            hex(id(self)),
-            self._host,
-            self._port,
-            self._id
+        return "<{module}.{name} at {id_} (host={host}, port={port}, id={my_id})>".format(
+            module=self.__class__.__module__,
+            name=self.__class__.__name__,
+            id_=hex(id(self)),
+            host=self._host,
+            port=self._port,
+            my_id=self._id
         )
 
     @classmethod

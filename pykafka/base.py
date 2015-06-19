@@ -139,7 +139,7 @@ class BasePartition(object):
         """
         return self._topic
 
-    def latest_available_offsets(self):
+    def latest_available_offset(self):
         """Gets the latest offset for the partition.
 
         :return: Latest offset for the partition.
@@ -147,7 +147,7 @@ class BasePartition(object):
         """
         raise NotImplementedError
 
-    def earliest_available_offsets(self):
+    def earliest_available_offset(self):
         """Gets the earliest offset for the partition.
 
         Due to logfile rotation, this will not always be 0. Instead,

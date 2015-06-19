@@ -54,11 +54,11 @@ class Partition(base.BasePartition):
         self._topic = topic
 
     def __repr__(self):
-        return "<{}.{} at {} (id={})>".format(
-            self.__class__.__module__,
-            self.__class__.__name__,
-            hex(id(self)),
-            self._id,
+        return "<{module}.{name} at {id_} (id={my_id})>".format(
+            module=self.__class__.__module__,
+            name=self.__class__.__name__,
+            id_=hex(id(self)),
+            my_id=self._id,
         )
 
     @property
@@ -99,16 +99,16 @@ class Partition(base.BasePartition):
         request = PartitionOffsetRequest(
             self.topic.name, self.id, offsets_before, max_offsets
         )
-        res = self._leader.request_offsets([request])
+        res = self._leader.request_offset_limits([request])
         return res.topics[self.topic.name][self._id][0]
 
-    def latest_available_offsets(self):
+    def latest_available_offset(self):
         """Get the latest offset for this partition."""
-        return self.fetch_offset_limit(OffsetType.LATEST)[self._id][0]
+        return self.fetch_offset_limit(OffsetType.LATEST)[0]
 
-    def earliest_available_offsets(self):
+    def earliest_available_offset(self):
         """Get the earliest offset for this partition."""
-        return self.fetch_offset_limit(OffsetType.EARLIEST)[self._id][0]
+        return self.fetch_offset_limit(OffsetType.EARLIEST)[0]
 
     def __hash__(self):
         return hash((self.topic, self.id))

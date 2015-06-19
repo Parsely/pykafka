@@ -74,7 +74,10 @@ this, you can use the `BalancedConsumer`.
 .. sourcecode:: python
 
     >>> balanced_consumer = topic.get_balanced_consumer(
-            consumer_group='testgroup', auto_commit_enable=True)
+        consumer_group='testgroup',
+        auto_commit_enable=True,
+        zookeeper_connect='myZkClusterNode1.com:2181,myZkClusterNode2.com:2181/myZkChroot'
+    )
 
 You can have as many `BalancedConsumer` instances consuming a topic as that
 topic has partitions. If they are all connected to the same zookeeper instance,
