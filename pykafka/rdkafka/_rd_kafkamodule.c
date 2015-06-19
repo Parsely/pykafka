@@ -14,9 +14,11 @@ static PyObject *PyRdKafkaError;
 
 
 static void
-set_PyRdKafkaError(rd_kafka_resp_err_t err) {
+set_PyRdKafkaError(rd_kafka_resp_err_t err, const char *extra_msg) {
     // Raise an exception, carrying the error code at Exception.args[0]:
-    PyObject *err_obj = Py_BuildValue("ls", (long)err, rd_kafka_err2str(err));
+    PyObject *err_obj = Py_BuildValue("lss", (long)err,
+                                             rd_kafka_err2str(err),
+                                             extra_msg);
     PyErr_SetObject(PyRdKafkaError, err_obj);
     Py_DECREF(err_obj);
 }
@@ -94,7 +96,7 @@ Consumer_stop(Consumer *self, PyObject *args) {
                 continue;
             }
             if (-1 == rd_kafka_consume_stop(self->rdk_topic_handle, part_id)) {
-                set_PyRdKafkaError(rd_kafka_errno2err(errno));
+                set_PyRdKafkaError(rd_kafka_errno2err(errno), NULL);
                 retval = NULL;
                 continue;
             }
@@ -154,11 +156,14 @@ Consumer_init(Consumer *self, PyObject *args, PyObject *kwds) {
     char errstr[512];
     self->rdk_handle = rd_kafka_new(
             RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
-    if (! self->rdk_handle) return 0;  // TODO set exception, return -1
+    if (! self->rdk_handle) {
+        set_PyRdKafkaError(RD_KAFKA_RESP_ERR__FAIL, errstr);
+        return -1;
+    }
     if (rd_kafka_brokers_add(self->rdk_handle, brokers) == 0) {
-        // TODO set exception, return -1
         // XXX add brokers via conf setting instead?
-        return 0;
+        set_PyRdKafkaError(RD_KAFKA_RESP_ERR__FAIL, "adding brokers failed");
+        return -1;  // TODO clean up handles
     }
 
     // Configure and take out a topic handle
@@ -166,10 +171,17 @@ Consumer_init(Consumer *self, PyObject *args, PyObject *kwds) {
     rd_kafka_topic_conf_t *topic_conf = rd_kafka_topic_conf_new();
     self->rdk_topic_handle =
         rd_kafka_topic_new(self->rdk_handle, topic_name, topic_conf);
+    if (! self->rdk_topic_handle) {
+        set_PyRdKafkaError(rd_kafka_errno2err(errno), NULL);
+        return -1;  // TODO clean up handles
+    }
 
     // Start a queue and add all partition_ids to it
     self->rdk_queue_handle = rd_kafka_queue_new(self->rdk_handle);
-    if (! self->rdk_queue_handle) return 0;  // TODO set exception, return -1
+    if (! self->rdk_queue_handle) {
+        set_PyRdKafkaError(RD_KAFKA_RESP_ERR__FAIL, "could not get queue");
+        return -1;  // TODO clean up handles
+    }
     Py_ssize_t i, len = PyList_Size(self->partition_ids);
     for (i = 0; i != len; ++i) {
         // We don't do much type-checking on partition_ids/start_offsets as this
@@ -183,8 +195,8 @@ Consumer_init(Consumer *self, PyObject *args, PyObject *kwds) {
                                                part_id,
                                                offset,
                                                self->rdk_queue_handle)) {
-            // TODO set exception
-            return -1;
+            set_PyRdKafkaError(rd_kafka_errno2err(errno), NULL);
+            return -1;  // TODO clean up handles
         }
     }
     return 0;
@@ -224,7 +236,7 @@ Consumer_consume(PyObject *self, PyObject *args) {
         // iteration loops, and simply skip over this one altogether:
         retval = Consumer_consume(self, args);
     } else {
-        set_PyRdKafkaError(rkmessage->err);
+        set_PyRdKafkaError(rkmessage->err, NULL);
     }
     rd_kafka_message_destroy(rkmessage);
     return retval;
