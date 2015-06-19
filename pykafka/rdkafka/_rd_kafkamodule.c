@@ -4,6 +4,22 @@
 
 
 /**
+ * Exception type
+ */
+
+static PyObject *PyRdKafkaError;
+
+
+static void
+set_PyRdKafkaError(rd_kafka_resp_err_t err) {
+    // Raise an exception, carrying the error code at Exception.args[0]:
+    PyObject *err_obj = Py_BuildValue("ls", (long)err, rd_kafka_err2str(err));
+    PyErr_SetObject(PyRdKafkaError, err_obj);
+    Py_DECREF(err_obj);
+}
+
+
+/**
  * Message type
  */
 
@@ -202,7 +218,7 @@ Consumer_consume(PyObject *self, PyObject *args) {
         // iteration loops, and simply skip over this one altogether:
         retval = Consumer_consume(self, args);
     } else {
-        // TODO set exception
+        set_PyRdKafkaError(rkmessage->err);
     }
     rd_kafka_message_destroy(rkmessage);
     return retval;
@@ -260,6 +276,11 @@ PyMODINIT_FUNC
 init_rd_kafka(void) {
     PyObject *mod = Py_InitModule("pykafka.rdkafka._rd_kafka", NULL);
     if (mod == NULL) return;
+
+    PyRdKafkaError = PyErr_NewException("pykafka.rdkafka.Error", NULL, NULL);
+    if (!PyRdKafkaError) return; // TODO goto error handler
+    Py_INCREF(PyRdKafkaError);
+    PyModule_AddObject(mod, "Error", PyRdKafkaError);
 
     if (MessageType.tp_name == NULL) {
         PyStructSequence_InitType(&MessageType, &Message_desc);
