@@ -65,21 +65,6 @@ typedef struct {
 } Consumer;
 
 
-static void
-Consumer_dealloc(PyObject *self) {
-    // calling PyObject_CallMethod with refcount at zero causes recursive calls
-    // to Consumer_dealloc, so lets up the refcount just for now:
-    Py_INCREF(self);
-    PyObject *stop_result = PyObject_CallMethod(self, "stop", NULL);
-    if (!stop_result) {
-        // TODO log exception but do not re-raise
-    } else {
-        Py_DECREF(stop_result);
-    }
-    self->ob_type->tp_free(self);
-}
-
-
 static PyObject *
 Consumer_stop(Consumer *self, PyObject *args) {
     // Call stop on all partitions, then destroy all handles
@@ -115,6 +100,18 @@ Consumer_stop(Consumer *self, PyObject *args) {
     }
     Py_XINCREF(retval);
     return retval;
+}
+
+
+static void
+Consumer_dealloc(PyObject *self) {
+    PyObject *stop_result = Consumer_stop((Consumer *)self, NULL);
+    if (!stop_result) {
+        // TODO log exception but do not re-raise
+    } else {
+        Py_DECREF(stop_result);
+    }
+    self->ob_type->tp_free(self);
 }
 
 
