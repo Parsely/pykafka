@@ -51,3 +51,13 @@ class TestRdKafkaConsumer(unittest2.TestCase):
         consumer.stop()
         _rd_kafka._wait_destroyed(1000)
         self.assertEquals(_rd_kafka._thread_cnt(), 0)
+
+    def test_stopped_exception(self):
+        """Check Consumer_consume raises ConsumerStoppedException"""
+        consumer = _rd_kafka.Consumer(brokers=self.kafka.brokers,
+                                      topic_name=self.topic_name,
+                                      partition_ids=self.partition_ids,
+                                      start_offsets=self.start_offsets)
+        consumer.stop()
+        with self.assertRaises(_rd_kafka.ConsumerStoppedException):
+            consumer.consume(1)

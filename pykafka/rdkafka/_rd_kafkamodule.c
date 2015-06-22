@@ -7,9 +7,10 @@
 
 
 /**
- * Exception type
+ * Exception types
  */
 
+static PyObject *ConsumerStoppedException;
 static PyObject *PyRdKafkaError;
 
 
@@ -213,13 +214,16 @@ fail:  ;
 
 
 static PyObject *
-Consumer_consume(PyObject *self, PyObject *args) {
+Consumer_consume(Consumer *self, PyObject *args) {
     int timeout_ms = 0;
     if (! PyArg_ParseTuple(args, "i", &timeout_ms)) return NULL;
+    if (! self->rdk_queue_handle) {
+        PyErr_SetNone(ConsumerStoppedException);
+        return NULL;
+    }
 
     rd_kafka_message_t *rkmessage;
-    rkmessage = rd_kafka_consume_queue(((Consumer *)self)->rdk_queue_handle,
-                                       timeout_ms);
+    rkmessage = rd_kafka_consume_queue(self->rdk_queue_handle, timeout_ms);
     if (!rkmessage) {
         // Either ETIMEDOUT or ENOENT occurred, but the latter would imply we
         // forgot to call rd_kafka_consume_start_queue, which is unlikely in
@@ -253,7 +257,8 @@ Consumer_consume(PyObject *self, PyObject *args) {
 
 
 static PyMethodDef Consumer_methods[] = {
-    {"consume", Consumer_consume, METH_VARARGS, "Consume from kafka."},
+    {"consume", (PyCFunction)Consumer_consume,
+        METH_VARARGS, "Consume from kafka."},
     {"stop", (PyCFunction)Consumer_stop, METH_NOARGS, "Destroy consumer."},
     {NULL, NULL, 0, NULL}
 };
@@ -340,6 +345,12 @@ init_rd_kafka(void) {
     PyObject *mod = Py_InitModule("pykafka.rdkafka._rd_kafka", pyrdk_methods);
     if (mod == NULL) return;
 
+    ConsumerStoppedException = PyErr_NewException(
+            "pykafka.rdkafka.ConsumerStoppedException", NULL, NULL);
+    if (! ConsumerStoppedException) return;
+    Py_INCREF(ConsumerStoppedException);
+    PyModule_AddObject(
+            mod, "ConsumerStoppedException", ConsumerStoppedException);
     PyRdKafkaError = PyErr_NewException("pykafka.rdkafka.Error", NULL, NULL);
     if (!PyRdKafkaError) return; // TODO goto error handler
     Py_INCREF(PyRdKafkaError);
