@@ -49,10 +49,20 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
         return msg
 
     def stop(self):
-        # Call _rd_kafka.Consumer.stop explicitly, so that we may catch errors:
-        self._fetch_workers.stop()
-        self._fetch_workers = None
+        if hasattr(self, "_fetch_workers") and self._fetch_workers is not None:
+            # Call _rd_kafka.Consumer.stop explicitly, so we may catch errors:
+            self._fetch_workers.stop()
+            self._fetch_workers = None
         super(RdKafkaSimpleConsumer, self).stop()
+
+    def fetch_offsets(self):
+        # Prevent calling this on a started consumer, because currently that
+        # would cause the pykafka and rdkafka sides to get out of sync about
+        # the current offsets:
+        if hasattr(self, "_fetch_workers") and self._fetch_workers is not None:
+            raise NotImplementedError("Changing offsets on an already started"
+                                      "RdKafkaSimpleConsumer not implemented")
+        return super(RdKafkaSimpleConsumer, self).fetch_offsets()
 
     def _mk_rdkafka_config_lists(self):
         """Populate conf, topic_conf to configure the rdkafka consumer"""
