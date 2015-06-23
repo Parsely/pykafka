@@ -60,8 +60,10 @@ static PyStructSequence_Desc Message_desc = {
 typedef struct {
     PyObject_HEAD
     rd_kafka_t *rdk_handle;
+    rd_kafka_conf_t *rdk_conf;
     rd_kafka_queue_t *rdk_queue_handle;
     rd_kafka_topic_t *rdk_topic_handle;
+    rd_kafka_topic_conf_t *rdk_topic_conf;
     PyObject *partition_ids;
 } Consumer;
 
@@ -99,6 +101,14 @@ Consumer_stop(Consumer *self, PyObject *args) {
         rd_kafka_destroy(self->rdk_handle);
         self->rdk_handle = NULL;
     }
+    if (self->rdk_conf) {
+        rd_kafka_conf_destroy(self->rdk_conf);
+        self->rdk_conf = NULL;
+    }
+    if (self->rdk_topic_conf) {
+        rd_kafka_topic_conf_destroy(self->rdk_topic_conf);
+        self->rdk_topic_conf = NULL;
+    }
     Py_XINCREF(retval);
     return retval;
 }
@@ -116,8 +126,74 @@ Consumer_dealloc(PyObject *self) {
 }
 
 
-static int
-Consumer_init(Consumer *self, PyObject *args, PyObject *kwds) {
+static const char Consumer_configure__doc__[] =
+"Set up and populate the rd_kafka_(topic_)conf_t\n"
+"\n"
+"Somewhat inelegantly (for the benefit of code reuse, whilst avoiding some\n"
+"harrowing partial binding for C functions) this requires that you call it\n"
+"twice, once with a `conf` list only, and again with `topic_conf` only.\n"
+"\n"
+"Repeated calls work incrementally; you can wipe configuration completely\n"
+"by calling Consumer_stop()\n";
+static PyObject *
+Consumer_configure(Consumer *self, PyObject *args, PyObject *kwds) {
+    char *keywords[] = {"conf", "topic_conf", NULL};
+    PyObject *conf = NULL;
+    PyObject *topic_conf = NULL;
+    if (! PyArg_ParseTupleAndKeywords(args,
+                                      kwds,
+                                      "|OO",
+                                      keywords,
+                                      &conf,
+                                      &topic_conf)) return NULL;
+
+    if ((conf && topic_conf) || (!conf && !topic_conf)) {
+        set_PyRdKafkaError(
+            RD_KAFKA_RESP_ERR__FAIL,
+            "You need to specify *either* `conf` *or* `topic_conf`.");
+        return NULL;
+    }
+    if (self->rdk_handle) {
+        set_PyRdKafkaError(
+            RD_KAFKA_RESP_ERR__FAIL,
+            "Cannot configure: seems instance was started already?");
+        return NULL;
+    }
+
+    if (! self->rdk_conf) self->rdk_conf = rd_kafka_conf_new();
+    if (! self->rdk_topic_conf) {
+        self->rdk_topic_conf = rd_kafka_topic_conf_new();
+    }
+
+    PyObject *conf_or_topic_conf = topic_conf ? topic_conf : conf;
+    Py_ssize_t i, len = PyList_Size(conf_or_topic_conf);
+    for (i = 0; i != len; ++i) {
+        PyObject *conf_pair = PyList_GetItem(conf_or_topic_conf, i);
+        const char *name = NULL;
+        const char *value =  NULL;
+        if (! PyArg_ParseTuple(conf_pair, "ss", &name, &value)) return NULL;
+
+        char errstr[512];
+        rd_kafka_conf_res_t res;
+        if (topic_conf) {
+            res = rd_kafka_topic_conf_set(
+                    self->rdk_topic_conf, name, value, errstr, sizeof(errstr));
+        } else {
+            res = rd_kafka_conf_set(
+                    self->rdk_conf, name, value, errstr, sizeof(errstr));
+        }
+        if (res != RD_KAFKA_CONF_OK) {
+            set_PyRdKafkaError(RD_KAFKA_RESP_ERR__FAIL, errstr);
+            return NULL;
+        }
+    }
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
+
+static PyObject *
+Consumer_start(Consumer *self, PyObject *args, PyObject *kwds) {
     char *keywords[] = {
         "brokers",
         "topic_name",
@@ -136,27 +212,27 @@ Consumer_init(Consumer *self, PyObject *args, PyObject *kwds) {
                                       &topic_name,
                                       &partition_ids,
                                       &start_offsets)) {
-        return -1;
+        return NULL;
     }
 
     // We'll keep our own copy of partition_ids, because the one handed to us
     // might be mutable, and weird things could happen if the list used on init
     // is different than that on dealloc
     if (self->partition_ids) {
-        // TODO set exception, expected a fresh Consumer
-        return -1;
+        set_PyRdKafkaError(RD_KAFKA_RESP_ERR__FAIL, "Already started.");
+        return NULL;
     }
     self->partition_ids = PySequence_List(partition_ids);
-    if (! self->partition_ids) return -1;
+    if (! self->partition_ids) return NULL;
 
     // Configure and start a new RD_KAFKA_CONSUMER
-    rd_kafka_conf_t *conf = rd_kafka_conf_new();
     char errstr[512];
     self->rdk_handle = rd_kafka_new(
-            RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
+            RD_KAFKA_CONSUMER, self->rdk_conf, errstr, sizeof(errstr));
+    self->rdk_conf = NULL;  // deallocated by rd_kafka_new()
     if (! self->rdk_handle) {
         set_PyRdKafkaError(RD_KAFKA_RESP_ERR__FAIL, errstr);
-        return -1;
+        return NULL;
     }
     if (rd_kafka_brokers_add(self->rdk_handle, brokers) == 0) {
         // XXX add brokers via conf setting instead?
@@ -165,10 +241,9 @@ Consumer_init(Consumer *self, PyObject *args, PyObject *kwds) {
     }
 
     // Configure and take out a topic handle
-    // TODO disable offset-storage etc
-    rd_kafka_topic_conf_t *topic_conf = rd_kafka_topic_conf_new();
     self->rdk_topic_handle =
-        rd_kafka_topic_new(self->rdk_handle, topic_name, topic_conf);
+        rd_kafka_topic_new(self->rdk_handle, topic_name, self->rdk_topic_conf);
+    self->rdk_topic_conf = NULL;  // deallocated by rd_kafka_topic_new()
     if (! self->rdk_topic_handle) {
         set_PyRdKafkaError(rd_kafka_errno2err(errno), NULL);
         goto fail;
@@ -197,7 +272,8 @@ Consumer_init(Consumer *self, PyObject *args, PyObject *kwds) {
             goto fail;
         }
     }
-    return 0;
+    Py_INCREF(Py_None);
+    return Py_None;
 
 fail:  ;
     PyObject *err_type, *err_value, *err_traceback;
@@ -209,7 +285,7 @@ fail:  ;
     else Py_DECREF(stop_result);
 
     PyErr_Restore(err_type, err_value, err_traceback);
-    return -1;
+    return NULL;
 }
 
 
@@ -260,6 +336,9 @@ static PyMethodDef Consumer_methods[] = {
     {"consume", (PyCFunction)Consumer_consume,
         METH_VARARGS, "Consume from kafka."},
     {"stop", (PyCFunction)Consumer_stop, METH_NOARGS, "Destroy consumer."},
+    {"configure", (PyCFunction)Consumer_configure,
+        METH_KEYWORDS, Consumer_configure__doc__},
+    {"start", (PyCFunction)Consumer_start, METH_VARARGS | METH_KEYWORDS, NULL},
     {NULL, NULL, 0, NULL}
 };
 
@@ -300,7 +379,7 @@ static PyTypeObject ConsumerType = {
     0,                             /* tp_descr_get */
     0,                             /* tp_descr_set */
     0,                             /* tp_dictoffset */
-    (initproc)Consumer_init,       /* tp_init */
+    0,                             /* tp_init */
 };
 
 

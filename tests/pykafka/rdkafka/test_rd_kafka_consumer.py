@@ -18,13 +18,14 @@ class TestRdKafkaConsumer(unittest2.TestCase):
     def tearDownClass(cls):
         stop_cluster(cls.kafka)
 
-    def test_init_fail(self):
-        """See if Consumer_init cleans up upon failure"""
+    def test_start_fail(self):
+        """See if Consumer_start cleans up upon failure"""
+        consumer = _rd_kafka.Consumer()
         with self.assertRaises(_rd_kafka.Error):
-            _rd_kafka.Consumer(brokers="",
-                               topic_name=self.topic_name,
-                               partition_ids=self.partition_ids,
-                               start_offsets=self.start_offsets)
+            consumer.start(brokers="",
+                       topic_name=self.topic_name,
+                       partition_ids=self.partition_ids,
+                       start_offsets=self.start_offsets)
         _rd_kafka._wait_destroyed(1000)
         self.assertEquals(_rd_kafka._thread_cnt(), 0)
 
@@ -38,10 +39,11 @@ class TestRdKafkaConsumer(unittest2.TestCase):
         count in the test gives some reassurance that we didn't leave any
         loose ends.
         """
-        consumer = _rd_kafka.Consumer(brokers=self.kafka.brokers,
-                                      topic_name=self.topic_name,
-                                      partition_ids=self.partition_ids,
-                                      start_offsets=self.start_offsets)
+        consumer = _rd_kafka.Consumer()
+        consumer.start(brokers=self.kafka.brokers,
+                       topic_name=self.topic_name,
+                       partition_ids=self.partition_ids,
+                       start_offsets=self.start_offsets)
 
         # We want to check we have some threads at all, because if we don't,
         # then having no threads post-stop() would be nice but meaningless.
