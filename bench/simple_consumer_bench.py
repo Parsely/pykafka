@@ -2,9 +2,7 @@ import json
 import random
 import subprocess
 import timeit
-import uuid
 
-from . import RdKafkaSimpleConsumer
 from pykafka import KafkaClient
 from pykafka.test.utils import get_cluster
 
