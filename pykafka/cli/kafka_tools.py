@@ -1,10 +1,12 @@
 import argparse
 import calendar
 import datetime as dt
+import time
 
 import tabulate
 
 import pykafka
+from pykafka.protocol import PartitionOffsetCommitRequest
 
 #
 # Helper Functions
@@ -179,12 +181,22 @@ def reset_offsets(client, args):
         raise ValueError('Topic {} does not exist.'.format(args.topic))
     topic = client.topics[args.topic]
 
+    # Build offset commit requests.
     offsets = fetch_offsets(client, topic, args.offset)
-    consumer = topic.get_simple_consumer(consumer_group=args.consumer_group,
-                                         auto_start=False)
-    for owned_partition, partition in consumer._partitions.iteritems():
-        owned_partition.last_offset_consumed = int(offsets[partition.id].offset[0])
-    consumer.commit_offsets()
+    tmsp = int(time.time() * 1000)
+    reqs = [PartitionOffsetCommitRequest(
+                topic.name,
+                partition_id,
+                res.offset[0],
+                tmsp, 'kafka-tools')
+            for partition_id, res in offsets.iteritems()]
+
+
+    # Send them to the appropriate broker.
+    broker = client.cluster.get_offset_manager(args.consumer_group)
+    broker.commit_consumer_group_offsets(
+        args.consumer_group, 1, 'kafka-tools', reqs
+    )
 
 
 def _add_consumer_group(parser):
