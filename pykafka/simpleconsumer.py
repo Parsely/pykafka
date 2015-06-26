@@ -555,18 +555,21 @@ class OwnedPartition(object):
         self.last_offset_consumed = last_offset_consumed
         self.next_offset = last_offset_consumed + 1
 
-    def build_offset_request(self, auto_offset_reset):
+    def build_offset_request(self, new_offset):
         """Create a :class:`pykafka.protocol.PartitionOffsetRequest` for this
             partition
 
-        :param auto_offset_reset: What to do if an offset is out of range. This
+        :param new_offset: What to do if an offset is out of range. This
             setting indicates how to reset the consumer's internal offset
             counter when an OffsetOutOfRangeError is encountered.
-        :type auto_offset_reset: :class:`pykafka.common.OffsetType`
+            There are two special values. Specify -1 to receive the latest
+            offset (i.e. the offset of the next coming message) and -2 to
+            receive the earliest available offset.
+        :type new_offset: :class:`pykafka.common.OffsetType` or int
         """
         return PartitionOffsetRequest(
             self.partition.topic.name, self.partition.id,
-            auto_offset_reset, 1)
+            new_offset, 1)
 
     def build_fetch_request(self, max_bytes):
         """Create a :class:`pykafka.protocol.FetchPartitionRequest` for this
