@@ -243,7 +243,7 @@ class BalancedConsumer():
         self._zookeeper = KazooClient(zookeeper_connect, timeout=timeout / 1000)
         self._zookeeper.start()
 
-    def _setup_internal_consumer(self):
+    def _setup_internal_consumer(self, start=True):
         """Instantiate an internal SimpleConsumer.
 
         If there is already a SimpleConsumer instance held by this object,
@@ -273,7 +273,8 @@ class BalancedConsumer():
             offsets_channel_backoff_ms=self._offsets_channel_backoff_ms,
             offsets_commit_max_retries=self._offsets_commit_max_retries,
             auto_offset_reset=self._auto_offset_reset,
-            reset_offset_on_start=reset_offset_on_start
+            reset_offset_on_start=reset_offset_on_start,
+            auto_start=start
         )
 
     def _decide_partitions(self, participants):
