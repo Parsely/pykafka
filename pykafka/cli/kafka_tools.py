@@ -7,6 +7,10 @@ import tabulate
 import pykafka
 from pykafka.common import OffsetType
 
+#
+# Helper Functions
+#
+
 
 def fetch_offsets(client, topic, offset):
     """Fetch raw offset data from a topic.
@@ -49,6 +53,33 @@ def fetch_consumer_lag(client, topic, consumer_group):
     current_offsets = consumer.fetch_offsets()
     return {p_id: (latest_offsets[p_id].offset[0], res.offset)
             for p_id, res in current_offsets}
+
+
+#
+# Commands
+#
+
+def desc_topic(client, topic):
+    """Print detailed information about a topic.
+
+    :param client: KafkaClient connected to the cluster.
+    :type client:  :class:`pykafka.KafkaClient`
+    :param topic:  Name of the topic.
+    :type topic:  :class:`str`
+    """
+    # Don't auto-create topics.
+    if topic not in client.topics:
+        raise ValueError('Topic {} does not exist.'.format(topic))
+    topic = client.topics[topic]
+    print 'Topic: {}'.format(topic.name)
+    print 'Partitions: {}'.format(len(topic.partitions))
+    print 'Replicas: {}'.format(len(topic.partitions.values()[0].replicas))
+    print tabulate.tabulate(
+        [(p.id, p.leader.id, [r.id for r in p.replicas], [r.id for r in p.isr])
+         for p in topic.partitions.values()],
+        headers=['Partition', 'Leader', 'Replicas', 'ISR'],
+        numalign='center',
+    )
 
 
 def print_consumer_lag(client, topic, consumer_group):
@@ -109,6 +140,22 @@ def print_offsets(client, topic, offset):
     )
 
 
+def print_topics(client):
+    """Print all topics in the cluster.
+
+    :param client: KafkaClient connected to the cluster.
+    :type client:  :class:`pykafka.KafkaClient`
+    """
+    print tabulate.tabulate(
+        [(t.name,
+          len(t.partitions),
+          len(t.partitions.values()[0].replicas) - 1)
+         for t in client.topics.values()],
+        headers=['Topic', 'Partitions', 'Replication'],
+        numalign='center',
+    )
+
+
 def reset_offsets(client, topic, consumer_group, offset):
     """Reset offset for a topic/consumer group.
 
@@ -154,6 +201,15 @@ def _get_arg_parser():
 
     subparsers = output.add_subparsers(help='Commands', dest='command')
 
+    # Desc Topic
+    parser = subparsers.add_parser(
+        'desc_topic',
+        help='Print detailed info for a topic.'
+    )
+    parser.add_argument('topic',
+                        metavar='TOPIC',
+                        help='Topic name.')
+
     # Print Consumer Lag
     parser = subparsers.add_parser(
         'print_consumer_lag',
@@ -179,6 +235,13 @@ def _get_arg_parser():
                         type=str,
                         help='Offset to fetch. Can be EARLIEST, LATEST, or a '
                              'datetime in the format YYYY-MM-DDTHH:MM:SS.')
+
+    # Print Topics
+    parser = subparsers.add_parser(
+        'print_topics',
+        help='Print information about all topics in the cluster.'
+    )
+
 
     # Reset Offsets
     parser = subparsers.add_parser(
@@ -213,6 +276,10 @@ def main():
         print_offsets(client, args.topic, args.offset)
     elif args.command == 'print_consumer_lag':
         print_consumer_lag(client, args.topic, args.consumer_group)
+    elif args.command == 'print_topics':
+        print_topics(client)
+    elif args.command == 'desc_topic':
+        desc_topic(client, args.topic)
 
 if __name__ == '__main__':
     main()
