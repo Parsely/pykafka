@@ -1,5 +1,3 @@
-from __future__ import division
-
 import math
 import time
 
@@ -38,10 +36,12 @@ class TestBalancedConsumer(unittest2.TestCase):
         cls._mock_consumer, _ = buildMockConsumer(timeout=cls._consumer_timeout)
 
     def test_consume_returns(self):
+        """Ensure that consume() returns in the amount of time it's supposed to
+        """
         self._mock_consumer._setup_internal_consumer(start=False)
         start = time.time()
         self._mock_consumer.consume()
-        self.assertTrue(time.time() - start >= self._consumer_timeout / 1000)
+        self.assertEqual(int(time.time() - start), int(self._consumer_timeout / 1000))
 
     def test_decide_partitions(self):
         """Test partition assignment for a number of partitions/consumers."""
