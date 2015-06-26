@@ -184,13 +184,12 @@ def reset_offsets(client, args):
     # Build offset commit requests.
     offsets = fetch_offsets(client, topic, args.offset)
     tmsp = int(time.time() * 1000)
-    reqs = [PartitionOffsetCommitRequest(
-                topic.name,
-                partition_id,
-                res.offset[0],
-                tmsp, 'kafka-tools')
+    reqs = [PartitionOffsetCommitRequest(topic.name,
+                                         partition_id,
+                                         res.offset[0],
+                                         tmsp,
+                                         'kafka-tools')
             for partition_id, res in offsets.iteritems()]
-
 
     # Send them to the appropriate broker.
     broker = client.cluster.get_offset_manager(args.consumer_group)
