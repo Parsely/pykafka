@@ -193,7 +193,7 @@ class SimpleConsumer():
 
         # Figure out which offset wer're starting on
         if self._reset_offset_on_start:
-            self._reset_offsets()
+            self.reset_offsets()
             # make sure the reset is saved in kafka before it can rebalance
             self.commit_offsets()
         elif self._consumer_group is not None:
@@ -207,8 +207,8 @@ class SimpleConsumer():
     def _build_default_error_handlers(self):
         """Set up the error handlers to use for partition errors."""
         def _handle_OffsetOutOfRangeError(parts):
-            self._reset_offsets([owned_partition
-                                 for owned_partition, pres in parts])
+            self.reset_offsets([(owned_partition, self._auto_offset_reset)
+                                for owned_partition, pres in parts])
 
         def _handle_NotCoordinatorForConsumer(parts):
             self._discover_offset_manager()
@@ -407,15 +407,17 @@ class SimpleConsumer():
             to_retry.extend(parts_by_error.get(NotCoordinatorForConsumer.ERROR_CODE, []))
             reqs = [p.build_offset_fetch_request() for p, _ in to_retry]
 
-    def _reset_offsets(self, partitions=None):
-        """Reset offsets after an error
+    def reset_offsets(self, partitions=None):
+        """Reset offsets for the specified partitions
 
         Issue an OffsetRequest for each partition and set the appropriate
-        returned offset in the OwnedPartition per self._auto_offset_reset
+        returned offset in the OwnedPartition
 
-        :param partitions: the partitions for which to reset offsets
+        :param partitions: (`partition`, `offset`) pairs to reset
+            where `partition` is the partition for which to reset the offset
+            and `offset` is the new offset the partition should have
         :type partitions: Iterable of
-            :class:`pykafka.simpleconsumer.OwnedPartition`
+            (:class:`pykafka.simpleconsumer.OwnedPartition`, int)
         """
         def _handle_success(parts):
             for owned_partition, pres in parts:
@@ -424,20 +426,21 @@ class SimpleConsumer():
                 owned_partition.set_offset(pres.offset[0] - 1)
 
         if partitions is None:
-            partitions = self._partitions.keys()
+            partitions = [(a, self._auto_offset_reset)
+                          for a in self._partitions.keys()]
 
         log.info("Resetting offsets for %s partitions", len(list(partitions)))
 
         for i in xrange(self._offsets_reset_max_retries):
             # group partitions by leader
             by_leader = defaultdict(list)
-            for p in partitions:
-                by_leader[p.partition.leader].append(p)
+            for partition, offset in partitions:
+                by_leader[partition.partition.leader].append((partition, offset))
 
             # get valid offset ranges for each partition
             for broker, owned_partitions in by_leader.iteritems():
-                reqs = [owned_partition.build_offset_request(self._auto_offset_reset)
-                        for owned_partition in owned_partitions]
+                reqs = [owned_partition.build_offset_request(offset)
+                        for owned_partition, offset in owned_partitions]
                 response = broker.request_offset_limits(reqs)
                 parts_by_error = handle_partition_responses(
                     response,
