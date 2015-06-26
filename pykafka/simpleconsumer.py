@@ -56,7 +56,6 @@ class SimpleConsumer(base.BaseSimpleConsumer):
                  queued_max_messages=2000,
                  fetch_min_bytes=1,
                  fetch_wait_max_ms=100,
-                 refresh_leader_backoff_ms=200,
                  offsets_channel_backoff_ms=1000,
                  offsets_commit_max_retries=5,
                  auto_offset_reset=OffsetType.LATEST,
@@ -105,10 +104,6 @@ class SimpleConsumer(base.BaseSimpleConsumer):
             the server will block before answering the fetch request if there
             isn't sufficient data to immediately satisfy `fetch_min_bytes`.
         :type fetch_wait_max_ms: int
-        :param refresh_leader_backoff_ms: Backoff time (in milliseconds) to
-            refresh the leader of a partition after the consumer loses the
-            current leader.
-        :type refresh_leader_backoff_ms: int
         :param offsets_channel_backoff_ms: Backoff time (in milliseconds) to
             retry offset commits/fetches
         :type offsets_channel_backoff_ms: int
