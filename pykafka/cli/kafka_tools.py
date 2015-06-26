@@ -5,7 +5,6 @@ import datetime as dt
 import tabulate
 
 import pykafka
-from pykafka.common import OffsetType
 
 #
 # Helper Functions
@@ -24,7 +23,7 @@ def fetch_offsets(client, topic, offset):
         *before* the datetime.
     :type offset: :class:`pykafka.common.OffsetType` or
         :class:`datetime.datetime`
-    :returns: dict of {partition_id: :class:`pykafka.protocol.OffsetPartitionResponse`}
+    :returns: {partition_id: :class:`pykafka.protocol.OffsetPartitionResponse`}
     """
     if offset.lower() == 'earliest':
         return topic.earliest_available_offsets()
@@ -59,7 +58,7 @@ def fetch_consumer_lag(client, topic, consumer_group):
 # Commands
 #
 
-def desc_topic(client, topic):
+def desc_topic(client, args):
     """Print detailed information about a topic.
 
     :param client: KafkaClient connected to the cluster.
@@ -68,9 +67,9 @@ def desc_topic(client, topic):
     :type topic:  :class:`str`
     """
     # Don't auto-create topics.
-    if topic not in client.topics:
-        raise ValueError('Topic {} does not exist.'.format(topic))
-    topic = client.topics[topic]
+    if args.topic not in client.topics:
+        raise ValueError('Topic {} does not exist.'.format(args.topic))
+    topic = client.topics[args.topic]
     print 'Topic: {}'.format(topic.name)
     print 'Partitions: {}'.format(len(topic.partitions))
     print 'Replicas: {}'.format(len(topic.partitions.values()[0].replicas))
@@ -82,7 +81,7 @@ def desc_topic(client, topic):
     )
 
 
-def print_consumer_lag(client, topic, consumer_group):
+def print_consumer_lag(client, args):
     """Print lag for a topic/consumer group.
 
     :param client: KafkaClient connected to the cluster.
@@ -93,13 +92,13 @@ def print_consumer_lag(client, topic, consumer_group):
     :type consumer_groups: :class:`str`
     """
     # Don't auto-create topics.
-    if topic not in client.topics:
-        raise ValueError('Topic {} does not exist.'.format(topic))
-    topic = client.topics[topic]
+    if args.topic not in client.topics:
+        raise ValueError('Topic {} does not exist.'.format(args.topic))
+    topic = client.topics[args.topic]
 
-    lag_info = fetch_consumer_lag(client, topic, consumer_group)
+    lag_info = fetch_consumer_lag(client, topic, args.consumer_group)
     lag_info = [(k, '{:,}'.format(v[0] - v[1]), v[0], v[1])
-                for k,v in lag_info.iteritems()]
+                for k, v in lag_info.iteritems()]
     print tabulate.tabulate(
         lag_info,
         headers=['Partition', 'Lag', 'Latest Offset', 'Current Offset'],
@@ -110,7 +109,7 @@ def print_consumer_lag(client, topic, consumer_group):
     print '\n Total lag: {:,} messages.'.format(total)
 
 
-def print_offsets(client, topic, offset):
+def print_offsets(client, args):
     """Print offsets for a topic/consumer group.
 
     NOTE: Time-based offset lookups are not precise, but are based on segment
@@ -128,19 +127,19 @@ def print_offsets(client, topic, offset):
         :class:`datetime.datetime`
     """
     # Don't auto-create topics.
-    if topic not in client.topics:
-        raise ValueError('Topic {} does not exist.'.format(topic))
-    topic = client.topics[topic]
+    if args.topic not in client.topics:
+        raise ValueError('Topic {} does not exist.'.format(args.topic))
+    topic = client.topics[args.topic]
 
-    offsets = fetch_offsets(client, topic, offset)
+    offsets = fetch_offsets(client, topic, args.offset)
     print tabulate.tabulate(
-        [(k, v.offset[0]) for k,v in offsets.iteritems()],
+        [(k, v.offset[0]) for k, v in offsets.iteritems()],
         headers=['Partition', 'Offset'],
         numalign='center',
     )
 
 
-def print_topics(client):
+def print_topics(client, args):
     """Print all topics in the cluster.
 
     :param client: KafkaClient connected to the cluster.
@@ -156,7 +155,7 @@ def print_topics(client):
     )
 
 
-def reset_offsets(client, topic, consumer_group, offset):
+def reset_offsets(client, args):
     """Reset offset for a topic/consumer group.
 
     NOTE: Time-based offset lookups are not precise, but are based on segment
@@ -176,16 +175,39 @@ def reset_offsets(client, topic, consumer_group, offset):
         :class:`datetime.datetime`
     """
     # Don't auto-create topics.
-    if topic not in client.topics:
-        raise ValueError('Topic {} does not exist.'.format(topic))
-    topic = client.topics[topic]
+    if args.topic not in client.topics:
+        raise ValueError('Topic {} does not exist.'.format(args.topic))
+    topic = client.topics[args.topic]
 
-    offsets = fetch_offsets(client, topic, offset)
-    consumer = topic.get_simple_consumer(consumer_group=consumer_group,
+    offsets = fetch_offsets(client, topic, args.offset)
+    consumer = topic.get_simple_consumer(consumer_group=args.consumer_group,
                                          auto_start=False)
     for owned_partition, partition in consumer._partitions.iteritems():
         owned_partition.last_offset_consumed = int(offsets[partition.id].offset[0])
     consumer.commit_offsets()
+
+
+def _add_consumer_group(parser):
+    """Add consumer_group to arg parser."""
+    parser.add_argument('consumer_group',
+                        metavar='CONSUMER_GROUP',
+                        help='Consumer group name.')
+
+
+def _add_offset(parser):
+    """Add offset to arg parser."""
+    parser.add_argument('offset',
+                        metavar='OFFSET',
+                        type=str,
+                        help='Offset to fetch. Can be EARLIEST, LATEST, or a '
+                             'datetime in the format YYYY-MM-DDTHH:MM:SS.')
+
+
+def _add_topic(parser):
+    """Add topic to arg parser."""
+    parser.add_argument('topic',
+                        metavar='TOPIC',
+                        help='Topic name.')
 
 
 def _get_arg_parser():
@@ -206,59 +228,43 @@ def _get_arg_parser():
         'desc_topic',
         help='Print detailed info for a topic.'
     )
-    parser.add_argument('topic',
-                        metavar='TOPIC',
-                        help='Topic name.')
+    parser.set_defaults(func=desc_topic)
+    _add_topic(parser)
 
     # Print Consumer Lag
     parser = subparsers.add_parser(
         'print_consumer_lag',
         help='Get consumer lag for a topic.'
     )
-    parser.add_argument('topic',
-                        metavar='TOPIC',
-                        help='Topic name.')
-    parser.add_argument('consumer_group',
-                        metavar='CONUSMER_GROUP',
-                        help='Consumer group name.')
+    parser.set_defaults(func=print_consumer_lag)
+    _add_topic(parser)
+    _add_consumer_group(parser)
 
     # Print Offsets
     parser = subparsers.add_parser(
         'print_offsets',
         help='Fetch offsets for a topic/consumer group'
     )
-    parser.add_argument('topic',
-                        metavar='TOPIC',
-                        help='Topic name.')
-    parser.add_argument('offset',
-                        metavar='OFFSET',
-                        type=str,
-                        help='Offset to fetch. Can be EARLIEST, LATEST, or a '
-                             'datetime in the format YYYY-MM-DDTHH:MM:SS.')
+    parser.set_defaults(func=print_offsets)
+    _add_topic(parser)
+    _add_offset(parser)
 
     # Print Topics
     parser = subparsers.add_parser(
         'print_topics',
         help='Print information about all topics in the cluster.'
     )
-
+    parser.set_defaults(func=print_topics)
 
     # Reset Offsets
     parser = subparsers.add_parser(
         'reset_offsets',
         help='Reset offsets for a topic/consumer group'
     )
-    parser.add_argument('topic',
-                        metavar='TOPIC',
-                        help='Topic to reset offsets for.')
-    parser.add_argument('consumer_group',
-                        metavar='CONUSMER_GROUP',
-                        help='Consumer group to reset offsets for.')
-    parser.add_argument('offset',
-                        metavar='OFFSET',
-                        type=str,
-                        help='Target offset. Can be EARLIEST, LATEST, or a '
-                             'datetime in the format YYYY-MM-DDTHH:MM:SS.')
+    parser.set_defaults(func=reset_offsets)
+    _add_topic(parser)
+    _add_consumer_group(parser)
+    _add_offset(parser)
 
     return output
 
@@ -266,20 +272,9 @@ def _get_arg_parser():
 def main():
     parser = _get_arg_parser()
     args = parser.parse_args()
-
-    # Connect to Kafka
     client = pykafka.KafkaClient(hosts=args.host)
+    args.func(client, args)
 
-    if args.command == 'reset_offsets':
-        reset_offsets(client, args.topic, args.consumer_group, args.offset)
-    elif args.command == 'print_offsets':
-        print_offsets(client, args.topic, args.offset)
-    elif args.command == 'print_consumer_lag':
-        print_consumer_lag(client, args.topic, args.consumer_group)
-    elif args.command == 'print_topics':
-        print_topics(client)
-    elif args.command == 'desc_topic':
-        desc_topic(client, args.topic)
 
 if __name__ == '__main__':
     main()
