@@ -1,5 +1,7 @@
+from __future__ import division
+
 import math
-from uuid import uuid4
+import time
 
 import mock
 import unittest2
@@ -9,10 +11,40 @@ from pykafka.balancedconsumer import BalancedConsumer
 from pykafka.test.utils import get_cluster, stop_cluster
 
 
+def buildMockConsumer(num_partitions=10, num_participants=1, timeout=2000):
+    consumer_group = 'testgroup'
+    topic = mock.Mock()
+    topic.name = 'testtopic'
+    topic.partitions = {}
+    for k in xrange(num_partitions):
+        part = mock.Mock(name='part-{part}'.format(part=k))
+        part.id = k
+        part.topic = topic
+        part.leader = mock.Mock()
+        part.leader.id = k % num_participants
+        topic.partitions[k] = part
+
+    cluster = mock.MagicMock()
+    zk = mock.MagicMock()
+    return BalancedConsumer(topic, cluster, consumer_group,
+                            zookeeper=zk, auto_start=False,
+                            consumer_timeout_ms=timeout), topic
+
+
 class TestBalancedConsumer(unittest2.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls._consumer_timeout = 2000
+        cls._mock_consumer, _ = buildMockConsumer(timeout=cls._consumer_timeout)
+
+    def test_consume_returns(self):
+        self._mock_consumer._setup_internal_consumer(start=False)
+        start = time.time()
+        self._mock_consumer.consume()
+        self.assertTrue(time.time() - start >= self._consumer_timeout / 1000)
+
     def test_decide_partitions(self):
         """Test partition assignment for a number of partitions/consumers."""
-        consumer_group = 'testgroup'
         # 100 test iterations
         for i in xrange(100):
             # Set up partitions, cluster, etc
@@ -20,21 +52,8 @@ class TestBalancedConsumer(unittest2.TestCase):
             num_partitions = 100 - i
             participants = ['test-debian:{p}'.format(p=p)
                             for p in xrange(num_participants)]
-            topic = mock.Mock()
-            topic.name = 'testtopic'
-            topic.partitions = {}
-            for k in xrange(num_partitions):
-                part = mock.Mock(name='part-{part}'.format(part=k))
-                part.id = k
-                part.topic = topic
-                part.leader = mock.Mock()
-                part.leader.id = k % num_participants
-                topic.partitions[k] = part
-
-            cluster = mock.MagicMock()
-            zk = mock.MagicMock()
-            cns = BalancedConsumer(topic, cluster, consumer_group,
-                                   zookeeper=zk, auto_start=False)
+            cns, topic = buildMockConsumer(num_partitions=num_partitions,
+                                           num_participants=num_participants)
 
             # Simulate each participant to ensure they're correct
             assigned_parts = []
@@ -101,7 +120,6 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
         finally:
             consumer_a.stop()
             consumer_b.stop()
-
 
 
 if __name__ == "__main__":
