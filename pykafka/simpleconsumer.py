@@ -121,7 +121,7 @@ class SimpleConsumer(base.BaseSimpleConsumer):
         :type auto_offset_reset: :class:`pykafka.common.OffsetType`
         :param consumer_timeout_ms: Amount of time (in milliseconds) the
             consumer may spend without messages available for consumption
-            before raising an error.
+            before returning None.
         :type consumer_timeout_ms: int
         :param auto_start: Whether the consumer should begin communicating
             with kafka after __init__ is complete. If false, communication

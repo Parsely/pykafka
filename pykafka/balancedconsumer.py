@@ -121,7 +121,7 @@ class BalancedConsumer():
         :type auto_offset_reset: :class:`pykafka.common.OffsetType`
         :param consumer_timeout_ms: Amount of time (in milliseconds) the
             consumer may spend without messages available for consumption
-            before raising an error.
+            before returning None.
         :type consumer_timeout_ms: int
         :param rebalance_max_retries: The number of times the rebalance should
             retry before raising an error.
@@ -515,12 +515,22 @@ class BalancedConsumer():
         :param block: Whether to block while waiting for a message
         :type block: bool
         """
+
+        def consumer_timed_out():
+            """Indicates whether the consumer has received messages recently"""
+            if self._consumer_timeout_ms == -1:
+                return False
+            disp = (time.time() - self._last_message_time) * 1000.0
+            return disp > self._consumer_timeout_ms
         message = None
-        while message is None:
+        self._last_message_time = time.time()
+        while message is None and not consumer_timed_out():
             try:
                 message = self._consumer.consume(block=block)
             except ConsumerStoppedException:
                 continue
+            if message:
+                self._last_message_time = time.time()
             if not block:
                 return message
         return message
