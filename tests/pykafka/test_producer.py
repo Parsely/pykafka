@@ -25,7 +25,8 @@ class ProducerIntegrationTests(unittest2.TestCase):
             # produced in a previous test
             payload = uuid4().bytes
 
-            prod = self.client.topics[self.topic_name].get_producer(batch_size=5)
+            prod = self.client.topics[self.topic_name].get_producer(
+                batch_size=5)
             prod.produce([payload])
 
             # set a timeout so we don't wait forever if we break producer code
