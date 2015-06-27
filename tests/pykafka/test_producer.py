@@ -29,10 +29,8 @@ class ProducerIntegrationTests(unittest2.TestCase):
             prod.produce([payload])
 
             # set a timeout so we don't wait forever if we break producer code
-            consumer = self.client.topics[self.topic_name].get_balanced_consumer(
-                'test_consume',
-                consumer_timeout_ms=1000,
-                zookeeper_connect=self.kafka.zookeeper)
+            consumer = self.client.topics[self.topic_name].get_simple_consumer(
+                consumer_timeout_ms=1000)
             message = consumer.consume()
             self.assertTrue(message.value == payload)
         finally:
