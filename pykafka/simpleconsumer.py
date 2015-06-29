@@ -207,8 +207,11 @@ class SimpleConsumer():
     def _build_default_error_handlers(self):
         """Set up the error handlers to use for partition errors."""
         def _handle_OffsetOutOfRangeError(parts):
-            self.reset_offsets([(owned_partition, self._auto_offset_reset)
-                                for owned_partition, pres in parts])
+            self.reset_offsets(
+                partitions=[(owned_partition, self._auto_offset_reset)
+                            for owned_partition, pres in parts],
+                flush=False
+            )
 
         def _handle_NotCoordinatorForConsumer(parts):
             self._discover_offset_manager()
@@ -407,7 +410,7 @@ class SimpleConsumer():
             to_retry.extend(parts_by_error.get(NotCoordinatorForConsumer.ERROR_CODE, []))
             reqs = [p.build_offset_fetch_request() for p, _ in to_retry]
 
-    def reset_offsets(self, partitions=None):
+    def reset_offsets(self, partitions=None, flush=True):
         """Reset offsets for the specified partitions
 
         Issue an OffsetRequest for each partition and set the appropriate
@@ -418,12 +421,18 @@ class SimpleConsumer():
             and `offset` is the new offset the partition should have
         :type partitions: Iterable of
             (:class:`pykafka.simpleconsumer.OwnedPartition`, int)
+        :param flush: Whether to flush the internal message queues before
+            resetting offsets
+        :type flush: bool
         """
         def _handle_success(parts):
             for owned_partition, pres in parts:
                 # offset_latest requests return the next offset to consume,
                 # so account for this here by passing offset - 1
                 owned_partition.set_offset(pres.offset[0] - 1)
+                # release locks on succeeded partitions to allow fetching
+                # to resume
+                owned_partition.fetch_lock.release()
 
         if partitions is None:
             partitions = [(a, self._auto_offset_reset)
@@ -432,15 +441,23 @@ class SimpleConsumer():
         log.info("Resetting offsets for %s partitions", len(list(partitions)))
 
         for i in xrange(self._offsets_reset_max_retries):
+            log.debug("Retrying offset reset")
             # group partitions by leader
             by_leader = defaultdict(list)
             for partition, offset in partitions:
-                by_leader[partition.partition.leader].append((partition, offset))
+                # acquire lock for each partition to stop fetching during offset
+                # reset
+                if partition.fetch_lock.acquire(True):
+                    # empty the queue for this partition to avoid sending
+                    # emitting messages from the old offset
+                    if flush:
+                        partition.flush()
+                    by_leader[partition.partition.leader].append((partition, offset))
 
             # get valid offset ranges for each partition
-            for broker, owned_partitions in by_leader.iteritems():
+            for broker, partition_offsets in by_leader.iteritems():
                 reqs = [owned_partition.build_offset_request(offset)
-                        for owned_partition, offset in owned_partitions]
+                        for owned_partition, offset in partition_offsets]
                 response = broker.request_offset_limits(reqs)
                 parts_by_error = handle_partition_responses(
                     response,
@@ -464,6 +481,15 @@ class SimpleConsumer():
                     [part for errcode, parts in parts_by_error.iteritems()
                      for part in parts])
 
+            # release all locks to allow fetching
+            for errcode, owned_partitions in parts_by_error.iteritems():
+                if errcode != 0:
+                    for owned_partition in owned_partitions:
+                        owned_partition.fetch_lock.release()
+
+            if len(parts_by_error) == 1 and 0 in parts_by_error:
+                break
+
     def fetch(self):
         """Fetch new messages for all partitions
 
@@ -484,7 +510,7 @@ class SimpleConsumer():
             partition_reqs = {}
             for owned_partition in owned_partitions:
                 # attempt to acquire lock, just pass if we can't
-                if owned_partition.lock.acquire(False):
+                if owned_partition.fetch_lock.acquire(False):
                     partition_reqs[owned_partition] = None
                     if owned_partition.message_count < self._queued_max_messages:
                         fetch_req = owned_partition.build_fetch_request(
@@ -514,7 +540,7 @@ class SimpleConsumer():
                     success_handler=_handle_success,
                     partitions_by_id=self._partitions_by_id)
             for owned_partition in partition_reqs.iterkeys():
-                owned_partition.lock.release()
+                owned_partition.fetch_lock.release()
 
 
 class OwnedPartition(object):

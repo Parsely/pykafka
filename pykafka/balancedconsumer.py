@@ -509,7 +509,7 @@ class BalancedConsumer():
         log.debug("Rebalance triggered by topic change")
         self._rebalance()
 
-    def reset_offsets(self, partitions=None):
+    def reset_offsets(self, partitions=None, flush=True):
         """Reset offsets for the specified partitions
 
         Issue an OffsetRequest for each partition and set the appropriate
@@ -520,10 +520,13 @@ class BalancedConsumer():
             and `offset` is the new offset the partition should have
         :type partitions: Iterable of
             (:class:`pykafka.simpleconsumer.OwnedPartition`, int)
+        :param flush: Whether to flush the internal message queues before
+            resetting offsets
+        :type flush: bool
         """
         if not self._consumer:
             raise ConsumerStoppedException("Internal consumer is stopped")
-        self._consumer.reset_offsets(partitions=partitions)
+        self._consumer.reset_offsets(partitions=partitions, flush=flush)
 
     def consume(self, block=True):
         """Get one message from the consumer
