@@ -577,8 +577,6 @@ class OwnedPartition(object):
             partition
         :type last_offset_consumed: int
         """
-        log.debug("Set offset for partition %d to %d",
-                  self.partition.id, last_offset_consumed)
         self.last_offset_consumed = last_offset_consumed
         self.next_offset = last_offset_consumed + 1
 
