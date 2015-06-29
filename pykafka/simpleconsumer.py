@@ -409,7 +409,7 @@ class SimpleConsumer():
             to_retry.extend(parts_by_error.get(NotCoordinatorForConsumer.ERROR_CODE, []))
             reqs = [p.build_offset_fetch_request() for p, _ in to_retry]
 
-    def reset_offsets(self, partitions=None, flush=True):
+    def reset_offsets(self, partitions=None):
         """Reset offsets for the specified partitions
 
         Issue an OffsetRequest for each partition and set the appropriate
@@ -420,9 +420,6 @@ class SimpleConsumer():
             and `offset` is the new offset the partition should have
         :type partitions: Iterable of
             (:class:`pykafka.simpleconsumer.OwnedPartition`, int)
-        :param flush: Whether to flush the internal message queues before
-            resetting offsets
-        :type flush: bool
         """
         def _handle_success(parts):
             for owned_partition, pres in parts:
@@ -449,8 +446,7 @@ class SimpleConsumer():
                 if partition.fetch_lock.acquire(True):
                     # empty the queue for this partition to avoid sending
                     # emitting messages from the old offset
-                    if flush:
-                        partition.flush()
+                    partition.flush()
                     by_leader[partition.partition.leader].append((partition, offset))
 
             # get valid offset ranges for each partition
