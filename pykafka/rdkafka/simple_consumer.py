@@ -73,7 +73,8 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
 
         conf = {  # destination: rd_kafka_conf_set
             "client.id": "pykafka.rdkafka",
-            ##"metadata.broker.list": "TODO move from _setup_fetch_workers",
+            # Handled via rd_kafka_brokers_add instead:
+            ##"metadata.broker.list"
 
             # NB these refer not to kafka messages, but to protocol messages.
             # We've no real equivalents for these, but defaults should be fine:

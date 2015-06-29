@@ -237,7 +237,6 @@ Consumer_start(Consumer *self, PyObject *args, PyObject *kwds) {
         return NULL;
     }
     if (rd_kafka_brokers_add(self->rdk_handle, brokers) == 0) {
-        // XXX add brokers via conf setting instead?
         set_PyRdKafkaError(RD_KAFKA_RESP_ERR__FAIL, "adding brokers failed");
         goto fail;
     }
