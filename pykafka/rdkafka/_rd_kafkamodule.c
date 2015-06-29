@@ -430,30 +430,47 @@ static PyMethodDef pyrdk_methods[] = {
 };
 
 
-PyMODINIT_FUNC
-init_rd_kafka(void) {
+static PyObject *
+_rd_kafkamodule_init(void)
+{
     PyObject *mod = Py_InitModule("pykafka.rdkafka._rd_kafka", pyrdk_methods);
-    if (mod == NULL) return;
+    if (mod == NULL) return NULL;
 
     ConsumerStoppedException = PyErr_NewException(
             "pykafka.rdkafka.ConsumerStoppedException", NULL, NULL);
-    if (! ConsumerStoppedException) return;
+    if (! ConsumerStoppedException) return NULL;
     Py_INCREF(ConsumerStoppedException);
-    PyModule_AddObject(
-            mod, "ConsumerStoppedException", ConsumerStoppedException);
+    if (PyModule_AddObject(
+            mod, "ConsumerStoppedException", ConsumerStoppedException)) {
+        return NULL;
+    }
+
     PyRdKafkaError = PyErr_NewException("pykafka.rdkafka.Error", NULL, NULL);
-    if (!PyRdKafkaError) return; // TODO goto error handler
+    if (!PyRdKafkaError) return NULL;
     Py_INCREF(PyRdKafkaError);
-    PyModule_AddObject(mod, "Error", PyRdKafkaError);
+    if (PyModule_AddObject(mod, "Error", PyRdKafkaError)) return NULL;
 
     if (MessageType.tp_name == NULL) {
         PyStructSequence_InitType(&MessageType, &Message_desc);
     }
     Py_INCREF(&MessageType);
-    PyModule_AddObject(mod, "Message", (PyObject *)&MessageType);
+    if (PyModule_AddObject(mod, "Message", (PyObject *)&MessageType)) {
+        return NULL;
+    }
 
     ConsumerType.tp_new = PyType_GenericNew;
-    if (PyType_Ready(&ConsumerType) != 0) return;
+    if (PyType_Ready(&ConsumerType)) return NULL;
     Py_INCREF(&ConsumerType);
-    PyModule_AddObject(mod, "Consumer", (PyObject *)&ConsumerType);
+    if (PyModule_AddObject(mod, "Consumer", (PyObject *)&ConsumerType)) {
+        return NULL;
+    }
+
+    return mod;
+}
+
+
+PyMODINIT_FUNC
+init_rd_kafka(void)
+{
+    _rd_kafkamodule_init();
 }
