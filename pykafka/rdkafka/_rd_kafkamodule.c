@@ -194,6 +194,24 @@ Consumer_configure(Consumer *self, PyObject *args, PyObject *kwds) {
 }
 
 
+/* Cleanup helper for Consumer_start, returns NULL to allow shorthand in use */
+static PyObject *
+Consumer_start_fail(Consumer *self)
+{
+    /* Something went wrong so we expect an exception has been set */
+    PyObject *err_type, *err_value, *err_traceback;
+    PyErr_Fetch(&err_type, &err_value, &err_traceback);
+
+    PyObject *stop_result = Consumer_stop(self, NULL);
+    /* Consumer_stop is likely to raise exceptions, as start was incomplete */
+    if (! stop_result) PyErr_Clear();
+    else Py_DECREF(stop_result);
+
+    PyErr_Restore(err_type, err_value, err_traceback);
+    return NULL;
+}
+
+
 static PyObject *
 Consumer_start(Consumer *self, PyObject *args, PyObject *kwds) {
     char *keywords[] = {
@@ -238,7 +256,7 @@ Consumer_start(Consumer *self, PyObject *args, PyObject *kwds) {
     }
     if (rd_kafka_brokers_add(self->rdk_handle, brokers) == 0) {
         set_PyRdKafkaError(RD_KAFKA_RESP_ERR__FAIL, "adding brokers failed");
-        goto fail;
+        return Consumer_start_fail(self);
     }
 
     // Configure and take out a topic handle
@@ -247,46 +265,38 @@ Consumer_start(Consumer *self, PyObject *args, PyObject *kwds) {
     self->rdk_topic_conf = NULL;  // deallocated by rd_kafka_topic_new()
     if (! self->rdk_topic_handle) {
         set_PyRdKafkaError(rd_kafka_errno2err(errno), NULL);
-        goto fail;
+        return Consumer_start_fail(self);
     }
 
     // Start a queue and add all partition_ids to it
     self->rdk_queue_handle = rd_kafka_queue_new(self->rdk_handle);
     if (! self->rdk_queue_handle) {
         set_PyRdKafkaError(RD_KAFKA_RESP_ERR__FAIL, "could not get queue");
-        goto fail;
+        return Consumer_start_fail(self);
     }
     Py_ssize_t i, len = PyList_Size(self->partition_ids);
     for (i = 0; i != len; ++i) {
         // We don't do much type-checking on partition_ids/start_offsets as this
         // module is intended solely for use with the py class that wraps it
         int32_t part_id = PyInt_AsLong(PyList_GetItem(self->partition_ids, i));
-        if (part_id == -1 && PyErr_Occurred()) goto fail;
+        if (part_id == -1 && PyErr_Occurred()) {
+            return Consumer_start_fail(self);
+        }
         PyObject *offset_obj = PySequence_GetItem(start_offsets, i);
-        if (! offset_obj) goto fail;  // shorter seq than partition_ids?
+        if (! offset_obj) {  /* start_offsets shorter than partition_ids? */
+            return Consumer_start_fail(self);
+        }
         int64_t offset = PyLong_AsLongLong(offset_obj);
         if (-1 == rd_kafka_consume_start_queue(self->rdk_topic_handle,
                                                part_id,
                                                offset,
                                                self->rdk_queue_handle)) {
             set_PyRdKafkaError(rd_kafka_errno2err(errno), NULL);
-            goto fail;
+            return Consumer_start_fail(self);
         }
     }
     Py_INCREF(Py_None);
     return Py_None;
-
-fail:  ;
-    PyObject *err_type, *err_value, *err_traceback;
-    PyErr_Fetch(&err_type, &err_value, &err_traceback);
-
-    PyObject *stop_result = Consumer_stop(self, NULL);
-    // Consumer_stop is likely to raise exceptions, since init was incomplete:
-    if (! stop_result) PyErr_Clear();
-    else Py_DECREF(stop_result);
-
-    PyErr_Restore(err_type, err_value, err_traceback);
-    return NULL;
 }
 
 
