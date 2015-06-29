@@ -29,13 +29,17 @@ set_PyRdKafkaError(rd_kafka_resp_err_t err, const char *extra_msg) {
  * Message type
  */
 
+PyDoc_STRVAR(MessageType__doc__,
+"A kafka message with field names compatible with pykafka.protocol.Message\n"
+"\n"
+"In addition to value, partition_key, offset, this offers partition_id.");
+
 // The PyStructSequence we will use here is the C API equivalent of namedtuple;
 // it is available in python 2.7 even though undocumented until python 3.3
 static PyTypeObject MessageType;
 
 
 static PyStructSequence_Field Message_fields[] = {
-    // field names compatible with pykafka.protocol.Message:
     {"value", "message payload"},
     {"partition_key", "message key (used for partitioning)"},
     {"partition_id", "partition that message originates from"},
@@ -46,7 +50,7 @@ static PyStructSequence_Field Message_fields[] = {
 
 static PyStructSequence_Desc Message_desc = {
     "pykafka.rdkafka.Message",
-    NULL,  // TODO docstring
+    MessageType__doc__,
     Message_fields,
     4
 };
