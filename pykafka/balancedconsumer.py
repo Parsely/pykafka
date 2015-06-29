@@ -205,6 +205,10 @@ class BalancedConsumer():
         log.debug("Starting checker thread")
         return self._cluster.handler.spawn(checker)
 
+    @property
+    def partitions(self):
+        return self._partitions
+
     def start(self):
         """Open connections and join a cluster."""
         if self._zookeeper is None:
