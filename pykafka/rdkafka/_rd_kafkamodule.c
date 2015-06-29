@@ -145,7 +145,9 @@ Consumer_configure(Consumer *self, PyObject *args, PyObject *kwds) {
                                       "|OO",
                                       keywords,
                                       &conf,
-                                      &topic_conf)) return NULL;
+                                      &topic_conf)) {
+        return NULL;
+    }
 
     if ((conf && topic_conf) || (!conf && !topic_conf)) {
         set_PyRdKafkaError(
@@ -203,7 +205,7 @@ Consumer_start(Consumer *self, PyObject *args, PyObject *kwds) {
     const char *brokers = NULL;
     const char *topic_name = NULL;
     PyObject *partition_ids = NULL;
-    PyObject *start_offsets= NULL;
+    PyObject *start_offsets = NULL;
     if (! PyArg_ParseTupleAndKeywords(args,
                                       kwds,
                                       "ssOO",
