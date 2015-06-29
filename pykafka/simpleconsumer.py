@@ -538,12 +538,16 @@ class OwnedPartition(object):
         self._messages_arrived = semaphore
         self.last_offset_consumed = 0
         self.next_offset = 0
-        self.lock = threading.Lock()
+        self.fetch_lock = threading.Lock()
 
     @property
     def message_count(self):
         """Count of messages currently in this partition's internal queue"""
         return self._messages.qsize()
+
+    def flush(self):
+        self._messages = Queue()
+        log.info("Flushed queue for partition %d", self.partition.id)
 
     def set_offset(self, last_offset_consumed):
         """Set the internal offset counters
@@ -552,6 +556,8 @@ class OwnedPartition(object):
             partition
         :type last_offset_consumed: int
         """
+        log.debug("Set offset for partition %d to %d",
+                  self.partition.id, last_offset_consumed)
         self.last_offset_consumed = last_offset_consumed
         self.next_offset = last_offset_consumed + 1
 
