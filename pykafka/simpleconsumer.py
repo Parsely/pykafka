@@ -316,7 +316,8 @@ class SimpleConsumer():
         if (time.time() - self._last_auto_commit) * 1000.0 >= self._auto_commit_interval_ms:
             log.info("Autocommitting consumer offset for consumer group %s and topic %s",
                      self._consumer_group, self._topic.name)
-            self.commit_offsets()
+            if self._consumer_group is not None:
+                self.commit_offsets()
             self._last_auto_commit = time.time()
 
     def commit_offsets(self):
@@ -483,7 +484,8 @@ class SimpleConsumer():
             if len(parts_by_error) == 1 and 0 in parts_by_error:
                 break
 
-        self.commit_offsets()
+        if self._consumer_group is not None:
+            self.commit_offsets()
 
     def fetch(self):
         """Fetch new messages for all partitions
