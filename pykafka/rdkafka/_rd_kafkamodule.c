@@ -15,8 +15,9 @@ static PyObject *PyRdKafkaError;
 
 
 static void
-set_PyRdKafkaError(rd_kafka_resp_err_t err, const char *extra_msg) {
-    // Raise an exception, carrying the error code at Exception.args[0]:
+set_PyRdKafkaError(rd_kafka_resp_err_t err, const char *extra_msg)
+{
+    /* Raise an exception, carrying the error code at Exception.args[0] */
     PyObject *err_obj = Py_BuildValue("lss", (long)err,
                                              rd_kafka_err2str(err),
                                              extra_msg);
@@ -34,8 +35,9 @@ PyDoc_STRVAR(MessageType__doc__,
 "\n"
 "In addition to value, partition_key, offset, this offers partition_id.");
 
-// The PyStructSequence we will use here is the C API equivalent of namedtuple;
-// it is available in python 2.7 even though undocumented until python 3.3
+
+/* The PyStructSequence we use here is the C-API equivalent of namedtuple; it
+   is available in python 2.7 even though undocumented until python 3.3 */
 static PyTypeObject MessageType;
 
 
@@ -73,16 +75,18 @@ typedef struct {
 
 
 static PyObject *
-Consumer_stop(Consumer *self, PyObject *args) {
-    // Call stop on all partitions, then destroy all handles
+Consumer_stop(Consumer *self, PyObject *args)
+{
+    /* Call stop on all partitions, then destroy all handles */
 
     PyObject *retval = Py_None;
     if (self->rdk_topic_handle != NULL) {
         Py_ssize_t i, len = PyList_Size(self->partition_ids);
         for (i = 0; i != len; ++i) {
-            // Error handling here is a bit poor; we cannot bail out directly
-            // if we want to clean up as much as we can.  TODO logging
-            long part_id = PyInt_AsLong(PyList_GetItem(self->partition_ids, i));
+            /* Error handling here is a bit poor; we cannot bail out directly
+               if we want to clean up as much as we can.  TODO logging */
+            long part_id = PyLong_AsLong(
+                    PyList_GetItem(self->partition_ids, i));
             if (part_id == -1) {
                 retval = NULL;
                 continue;
@@ -119,10 +123,11 @@ Consumer_stop(Consumer *self, PyObject *args) {
 
 
 static void
-Consumer_dealloc(PyObject *self) {
+Consumer_dealloc(PyObject *self)
+{
     PyObject *stop_result = Consumer_stop((Consumer *)self, NULL);
     if (!stop_result) {
-        // TODO log exception but do not re-raise
+        /* TODO log exception but do not re-raise */
     } else {
         Py_DECREF(stop_result);
     }
@@ -130,7 +135,7 @@ Consumer_dealloc(PyObject *self) {
 }
 
 
-static const char Consumer_configure__doc__[] =
+PyDoc_STRVAR(Consumer_configure__doc__,
 "Set up and populate the rd_kafka_(topic_)conf_t\n"
 "\n"
 "Somewhat inelegantly (for the benefit of code reuse, whilst avoiding some\n"
@@ -138,9 +143,11 @@ static const char Consumer_configure__doc__[] =
 "twice, once with a `conf` list only, and again with `topic_conf` only.\n"
 "\n"
 "Repeated calls work incrementally; you can wipe configuration completely\n"
-"by calling Consumer_stop()\n";
+"by calling Consumer_stop()\n");
+
 static PyObject *
-Consumer_configure(Consumer *self, PyObject *args, PyObject *kwds) {
+Consumer_configure(Consumer *self, PyObject *args, PyObject *kwds)
+{
     char *keywords[] = {"conf", "topic_conf", NULL};
     PyObject *conf = NULL;
     PyObject *topic_conf = NULL;
@@ -217,12 +224,13 @@ Consumer_start_fail(Consumer *self)
 
 
 static PyObject *
-Consumer_start(Consumer *self, PyObject *args, PyObject *kwds) {
+Consumer_start(Consumer *self, PyObject *args, PyObject *kwds)
+{
     char *keywords[] = {
         "brokers",
         "topic_name",
         "partition_ids",
-        "start_offsets",  // same order as partition_ids
+        "start_offsets",  /* same order as partition_ids */
         NULL};
     const char *brokers = NULL;
     const char *topic_name = NULL;
@@ -239,9 +247,9 @@ Consumer_start(Consumer *self, PyObject *args, PyObject *kwds) {
         return NULL;
     }
 
-    // We'll keep our own copy of partition_ids, because the one handed to us
-    // might be mutable, and weird things could happen if the list used on init
-    // is different than that on dealloc
+    /* We'll keep our own copy of partition_ids, because the one handed to us
+       might be mutable, and weird things could happen if the list used on init
+       is different than that on dealloc */
     if (self->partition_ids) {
         set_PyRdKafkaError(RD_KAFKA_RESP_ERR__FAIL, "Already started.");
         return NULL;
@@ -249,11 +257,11 @@ Consumer_start(Consumer *self, PyObject *args, PyObject *kwds) {
     self->partition_ids = PySequence_List(partition_ids);
     if (! self->partition_ids) return NULL;
 
-    // Configure and start a new RD_KAFKA_CONSUMER
+    /* Configure and start a new RD_KAFKA_CONSUMER */
     char errstr[512];
     self->rdk_handle = rd_kafka_new(
             RD_KAFKA_CONSUMER, self->rdk_conf, errstr, sizeof(errstr));
-    self->rdk_conf = NULL;  // deallocated by rd_kafka_new()
+    self->rdk_conf = NULL;  /* deallocated by rd_kafka_new() */
     if (! self->rdk_handle) {
         set_PyRdKafkaError(RD_KAFKA_RESP_ERR__FAIL, errstr);
         return NULL;
@@ -263,16 +271,16 @@ Consumer_start(Consumer *self, PyObject *args, PyObject *kwds) {
         return Consumer_start_fail(self);
     }
 
-    // Configure and take out a topic handle
+    /* Configure and take out a topic handle */
     self->rdk_topic_handle =
         rd_kafka_topic_new(self->rdk_handle, topic_name, self->rdk_topic_conf);
-    self->rdk_topic_conf = NULL;  // deallocated by rd_kafka_topic_new()
+    self->rdk_topic_conf = NULL;  /* deallocated by rd_kafka_topic_new() */
     if (! self->rdk_topic_handle) {
         set_PyRdKafkaError(rd_kafka_errno2err(errno), NULL);
         return Consumer_start_fail(self);
     }
 
-    // Start a queue and add all partition_ids to it
+    /* Start a queue and add all partition_ids to it */
     self->rdk_queue_handle = rd_kafka_queue_new(self->rdk_handle);
     if (! self->rdk_queue_handle) {
         set_PyRdKafkaError(RD_KAFKA_RESP_ERR__FAIL, "could not get queue");
@@ -280,9 +288,11 @@ Consumer_start(Consumer *self, PyObject *args, PyObject *kwds) {
     }
     Py_ssize_t i, len = PyList_Size(self->partition_ids);
     for (i = 0; i != len; ++i) {
-        // We don't do much type-checking on partition_ids/start_offsets as this
-        // module is intended solely for use with the py class that wraps it
-        int32_t part_id = PyInt_AsLong(PyList_GetItem(self->partition_ids, i));
+        /* We don't do much type-checking on partition_ids/start_offsets as
+           this module is intended solely for use with the python class that
+           wraps it */
+        int32_t part_id = PyLong_AsLong(
+                PyList_GetItem(self->partition_ids, i));
         if (part_id == -1 && PyErr_Occurred()) {
             return Consumer_start_fail(self);
         }
@@ -305,7 +315,8 @@ Consumer_start(Consumer *self, PyObject *args, PyObject *kwds) {
 
 
 static PyObject *
-Consumer_consume(Consumer *self, PyObject *args) {
+Consumer_consume(Consumer *self, PyObject *args)
+{
     int timeout_ms = 0;
     if (! PyArg_ParseTuple(args, "i", &timeout_ms)) return NULL;
     if (! self->rdk_queue_handle) {
@@ -316,9 +327,9 @@ Consumer_consume(Consumer *self, PyObject *args) {
     rd_kafka_message_t *rkmessage;
     rkmessage = rd_kafka_consume_queue(self->rdk_queue_handle, timeout_ms);
     if (!rkmessage) {
-        // Either ETIMEDOUT or ENOENT occurred, but the latter would imply we
-        // forgot to call rd_kafka_consume_start_queue, which is unlikely in
-        // this setup.  We'll assume it was ETIMEDOUT then:
+        /* Either ETIMEDOUT or ENOENT occurred, but the latter would imply we
+           forgot to call rd_kafka_consume_start_queue, which is unlikely in
+           this setup.  We'll assume it was ETIMEDOUT then: */
         Py_INCREF(Py_None);
         return Py_None;
     }
@@ -334,10 +345,10 @@ Consumer_consume(Consumer *self, PyObject *args) {
         PyStructSequence_SET_ITEM(retval, 3, PyLong_FromLongLong(
                                   rkmessage->offset));
     } else if (rkmessage->err == RD_KAFKA_RESP_ERR__PARTITION_EOF) {
-        // Whenever we get to the head of a partition, we get this.  There may
-        // be messages available in other partitions, so if we want to match
-        // pykafka.SimpleConsumer behaviour, we ought to avoid breaking any
-        // iteration loops, and simply skip over this one altogether:
+        /* Whenever we get to the head of a partition, we get this.  There may
+           be messages available in other partitions, so if we want to match
+           pykafka.SimpleConsumer behaviour, we ought to avoid breaking any
+           iteration loops, and simply skip over this one altogether: */
         retval = Consumer_consume(self, args);
     } else {
         set_PyRdKafkaError(rkmessage->err, NULL);
@@ -362,23 +373,23 @@ static PyTypeObject ConsumerType = {
     PyVarObject_HEAD_INIT(NULL, 0)
     "pykafka.rd_kafka.Consumer",
     sizeof(Consumer),
-    0,                             /*tp_itemsize*/
-    (destructor)Consumer_dealloc,  /*tp_dealloc*/
-    0,                             /*tp_print*/
-    0,                             /*tp_getattr*/
-    0,                             /*tp_setattr*/
-    0,                             /*tp_compare*/
-    0,                             /*tp_repr*/
-    0,                             /*tp_as_number*/
-    0,                             /*tp_as_sequence*/
-    0,                             /*tp_as_mapping*/
-    0,                             /*tp_hash */
-    0,                             /*tp_call*/
-    0,                             /*tp_str*/
-    0,                             /*tp_getattro*/
-    0,                             /*tp_setattro*/
-    0,                             /*tp_as_buffer*/
-    Py_TPFLAGS_DEFAULT,            /*tp_flags*/
+    0,                             /* tp_itemsize */
+    (destructor)Consumer_dealloc,  /* tp_dealloc */
+    0,                             /* tp_print */
+    0,                             /* tp_getattr */
+    0,                             /* tp_setattr */
+    0,                             /* tp_compare */
+    0,                             /* tp_repr */
+    0,                             /* tp_as_number */
+    0,                             /* tp_as_sequence */
+    0,                             /* tp_as_mapping */
+    0,                             /* tp_hash */
+    0,                             /* tp_call */
+    0,                             /* tp_str */
+    0,                             /* tp_getattro */
+    0,                             /* tp_setattro */
+    0,                             /* tp_as_buffer */
+    Py_TPFLAGS_DEFAULT,            /* tp_flags */
     0,                             /* tp_doc */
     0,                             /* tp_traverse */
     0,                             /* tp_clear */
@@ -403,13 +414,15 @@ static PyTypeObject ConsumerType = {
  */
 
 static PyObject *
-debug_thread_cnt(PyObject *self, PyObject *args) {
+debug_thread_cnt(PyObject *self, PyObject *args)
+{
     return PyLong_FromLong(rd_kafka_thread_cnt());
 }
 
 
 static PyObject *
-debug_wait_destroyed(PyObject *self, PyObject *arg) {
+debug_wait_destroyed(PyObject *self, PyObject *arg)
+{
     int timeout_ms = PyLong_AsLong(arg);
     if (timeout_ms == -1 && PyErr_Occurred()) return NULL;
     int res = rd_kafka_wait_destroyed(timeout_ms);
