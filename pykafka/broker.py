@@ -20,7 +20,6 @@ __all__ = ["Broker"]
 import logging
 import time
 
-import base
 from .connection import BrokerConnection
 from .exceptions import LeaderNotAvailable
 from .handlers import RequestHandler
@@ -35,7 +34,7 @@ from .protocol import (
 log = logging.getLogger(__name__)
 
 
-class Broker(base.BaseBroker):
+class Broker():
     """
     A Broker is an abstraction over a real kafka server instance.
     It is used to perform requests to these servers.

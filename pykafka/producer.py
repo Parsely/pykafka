@@ -23,7 +23,6 @@ import logging
 import time
 from collections import defaultdict
 
-import base
 from .common import CompressionType
 from .exceptions import (
     UnknownTopicOrPartition, NotLeaderForPartition, RequestTimedOut,
@@ -37,7 +36,7 @@ from .protocol import Message, ProduceRequest
 log = logging.getLogger(__name__)
 
 
-class AsyncProducer(base.BaseAsyncProducer):
+class AsyncProducer():
     def __init__(self,
                  topic,
                  partitioner=None,
@@ -53,7 +52,7 @@ class AsyncProducer(base.BaseAsyncProducer):
         raise NotImplementedError("AsyncProducer is unimplemented")
 
 
-class Producer(base.BaseProducer):
+class Producer():
     """
     This class implements the synchronous producer logic found in the
     JVM driver.

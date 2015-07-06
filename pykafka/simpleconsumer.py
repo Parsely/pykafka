@@ -25,7 +25,6 @@ import threading
 from collections import defaultdict
 from Queue import Queue, Empty
 
-import base
 from .common import OffsetType
 from .utils.compat import Semaphore
 from .exceptions import (OffsetOutOfRangeError, UnknownTopicOrPartition,
@@ -40,7 +39,7 @@ from .utils.error_handlers import handle_partition_responses, raise_error
 log = logging.getLogger(__name__)
 
 
-class SimpleConsumer(base.BaseSimpleConsumer):
+class SimpleConsumer():
     """
     A non-balancing consumer for Kafka
     """
