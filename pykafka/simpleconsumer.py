@@ -30,7 +30,7 @@ from .utils.compat import Semaphore
 from .exceptions import (OffsetOutOfRangeError, UnknownTopicOrPartition,
                          OffsetMetadataTooLarge, OffsetsLoadInProgress,
                          NotCoordinatorForConsumer, SocketDisconnectedError,
-                         ConsumerStoppedException, ERROR_CODES)
+                         ConsumerStoppedException, KafkaError, ERROR_CODES)
 from .protocol import (PartitionFetchRequest, PartitionOffsetCommitRequest,
                        PartitionOffsetFetchRequest, PartitionOffsetRequest)
 from .utils.error_handlers import (handle_partition_responses, raise_error,
@@ -482,12 +482,11 @@ class SimpleConsumer():
             owned_partition_offsets = dict((self._partitions[p], offset)
                                            for p, offset in partition_offsets)
         except KeyError as e:
-            raise("Unknown partition supplied to reset_offsets\n%s", e)
+            raise KafkaError("Unknown partition supplied to reset_offsets\n%s", e)
 
         log.info("Resetting offsets for %s partitions", len(list(owned_partition_offsets)))
 
         for i in xrange(self._offsets_reset_max_retries):
-            log.debug("Retrying offset reset")
             # group partitions by leader
             by_leader = defaultdict(list)
             for partition, offset in owned_partition_offsets.iteritems():
@@ -534,6 +533,7 @@ class SimpleConsumer():
 
             if len(parts_by_error) == 1 and 0 in parts_by_error:
                 break
+            log.debug("Retrying offset reset")
 
         if self._consumer_group is not None:
             self.commit_offsets()
@@ -587,8 +587,8 @@ class SimpleConsumer():
                 # release the lock in these cases, since resolving the error
                 # requires an offset reset and not releasing the lock would
                 # lead to a deadlock in reset_offsets. For successful requests
-                # or requests with # different errors, we still assume # that
-                # it's ok to # retain the lock since no offset_reset can happen
+                # or requests with different errors, we still assume that
+                # it's ok to retain the lock since no offset_reset can happen
                 # before this function returns
                 out_of_range = parts_by_error.get(OffsetOutOfRangeError.ERROR_CODE, [])
                 for owned_partition, res in out_of_range:
