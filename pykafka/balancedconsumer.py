@@ -515,11 +515,11 @@ class BalancedConsumer():
         Issue an OffsetRequest for each partition and set the appropriate
         returned offset in the OwnedPartition
 
-        :param partitions: (`partition`, `offset`) pairs to reset
+        :param partition_offsets: (`partition`, `offset`) pairs to reset
             where `partition` is the partition for which to reset the offset
             and `offset` is the new offset the partition should have
-        :type partitions: Iterable of
-            (:class:`pykafka.simpleconsumer.OwnedPartition`, int)
+        :type partition_offsets: Iterable of
+            (:class:`pykafka.partition.Partition`, int)
         """
         if not self._consumer:
             raise ConsumerStoppedException("Internal consumer is stopped")
