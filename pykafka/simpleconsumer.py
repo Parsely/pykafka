@@ -206,6 +206,7 @@ class SimpleConsumer():
     def _build_default_error_handlers(self):
         """Set up the error handlers to use for partition errors."""
         def _handle_OffsetOutOfRangeError(parts):
+            log.info("Resetting offsets in response to OffsetOutOfRangeError")
             self.reset_offsets(
                 partition_offsets=[(owned_partition.partition, self._auto_offset_reset)
                                    for owned_partition, pres in parts]
@@ -422,11 +423,21 @@ class SimpleConsumer():
         Issue an OffsetRequest for each partition and set the appropriate
         returned offset in the OwnedPartition
 
-        :param partition_offsets: (`partition`, `offset`) pairs to reset
-            where `partition` is the partition for which to reset the offset
-            and `offset` is the new offset the partition should have
+        :param partition_offsets: (`partition`, `timestamp_or_offset`) pairs to
+            reset where `partition` is the partition for which to reset the offset
+            and `timestamp_or_offset` is EITHER the timestamp of the message
+            whose offset the partition should have OR the new offset the
+            partition should have
         :type partition_offsets: Iterable of
             (:class:`pykafka.partition.Partition`, int)
+
+        NOTE: If an instance of `timestamp_or_offset` is treated by kafka as
+        an invalid offset timestamp, this function directly sets the consumer's
+        internal offset counter for that partition to that instance of
+        `timestamp_or_offset`. On the next fetch request, the consumer attempts
+        to fetch messages starting from that offset. See the following link
+        for more information on what kafka treats as a valid offset timestamp:
+        https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol#AGuideToTheKafkaProtocol-OffsetRequest
         """
         def _handle_success(parts):
             for owned_partition, pres in parts:
@@ -435,10 +446,28 @@ class SimpleConsumer():
                     # so account for this here by passing offset - 1
                     owned_partition.set_offset(pres.offset[0] - 1)
                 else:
+                    # If the number specified in partition_offsets is an invalid
+                    # timestamp value for the partition, kafka does the
+                    # following:
+                    #   returns an empty array in pres.offset
+                    #   returns error code 0
+                    #   sets the specified number as the offset in its internal
+                    #       store
+                    # Here, we detect this case and set the consumer's internal
+                    # offset to that value. Thus, the next fetch request will
+                    # attempt to fetch from that offset. If it succeeds, all is
+                    # well; if not, reset_offsets is called again by the error
+                    # handlers in fetch() and fetching continues from
+                    # self._auto_offset_reset..
+                    # This amounts to a hacky way to support user-specified
+                    # offsets in reset_offsets by working around a bug or bad
+                    # design decision in kafka.
                     given_offset = owned_partition_offsets[owned_partition]
-                    msg = "Offset reset for partition {} to {} failed.".format(
-                        owned_partition.partition.id, given_offset)
-                    log.warning(msg)
+                    log.warning(
+                        "Offset reset for partition {id_} to timestamp {offset}"
+                        " failed. Setting partition {id_}'s internal counter"
+                        " to {offset}".format(
+                            id_=owned_partition.partition.id, offset=given_offset))
                     owned_partition.set_offset(given_offset)
                 # release locks on succeeded partitions to allow fetching
                 # to resume
@@ -553,12 +582,14 @@ class SimpleConsumer():
                         return
                     else:
                         raise
+
                 parts_by_error = build_parts_by_error(response, self._partitions_by_id)
                 # release the lock in these cases, since resolving the error
                 # requires an offset reset and not releasing the lock would
-                # lead to a deadlock. For successful requests or requests with
-                # different errors, we should still assume that it's ok to
-                # retain the lock
+                # lead to a deadlock in reset_offsets. For successful requests
+                # or requests with # different errors, we still assume # that
+                # it's ok to # retain the lock since no offset_reset can happen
+                # before this function returns
                 out_of_range = parts_by_error.get(OffsetOutOfRangeError.ERROR_CODE, [])
                 for owned_partition, res in out_of_range:
                     owned_partition.fetch_lock.release()
@@ -571,6 +602,7 @@ class SimpleConsumer():
                     self._default_error_handlers,
                     parts_by_error=parts_by_error,
                     success_handler=_handle_success)
+                # unlock the rest of the partitions
                 for owned_partition in partition_reqs.iterkeys():
                     owned_partition.fetch_lock.release()
 
