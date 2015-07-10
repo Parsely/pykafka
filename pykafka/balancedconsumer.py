@@ -209,6 +209,14 @@ class BalancedConsumer():
     def partitions(self):
         return self._consumer.partitions if self._consumer else None
 
+    @property
+    def held_offsets(self):
+        """Return a map from partition id to held offset for each partition"""
+        if not self._consumer:
+            return None
+        return dict((p.partition.id, p.last_offset_consumed)
+                    for p in self._consumer._partitions_by_id.itervalues())
+
     def start(self):
         """Open connections and join a cluster."""
         if self._zookeeper is None:

@@ -239,6 +239,12 @@ class SimpleConsumer():
         return dict((id_, partition.partition)
                     for id_, partition in self._partitions_by_id.iteritems())
 
+    @property
+    def held_offsets(self):
+        """Return a map from partition id to held offset for each partition"""
+        return dict((p.partition.id, p.last_offset_consumed)
+                    for p in self._partitions_by_id.itervalues())
+
     def __del__(self):
         """Stop consumption and workers when object is deleted"""
         self.stop()
