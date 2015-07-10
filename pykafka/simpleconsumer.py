@@ -30,7 +30,7 @@ from .utils.compat import Semaphore
 from .exceptions import (OffsetOutOfRangeError, UnknownTopicOrPartition,
                          OffsetMetadataTooLarge, OffsetsLoadInProgress,
                          NotCoordinatorForConsumer, SocketDisconnectedError,
-                         ConsumerStoppedException, ERROR_CODES)
+                         ConsumerStoppedException, KafkaException, ERROR_CODES)
 from .protocol import (PartitionFetchRequest, PartitionOffsetCommitRequest,
                        PartitionOffsetFetchRequest, PartitionOffsetRequest)
 from .utils.error_handlers import handle_partition_responses, raise_error
@@ -429,8 +429,10 @@ class SimpleConsumer():
                     # so account for this here by passing offset - 1
                     owned_partition.set_offset(new_offset - 1)
                 else:
-                    log.warning("Offset reset for partition {} failed.".format(
-                                owned_partition.partition.id))
+                    msg = "Offset reset for partition {} failed.".format(
+                        owned_partition.partition.id)
+                    log.warning(msg)
+                    raise KafkaException(msg)
                 # release locks on succeeded partitions to allow fetching
                 # to resume
                 owned_partition.fetch_lock.release()

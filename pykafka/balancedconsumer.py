@@ -207,7 +207,7 @@ class BalancedConsumer():
 
     @property
     def partitions(self):
-        return self._partitions
+        return self._consumer.partitions if self._consumer else None
 
     def start(self):
         """Open connections and join a cluster."""
