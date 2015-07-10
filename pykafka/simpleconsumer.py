@@ -30,7 +30,7 @@ from .utils.compat import Semaphore
 from .exceptions import (OffsetOutOfRangeError, UnknownTopicOrPartition,
                          OffsetMetadataTooLarge, OffsetsLoadInProgress,
                          NotCoordinatorForConsumer, SocketDisconnectedError,
-                         ConsumerStoppedException, KafkaError, ERROR_CODES)
+                         ConsumerStoppedException, KafkaException, ERROR_CODES)
 from .protocol import (PartitionFetchRequest, PartitionOffsetCommitRequest,
                        PartitionOffsetFetchRequest, PartitionOffsetRequest)
 from .utils.error_handlers import (handle_partition_responses, raise_error,
@@ -482,7 +482,7 @@ class SimpleConsumer():
             owned_partition_offsets = dict((self._partitions[p], offset)
                                            for p, offset in partition_offsets)
         except KeyError as e:
-            raise KafkaError("Unknown partition supplied to reset_offsets\n%s", e)
+            raise KafkaException("Unknown partition supplied to reset_offsets\n%s", e)
 
         log.info("Resetting offsets for %s partitions", len(list(owned_partition_offsets)))
 
@@ -499,9 +499,9 @@ class SimpleConsumer():
                     by_leader[partition.partition.leader].append((partition, offset))
 
             # get valid offset ranges for each partition
-            for broker, partition_offsets in by_leader.iteritems():
+            for broker, offsets in by_leader.iteritems():
                 reqs = [owned_partition.build_offset_request(offset)
-                        for owned_partition, offset in partition_offsets]
+                        for owned_partition, offset in offsets]
                 response = broker.request_offset_limits(reqs)
                 parts_by_error = handle_partition_responses(
                     self._default_error_handlers,
