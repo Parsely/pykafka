@@ -20,9 +20,10 @@ __all__ = ["handle_partition_responses", "raise_error"]
 from collections import defaultdict
 
 
-def handle_partition_responses(response,
-                               error_handlers,
+def handle_partition_responses(error_handlers,
+                               parts_by_error=None,
                                success_handler=None,
+                               response=None,
                                partitions_by_id=None):
     """Call the appropriate handler for each errored partition
 
@@ -41,6 +42,17 @@ def handle_partition_responses(response,
     if success_handler is not None:
         error_handlers[0] = success_handler
 
+    if parts_by_error is None:
+        parts_by_error = build_parts_by_error(response, partitions_by_id)
+
+    for errcode, parts in parts_by_error.iteritems():
+        if errcode in error_handlers:
+            error_handlers[errcode](parts)
+
+    return parts_by_error
+
+
+def build_parts_by_error(response, partitions_by_id):
     # group partition responses by error code
     parts_by_error = defaultdict(list)
     for topic_name in response.topics.keys():
@@ -49,11 +61,6 @@ def handle_partition_responses(response,
             if partitions_by_id is not None:
                 owned_partition = partitions_by_id[partition_id]
             parts_by_error[pres.err].append((owned_partition, pres))
-
-    for errcode, parts in parts_by_error.iteritems():
-        if errcode in error_handlers:
-            error_handlers[errcode](parts)
-
     return parts_by_error
 
 

@@ -30,10 +30,11 @@ from .utils.compat import Semaphore
 from .exceptions import (OffsetOutOfRangeError, UnknownTopicOrPartition,
                          OffsetMetadataTooLarge, OffsetsLoadInProgress,
                          NotCoordinatorForConsumer, SocketDisconnectedError,
-                         ConsumerStoppedException, KafkaException, ERROR_CODES)
+                         ConsumerStoppedException, ERROR_CODES)
 from .protocol import (PartitionFetchRequest, PartitionOffsetCommitRequest,
                        PartitionOffsetFetchRequest, PartitionOffsetRequest)
-from .utils.error_handlers import handle_partition_responses, raise_error
+from .utils.error_handlers import (handle_partition_responses, raise_error,
+                                   build_parts_by_error)
 
 
 log = logging.getLogger(__name__)
@@ -346,8 +347,8 @@ class SimpleConsumer():
             response = self._offset_manager.commit_consumer_group_offsets(
                 self._consumer_group, 1, 'pykafka', reqs)
             parts_by_error = handle_partition_responses(
-                response,
                 self._default_error_handlers,
+                response=response,
                 partitions_by_id=self._partitions_by_id)
             if len(parts_by_error) == 1 and 0 in parts_by_error:
                 break
@@ -393,8 +394,8 @@ class SimpleConsumer():
 
             res = self._offset_manager.fetch_consumer_group_offsets(self._consumer_group, reqs)
             parts_by_error = handle_partition_responses(
-                res,
                 self._default_error_handlers,
+                response=res,
                 success_handler=_handle_success,
                 partitions_by_id=self._partitions_by_id)
 
@@ -430,15 +431,15 @@ class SimpleConsumer():
         def _handle_success(parts):
             for owned_partition, pres in parts:
                 if len(pres.offset) > 0:
-                    new_offset = pres.offset[0]
                     # offset requests return the next offset to consume,
                     # so account for this here by passing offset - 1
-                    owned_partition.set_offset(new_offset - 1)
+                    owned_partition.set_offset(pres.offset[0] - 1)
                 else:
-                    msg = "Offset reset for partition {} failed.".format(
-                        owned_partition.partition.id)
+                    given_offset = owned_partition_offsets[owned_partition]
+                    msg = "Offset reset for partition {} to {} failed.".format(
+                        owned_partition.partition.id, given_offset)
                     log.warning(msg)
-                    raise KafkaException(msg)
+                    owned_partition.set_offset(given_offset)
                 # release locks on succeeded partitions to allow fetching
                 # to resume
                 owned_partition.fetch_lock.release()
@@ -449,18 +450,18 @@ class SimpleConsumer():
 
         # turn Partitions into their corresponding OwnedPartitions
         try:
-            owned_partitions = [(self._partitions[p], offset)
-                                for p, offset in partition_offsets]
+            owned_partition_offsets = dict((self._partitions[p], offset)
+                                           for p, offset in partition_offsets)
         except KeyError as e:
             raise("Unknown partition supplied to reset_offsets\n%s", e)
 
-        log.info("Resetting offsets for %s partitions", len(list(owned_partitions)))
+        log.info("Resetting offsets for %s partitions", len(list(owned_partition_offsets)))
 
         for i in xrange(self._offsets_reset_max_retries):
             log.debug("Retrying offset reset")
             # group partitions by leader
             by_leader = defaultdict(list)
-            for partition, offset in owned_partitions:
+            for partition, offset in owned_partition_offsets.iteritems():
                 # acquire lock for each partition to stop fetching during offset
                 # reset
                 if partition.fetch_lock.acquire(True):
@@ -475,8 +476,8 @@ class SimpleConsumer():
                         for owned_partition, offset in partition_offsets]
                 response = broker.request_offset_limits(reqs)
                 parts_by_error = handle_partition_responses(
-                    response,
                     self._default_error_handlers,
+                    response=response,
                     success_handler=_handle_success,
                     partitions_by_id=self._partitions_by_id)
 
@@ -552,13 +553,26 @@ class SimpleConsumer():
                         return
                     else:
                         raise
+                parts_by_error = build_parts_by_error(response, self._partitions_by_id)
+                # release the lock in these cases, since resolving the error
+                # requires an offset reset and not releasing the lock would
+                # lead to a deadlock. For successful requests or requests with
+                # different errors, we should still assume that it's ok to
+                # retain the lock
+                out_of_range = parts_by_error.get(OffsetOutOfRangeError.ERROR_CODE, [])
+                for owned_partition, res in out_of_range:
+                    owned_partition.fetch_lock.release()
+                    # remove them from the dict of partitions to unlock to avoid
+                    # double-unlocking
+                    partition_reqs.pop(owned_partition)
+                # handle the rest of the errors that don't require deadlock
+                # management
                 handle_partition_responses(
-                    response,
                     self._default_error_handlers,
-                    success_handler=_handle_success,
-                    partitions_by_id=self._partitions_by_id)
-            for owned_partition in partition_reqs.iterkeys():
-                owned_partition.fetch_lock.release()
+                    parts_by_error=parts_by_error,
+                    success_handler=_handle_success)
+                for owned_partition in partition_reqs.iterkeys():
+                    owned_partition.fetch_lock.release()
 
 
 class OwnedPartition(object):
