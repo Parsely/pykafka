@@ -509,7 +509,7 @@ class BalancedConsumer():
         log.debug("Rebalance triggered by topic change")
         self._rebalance()
 
-    def reset_offsets(self, partitions=None):
+    def reset_offsets(self, partition_offsets=None):
         """Reset offsets for the specified partitions
 
         Issue an OffsetRequest for each partition and set the appropriate
@@ -523,7 +523,7 @@ class BalancedConsumer():
         """
         if not self._consumer:
             raise ConsumerStoppedException("Internal consumer is stopped")
-        self._consumer.reset_offsets(partitions=partitions)
+        self._consumer.reset_offsets(partition_offsets=partition_offsets)
 
     def consume(self, block=True):
         """Get one message from the consumer
