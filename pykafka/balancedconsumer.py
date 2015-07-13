@@ -207,7 +207,15 @@ class BalancedConsumer():
 
     @property
     def partitions(self):
-        return self._partitions
+        return self._consumer.partitions if self._consumer else None
+
+    @property
+    def held_offsets(self):
+        """Return a map from partition id to held offset for each partition"""
+        if not self._consumer:
+            return None
+        return dict((p.partition.id, p.last_offset_consumed)
+                    for p in self._consumer._partitions_by_id.itervalues())
 
     def start(self):
         """Open connections and join a cluster."""
@@ -508,6 +516,22 @@ class BalancedConsumer():
             return
         log.debug("Rebalance triggered by topic change")
         self._rebalance()
+
+    def reset_offsets(self, partition_offsets=None):
+        """Reset offsets for the specified partitions
+
+        Issue an OffsetRequest for each partition and set the appropriate
+        returned offset in the OwnedPartition
+
+        :param partition_offsets: (`partition`, `offset`) pairs to reset
+            where `partition` is the partition for which to reset the offset
+            and `offset` is the new offset the partition should have
+        :type partition_offsets: Iterable of
+            (:class:`pykafka.partition.Partition`, int)
+        """
+        if not self._consumer:
+            raise ConsumerStoppedException("Internal consumer is stopped")
+        self._consumer.reset_offsets(partition_offsets=partition_offsets)
 
     def consume(self, block=True):
         """Get one message from the consumer
