@@ -103,4 +103,4 @@ Support
 If you need help using PyKafka or have found a bug, please open a `github issue`_ or use the `Google Group`_.
 
 .. _github issue: https://github.com/Parsely/pykafka/issues
-.. _Google Group: pykafka-user@googlegroups.com
+.. _Google Group: https://groups.google.com/forum/#!forum/pykafka-user
