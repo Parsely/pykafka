@@ -520,10 +520,10 @@ class SimpleConsumer():
 
                 if 0 in parts_by_error:
                     parts_by_error.pop(0)
-                partitions = []
-                partitions.extend(
-                    [part for errcode, parts in parts_by_error.iteritems()
-                     for part in parts])
+                owned_partition_offsets = dict(
+                    (part, owned_partition_offsets[part])
+                    for errcode, parts in parts_by_error.iteritems()
+                    for part, _ in parts)
 
             # release all locks to allow fetching
             for errcode, owned_partitions in parts_by_error.iteritems():
