@@ -72,7 +72,8 @@ class TestSimpleConsumer(unittest2.TestCase):
 class TestOwnedPartition(unittest2.TestCase):
     def test_partition_saves_offset(self):
         msgval = "test"
-        op = OwnedPartition(None)
+        partition = mock.MagicMock()
+        op = OwnedPartition(partition)
 
         message = mock.Mock()
         message.value = msgval

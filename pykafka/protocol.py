@@ -141,11 +141,17 @@ class Message(Message, Serializable):
                  value,
                  partition_key=None,
                  compression_type=CompressionType.NONE,
-                 offset=-1):
+                 offset=-1,
+                 partition_id=-1):
         self.compression_type = compression_type
         self.partition_key = partition_key
         self.value = value
         self.offset = offset
+        # this is set on decode to expose it to clients that use the protocol
+        # implementation but not the consumer
+        self.partition_id = partition_id
+        # self.partition is set by the consumer
+        self.partition = None
 
     def __len__(self):
         size = 4 + 1 + 1 + 4 + 4 + len(self.value)
@@ -154,14 +160,16 @@ class Message(Message, Serializable):
         return size
 
     @classmethod
-    def decode(self, buff, msg_offset=-1):
+    def decode(self, buff, msg_offset=-1, partition_id=-1):
         fmt = 'iBBYY'
         response = struct_helpers.unpack_from(fmt, buff, 0)
         crc, _, attr, key, val = response
         # TODO: Handle CRC failure
         return Message(val,
                        partition_key=key,
-                       compression_type=attr, offset=msg_offset)
+                       compression_type=attr,
+                       offset=msg_offset,
+                       partition_id=partition_id)
 
     def pack_into(self, buff, offset):
         """Serialize and write to ``buff`` starting at offset ``offset``.
@@ -255,7 +263,7 @@ class MessageSet(Serializable):
         return Message(compressed, compression_type=self.compression_type)
 
     @classmethod
-    def decode(cls, buff):
+    def decode(cls, buff, partition_id=-1):
         """Decode a serialized MessageSet."""
         messages = []
         offset = 0
@@ -269,7 +277,9 @@ class MessageSet(Serializable):
             if len(buff) - offset < size:
                 break
             # TODO: Check we have all the requisite bytes
-            message = Message.decode(buff[offset:offset + size], msg_offset)
+            message = Message.decode(buff[offset:offset + size],
+                                     msg_offset,
+                                     partition_id=partition_id)
             # print '[%d] (%s) %s' % (message.offset, message.partition_key, message.value)
             messages.append(message)
             offset += size
@@ -545,7 +555,7 @@ class PartitionFetchRequest(_PartitionFetchRequest):
     :ivar offset: Offset at which to start reading
     :ivar max_bytes: Max bytes to read from this partition (default: 300kb)
     """
-    def __new__(cls, topic, partition, offset, max_bytes=1024*1024):
+    def __new__(cls, topic, partition, offset, max_bytes=1024 * 1024):
         return super(PartitionFetchRequest, cls).__new__(
             cls, topic, partition, offset, max_bytes)
 
@@ -661,23 +671,27 @@ class FetchResponse(Response):
         for (topic, partitions) in response:
             for partition in partitions:
                 self.topics[topic][partition[0]] = FetchPartitionResponse(
-                    partition[2], self._unpack_message_set(partition[3]),
+                    partition[2],
+                    self._unpack_message_set(partition[3],
+                                             partition_id=partition[0]),
                     partition[1]
                 )
 
-    def _unpack_message_set(self, buff):
+    def _unpack_message_set(self, buff, partition_id=-1):
         """MessageSets can be nested. Get just the Messages out of it."""
         output = []
-        message_set = MessageSet.decode(buff)
+        message_set = MessageSet.decode(buff, partition_id=partition_id)
         for message in message_set.messages:
             if message.compression_type == CompressionType.NONE:
                 output.append(message)
             elif message.compression_type == CompressionType.GZIP:
                 decompressed = compression.decode_gzip(message.value)
-                output += self._unpack_message_set(decompressed)
+                output += self._unpack_message_set(decompressed,
+                                                   partition_id=partition_id)
             elif message.compression_type == CompressionType.SNAPPY:
                 decompressed = compression.decode_snappy(message.value)
-                output += self._unpack_message_set(decompressed)
+                output += self._unpack_message_set(decompressed,
+                                                   partition_id=partition_id)
         return output
 
 

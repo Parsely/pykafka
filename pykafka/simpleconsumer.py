@@ -618,6 +618,11 @@ class OwnedPartition(object):
                           "less than last_offset_consumed (%s)",
                           message.offset, self.last_offset_consumed)
                 continue
+            message.partition = self.partition
+            if message.partition_id != self.partition.id:
+                log.error("Partition %s enqueued a message meant for partition %s",
+                          self.partition.id, message.partition_id)
+            message.partition_id = self.partition.id
             self._messages.put(message)
             self.next_offset = message.offset + 1
 

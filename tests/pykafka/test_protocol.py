@@ -128,15 +128,15 @@ class TestFetchAPI(unittest2.TestCase):
         response = protocol.FetchResponse(msg)
         self.assertDictEqual(
             response.topics['test_gzip'][0].messages[0].__dict__,
-            {'partition_key': 'asdf', 'compression_type': 0, 'value': 'this is a test message', 'offset': 0},
+            {'partition_key': 'asdf', 'compression_type': 0, 'value': 'this is a test message', 'offset': 0, 'partition_id': 0, 'partition': None},
         )
         self.assertDictEqual(
             response.topics['test_gzip'][0].messages[1].__dict__,
-            {'partition_key': 'test_key', 'compression_type': 0, 'value': 'this is also a test message', 'offset': 1},
+            {'partition_key': 'test_key', 'compression_type': 0, 'value': 'this is also a test message', 'offset': 1, 'partition_id': 0, 'partition': None},
         )
         self.assertDictEqual(
             response.topics['test_gzip'][0].messages[2].__dict__,
-            {'partition_key': None, 'compression_type': 0, 'value': "this doesn't have a partition key", 'offset': 2}
+            {'partition_key': None, 'compression_type': 0, 'value': "this doesn't have a partition key", 'offset': 2, 'partition_id': 0, 'partition': None}
         )
         return
 
