@@ -421,7 +421,7 @@ class SimpleConsumer():
         """Reset offsets for the specified partitions
 
         Issue an OffsetRequest for each partition and set the appropriate
-        returned offset in the OwnedPartition
+        returned offset in the consumer's internal offset counter.
 
         :param partition_offsets: (`partition`, `timestamp_or_offset`) pairs to
             reset where `partition` is the partition for which to reset the offset
