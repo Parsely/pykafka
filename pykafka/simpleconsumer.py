@@ -527,6 +527,14 @@ class SimpleConsumer():
             for errcode, owned_partitions in parts_by_error.iteritems():
                 if errcode != 0:
                     for owned_partition in owned_partitions:
+                        # set internal counter appropriately to avoid possibly
+                        # leaving it in a state inconsistent with the given
+                        # offset
+                        given_offset = owned_partition_offsets[owned_partition]
+                        # don't reset counter to a magic value, only to a real
+                        # offset
+                        if given_offset != self._auto_offset_reset:
+                            owned_partition.set_offset(given_offset)
                         owned_partition.fetch_lock.release()
 
             if len(parts_by_error) == 1 and 0 in parts_by_error:
