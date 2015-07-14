@@ -451,8 +451,6 @@ class SimpleConsumer():
                     # following:
                     #   returns an empty array in pres.offset
                     #   returns error code 0
-                    #   sets the specified number as the offset in its internal
-                    #       store
                     # Here, we detect this case and set the consumer's internal
                     # offset to that value. Thus, the next fetch request will
                     # attempt to fetch from that offset. If it succeeds, all is
