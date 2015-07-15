@@ -393,8 +393,9 @@ class BalancedConsumer():
             path=self._consumer_id_path,
             id_=self._consumer_id
         )
-        self._zookeeper.create(
-            path, self._topic.name, ephemeral=True, makepath=True)
+        if self._consumer_id not in participants:
+            self._zookeeper.create(
+                path, self._topic.name, ephemeral=True, makepath=True)
 
     def _rebalance(self):
         """Claim partitions for this consumer.
@@ -510,6 +511,7 @@ class BalancedConsumer():
         if self._setting_watches:
             return
         log.debug("Rebalance triggered by consumer change")
+        self._add_self()
         self._rebalance()
 
     def _topics_changed(self, topics):
