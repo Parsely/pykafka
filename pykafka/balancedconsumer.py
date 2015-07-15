@@ -238,6 +238,11 @@ class BalancedConsumer():
         self._consumer.stop()
         self._running = False
 
+    @property
+    def running(self):
+        """Indicates whether the consumer has been started"""
+        return self._running
+
     def _setup_zookeeper(self, zookeeper_connect, timeout):
         """Open a connection to a ZooKeeper host.
 
