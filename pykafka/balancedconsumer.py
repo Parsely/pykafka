@@ -196,11 +196,15 @@ class BalancedConsumer():
     def _setup_checker_worker(self):
         """Start the zookeeper partition checker thread"""
         def checker():
-            while True:
-                time.sleep(120)
-                if not self._running:
-                    break
-                self._check_held_partitions()
+            try:
+                while True:
+                    time.sleep(120)
+                    if not self._running:
+                        break
+                    self._check_held_partitions()
+            finally:
+                if self._running:
+                    self.stop()
             log.debug("Checker thread exiting")
         log.debug("Starting checker thread")
         return self._cluster.handler.spawn(checker)
@@ -391,16 +395,20 @@ class BalancedConsumer():
         number of partitions.
         """
         participants = self._get_participants()
+        # This checking should be before checking the total number of participants.
+        if self._consumer_id in participants:
+            return
         if len(self._topic.partitions) <= len(participants):
+            # When this condition happens, this consumer should stop.
+            self.stop()
             raise KafkaException("Cannot add consumer: more consumers than partitions")
 
         path = '{path}/{id_}'.format(
             path=self._consumer_id_path,
             id_=self._consumer_id
         )
-        if self._consumer_id not in participants:
-            self._zookeeper.create(
-                path, self._topic.name, ephemeral=True, makepath=True)
+        self._zookeeper.create(
+            path, self._topic.name, ephemeral=True, makepath=True)
 
     def _rebalance(self):
         """Claim partitions for this consumer.
@@ -547,13 +555,22 @@ class BalancedConsumer():
         :param block: Whether to block while waiting for a message
         :type block: bool
         """
-
         def consumer_timed_out():
             """Indicates whether the consumer has received messages recently"""
             if self._consumer_timeout_ms == -1:
                 return False
             disp = (time.time() - self._last_message_time) * 1000.0
             return disp > self._consumer_timeout_ms
+
+        # To check if internal consumer is still running.
+        if not self._consumer.running:
+            if self.running:
+                # it should be able to commit offsets even if it is marked as not running.
+                self.commit_offsets()
+                self._setup_internal_consumer()
+            else:
+                return None
+
         message = None
         self._last_message_time = time.time()
         while message is None and not consumer_timed_out():

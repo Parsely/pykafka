@@ -248,6 +248,11 @@ class SimpleConsumer():
         return dict((p.partition.id, p.last_offset_consumed)
                     for p in self._partitions_by_id.itervalues())
 
+    @property
+    def running(self):
+        """Indicates whether the consumer has been started"""
+        return self._running
+
     def __del__(self):
         """Stop consumption and workers when object is deleted"""
         self.stop()
@@ -259,12 +264,16 @@ class SimpleConsumer():
     def _setup_autocommit_worker(self):
         """Start the autocommitter thread"""
         def autocommitter():
-            while True:
-                if not self._running:
-                    break
-                if self._auto_commit_enable:
-                    self._auto_commit()
-                time.sleep(self._auto_commit_interval_ms / 1000)
+            try:
+                while True:
+                    if not self._running:
+                        break
+                    if self._auto_commit_enable:
+                        self._auto_commit()
+                    time.sleep(self._auto_commit_interval_ms / 1000)
+            finally:
+                if self._running:
+                    self.stop()
             log.debug("Autocommitter thread exiting")
         log.debug("Starting autocommitter thread")
         return self._cluster.handler.spawn(autocommitter)
@@ -272,11 +281,15 @@ class SimpleConsumer():
     def _setup_fetch_workers(self):
         """Start the fetcher threads"""
         def fetcher():
-            while True:
-                if not self._running:
-                    break
-                self.fetch()
-                time.sleep(.0001)
+            try:
+                while True:
+                    if not self._running:
+                        break
+                    self.fetch()
+                    time.sleep(.0001)
+            finally:
+                if self._running:
+                    self.stop()
             log.debug("Fetcher thread exiting")
         log.info("Starting %s fetcher threads", self._num_consumer_fetchers)
         return [self._cluster.handler.spawn(fetcher)
@@ -296,6 +309,9 @@ class SimpleConsumer():
         :param block: Whether to block while waiting for a message
         :type block: bool
         """
+        if not self._running:
+            return None
+
         timeout = None
         if block:
             if self._consumer_timeout_ms > 0:
