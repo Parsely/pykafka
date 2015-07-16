@@ -564,12 +564,12 @@ class BalancedConsumer():
             disp = (time.time() - self._last_message_time) * 1000.0
             return disp > self._consumer_timeout_ms
 
+        # auto-restart the internal consumer if it has stalled
         if not self._consumer.running:
-            if self._running:
-                self.commit_offsets()
-                self._setup_internal_consumer()
-            else:
+            if not self._running:
                 return None
+            self.commit_offsets()
+            self._setup_internal_consumer()
 
         message = None
         self._last_message_time = time.time()
