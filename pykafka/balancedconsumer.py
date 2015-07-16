@@ -240,8 +240,8 @@ class BalancedConsumer():
         """
         self._zookeeper.stop()
         # If internal consumer is not running and this consumer is running,
-        # It will re-setup an internal consumer.
-        # To avoid race condition, set this consumer not running before
+        # consume() will re-setup the internal consumer.
+        # To avoid a race condition, set this consumer to not running before
         # stopping internal consumer.
         self._running = False
         self._consumer.stop()
@@ -399,11 +399,9 @@ class BalancedConsumer():
         number of partitions.
         """
         participants = self._get_participants()
-        # This checking should be before checking the total number of participants.
         if self._consumer_id in participants:
             return
         if len(self._topic.partitions) <= len(participants):
-            # When this condition happens, this consumer should stop.
             self.stop()
             raise KafkaException("Cannot add consumer: more consumers than partitions")
 
@@ -566,10 +564,8 @@ class BalancedConsumer():
             disp = (time.time() - self._last_message_time) * 1000.0
             return disp > self._consumer_timeout_ms
 
-        # To check if internal consumer is still running.
         if not self._consumer.running:
             if self._running:
-                # it should be able to commit offsets even if it is marked as not running.
                 self.commit_offsets()
                 self._setup_internal_consumer()
             else:
