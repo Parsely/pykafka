@@ -239,8 +239,12 @@ class BalancedConsumer():
         This method should be called as part of a graceful shutdown process.
         """
         self._zookeeper.stop()
-        self._consumer.stop()
+        # If internal consumer is not running and this consumer is running,
+        # It will re-setup an internal consumer.
+        # To avoid race condition, set this consumer not running before
+        # stopping internal consumer.
         self._running = False
+        self._consumer.stop()
 
     @property
     def running(self):
@@ -564,7 +568,7 @@ class BalancedConsumer():
 
         # To check if internal consumer is still running.
         if not self._consumer.running:
-            if self.running:
+            if self._running:
                 # it should be able to commit offsets even if it is marked as not running.
                 self.commit_offsets()
                 self._setup_internal_consumer()
