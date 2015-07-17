@@ -30,7 +30,8 @@ from .utils.compat import Semaphore
 from .exceptions import (OffsetOutOfRangeError, UnknownTopicOrPartition,
                          OffsetMetadataTooLarge, OffsetsLoadInProgress,
                          NotCoordinatorForConsumer, SocketDisconnectedError,
-                         ConsumerStoppedException, KafkaException, ERROR_CODES)
+                         ConsumerStoppedException, KafkaException,
+                         OffsetRequestFailedError, ERROR_CODES)
 from .protocol import (PartitionFetchRequest, PartitionOffsetCommitRequest,
                        PartitionOffsetFetchRequest, PartitionOffsetRequest)
 from .utils.error_handlers import (handle_partition_responses, raise_error,
@@ -526,20 +527,16 @@ class SimpleConsumer():
             for errcode, owned_partitions in parts_by_error.iteritems():
                 if errcode != 0:
                     for owned_partition in owned_partitions:
-                        # set internal counter appropriately to avoid possibly
-                        # leaving it in a state inconsistent with the given
-                        # offset
-                        given_offset = owned_partition_offsets[owned_partition]
-                        # don't reset counter to a magic value, only to a real
-                        # offset
-                        if given_offset != self._auto_offset_reset:
-                            owned_partition.set_offset(given_offset)
-                        # release all locks to allow fetching
                         owned_partition.fetch_lock.release()
 
             if len(parts_by_error) == 1 and 0 in parts_by_error:
                 break
             log.debug("Retrying offset reset")
+
+        if any([a != 0 for a in parts_by_error]):
+            raise OffsetRequestFailedError("reset_offsets failed after %d "
+                                           "retries",
+                                           self._offsets_reset_max_retries)
 
         if self._consumer_group is not None:
             self.commit_offsets()

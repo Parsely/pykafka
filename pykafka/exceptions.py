@@ -45,6 +45,11 @@ class NoMessagesConsumedError(KafkaException):
     pass
 
 
+class OffsetRequestFailedError(KafkaException):
+    """Indicates that OffsetRequests for offset resetting failed more times than the configured maximum"""
+    pass
+
+
 class PartitionOwnedError(KafkaException):
     """Indicates a given partition is still owned in Zookeeper."""
 
