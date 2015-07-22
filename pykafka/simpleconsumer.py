@@ -512,7 +512,7 @@ class SimpleConsumer():
                     partitions_by_id=self._partitions_by_id)
 
                 if len(parts_by_error) == 1 and 0 in parts_by_error:
-                    break
+                    continue
                 log.error("Error resetting offsets for topic %s (errors: %s)",
                           self._topic.name,
                           dict((ERROR_CODES[err], [op.partition.id for op, _ in parts])
