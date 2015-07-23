@@ -553,6 +553,8 @@ class BalancedConsumer():
             try:
                 message = self._consumer.consume(block=block)
             except ConsumerStoppedException:
+                if hasattr(self, '_running') and not self._running:
+                    return
                 continue
             if message:
                 self._last_message_time = time.time()

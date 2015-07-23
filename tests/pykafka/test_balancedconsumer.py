@@ -6,6 +6,7 @@ import unittest2
 
 from pykafka import KafkaClient
 from pykafka.balancedconsumer import BalancedConsumer
+from pykafka.exceptions import ConsumerStoppedException
 from pykafka.test.utils import get_cluster, stop_cluster
 
 
@@ -42,6 +43,16 @@ class TestBalancedConsumer(unittest2.TestCase):
         start = time.time()
         self._mock_consumer.consume()
         self.assertEqual(int(time.time() - start), int(self._consumer_timeout / 1000))
+
+    def test_consume_graceful_stop(self):
+        """Ensure that stopping a consumer while consuming from Kafka does not
+        end in an infinite loop when timeout is not used.
+        """
+        consumer, _ = buildMockConsumer(timeout=-1)
+        consumer._setup_internal_consumer(start=False)
+
+        consumer.stop()
+        consumer.consume()
 
     def test_decide_partitions(self):
         """Test partition assignment for a number of partitions/consumers."""
