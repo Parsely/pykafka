@@ -210,15 +210,15 @@ class Producer():
             )
             # Send requests at the batch size
             if requests[leader].message_count() >= self._batch_size:
-                self._request_built_callback(leader,
-                                             requests.pop(leader.id),
-                                             attempt)
+                self._prepare_request(leader,
+                                      requests.pop(leader.id),
+                                      attempt)
 
         # Send any still not sent
         for leader, req in requests.iteritems():
-            self._request_built_callback(leader, req, attempt)
+            self._prepare_request(leader, req, attempt)
 
-    def _request_built_callback(self, leader, request, attempt):
+    def _prepare_request(self, leader, request, attempt):
         """Callback called when a request is ready to be sent
 
         Immediately sends the request to `leader`
@@ -291,7 +291,7 @@ class AsyncProducer(Producer):
         self._cluster.handler.spawn(worker)
         return request_queue
 
-    def _request_built_callback(self, leader, request, attempt):
+    def _prepare_request(self, leader, request, attempt):
         """Callback called when a request is ready to be sent
 
         Enqueues the request in the queue associated with `leader`
