@@ -163,6 +163,7 @@ class BalancedConsumer():
         self._zookeeper_connect = zookeeper_connect
         self._zookeeper_connection_timeout_ms = zookeeper_connection_timeout_ms
         self._reset_offset_on_start = reset_offset_on_start
+        self._running = False
 
         self._rebalancing_lock = cluster.handler.Lock()
         self._consumer = None
@@ -553,7 +554,7 @@ class BalancedConsumer():
             try:
                 message = self._consumer.consume(block=block)
             except ConsumerStoppedException:
-                if hasattr(self, '_running') and not self._running:
+                if not self._running:
                     return
                 continue
             if message:
