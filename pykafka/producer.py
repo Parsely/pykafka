@@ -249,12 +249,53 @@ class AsyncProducer(Producer):
     This class implements the asynchronous producer logic found in the
     JVM driver. In inherits from the synchronous implementation.
     """
-    def __init__(self, *args, **kwargs):
+    def __init__(self,
+                 cluster,
+                 topic,
+                 partitioner=random_partitioner,
+                 compression=CompressionType.NONE,
+                 max_retries=3,
+                 retry_backoff_ms=100,
+                 required_acks=1,
+                 ack_timeout_ms=10000,
+                 batch_size=200):
         """Instantiate a new AsyncProducer
 
-        For argument documentation, see :class:`pykafka.producer.Producer`
+        :param cluster: The cluster to which to connect
+        :type cluster: :class:`pykafka.cluster.Cluster`
+        :param topic: The topic to which to produce messages
+        :type topic: :class:`pykafka.topic.Topic`
+        :param partitioner: The partitioner to use during message production
+        :type partitioner: :class:`pykafka.partitioners.BasePartitioner`
+        :param compression: The type of compression to use.
+        :type compression: :class:`pykafka.common.CompressionType`
+        :param max_retries: How many times to attempt to produce messages
+            before raising an error.
+        :type max_retries: int
+        :param retry_backoff_ms: The amount of time (in milliseconds) to
+            back off during produce request retries.
+        :type retry_backoff_ms: int
+        :param required_acks: How many other brokers must have committed the
+            data to their log and acknowledged this to the leader before a
+            request is considered complete?
+        :type required_acks: int
+        :param ack_timeout_ms: Amount of time (in milliseconds) to wait for
+            acknowledgment of a produce request.
+        :type ack_timeout_ms: int
+        :param batch_size: Size (in bytes) of batches to send to brokers.
+        :type batch_size: int
         """
-        super(AsyncProducer, self).__init__(*args, **kwargs)
+        super(AsyncProducer, self).__init__(
+            cluster,
+            topic,
+            partitioner=partitioner,
+            compression=compression,
+            max_retries=max_retries,
+            retry_backoff_ms=retry_backoff_ms,
+            required_acks=required_acks,
+            ack_timeout_ms=ack_timeout_ms,
+            batch_size=batch_size
+        )
         self._setup_workers()
 
     def _setup_workers(self):
