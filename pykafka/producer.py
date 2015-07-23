@@ -258,7 +258,8 @@ class AsyncProducer(Producer):
                  retry_backoff_ms=100,
                  required_acks=1,
                  ack_timeout_ms=10000,
-                 batch_size=200):
+                 batch_size=200,
+                 max_queued_requests=500):
         """Instantiate a new AsyncProducer
 
         :param cluster: The cluster to which to connect
@@ -284,6 +285,9 @@ class AsyncProducer(Producer):
         :type ack_timeout_ms: int
         :param batch_size: Size (in bytes) of batches to send to brokers.
         :type batch_size: int
+        :param max_queued_requests: The maximum number of requests allowed
+            in the request queue
+        :type max_queued_requests: int
         """
         super(AsyncProducer, self).__init__(
             cluster,
@@ -296,6 +300,7 @@ class AsyncProducer(Producer):
             ack_timeout_ms=ack_timeout_ms,
             batch_size=batch_size
         )
+        self._max_queued_requests = max_queued_requests
         self._setup_workers()
 
     def _setup_workers(self):
@@ -348,7 +353,12 @@ class AsyncProducer(Producer):
         :param attempt: The attempt number for this send attempt
         :type attempt: int
         """
-        self._queues_by_leader[leader.id].put((request, attempt))
+        queue = self._queues_by_leader[leader.id]
+        # block until there is space available in the queue
+        while queue.qsize() > self._max_queued_requests:
+            log.debug("Queue for broker %d is full. Blocking...", leader.id)
+            pass
+        queue.put((request, attempt))
         log.debug("Enqueued %d messages for broker %s",
                   request.message_count(),
                   leader.id)
