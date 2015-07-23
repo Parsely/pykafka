@@ -181,6 +181,7 @@ class BalancedConsumer():
             group=self._consumer_group)
 
         self._zookeeper = None
+        self._owns_zookeeper = zookeeper is None
         if zookeeper is not None:
             self._zookeeper = zookeeper
         if auto_start is True:
@@ -246,7 +247,8 @@ class BalancedConsumer():
         self._running = False
         if self._consumer is not None:
             self._consumer.stop()
-        self._zookeeper.stop()
+        if self._owns_zookeeper:
+            self._zookeeper.stop()
 
     @property
     def running(self):
