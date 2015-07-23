@@ -584,7 +584,13 @@ class BalancedConsumer():
         while message is None and not consumer_timed_out():
             if not self._zookeeper.connected:
                 raise ZookeeperConnectionLost()
-            message = self._consumer.consume(block=block)
+            try:
+                message = self._consumer.consume(block=block)
+            except ConsumerStoppedException:
+                # don't raise the exception if we're rebalancing
+                if self._rebalancing_lock.locked():
+                    continue
+                raise
             if message:
                 self._last_message_time = time.time()
             if not block:
