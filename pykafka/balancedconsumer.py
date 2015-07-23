@@ -235,10 +235,13 @@ class BalancedConsumer():
         self._running = True
         self._setup_checker_worker()
 
-    def stop(self):
+    def stop(self, commit_offsets=True):
         """Close the zookeeper connection and stop consuming.
 
         This method should be called as part of a graceful shutdown process.
+
+        :param commit_offsets: Whether to commit offsets before stopping
+        :type commit_offsets: bool
         """
         # If internal consumer is not running and this consumer is running,
         # consume() will re-setup the internal consumer.
@@ -246,7 +249,7 @@ class BalancedConsumer():
         # stopping internal consumer.
         self._running = False
         if self._consumer is not None:
-            self._consumer.stop()
+            self._consumer.stop(commit_offsets=commit_offsets)
         if self._owns_zookeeper:
             self._zookeeper.stop()
 
@@ -583,6 +586,7 @@ class BalancedConsumer():
         self._last_message_time = time.time()
         while message is None and not consumer_timed_out():
             if not self._zookeeper.connected:
+                self.stop(commit_offsets=False)
                 raise ZookeeperConnectionLost()
             try:
                 message = self._consumer.consume(block=block)

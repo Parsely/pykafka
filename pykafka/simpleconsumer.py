@@ -257,9 +257,13 @@ class SimpleConsumer():
         """Stop consumption and workers when object is deleted"""
         self.stop()
 
-    def stop(self):
-        """Flag all running workers for deletion."""
-        if self._consumer_group is not None:
+    def stop(self, commit_offsets=True):
+        """Flag all running workers for deletion.
+
+        :param commit_offsets: Whether to commit offsets before stopping
+        :type commit_offsets: bool
+        """
+        if commit_offsets and self._consumer_group is not None:
             self.commit_offsets()
         self._running = False
 
