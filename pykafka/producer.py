@@ -329,10 +329,9 @@ class AsyncProducer(Producer):
                 time.sleep(.0001)
                 try:
                     request, attempt = request_queue.get_nowait()
+                    self._send_request(broker, request, attempt)
                 except Empty:
                     continue
-                try:
-                    self._send_request(broker, request, attempt)
                 except ProduceFailureError as e:
                     log.error("Producer error: %s", e)
 
