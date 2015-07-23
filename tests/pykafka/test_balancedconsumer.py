@@ -6,6 +6,7 @@ import unittest2
 
 from pykafka import KafkaClient
 from pykafka.balancedconsumer import BalancedConsumer
+from pykafka.exceptions import ZookeeperConnectionLost
 from pykafka.test.utils import get_cluster, stop_cluster
 
 
@@ -39,6 +40,7 @@ class TestBalancedConsumer(unittest2.TestCase):
         """Ensure that consume() returns in the amount of time it's supposed to
         """
         self._mock_consumer._setup_internal_consumer(start=False)
+        self._mock_consumer._consumer._running = True
         start = time.time()
         self._mock_consumer.consume()
         self.assertEqual(int(time.time() - start), int(self._consumer_timeout / 1000))
@@ -120,6 +122,19 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
         finally:
             consumer_a.stop()
             consumer_b.stop()
+
+    def test_zk_connection_lost(self):
+        try:
+            consumer_a = self.client.topics[self.topic_name].get_balanced_consumer('test_consume', zookeeper_connect=self.kafka.zookeeper)
+
+            # artificially break the zookeeper connection and regain it
+            consumer_a._zookeeper.stop()
+
+            # Consume from both a few times
+            with self.assertRaises(ZookeeperConnectionLost):
+                consumer_a.consume()
+        finally:
+            consumer_a.stop()
 
 
 if __name__ == "__main__":

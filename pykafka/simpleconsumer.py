@@ -259,6 +259,8 @@ class SimpleConsumer():
 
     def stop(self):
         """Flag all running workers for deletion."""
+        if self._consumer_group is not None:
+            self.commit_offsets()
         self._running = False
 
     def _setup_autocommit_worker(self):
@@ -309,9 +311,6 @@ class SimpleConsumer():
         :param block: Whether to block while waiting for a message
         :type block: bool
         """
-        if not self._running:
-            return None
-
         timeout = None
         if block:
             if self._consumer_timeout_ms > 0:

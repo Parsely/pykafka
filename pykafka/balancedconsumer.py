@@ -26,12 +26,13 @@ import time
 from uuid import uuid4
 
 from kazoo.client import KazooClient
-from kazoo.exceptions import NoNodeException, NodeExistsError
+from kazoo.exceptions import (NoNodeException, NodeExistsError, ConnectionLoss,
+                              ConnectionClosedError)
 from kazoo.recipe.watchers import ChildrenWatch
 
 from .common import OffsetType
 from .exceptions import (KafkaException, PartitionOwnedError,
-                         ConsumerStoppedException)
+                         ConsumerStoppedException, ZookeeperConnectionLost)
 from .simpleconsumer import SimpleConsumer
 
 
@@ -238,13 +239,14 @@ class BalancedConsumer():
 
         This method should be called as part of a graceful shutdown process.
         """
-        self._zookeeper.stop()
         # If internal consumer is not running and this consumer is running,
         # consume() will re-setup the internal consumer.
         # To avoid a race condition, set this consumer to not running before
         # stopping internal consumer.
         self._running = False
-        self._consumer.stop()
+        if self._consumer is not None:
+            self._consumer.stop()
+        self._zookeeper.stop()
 
     @property
     def running(self):
@@ -270,6 +272,7 @@ class BalancedConsumer():
         disable its workers and mark it for garbage collection before
         creating a new one.
         """
+        log.info("Resetting internal consumer")
         reset_offset_on_start = self._reset_offset_on_start
         if self._consumer is not None:
             self._consumer.stop()
@@ -401,7 +404,7 @@ class BalancedConsumer():
         participants = self._get_participants()
         if self._consumer_id in participants:
             return
-        if len(self._topic.partitions) <= len(participants):
+        if len(self._topic.partitions) < len(participants):
             self.stop()
             raise KafkaException("Cannot add consumer: more consumers than partitions")
 
@@ -449,6 +452,9 @@ class BalancedConsumer():
                                     ex.partition, i)
                         raise
                     log.info('Unable to acquire partition %s. Retrying', ex.partition)
+                    time.sleep(i * (self._rebalance_backoff_ms / 1000))
+                except (ConnectionLoss, ConnectionClosedError):
+                    log.error("Zookeeper connection lost. Retrying.")
                     time.sleep(i * (self._rebalance_backoff_ms / 1000))
 
     def _path_from_partition(self, p):
@@ -526,6 +532,13 @@ class BalancedConsumer():
         if self._setting_watches:
             return
         log.debug("Rebalance triggered by consumer change")
+        # If the zookeeper connection dies, the consumer's ID is removed from
+        # zookeeper's registry. When the zookeeper connection is regained, the
+        # consumer needs to actively add itself to that registry. Since we can't
+        # count on the zookeeper connection failing in a particular piece of
+        # code, this seems like the best place to handle it: if we have an
+        # active ZK connection, this function will be called by its watch and
+        # _add_self will happen.
         self._add_self()
         self._rebalance()
 
@@ -564,20 +577,12 @@ class BalancedConsumer():
             disp = (time.time() - self._last_message_time) * 1000.0
             return disp > self._consumer_timeout_ms
 
-        # auto-restart the internal consumer if it has stalled
-        if not self._consumer.running:
-            if not self._running:
-                return None
-            self.commit_offsets()
-            self._setup_internal_consumer()
-
         message = None
         self._last_message_time = time.time()
         while message is None and not consumer_timed_out():
-            try:
-                message = self._consumer.consume(block=block)
-            except ConsumerStoppedException:
-                continue
+            if not self._zookeeper.connected:
+                raise ZookeeperConnectionLost()
+            message = self._consumer.consume(block=block)
             if message:
                 self._last_message_time = time.time()
             if not block:

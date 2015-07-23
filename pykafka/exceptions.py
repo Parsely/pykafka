@@ -50,6 +50,11 @@ class OffsetRequestFailedError(KafkaException):
     pass
 
 
+class ZookeeperConnectionLost(KafkaException):
+    """Indicates that the connection to Zookeeper has been unexpectedly terminated"""
+    pass
+
+
 class PartitionOwnedError(KafkaException):
     """Indicates a given partition is still owned in Zookeeper."""
 
