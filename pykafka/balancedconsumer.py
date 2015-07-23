@@ -426,6 +426,7 @@ class BalancedConsumer():
                         self._setup_internal_consumer()
 
                     log.info('Rebalancing Complete.')
+                    break
                 except PartitionOwnedError as ex:
                     if i == self._rebalance_max_retries - 1:
                         log.warning('Failed to acquire partition %s after %d retries.',
