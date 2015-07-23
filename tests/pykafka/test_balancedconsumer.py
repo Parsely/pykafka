@@ -51,7 +51,7 @@ class TestBalancedConsumer(unittest2.TestCase):
         consumer._setup_internal_consumer(start=False)
 
         consumer.stop()
-        consumer.consume()
+        self.assertIsNone(consumer.consume())
 
     def test_decide_partitions(self):
         """Test partition assignment for a number of partitions/consumers."""
