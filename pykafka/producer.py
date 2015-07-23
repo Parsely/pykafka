@@ -22,7 +22,7 @@ import itertools
 import logging
 import time
 from collections import defaultdict
-from Queue import Queue, Empty
+from Queue import Empty
 
 from .common import CompressionType
 from .exceptions import (
@@ -327,7 +327,7 @@ class AsyncProducer(Producer):
                 except Empty:
                     continue
                 self._send_request(broker, request, attempt)
-        request_queue = Queue()
+        request_queue = self._cluster.handler.Queue()
         log.info("Starting new produce worker thread for broker %s", broker.id)
         self._cluster.handler.spawn(worker)
         return request_queue
