@@ -6,7 +6,6 @@ import unittest2
 
 from pykafka import KafkaClient
 from pykafka.balancedconsumer import BalancedConsumer
-from pykafka.exceptions import ConsumerStoppedException
 from pykafka.test.utils import get_cluster, stop_cluster
 
 
