@@ -326,7 +326,11 @@ class AsyncProducer(Producer):
                     request, attempt = request_queue.get_nowait()
                 except Empty:
                     continue
-                self._send_request(broker, request, attempt)
+                try:
+                    self._send_request(broker, request, attempt)
+                except ProduceFailureError as e:
+                    log.error("Producer error: %s", e)
+
         request_queue = self._cluster.handler.Queue()
         log.info("Starting new produce worker thread for broker %s", broker.id)
         self._cluster.handler.spawn(worker)
