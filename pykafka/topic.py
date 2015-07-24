@@ -20,7 +20,6 @@ __all__ = ["Topic"]
 import logging
 from collections import defaultdict
 
-from base import BaseTopic
 from .balancedconsumer import BalancedConsumer
 from .common import OffsetType
 from .partition import Partition
@@ -32,7 +31,7 @@ from .simpleconsumer import SimpleConsumer
 log = logging.getLogger(__name__)
 
 
-class Topic(BaseTopic):
+class Topic():
     """
     A Topic is an abstraction over the kafka concept of a topic.
     It contains a dictionary of partitions that comprise it.

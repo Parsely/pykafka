@@ -23,7 +23,6 @@ import logging
 import time
 from collections import defaultdict
 
-import base
 from .common import CompressionType
 from .exceptions import (
     UnknownTopicOrPartition, NotLeaderForPartition, RequestTimedOut,
@@ -37,14 +36,13 @@ from .protocol import Message, ProduceRequest
 log = logging.getLogger(__name__)
 
 
-class AsyncProducer(base.BaseAsyncProducer):
+class AsyncProducer():
     def __init__(self,
                  topic,
                  partitioner=None,
                  compression=CompressionType.NONE,
                  max_retries=3,
                  retry_backoff_ms=100,
-                 topic_refresh_interval_ms=600000,
                  required_acks=0,
                  ack_timeout_ms=10000,
                  batch_size=200,
@@ -54,7 +52,7 @@ class AsyncProducer(base.BaseAsyncProducer):
         raise NotImplementedError("AsyncProducer is unimplemented")
 
 
-class Producer(base.BaseProducer):
+class Producer():
     """
     This class implements the synchronous producer logic found in the
     JVM driver.
@@ -66,7 +64,6 @@ class Producer(base.BaseProducer):
                  compression=CompressionType.NONE,
                  max_retries=3,
                  retry_backoff_ms=100,
-                 topic_refresh_interval_ms=600000,
                  required_acks=1,
                  ack_timeout_ms=10000,
                  batch_size=200):
@@ -86,12 +83,6 @@ class Producer(base.BaseProducer):
         :param retry_backoff_ms: The amount of time (in milliseconds) to
             back off during produce request retries.
         :type retry_backoff_ms: int
-        :param topic_refresh_interval_ms: Time (in milliseconds) between queries
-            to refresh metadata about the topic. The Producer will also refresh
-            this data when the cluster changes (e.g. partitions missing, etc),
-            but this is the interval for how often it actively polls for
-            changes.
-        :type topic_refresh_interval_ms: int
         :param required_acks: How many other brokers must have committed the
             data to their log and acknowledged this to the leader before a
             request is considered complete?

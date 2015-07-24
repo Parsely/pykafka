@@ -23,6 +23,10 @@ You can install PyKafka from PyPI with
 
 Full documentation for PyKafka can be found on `readthedocs`_.
 
+You can install PyKafka for local development and testing with
+
+    $ python setup.py develop
+
 .. _JVM Kafka client: https://github.com/apache/kafka/tree/0.8.2/clients/src/main/java/org/apache/kafka
 .. _readthedocs: http://pykafka.readthedocs.org/en/latest/
 
@@ -103,4 +107,4 @@ Support
 If you need help using PyKafka or have found a bug, please open a `github issue`_ or use the `Google Group`_.
 
 .. _github issue: https://github.com/Parsely/pykafka/issues
-.. _Google Group: pykafka-user@googlegroups.com
+.. _Google Group: https://groups.google.com/forum/#!forum/pykafka-user

@@ -19,14 +19,13 @@ limitations under the License.
 __all__ = ["Partition"]
 import logging
 
-import base
 from .common import OffsetType
 from .protocol import PartitionOffsetRequest
 
 log = logging.getLogger(__name__)
 
 
-class Partition(base.BasePartition):
+class Partition():
     """
     A Partition is an abstraction over the kafka concept of a partition.
     A kafka partition is a logical division of the logs for a topic. Its

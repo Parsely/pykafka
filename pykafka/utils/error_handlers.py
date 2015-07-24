@@ -20,18 +20,22 @@ __all__ = ["handle_partition_responses", "raise_error"]
 from collections import defaultdict
 
 
-def handle_partition_responses(response,
-                               error_handlers,
+def handle_partition_responses(error_handlers,
+                               parts_by_error=None,
                                success_handler=None,
+                               response=None,
                                partitions_by_id=None):
     """Call the appropriate handler for each errored partition
 
-    :param response: a Response object containing partition responses
-    :type response: :class:`pykafka.protocol.Response`
-    :param success_handler: function to call for successful partitions
-    :type success_handler: callable accepting an iterable of partition responses
     :param error_handlers: mapping of error code to handler
     :type error_handlers: dict {int: callable(parts)}
+    :param parts_by_error: a dict of partitions grouped by error code
+    :type parts_by_error: dict
+        {int: iterable(:class:`pykafka.simpleconsumer.OwnedPartition`)}
+    :param success_handler: function to call for successful partitions
+    :type success_handler: callable accepting an iterable of partition responses
+    :param response: a Response object containing partition responses
+    :type response: :class:`pykafka.protocol.Response`
     :param partitions_by_id: a dict mapping partition ids to OwnedPartition
         instances
     :type partitions_by_id: dict
@@ -41,6 +45,26 @@ def handle_partition_responses(response,
     if success_handler is not None:
         error_handlers[0] = success_handler
 
+    if parts_by_error is None:
+        parts_by_error = build_parts_by_error(response, partitions_by_id)
+
+    for errcode, parts in parts_by_error.iteritems():
+        if errcode in error_handlers:
+            error_handlers[errcode](parts)
+
+    return parts_by_error
+
+
+def build_parts_by_error(response, partitions_by_id):
+    """Separate the partitions from a response by their error code
+
+    :param response: a Response object containing partition responses
+    :type response: :class:`pykafka.protocol.Response`
+    :param partitions_by_id: a dict mapping partition ids to OwnedPartition
+        instances
+    :type partitions_by_id: dict
+        {int: :class:`pykafka.simpleconsumer.OwnedPartition`}
+    """
     # group partition responses by error code
     parts_by_error = defaultdict(list)
     for topic_name in response.topics.keys():
@@ -49,11 +73,6 @@ def handle_partition_responses(response,
             if partitions_by_id is not None:
                 owned_partition = partitions_by_id[partition_id]
             parts_by_error[pres.err].append((owned_partition, pres))
-
-    for errcode, parts in parts_by_error.iteritems():
-        if errcode in error_handlers:
-            error_handlers[errcode](parts)
-
     return parts_by_error
 
 

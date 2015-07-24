@@ -67,13 +67,14 @@ class TestSimpleConsumer(unittest2.TestCase):
     @staticmethod
     def _currently_held_offsets(consumer):
         return dict((p.partition.id, p.last_offset_consumed)
-                    for p in consumer.partitions)
+                    for p in consumer._partitions.itervalues())
 
 
 class TestOwnedPartition(unittest2.TestCase):
     def test_partition_saves_offset(self):
         msgval = "test"
-        op = OwnedPartition(None)
+        partition = mock.MagicMock()
+        op = OwnedPartition(partition)
 
         message = mock.Mock()
         message.value = msgval

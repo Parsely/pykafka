@@ -58,7 +58,6 @@ class BalancedConsumer():
                  queued_max_messages=2000,
                  fetch_min_bytes=1,
                  fetch_wait_max_ms=100,
-                 refresh_leader_backoff_ms=200,
                  offsets_channel_backoff_ms=1000,
                  offsets_commit_max_retries=5,
                  auto_offset_reset=OffsetType.LATEST,
@@ -105,10 +104,6 @@ class BalancedConsumer():
             that the server will block before answering a fetch request if
             there isn't sufficient data to immediately satisfy `fetch_min_bytes`.
         :type fetch_wait_max_ms: int
-        :param refresh_leader_backoff_ms: Backoff time (in milliseconds) to
-            refresh the leader of a partition after the consumer loses the
-            current leader.
-        :type refresh_leader_backoff_ms: int
         :param offsets_channel_backoff_ms: Backoff time to retry failed offset
             commits and fetches.
         :type offsets_channel_backoff_ms: int
@@ -121,7 +116,7 @@ class BalancedConsumer():
         :type auto_offset_reset: :class:`pykafka.common.OffsetType`
         :param consumer_timeout_ms: Amount of time (in milliseconds) the
             consumer may spend without messages available for consumption
-            before raising an error.
+            before returning None.
         :type consumer_timeout_ms: int
         :param rebalance_max_retries: The number of times the rebalance should
             retry before raising an error.
@@ -168,6 +163,7 @@ class BalancedConsumer():
         self._zookeeper_connect = zookeeper_connect
         self._zookeeper_connection_timeout_ms = zookeeper_connection_timeout_ms
         self._reset_offset_on_start = reset_offset_on_start
+        self._running = False
 
         self._rebalancing_lock = cluster.handler.Lock()
         self._consumer = None
@@ -210,6 +206,18 @@ class BalancedConsumer():
         log.debug("Starting checker thread")
         return self._cluster.handler.spawn(checker)
 
+    @property
+    def partitions(self):
+        return self._consumer.partitions if self._consumer else None
+
+    @property
+    def held_offsets(self):
+        """Return a map from partition id to held offset for each partition"""
+        if not self._consumer:
+            return None
+        return dict((p.partition.id, p.last_offset_consumed)
+                    for p in self._consumer._partitions_by_id.itervalues())
+
     def start(self):
         """Open connections and join a cluster."""
         if self._zookeeper is None:
@@ -243,7 +251,7 @@ class BalancedConsumer():
         self._zookeeper = KazooClient(zookeeper_connect, timeout=timeout / 1000)
         self._zookeeper.start()
 
-    def _setup_internal_consumer(self):
+    def _setup_internal_consumer(self, start=True):
         """Instantiate an internal SimpleConsumer.
 
         If there is already a SimpleConsumer instance held by this object,
@@ -273,7 +281,8 @@ class BalancedConsumer():
             offsets_channel_backoff_ms=self._offsets_channel_backoff_ms,
             offsets_commit_max_retries=self._offsets_commit_max_retries,
             auto_offset_reset=self._auto_offset_reset,
-            reset_offset_on_start=reset_offset_on_start
+            reset_offset_on_start=reset_offset_on_start,
+            auto_start=start
         )
 
     def _decide_partitions(self, participants):
@@ -418,6 +427,7 @@ class BalancedConsumer():
                         self._setup_internal_consumer()
 
                     log.info('Rebalancing Complete.')
+                    break
                 except PartitionOwnedError as ex:
                     if i == self._rebalance_max_retries - 1:
                         log.warning('Failed to acquire partition %s after %d retries.',
@@ -509,18 +519,46 @@ class BalancedConsumer():
         log.debug("Rebalance triggered by topic change")
         self._rebalance()
 
+    def reset_offsets(self, partition_offsets=None):
+        """Reset offsets for the specified partitions
+
+        Issue an OffsetRequest for each partition and set the appropriate
+        returned offset in the OwnedPartition
+
+        :param partition_offsets: (`partition`, `offset`) pairs to reset
+            where `partition` is the partition for which to reset the offset
+            and `offset` is the new offset the partition should have
+        :type partition_offsets: Iterable of
+            (:class:`pykafka.partition.Partition`, int)
+        """
+        if not self._consumer:
+            raise ConsumerStoppedException("Internal consumer is stopped")
+        self._consumer.reset_offsets(partition_offsets=partition_offsets)
+
     def consume(self, block=True):
         """Get one message from the consumer
 
         :param block: Whether to block while waiting for a message
         :type block: bool
         """
+
+        def consumer_timed_out():
+            """Indicates whether the consumer has received messages recently"""
+            if self._consumer_timeout_ms == -1:
+                return False
+            disp = (time.time() - self._last_message_time) * 1000.0
+            return disp > self._consumer_timeout_ms
         message = None
-        while message is None:
+        self._last_message_time = time.time()
+        while message is None and not consumer_timed_out():
             try:
                 message = self._consumer.consume(block=block)
             except ConsumerStoppedException:
+                if not self._running:
+                    return
                 continue
+            if message:
+                self._last_message_time = time.time()
             if not block:
                 return message
         return message

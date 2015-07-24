@@ -27,7 +27,8 @@ def get_version():
                          version_file.read()).group('version')
 
 install_requires = [
-    'kazoo'
+    'kazoo',
+    'tabulate',
 ]
 
 lint_requires = [
@@ -56,6 +57,11 @@ setup(
     keywords='apache kafka client driver',
     license='Apache License 2.0',
     packages=find_packages(),
+    entry_points={
+        'console_scripts': [
+            'kafka-tools = pykafka.cli.kafka_tools:main',
+            ]
+    },
     install_requires=install_requires,
     tests_require=tests_require,
     setup_requires=setup_requires,
