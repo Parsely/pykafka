@@ -41,7 +41,7 @@ from .utils.error_handlers import (handle_partition_responses, raise_error,
 log = logging.getLogger(__name__)
 
 
-class SimpleConsumer():
+class SimpleConsumer(object):
     """
     A non-balancing consumer for Kafka
     """
