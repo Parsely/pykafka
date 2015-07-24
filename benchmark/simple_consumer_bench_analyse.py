@@ -6,7 +6,15 @@ import matplotlib.pyplot as plt
 
 
 def analyse(filename="consumer_bench.json"):
+    """
+    Given a file of line-delimited json benchmark results, sort and aggregate
 
+    This quick script processes a file with the accumulated output of
+    simple_consumer_bench.run_bench; it's very tightly coupled with that, and
+    basically just groups the results by common input parameters.  See inline
+    comments for how we pick max throughput.  The resulting nested dict should
+    be passed to plot().
+    """
     with open(filename) as f:
         rawdata = map(json.loads, f.readlines())
 
@@ -46,6 +54,7 @@ def analyse(filename="consumer_bench.json"):
 
 
 def plot(sorteddata):
+    """Turn output of analyse() into a pyplot plot"""
     plt.figure()
     plt.suptitle("pure-pykafka vs pykafka.rdkafka consumer throughput")
 
