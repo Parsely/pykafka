@@ -28,19 +28,18 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
             self._partitions_by_id[p].next_offset for p in partition_ids]
         conf, topic_conf = self._mk_rdkafka_config_lists()
 
-        rdk_consumer = _rd_kafka.Consumer()
-        rdk_consumer.configure(conf=conf)
-        rdk_consumer.configure(topic_conf=topic_conf)
-        rdk_consumer.start(brokers,
-                           self._topic.name,
-                           partition_ids,
-                           start_offsets)
-        return rdk_consumer
+        self._rdk_consumer = _rd_kafka.Consumer()
+        self._rdk_consumer.configure(conf=conf)
+        self._rdk_consumer.configure(topic_conf=topic_conf)
+        self._rdk_consumer.start(brokers,
+                                 self._topic.name,
+                                 partition_ids,
+                                 start_offsets)
 
     def consume(self, block=True):
         timeout_ms = self._consumer_timeout_ms if block else 1
         try:
-            msg = self._fetch_workers.consume(timeout_ms)
+            msg = self._rdk_consumer.consume(timeout_ms)
         except _rd_kafka.ConsumerStoppedException:
             raise ConsumerStoppedException
         if msg is not None:
@@ -49,18 +48,18 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
         return msg
 
     def stop(self):
-        if hasattr(self, "_fetch_workers") and self._fetch_workers is not None:
+        if hasattr(self, "_rdk_consumer") and self._rdk_consumer is not None:
             # Call _rd_kafka.Consumer.stop explicitly, so we may catch errors:
-            self._fetch_workers.stop()
-            self._fetch_workers = None
+            self._rdk_consumer.stop()
+            self._rdk_consumer = None
         super(RdKafkaSimpleConsumer, self).stop()
 
     def fetch_offsets(self):
         # Prevent calling this on a started consumer, because currently that
         # would cause the pykafka and rdkafka sides to get out of sync about
         # the current offsets:
-        if hasattr(self, "_fetch_workers") and self._fetch_workers is not None:
-            raise NotImplementedError("Changing offsets on an already started"
+        if hasattr(self, "_rdk_consumer") and self._rdk_consumer is not None:
+            raise NotImplementedError("Changing offsets on an already started "
                                       "RdKafkaSimpleConsumer not implemented")
         return super(RdKafkaSimpleConsumer, self).fetch_offsets()
 
