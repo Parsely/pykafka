@@ -409,7 +409,7 @@ class BalancedConsumer():
         participants = self._get_participants()
         if self._consumer_id in participants:
             return
-        if len(self._topic.partitions) < len(participants):
+        if len(self._topic.partitions) <= len(participants):
             self.stop()
             raise KafkaException("Cannot add consumer: more consumers than partitions")
 
