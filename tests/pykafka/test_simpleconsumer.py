@@ -1,6 +1,7 @@
 from contextlib import contextmanager
 import mock
 import unittest2
+from uuid import uuid4
 
 from pykafka import KafkaClient
 from pykafka.simpleconsumer import OwnedPartition
@@ -13,7 +14,7 @@ class TestSimpleConsumer(unittest2.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.kafka = get_cluster()
-        cls.topic_name = 'test-data'
+        cls.topic_name = uuid4().hex
         cls.kafka.create_topic(cls.topic_name, 3, 2)
         cls.kafka.produce_messages(
             cls.topic_name,
