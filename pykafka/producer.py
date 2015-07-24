@@ -211,7 +211,7 @@ class Producer():
             # Send requests at the batch size
             if requests[leader].message_count() >= self._batch_size:
                 self._prepare_request(leader,
-                                      requests.pop(leader.id),
+                                      requests.pop(leader),
                                       attempt)
 
         # Send any still not sent
