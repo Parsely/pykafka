@@ -4,7 +4,7 @@ import unittest2
 from uuid import uuid4
 
 from pykafka import KafkaClient
-from pykafka.simpleconsumer import OwnedPartition
+from pykafka.simpleconsumer import OwnedPartition, OffsetType
 from pykafka.test.utils import get_cluster, stop_cluster
 
 
@@ -16,10 +16,18 @@ class TestSimpleConsumer(unittest2.TestCase):
         cls.kafka = get_cluster()
         cls.topic_name = uuid4().hex
         cls.kafka.create_topic(cls.topic_name, 3, 2)
-        cls.kafka.produce_messages(
-            cls.topic_name,
-            ('msg {i}'.format(i=i) for i in xrange(1000))
-        )
+
+        # It turns out that the underlying producer used by KafkaInstance will
+        # write all messages in a batch to a single partition, though not the
+        # same partition every time.  We try to attain some spread here by
+        # sending more than one batch:
+        batch = 300
+        cls.total_msgs = 3 * batch
+        for _ in range(3):
+            cls.kafka.produce_messages(
+                cls.topic_name,
+                ('msg {i}'.format(i=i) for i in xrange(batch)))
+
         cls.client = KafkaClient(cls.kafka.brokers)
 
     @classmethod
@@ -36,8 +44,9 @@ class TestSimpleConsumer(unittest2.TestCase):
 
     def test_consume(self):
         with self._get_simple_consumer() as consumer:
-            messages = [consumer.consume() for _ in xrange(1000)]
-            self.assertEquals(len(messages), 1000)
+            messages = [consumer.consume() for _ in xrange(self.total_msgs)]
+            self.assertEquals(len(messages), self.total_msgs)
+            self.assertTrue(None not in messages)
 
     def test_offset_commit(self):
         """Check fetched offsets match pre-commit internal state"""
@@ -62,6 +71,40 @@ class TestSimpleConsumer(unittest2.TestCase):
         with self._get_simple_consumer(
                 consumer_group='test_offset_resume') as consumer:
             self.assertEquals(consumer.held_offsets, offsets_committed)
+
+    def test_reset_offset_on_start(self):
+        """Try starting from LATEST and EARLIEST offsets"""
+        with self._get_simple_consumer(
+                auto_offset_reset=OffsetType.EARLIEST,
+                reset_offset_on_start=True) as consumer:
+            earliest_offs = consumer.held_offsets
+            self.assertIsNotNone(consumer.consume())
+        with self._get_simple_consumer(
+                auto_offset_reset=OffsetType.LATEST,
+                reset_offset_on_start=True,
+                consumer_timeout_ms=500) as consumer:
+            latest_offs = consumer.held_offsets
+            self.assertIsNone(consumer.consume(block=False))
+        difference = sum(
+            latest_offs[i] - earliest_offs[i] for i in latest_offs.keys())
+        self.assertEqual(difference, self.total_msgs)
+
+    def test_reset_offsets(self):
+        """Test resetting to user-provided offsets"""
+        with self._get_simple_consumer(
+                auto_offset_reset=OffsetType.LATEST,
+                reset_offset_on_start=True) as consumer:
+            latest_offs = consumer.held_offsets
+            # We can't control which partition(s) our setUpClass produce calls
+            # write to, so we don't know on which partitions the following will
+            # result in a valid offset. But at least one will be valid, which
+            # is good enough.
+            custom_offs = [(consumer.partitions[pid], latest - 5)
+                           for pid, latest in latest_offs.items()]
+            consumer.reset_offsets(partition_offsets=custom_offs)
+            msg = consumer.consume()
+            # FIXME this 4 should be a 5 or I'm getting something else wrong:
+            self.assertEqual(msg.offset, latest_offs[msg.partition_id] - 4)
 
 
 class TestOwnedPartition(unittest2.TestCase):
