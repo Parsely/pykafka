@@ -508,7 +508,11 @@ class SimpleConsumer():
                     success_handler=_handle_success,
                     partitions_by_id=self._partitions_by_id)
 
-                if len(parts_by_error) == 1 and 0 in parts_by_error:
+                if 0 in parts_by_error:
+                    # drop successfully reset partitions for next retry
+                    successful = [part for part, _ in parts_by_error.pop(0)]
+                    map(owned_partition_offsets.pop, successful)
+                if not parts_by_error:
                     continue
                 log.error("Error resetting offsets for topic %s (errors: %s)",
                           self._topic.name,
@@ -517,12 +521,6 @@ class SimpleConsumer():
 
                 time.sleep(i * (self._offsets_channel_backoff_ms / 1000))
 
-                if 0 in parts_by_error:
-                    parts_by_error.pop(0)
-                owned_partition_offsets = dict(
-                    (part, owned_partition_offsets[part])
-                    for errcode, parts in parts_by_error.iteritems()
-                    for part, _ in parts)
 
             for errcode, owned_partitions in parts_by_error.iteritems():
                 if errcode != 0:
