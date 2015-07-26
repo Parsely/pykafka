@@ -521,17 +521,16 @@ class SimpleConsumer():
 
                 time.sleep(i * (self._offsets_channel_backoff_ms / 1000))
 
+                for errcode, owned_partitions in parts_by_error.iteritems():
+                    if errcode != 0:
+                        for owned_partition in owned_partitions:
+                            owned_partition.fetch_lock.release()
 
-            for errcode, owned_partitions in parts_by_error.iteritems():
-                if errcode != 0:
-                    for owned_partition in owned_partitions:
-                        owned_partition.fetch_lock.release()
-
-            if len(parts_by_error) == 1 and 0 in parts_by_error:
+            if not owned_partition_offsets:
                 break
             log.debug("Retrying offset reset")
 
-        if any([a != 0 for a in parts_by_error]):
+        if owned_partition_offsets:
             raise OffsetRequestFailedError("reset_offsets failed after %d "
                                            "retries",
                                            self._offsets_reset_max_retries)
