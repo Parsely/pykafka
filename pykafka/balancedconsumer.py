@@ -594,6 +594,9 @@ class BalancedConsumer():
                 # don't raise the exception if we're rebalancing
                 if self._rebalancing_lock.locked():
                     continue
+                # rebalancing has been finished
+                if self._consumer.running:
+                    continue
                 raise
             if message:
                 self._last_message_time = time.time()
