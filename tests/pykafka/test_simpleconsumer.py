@@ -77,16 +77,26 @@ class TestSimpleConsumer(unittest2.TestCase):
         with self._get_simple_consumer(
                 auto_offset_reset=OffsetType.EARLIEST,
                 reset_offset_on_start=True) as consumer:
-            earliest_offs = consumer.held_offsets
+            earliest = consumer.topic.earliest_available_offsets()
+            earliest_minus_one = consumer.held_offsets
+            self.assertTrue(all(
+                earliest_minus_one[i] == earliest[i].offset[0] - 1
+                for i in earliest.keys()))
             self.assertIsNotNone(consumer.consume())
+
         with self._get_simple_consumer(
                 auto_offset_reset=OffsetType.LATEST,
                 reset_offset_on_start=True,
                 consumer_timeout_ms=500) as consumer:
-            latest_offs = consumer.held_offsets
+            latest = consumer.topic.latest_available_offsets()
+            latest_minus_one = consumer.held_offsets
+            self.assertTrue(all(
+                latest_minus_one[i] == latest[i].offset[0] - 1
+                for i in latest.keys()))
             self.assertIsNone(consumer.consume(block=False))
-        difference = sum(
-            latest_offs[i] - earliest_offs[i] for i in latest_offs.keys())
+
+        difference = sum(latest_minus_one[i] - earliest_minus_one[i]
+                         for i in latest_minus_one.keys())
         self.assertEqual(difference, self.total_msgs)
 
     def test_reset_offsets(self):
@@ -94,17 +104,16 @@ class TestSimpleConsumer(unittest2.TestCase):
         with self._get_simple_consumer(
                 auto_offset_reset=OffsetType.LATEST,
                 reset_offset_on_start=True) as consumer:
-            latest_offs = consumer.held_offsets
+            latest_minus_one = consumer.held_offsets
             # We can't control which partition(s) our setUpClass produce calls
-            # write to, so we don't know on which partitions the following will
-            # result in a valid offset. But at least one will be valid, which
-            # is good enough.
-            custom_offs = [(consumer.partitions[pid], latest - 5)
-                           for pid, latest in latest_offs.items()]
-            consumer.reset_offsets(partition_offsets=custom_offs)
+            # write to, so we don't know on which partitions "offset - 5" will
+            # be a valid offset. But at least one will be valid, and we'll
+            # consume that one:
+            custom_offs = {consumer.partitions[pid]: offset - 5
+                           for pid, offset in latest_minus_one.items()}
+            consumer.reset_offsets(partition_offsets=custom_offs.items())
             msg = consumer.consume()
-            # FIXME this 4 should be a 5 or I'm getting something else wrong:
-            self.assertEqual(msg.offset, latest_offs[msg.partition_id] - 4)
+            self.assertEqual(msg.offset, custom_offs[msg.partition] + 1)
 
 
 class TestOwnedPartition(unittest2.TestCase):
