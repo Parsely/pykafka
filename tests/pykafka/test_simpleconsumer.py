@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 import mock
+import time
 import unittest2
 from uuid import uuid4
 
@@ -104,16 +105,22 @@ class TestSimpleConsumer(unittest2.TestCase):
         with self._get_simple_consumer(
                 auto_offset_reset=OffsetType.LATEST,
                 reset_offset_on_start=True) as consumer:
-            latest_minus_one = consumer.held_offsets
-            # We can't control which partition(s) our setUpClass produce calls
-            # write to, so we don't know on which partitions "offset - 5" will
-            # be a valid offset. But at least one will be valid, and we'll
-            # consume that one:
-            custom_offs = {consumer.partitions[pid]: offset - 5
-                           for pid, offset in latest_minus_one.items()}
-            consumer.reset_offsets(partition_offsets=custom_offs.items())
+            part_id, latest_offset = next(  # get a non-empty partition
+                (p, o) for p, o in consumer.held_offsets.items() if o > 0)
+
+            new_offset = latest_offset - 5
+            consumer.reset_offsets(
+                [(consumer.partitions[part_id], new_offset)])
+            self.assertEqual(consumer.held_offsets[part_id], new_offset)
             msg = consumer.consume()
-            self.assertEqual(msg.offset, custom_offs[msg.partition] + 1)
+            self.assertEqual(msg.offset, new_offset + 1)
+
+            # Invalid offsets should get overwritten with auto_offset_reset:
+            invalid_offset = latest_offset + 5
+            consumer.reset_offsets(
+                [(consumer.partitions[part_id], invalid_offset)])
+            time.sleep(1.)  # ugly, but we must let the fetcher thread work
+            self.assertEqual(consumer.held_offsets[part_id], latest_offset)
 
 
 class TestOwnedPartition(unittest2.TestCase):
