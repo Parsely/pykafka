@@ -591,8 +591,10 @@ class BalancedConsumer():
             try:
                 message = self._consumer.consume(block=block)
             except ConsumerStoppedException:
-                # don't raise the exception if we're rebalancing
-                if self._rebalancing_lock.locked():
+                # don't raise the exception if we're rebalancing,
+                # or rebalancing has been finished and the internal consumer
+                # is running.
+                if self._rebalancing_lock.locked() or self._consumer.running:
                     continue
                 raise
             if message:
