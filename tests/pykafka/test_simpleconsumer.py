@@ -1,6 +1,5 @@
 from contextlib import contextmanager
 import mock
-import time
 import unittest2
 from uuid import uuid4
 
@@ -103,28 +102,38 @@ class TestSimpleConsumer(unittest2.TestCase):
     def test_reset_offsets(self):
         """Test resetting to user-provided offsets"""
         with self._get_simple_consumer(
-                auto_offset_reset=OffsetType.LATEST,
-                reset_offset_on_start=True) as consumer:
-            part_id, latest_offset = next(  # get a non-empty partition
-                (p, o) for p, o in consumer.held_offsets.items() if o > 0)
+                auto_offset_reset=OffsetType.EARLIEST) as consumer:
+            # Find us a non-empty partition "target_part"
+            part_id, latest_offset = next(
+                (p, res.offset[0])
+                for p, res in consumer.topic.latest_available_offsets().items()
+                if res.offset[0] > 0)
+            target_part = consumer.partitions[part_id]
+
+            # Set all other partitions to LATEST, to ensure that any consume()
+            # calls read from target_part
+            partition_offsets = {
+                p: OffsetType.LATEST for p in consumer.partitions.values()}
 
             new_offset = latest_offset - 5
-            consumer.reset_offsets(
-                [(consumer.partitions[part_id], new_offset)])
+            partition_offsets[target_part] = new_offset
+            consumer.reset_offsets(partition_offsets.items())
+
             self.assertEqual(consumer.held_offsets[part_id], new_offset)
             msg = consumer.consume()
             self.assertEqual(msg.offset, new_offset + 1)
 
-            # Invalid offsets should get overwritten with auto_offset_reset:
-            invalid_offset = latest_offset + 5
-            consumer.reset_offsets(
-                [(consumer.partitions[part_id], invalid_offset)])
+            # Invalid offsets should get overwritten as per auto_offset_reset
+            partition_offsets[target_part] = latest_offset + 5  # invalid!
+            consumer.reset_offsets(partition_offsets.items())
+
             # SimpleConsumer's fetcher thread will detect the invalid offset
             # and reset it immediately.  RdKafkaSimpleConsumer however will
             # only get to write the valid offset upon a call to consume():
-            time.sleep(.5)  # wait for fetcher to handle OffsetOutOfRangeError
-            msg = consumer.consume(block=False)
-            self.assertEqual(consumer.held_offsets[part_id], latest_offset)
+            msg = consumer.consume()
+            expected_offset = target_part.earliest_available_offset()
+            self.assertEqual(msg.offset, expected_offset)
+            self.assertEqual(consumer.held_offsets[part_id], expected_offset)
 
 
 class TestOwnedPartition(unittest2.TestCase):
