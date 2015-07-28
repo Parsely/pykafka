@@ -45,6 +45,9 @@ class KafkaClient(object):
                  source_address=''):
         """Create a connection to a Kafka cluster.
 
+        Documentation for source_address can be found at
+        https://docs.python.org/2/library/socket.html#socket.create_connection
+
         :param hosts: Comma-separated list of kafka hosts to used to connect.
         :type hosts: str
         :param use_greenlets: If True, use gevent instead of threading.
