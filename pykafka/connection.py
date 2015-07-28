@@ -77,7 +77,7 @@ class BrokerConnection(object):
         self._socket = socket.create_connection(
             (self.host, self.port),
             timeout / 1000,
-            self.source_host, self.source_port
+            (self.source_host, self.source_port)
         )
 
     def disconnect(self):
