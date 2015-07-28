@@ -119,7 +119,11 @@ class TestSimpleConsumer(unittest2.TestCase):
             invalid_offset = latest_offset + 5
             consumer.reset_offsets(
                 [(consumer.partitions[part_id], invalid_offset)])
-            time.sleep(1.)  # ugly, but we must let the fetcher thread work
+            # SimpleConsumer's fetcher thread will detect the invalid offset
+            # and reset it immediately.  RdKafkaSimpleConsumer however will
+            # only get to write the valid offset upon a call to consume():
+            time.sleep(.5)  # wait for fetcher to handle OffsetOutOfRangeError
+            msg = consumer.consume(block=False)
             self.assertEqual(consumer.held_offsets[part_id], latest_offset)
 
 

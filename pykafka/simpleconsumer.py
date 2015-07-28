@@ -636,7 +636,18 @@ class OwnedPartition(object):
         return self._messages.qsize()
 
     def flush(self):
-        self._messages = Queue()
+        """Flush internal queue"""
+        # This is a slow way to empty the queue, but the safest solution that
+        # keeps the semaphore in sync, if we cannot rule out that someone may
+        # be consume()-ing on another thread.
+        while self._messages_arrived.acquire(blocking=False):
+            try:
+                self._messages.get_nowait()
+            except Empty:
+                # This means we've acquire()'d one too many (which will happen
+                # if there are messages on other partitions), so put it back:
+                self._messages_arrived.release()
+                break
         log.info("Flushed queue for partition %d", self.partition.id)
 
     def set_offset(self, last_offset_consumed):
