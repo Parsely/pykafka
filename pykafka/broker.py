@@ -46,7 +46,9 @@ class Broker():
                  handler,
                  socket_timeout_ms,
                  offsets_channel_socket_timeout_ms,
-                 buffer_size=1024 * 1024):
+                 buffer_size=1024 * 1024,
+                 source_host='',
+                 source_port=0):
         """Create a Broker instance.
 
         :param id_: The id number of this broker
@@ -67,12 +69,20 @@ class Broker():
         :param buffer_size: The size (bytes) of the internal buffer used to
             receive network responses
         :type buffer_size: int
+        :param source_host: The host portion of the source address for
+            socket connections
+        :type source_host: str
+        :param source_port: The port portion of the source address for
+            socket connections
+        :type source_port: int
         """
         self._connection = None
         self._offsets_channel_connection = None
         self._id = int(id_)
         self._host = host
         self._port = port
+        self._source_host = source_host
+        self._source_port = source_port
         self._handler = handler
         self._req_handler = None
         self._offsets_channel_req_handler = None
@@ -97,7 +107,9 @@ class Broker():
                       handler,
                       socket_timeout_ms,
                       offsets_channel_socket_timeout_ms,
-                      buffer_size=64 * 1024):
+                      buffer_size=64 * 1024,
+                      source_host='',
+                      source_port=0):
         """Create a Broker using BrokerMetadata
 
         :param metadata: Metadata that describes the broker.
@@ -113,11 +125,19 @@ class Broker():
         :param buffer_size: The size (bytes) of the internal buffer used to
             receive network responses
         :type buffer_size: int
+        :param source_host: The host portion of the source address for
+            socket connections
+        :type source_host: str
+        :param source_port: The port portion of the source address for
+            socket connections
+        :type source_port: int
         """
         return cls(metadata.id, metadata.host,
                    metadata.port, handler, socket_timeout_ms,
                    offsets_channel_socket_timeout_ms,
-                   buffer_size=buffer_size)
+                   buffer_size=buffer_size,
+                   source_host=source_host,
+                   source_port=source_port)
 
     @property
     def connected(self):
@@ -174,7 +194,9 @@ class Broker():
         :class:`pykafka.handlers.RequestHandler` for this broker
         """
         self._connection = BrokerConnection(self.host, self.port,
-                                            self._buffer_size)
+                                            buffer_size=self._buffer_size,
+                                            source_host=self._source_host,
+                                            source_port=self._source_port)
         self._connection.connect(self._socket_timeout_ms)
         self._req_handler = RequestHandler(self._handler, self._connection)
         self._req_handler.start()
@@ -186,8 +208,9 @@ class Broker():
         :class:`pykafka.handlers.RequestHandler` for this broker's offsets
         channel
         """
-        self._offsets_channel_connection = BrokerConnection(self.host, self.port,
-                                                            self._buffer_size)
+        self._offsets_channel_connection = BrokerConnection(
+            self.host, self.port, buffer_size=self._buffer_size,
+            source_host=self._source_host, source_port=self._source_port)
         self._offsets_channel_connection.connect(self._offsets_channel_socket_timeout_ms)
         self._offsets_channel_req_handler = RequestHandler(
             self._handler, self._offsets_channel_connection
