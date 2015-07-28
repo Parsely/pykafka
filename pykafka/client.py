@@ -41,7 +41,8 @@ class KafkaClient(object):
                  socket_timeout_ms=30 * 1000,
                  offsets_channel_socket_timeout_ms=10 * 1000,
                  ignore_rdkafka=False,
-                 exclude_internal_topics=True):
+                 exclude_internal_topics=True,
+                 source_address=''):
         """Create a connection to a Kafka cluster.
 
         :param hosts: Comma-separated list of kafka hosts to used to connect.
@@ -60,8 +61,11 @@ class KafkaClient(object):
         :param exclude_internal_topics: Whether messages from internal topics
             (specifically, the offsets topic) should be exposed to the consumer.
         :type exclude_internal_topics: bool
+        :param source_address: The source address for socket connections
+        :type source_address: str `'host:port'`
         """
         self._seed_hosts = hosts
+        self._source_address = source_address
         self._socket_timeout_ms = socket_timeout_ms
         self._offsets_channel_socket_timeout_ms = offsets_channel_socket_timeout_ms
         self._handler = None if use_greenlets else handlers.ThreadingHandler()
@@ -75,7 +79,8 @@ class KafkaClient(object):
                 self._handler,
                 socket_timeout_ms=self._socket_timeout_ms,
                 offsets_channel_socket_timeout_ms=self._offsets_channel_socket_timeout_ms,
-                exclude_internal_topics=exclude_internal_topics
+                exclude_internal_topics=exclude_internal_topics,
+                source_address=self._source_address
             )
         self.brokers = self.cluster.brokers
         self.topics = self.cluster.topics
