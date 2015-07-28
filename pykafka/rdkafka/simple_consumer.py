@@ -1,3 +1,5 @@
+from contextlib import contextmanager
+
 from pykafka.simpleconsumer import (
     SimpleConsumer, ConsumerStoppedException, OffsetType)
 from . import _rd_kafka
@@ -55,13 +57,29 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
         super(RdKafkaSimpleConsumer, self).stop()
 
     def fetch_offsets(self):
-        # Prevent calling this on a started consumer, because currently that
-        # would cause the pykafka and rdkafka sides to get out of sync about
-        # the current offsets:
-        if hasattr(self, "_rdk_consumer") and self._rdk_consumer is not None:
-            raise NotImplementedError("Changing offsets on an already started "
-                                      "RdKafkaSimpleConsumer not implemented")
-        return super(RdKafkaSimpleConsumer, self).fetch_offsets()
+        # Restart, because _rdk_consumer needs its internal offsets resynced
+        with self._stop_start_rdk_consumer():
+            return super(RdKafkaSimpleConsumer, self).fetch_offsets()
+
+    def reset_offsets(self, partition_offsets=None):
+        # Restart, because _rdk_consumer needs its internal offsets resynced
+        with self._stop_start_rdk_consumer():
+            super(RdKafkaSimpleConsumer, self).reset_offsets(partition_offsets)
+
+    @contextmanager
+    def _stop_start_rdk_consumer(self):
+        """Context manager for methods to temporarily stop _rdk_consumer"""
+        restart_required = (self._running and hasattr(self, "_rdk_consumer")
+                            and self._rdk_consumer is not None)
+        if restart_required:
+            # Note we must not call a full self.stop() as that would stop
+            # SimpleConsumer threads too, and if we'd have to start() again
+            # that could have other side effects (eg resetting offsets).
+            self._rdk_consumer.stop()
+            restart_required = True
+        yield
+        if restart_required:
+            self._setup_fetch_workers()
 
     def _mk_rdkafka_config_lists(self):
         """Populate conf, topic_conf to configure the rdkafka consumer"""
