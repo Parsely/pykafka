@@ -26,11 +26,8 @@ def get_version():
                          version_file.read()).group('version')
 
 install_requires = [
-    'kazoo'
-]
-
-cli_requires = [
-    'tabulate'
+    'kazoo',
+    'tabulate',
 ]
 
 lint_requires = [
@@ -64,10 +61,9 @@ setup(
     setup_requires=setup_requires,
     extras_require={
         'test': tests_require,
-        'all': install_requires + tests_require + cli_requires,
+        'all': install_requires + tests_require,
         'docs': ['sphinx'] + tests_require,
-        'lint': lint_requires,
-        'cli': install_requires + cli_requires
+        'lint': lint_requires
     },
     dependency_links=dependency_links,
     zip_safe=False,
