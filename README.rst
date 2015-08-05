@@ -1,7 +1,7 @@
 .. image:: https://travis-ci.org/Parsely/pykafka.svg?branch=master
     :target: https://travis-ci.org/Parsely/pykafka
 .. image:: https://coveralls.io/repos/Parsely/pykafka/badge.svg?branch=master
-    :target: https://coveralls.io/r/Parsely/pykafka?branch=master 
+    :target: https://coveralls.io/r/Parsely/pykafka?branch=master
 
 PyKafka
 =======
@@ -9,7 +9,7 @@ PyKafka
 .. image:: http://i.imgur.com/ztYl4lG.jpg
 
 PyKafka is a cluster-aware Kafka protocol client for python. It includes python
-implementations of Kafka producers and consumers.
+implementations of Kafka producers and consumers, and runs under python 2.7.
 
 PyKafka's primary goal is to provide a similar level of abstraction to the
 `JVM Kafka client`_ using idioms familiar to python programmers and exposing
