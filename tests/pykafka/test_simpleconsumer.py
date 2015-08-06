@@ -1,9 +1,10 @@
 from contextlib import contextmanager
 import mock
 import unittest2
+from uuid import uuid4
 
 from pykafka import KafkaClient
-from pykafka.simpleconsumer import OwnedPartition
+from pykafka.simpleconsumer import OwnedPartition, OffsetType
 from pykafka.test.utils import get_cluster, stop_cluster
 
 
@@ -13,12 +14,20 @@ class TestSimpleConsumer(unittest2.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.kafka = get_cluster()
-        cls.topic_name = 'test-data'
+        cls.topic_name = uuid4().hex
         cls.kafka.create_topic(cls.topic_name, 3, 2)
-        cls.kafka.produce_messages(
-            cls.topic_name,
-            ('msg {i}'.format(i=i) for i in xrange(1000))
-        )
+
+        # It turns out that the underlying producer used by KafkaInstance will
+        # write all messages in a batch to a single partition, though not the
+        # same partition every time.  We try to attain some spread here by
+        # sending more than one batch:
+        batch = 300
+        cls.total_msgs = 3 * batch
+        for _ in range(3):
+            cls.kafka.produce_messages(
+                cls.topic_name,
+                ('msg {i}'.format(i=i) for i in xrange(batch)))
+
         cls.client = KafkaClient(cls.kafka.brokers)
 
     @classmethod
@@ -35,15 +44,16 @@ class TestSimpleConsumer(unittest2.TestCase):
 
     def test_consume(self):
         with self._get_simple_consumer() as consumer:
-            messages = [consumer.consume() for _ in xrange(1000)]
-            self.assertEquals(len(messages), 1000)
+            messages = [consumer.consume() for _ in xrange(self.total_msgs)]
+            self.assertEquals(len(messages), self.total_msgs)
+            self.assertTrue(None not in messages)
 
     def test_offset_commit(self):
         """Check fetched offsets match pre-commit internal state"""
         with self._get_simple_consumer(
                 consumer_group='test_offset_commit') as consumer:
             [consumer.consume() for _ in xrange(100)]
-            offsets_committed = self._currently_held_offsets(consumer)
+            offsets_committed = consumer.held_offsets
             consumer.commit_offsets()
 
             offsets_fetched = dict((r[0], r[1].offset)
@@ -55,18 +65,75 @@ class TestSimpleConsumer(unittest2.TestCase):
         with self._get_simple_consumer(
                 consumer_group='test_offset_resume') as consumer:
             [consumer.consume() for _ in xrange(100)]
-            offsets_committed = self._currently_held_offsets(consumer)
+            offsets_committed = consumer.held_offsets
             consumer.commit_offsets()
 
         with self._get_simple_consumer(
                 consumer_group='test_offset_resume') as consumer:
-            offsets_resumed = self._currently_held_offsets(consumer)
-            self.assertEquals(offsets_resumed, offsets_committed)
+            self.assertEquals(consumer.held_offsets, offsets_committed)
 
-    @staticmethod
-    def _currently_held_offsets(consumer):
-        return dict((p.partition.id, p.last_offset_consumed)
-                    for p in consumer._partitions.itervalues())
+    def test_reset_offset_on_start(self):
+        """Try starting from LATEST and EARLIEST offsets"""
+        with self._get_simple_consumer(
+                auto_offset_reset=OffsetType.EARLIEST,
+                reset_offset_on_start=True) as consumer:
+            earliest = consumer.topic.earliest_available_offsets()
+            earliest_minus_one = consumer.held_offsets
+            self.assertTrue(all(
+                earliest_minus_one[i] == earliest[i].offset[0] - 1
+                for i in earliest.keys()))
+            self.assertIsNotNone(consumer.consume())
+
+        with self._get_simple_consumer(
+                auto_offset_reset=OffsetType.LATEST,
+                reset_offset_on_start=True,
+                consumer_timeout_ms=500) as consumer:
+            latest = consumer.topic.latest_available_offsets()
+            latest_minus_one = consumer.held_offsets
+            self.assertTrue(all(
+                latest_minus_one[i] == latest[i].offset[0] - 1
+                for i in latest.keys()))
+            self.assertIsNone(consumer.consume(block=False))
+
+        difference = sum(latest_minus_one[i] - earliest_minus_one[i]
+                         for i in latest_minus_one.keys())
+        self.assertEqual(difference, self.total_msgs)
+
+    def test_reset_offsets(self):
+        """Test resetting to user-provided offsets"""
+        with self._get_simple_consumer(
+                auto_offset_reset=OffsetType.EARLIEST) as consumer:
+            # Find us a non-empty partition "target_part"
+            part_id, latest_offset = next(
+                (p, res.offset[0])
+                for p, res in consumer.topic.latest_available_offsets().items()
+                if res.offset[0] > 0)
+            target_part = consumer.partitions[part_id]
+
+            # Set all other partitions to LATEST, to ensure that any consume()
+            # calls read from target_part
+            partition_offsets = {
+                p: OffsetType.LATEST for p in consumer.partitions.values()}
+
+            new_offset = latest_offset - 5
+            partition_offsets[target_part] = new_offset
+            consumer.reset_offsets(partition_offsets.items())
+
+            self.assertEqual(consumer.held_offsets[part_id], new_offset)
+            msg = consumer.consume()
+            self.assertEqual(msg.offset, new_offset + 1)
+
+            # Invalid offsets should get overwritten as per auto_offset_reset
+            partition_offsets[target_part] = latest_offset + 5  # invalid!
+            consumer.reset_offsets(partition_offsets.items())
+
+            # SimpleConsumer's fetcher thread will detect the invalid offset
+            # and reset it immediately.  RdKafkaSimpleConsumer however will
+            # only get to write the valid offset upon a call to consume():
+            msg = consumer.consume()
+            expected_offset = target_part.earliest_available_offset()
+            self.assertEqual(msg.offset, expected_offset)
+            self.assertEqual(consumer.held_offsets[part_id], expected_offset)
 
 
 class TestOwnedPartition(unittest2.TestCase):

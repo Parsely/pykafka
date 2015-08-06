@@ -497,9 +497,6 @@ class SimpleConsumer():
                     partition.flush()
                     by_leader[partition.partition.leader].append((partition, offset))
 
-            # reset this dict to prepare it for next retry
-            owned_partition_offsets = {}
-
             # get valid offset ranges for each partition
             for broker, offsets in by_leader.iteritems():
                 reqs = [owned_partition.build_offset_request(offset)
@@ -511,7 +508,11 @@ class SimpleConsumer():
                     success_handler=_handle_success,
                     partitions_by_id=self._partitions_by_id)
 
-                if len(parts_by_error) == 1 and 0 in parts_by_error:
+                if 0 in parts_by_error:
+                    # drop successfully reset partitions for next retry
+                    successful = [part for part, _ in parts_by_error.pop(0)]
+                    map(owned_partition_offsets.pop, successful)
+                if not parts_by_error:
                     continue
                 log.error("Error resetting offsets for topic %s (errors: %s)",
                           self._topic.name,
@@ -520,24 +521,16 @@ class SimpleConsumer():
 
                 time.sleep(i * (self._offsets_channel_backoff_ms / 1000))
 
-                if 0 in parts_by_error:
-                    parts_by_error.pop(0)
-                errored_partitions = {
-                    part: owned_partition_offsets[part]
-                    for errcode, parts in parts_by_error.iteritems()
-                    for part, _ in parts}
-                owned_partition_offsets.update(errored_partitions)
+                for errcode, owned_partitions in parts_by_error.iteritems():
+                    if errcode != 0:
+                        for owned_partition in owned_partitions:
+                            owned_partition.fetch_lock.release()
 
-            for errcode, owned_partitions in parts_by_error.iteritems():
-                if errcode != 0:
-                    for owned_partition in owned_partitions:
-                        owned_partition.fetch_lock.release()
-
-            if len(parts_by_error) == 1 and 0 in parts_by_error:
+            if not owned_partition_offsets:
                 break
             log.debug("Retrying offset reset")
 
-        if any([a != 0 for a in parts_by_error]):
+        if owned_partition_offsets:
             raise OffsetRequestFailedError("reset_offsets failed after %d "
                                            "retries",
                                            self._offsets_reset_max_retries)
@@ -643,7 +636,16 @@ class OwnedPartition(object):
         return self._messages.qsize()
 
     def flush(self):
+        """Flush internal queue"""
+        # Swap out _messages so a concurrent consume/enqueue won't interfere
+        tmp = self._messages
         self._messages = Queue()
+        while True:
+            try:
+                tmp.get_nowait()
+                self._messages_arrived.acquire(blocking=False)
+            except Empty:
+                break
         log.info("Flushed queue for partition %d", self.partition.id)
 
     def set_offset(self, last_offset_consumed):
