@@ -34,7 +34,12 @@ class BrokerConnection(object):
     and handles the sending and receiving of data that conform to the
     kafka binary protocol over that socket.
     """
-    def __init__(self, host, port, buffer_size=1024 * 1024):
+    def __init__(self,
+                 host,
+                 port,
+                 buffer_size=1024 * 1024,
+                 source_host='',
+                 source_port=0):
         """Initialize a socket connection to Kafka.
 
         :param host: The host to which to connect
@@ -44,11 +49,19 @@ class BrokerConnection(object):
         :param buffer_size: The size (in bytes) of the buffer in which to
             hold response data.
         :type buffer_size: int
+        :param source_host: The host portion of the source address for
+            the socket connection
+        :type source_host: str
+        :param source_port: The port portion of the source address for
+            the socket connection
+        :type source_port: int
         """
         self._buff = bytearray(buffer_size)
         self.host = host
         self.port = port
         self._socket = None
+        self.source_host = source_host
+        self.source_port = source_port
 
     def __del__(self):
         """Close this connection when the object is deleted."""
@@ -63,7 +76,8 @@ class BrokerConnection(object):
         """Connect to the broker."""
         self._socket = socket.create_connection(
             (self.host, self.port),
-            timeout=timeout / 1000
+            timeout / 1000,
+            (self.source_host, self.source_port)
         )
 
     def disconnect(self):
