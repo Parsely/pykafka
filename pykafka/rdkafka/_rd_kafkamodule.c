@@ -2,8 +2,48 @@
 #include <structseq.h>
 
 #include <errno.h>
+#include <syslog.h>
 
 #include <librdkafka/rdkafka.h>
+
+
+/**
+ * Logging
+ */
+
+static PyObject *logger;
+
+
+static void
+logging_callback(const rd_kafka_t *rk,
+                 int level,
+                 const char *fac,
+                 const char *buf)
+{
+    /* Map syslog levels to python logging levels */
+    char *lvl = NULL;
+    if (level == LOG_DEBUG) lvl = "debug";
+    else if (level == LOG_INFO || level == LOG_NOTICE) lvl = "info";
+    else if (level == LOG_WARNING) lvl = "warning";
+    else if (level == LOG_ERR) lvl = "error";
+    else lvl = "critical";
+
+    /* NB librdkafka docs say that rk may be NULL, so check that */
+    const char *rk_name = rk ? rd_kafka_name(rk) : "rk_handle null";
+    const char *format = "%s [%s] %s";  /* format rk_name + fac + buf */
+
+    /* Grab the GIL, as rdkafka callbacks may come from non-python threads */
+    PyGILState_STATE gstate = PyGILState_Ensure();
+
+    PyObject *res = PyObject_CallMethod(
+            logger, lvl, "ssss", format, rk_name, fac, buf);
+    /* Any errors here we'll just have to swallow: we're probably on some
+       background thread, and we can't log either (logging just failed!) */
+    if (! res) PyErr_Clear();
+    else Py_DECREF(res);
+
+    PyGILState_Release(gstate);
+}
 
 
 /**
@@ -266,6 +306,8 @@ Consumer_start(Consumer *self, PyObject *args, PyObject *kwds)
         set_PyRdKafkaError(RD_KAFKA_RESP_ERR__FAIL, errstr);
         return NULL;
     }
+
+    rd_kafka_set_logger(self->rdk_handle, logging_callback);
     if (rd_kafka_brokers_add(self->rdk_handle, brokers) == 0) {
         set_PyRdKafkaError(RD_KAFKA_RESP_ERR__FAIL, "adding brokers failed");
         return Consumer_start_fail(self);
@@ -450,8 +492,15 @@ static PyMethodDef pyrdk_methods[] = {
 static PyObject *
 _rd_kafkamodule_init(void)
 {
-    PyObject *mod = Py_InitModule("pykafka.rdkafka._rd_kafka", pyrdk_methods);
+    const char *mod_name = "pykafka.rdkafka._rd_kafka";
+    PyObject *mod = Py_InitModule(mod_name, pyrdk_methods);
     if (mod == NULL) return NULL;
+
+    PyObject *logging = PyImport_ImportModule("logging");
+    if (! logging) return NULL;
+    logger = PyObject_CallMethod(logging, "getLogger", "s", mod_name);
+    Py_DECREF(logging);
+    if (! logger) return NULL;
 
     ConsumerStoppedException = PyErr_NewException(
             "pykafka.rdkafka.ConsumerStoppedException", NULL, NULL);

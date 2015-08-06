@@ -1,8 +1,12 @@
 from contextlib import contextmanager
+import logging
 
 from pykafka.simpleconsumer import (
     SimpleConsumer, ConsumerStoppedException, OffsetType)
 from . import _rd_kafka
+
+
+log = logging.getLogger(__name__)
 
 
 class RdKafkaSimpleConsumer(SimpleConsumer):
@@ -105,7 +109,7 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
             ##"topic.metadata.refresh.fast.interval.ms"
             ##"topic.metadata.refresh.sparse"
 
-            ##"debug"
+            "debug": "all",
 
             "socket.timeout.ms": self._cluster._socket_timeout_ms,
             ##"socket.send.buffer.bytes"
@@ -119,8 +123,9 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
             ##"statistics.interval.ms"
             ##"error_cb"
             ##"stats_cb"
-            ##"log_cb"
-            ##"log_level"
+
+            ##"log_cb"  # gets set in _rd_kafka module
+            "log_level": 7,
 
             ##"socket_cb"
             ##"open_cb"
