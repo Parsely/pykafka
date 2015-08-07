@@ -28,7 +28,7 @@ from .common import CompressionType
 from .exceptions import (
     UnknownTopicOrPartition, NotLeaderForPartition, RequestTimedOut,
     ProduceFailureError, SocketDisconnectedError, InvalidMessageError,
-    InvalidMessageSize, MessageSizeTooLarge
+    InvalidMessageSize, MessageSizeTooLarge, ProducerQueueFullError
 )
 from .partitioners import random_partitioner
 from .protocol import Message, ProduceRequest
@@ -245,9 +245,10 @@ class AsyncProducer():
                  max_retries=3,
                  retry_backoff_ms=100,
                  required_acks=1,
-                 ack_timeout_ms=10000,
-                 batch_size=200,
-                 max_queued_messages=500):
+                 ack_timeout_ms=10 * 1000,
+                 max_queued_messages=10000,
+                 linger_ms=0,
+                 block_on_queue_full=True):
         """Instantiate a new AsyncProducer
 
         :param cluster: The cluster to which to connect
@@ -271,11 +272,25 @@ class AsyncProducer():
         :param ack_timeout_ms: Amount of time (in milliseconds) to wait for
             acknowledgment of a produce request.
         :type ack_timeout_ms: int
-        :param batch_size: Size (in bytes) of batches to send to brokers.
-        :type batch_size: int
-        :param max_queued_messages: The maximum number of requests allowed
-            in the request queue
+        :param max_queued_messages: The maximum number of messages the producer
+            can have waiting to be sent to the broker. If messages are sent
+            faster than they can be delivered to the broker, the producer will
+            either block or throw an exception based on the preference specified
+            by block_on_queue_full.
         :type max_queued_messages: int
+        :param linger_ms: This setting gives the upper bound on the delay for
+            batching: once the producer gets max_queued_messages worth of
+            messages for a broker, it will be sent immediately regardless of
+            this setting.  However, if we have fewer than this many messages
+            accumulated for this partition we will 'linger' for the specified
+            time waiting for more records to show up. linger_ms=0 indicates no
+            lingering.
+        :type linger_ms: int
+        :param block_on_queue_full: When the producer's message queue for a
+            broker contains max_queued_messages, we must either stop accepting
+            new messages (block) or throw an error. If True, this setting
+            indicates we should block until space is available in the queue.
+        :type block_on_queue_full: bool
         """
         self._cluster = cluster
         self._topic = topic
@@ -285,10 +300,11 @@ class AsyncProducer():
         self._retry_backoff_ms = retry_backoff_ms
         self._required_acks = required_acks
         self._ack_timeout_ms = ack_timeout_ms
-        self._batch_size = batch_size
+        self._max_queued_messages = max_queued_messages
+        self._linger_ms = linger_ms
+        self._block_on_queue_full = block_on_queue_full
 
         self._setup_internal_producer()
-        self._max_queued_messages = max_queued_messages
         self._setup_workers()
 
     def _setup_internal_producer(self):
@@ -301,7 +317,6 @@ class AsyncProducer():
             retry_backoff_ms=self._retry_backoff_ms,
             required_acks=self._required_acks,
             ack_timeout_ms=self._ack_timeout_ms,
-            batch_size=self._batch_size
         )
 
     def _setup_workers(self):
@@ -329,12 +344,17 @@ class AsyncProducer():
 
         # enqueue messages in the appropriate queue
         for broker_id, messages in messages_by_leader.iteritems():
+            # get the queue associated with this broker
             q_info = self._workers_by_leader[broker_id]
             if len(q_info.queue) >= self._max_queued_messages:
                 with q_info.lock:
                     if len(q_info.queue) >= self._max_queued_messages:
                         q_info.slot_available.clear()
-                q_info.slot_available.wait()
+                if self._block_on_queue_full:
+                    q_info.slot_available.wait()
+                else:
+                    raise ProducerQueueFullError("Queue full for broker %d",
+                                                 broker_id)
             with q_info.lock:
                 to_extend = itertools.islice(
                     messages, self._max_queued_messages - len(q_info.queue))
@@ -374,12 +394,16 @@ class AsyncProducer():
                     with lock:
                         if len(message_queue) == 0:
                             flush_ready.clear()
-                    flush_ready.wait()
+                    flush_ready.wait(self._linger_ms / 1000)
                 with lock:
                     batch = [message_queue.pop() for _ in xrange(len(message_queue))]
                     if not slot_available.is_set():
                         slot_available.set()
-                self._build_request(batch, broker)
+                # this check is necessary since it's possible to get here when
+                # the queue is still empty (in cases where self._linger_ms is
+                # reached)
+                if batch:
+                    self._send_request(batch, broker)
 
         self._cluster.handler.spawn(queue_reader)
         log.info("Starting new produce worker thread for broker %s", broker.id)
@@ -388,7 +412,7 @@ class AsyncProducer():
                          slot_available=slot_available,
                          queue=message_queue)
 
-    def _build_request(self, message_batch, broker):
+    def _send_request(self, message_batch, broker):
         log.debug("Sending %d messages to broker %d", len(message_batch), broker.id)
         request = ProduceRequest(
             compression_type=self._compression,
