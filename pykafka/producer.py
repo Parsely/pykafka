@@ -37,7 +37,7 @@ from .protocol import Message, ProduceRequest
 log = logging.getLogger(__name__)
 
 
-class Producer(object):
+class Producer():
     """
     This class implements the synchronous producer logic found in the
     JVM driver.
