@@ -167,6 +167,7 @@ class Cluster(object):
                 except:
                     log.exception('Unable to connect to broker %s',
                                   broker_str)
+                    raise
         # Couldn't connect anywhere. Raise an error.
         raise Exception('Unable to connect to a broker to fetch metadata.')
 
