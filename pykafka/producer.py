@@ -37,7 +37,7 @@ from .protocol import Message, ProduceRequest
 log = logging.getLogger(__name__)
 
 
-class Producer():
+class Producer(object):
     """
     This class implements the synchronous producer logic found in the
     JVM driver.
@@ -210,27 +210,11 @@ class Producer():
             )
             # Send requests at the batch size
             if requests[leader].message_count() >= self._batch_size:
-                self._prepare_request(leader,
-                                      requests.pop(leader),
-                                      attempt)
+                self._send_request(leader, requests.pop(leader), attempt)
 
         # Send any still not sent
         for leader, req in requests.iteritems():
-            self._prepare_request(leader, req, attempt)
-
-    def _prepare_request(self, leader, request, attempt):
-        """Callback called when a request is ready to be sent
-
-        Immediately sends the request to `leader`
-
-        :param leader: The broker to which to send the request
-        :type leader: :class:`pykafka.broker.Broker`
-        :param request: The request to send
-        :type request: :class:`pykafka.protocol.ProduceRequest`
-        :param attempt: The attempt number for this send attempt
-        :type attempt: int
-        """
-        self._send_request(leader, request, attempt)
+            self._send_request(leader, req, attempt)
 
     def produce(self, messages):
         """Produce a set of messages.
@@ -244,10 +228,10 @@ class Producer():
         self._produce(self._partition_messages(messages), 0)
 
 
-class AsyncProducer(Producer):
+class AsyncProducer():
     """
-    This class implements the asynchronous producer logic found in the
-    JVM driver. In inherits from the synchronous implementation.
+    This class implements asynchronous producer logic similar to that found in
+    the JVM driver. In inherits from the synchronous implementation.
     """
     def __init__(self,
                  cluster,
@@ -259,7 +243,7 @@ class AsyncProducer(Producer):
                  required_acks=1,
                  ack_timeout_ms=10000,
                  batch_size=200,
-                 max_queued_requests=500):
+                 max_queued_messages=500):
         """Instantiate a new AsyncProducer
 
         :param cluster: The cluster to which to connect
@@ -285,23 +269,36 @@ class AsyncProducer(Producer):
         :type ack_timeout_ms: int
         :param batch_size: Size (in bytes) of batches to send to brokers.
         :type batch_size: int
-        :param max_queued_requests: The maximum number of requests allowed
+        :param max_queued_messages: The maximum number of requests allowed
             in the request queue
-        :type max_queued_requests: int
+        :type max_queued_messages: int
         """
-        super(AsyncProducer, self).__init__(
-            cluster,
-            topic,
-            partitioner=partitioner,
-            compression=compression,
-            max_retries=max_retries,
-            retry_backoff_ms=retry_backoff_ms,
-            required_acks=required_acks,
-            ack_timeout_ms=ack_timeout_ms,
-            batch_size=batch_size
-        )
-        self._max_queued_requests = max_queued_requests
+        self._cluster = cluster
+        self._topic = topic
+        self._partitioner = partitioner
+        self._compression = compression
+        self._max_retries = max_retries
+        self._retry_backoff_ms = retry_backoff_ms
+        self._required_acks = required_acks
+        self._ack_timeout_ms = ack_timeout_ms
+        self._batch_size = batch_size
+
+        self._setup_internal_producer()
+        self._max_queued_messages = max_queued_messages
         self._setup_workers()
+
+    def _setup_internal_producer(self):
+        self._producer = Producer(
+            self._cluster,
+            self._topic,
+            self._partitioner,
+            compression=self._compression,
+            max_retries=self._max_retries,
+            retry_backoff_ms=self._retry_backoff_ms,
+            required_acks=self._required_acks,
+            ack_timeout_ms=self._ack_timeout_ms,
+            batch_size=self._batch_size
+        )
 
     def _setup_workers(self):
         """Spawn workers for connected brokers
@@ -327,37 +324,49 @@ class AsyncProducer(Producer):
         def worker():
             while True:
                 time.sleep(.0001)
-                try:
-                    request, attempt = request_queue.get_nowait()
-                    self._send_request(broker, request, attempt)
-                except Empty:
-                    continue
-                except ProduceFailureError as e:
-                    log.error("Producer error: %s", e)
+                log.debug("queue ready: %s", self._queue_ready(message_queue))
+                if self._queue_ready(message_queue):
+                    self._build_request(message_queue, broker)
 
-        request_queue = self._cluster.handler.Queue()
+        message_queue = self._cluster.handler.Queue()
         log.info("Starting new produce worker thread for broker %s", broker.id)
         self._cluster.handler.spawn(worker)
-        return request_queue
+        return message_queue
 
-    def _prepare_request(self, leader, request, attempt):
-        """Callback called when a request is ready to be sent
+    def _queue_ready(self, queue):
+        return queue.qsize() >= self._max_queued_messages
 
-        Enqueues the request in the queue associated with `leader`
+    def _build_request(self, queue, broker):
+        request = ProduceRequest(
+            compression_type=self._compression,
+            required_acks=self._required_acks,
+            timeout=self._ack_timeout_ms
+        )
+        for i in xrange(self._max_queued_messages):
+            try:
+                (key, value), partition_id = queue.get_nowait()
+                request.add_message(
+                    Message(value, partition_key=key),
+                    self._topic.name,
+                    partition_id
+                )
+            except Empty:
+                break
+        try:
+            self._producer._send_request(broker, request, 0)
+        except ProduceFailureError as e:
+            log.error("Producer error: %s", e)
 
-        :param leader: The broker to which to send the request
-        :type leader: :class:`pykafka.broker.Broker`
-        :param request: The request to send
-        :type request: :class:`pykafka.protocol.ProduceRequest`
-        :param attempt: The attempt number for this send attempt
-        :type attempt: int
+    def produce(self, messages):
+        """Produce a set of messages.
+
+        :param messages: The messages to produce
+        :type messages: Iterable of str or (str, str) tuples
         """
-        queue = self._queues_by_leader[leader.id]
-        # block until there is space available in the queue
-        while queue.qsize() > self._max_queued_requests:
-            log.debug("Queue for broker %d is full. Blocking...", leader.id)
-            pass
-        queue.put((request, attempt))
-        log.debug("Enqueued %d messages for broker %s",
-                  request.message_count(),
-                  leader.id)
+        self._produce(self._producer._partition_messages(messages))
+
+    def _produce(self, message_partition_tups):
+        for ((key, value), partition_id) in message_partition_tups:
+            leader = self._topic.partitions[partition_id].leader
+            queue = self._queues_by_leader[leader.id]
+            queue.put(((key, value), partition_id))
