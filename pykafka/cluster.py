@@ -164,12 +164,12 @@ class Cluster(object):
                     response = broker.request_metadata()
                     if response is not None:
                         return response
-                except:
-                    log.exception('Unable to connect to broker %s',
-                                  broker_str)
-                    raise
+                except Exception as e:
+                    log.error('Unable to connect to broker %s', broker_str)
+                    log.exception(e)
         # Couldn't connect anywhere. Raise an error.
-        raise Exception('Unable to connect to a broker to fetch metadata.')
+        raise RuntimeError(
+            'Unable to connect to a broker to fetch metadata. See logs.')
 
     def _update_brokers(self, broker_metadata):
         """Update brokers with fresh metadata.
