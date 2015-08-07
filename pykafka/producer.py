@@ -228,8 +228,8 @@ class Producer(object):
         self._produce(self._partition_messages(messages), 0)
 
 
-QueueInfo = namedtuple('QueuePrimitives', ['lock', 'msg_ready',
-                                           'queue_ready', 'queue'])
+QueueInfo = namedtuple('QueueInfo', ['lock', 'flush_ready',
+                                     'slot_available', 'queue'])
 
 
 class AsyncProducer():
@@ -311,12 +311,14 @@ class AsyncProducer():
         broker. The queue holds requests waiting to be sent, and the worker
         thread reads the end of the queue and sends requests.
         """
-        self._queues_by_leader = {}
-
+        # _workers_by_leader maps each broker id to a QueueInfo instance
+        # containing references to that broker's queue and its associated
+        # synchronization primitives
+        self._workers_by_leader = {}
         for partition in self._topic.partitions.values():
-            if partition.leader.id not in self._queues_by_leader:
-                queue_info = self._setup_queue(partition.leader)
-                self._queues_by_leader[partition.leader.id] = queue_info
+            if partition.leader.id not in self._workers_by_leader:
+                q_info = self._setup_queue(partition.leader)
+                self._workers_by_leader[partition.leader.id] = q_info
 
     def _produce(self, message_partition_tups):
         # group messages by destination broker
@@ -327,22 +329,22 @@ class AsyncProducer():
 
         # enqueue messages in the appropriate queue
         for broker_id, messages in messages_by_leader.iteritems():
-            queue_info = self._queues_by_leader[broker_id]
-            if len(queue_info.queue) >= self._max_queued_messages:
-                with queue_info.lock:
-                    if len(queue_info.queue) >= self._max_queued_messages:
-                        queue_info.queue_ready.clear()
-                queue_info.queue_ready.wait()
-            with queue_info.lock:
+            q_info = self._workers_by_leader[broker_id]
+            if len(q_info.queue) >= self._max_queued_messages:
+                with q_info.lock:
+                    if len(q_info.queue) >= self._max_queued_messages:
+                        q_info.slot_available.clear()
+                q_info.slot_available.wait()
+            with q_info.lock:
                 to_extend = itertools.islice(
-                    messages, self._max_queued_messages - len(queue_info.queue))
-                queue_info.queue.extendleft(to_extend)
+                    messages, self._max_queued_messages - len(q_info.queue))
+                q_info.queue.extendleft(to_extend)
                 log.debug("Enqueued %d messages for broker %d",
                           len(messages), broker_id)
                 # should only set this if queue is full or timeout
-                if len(queue_info.queue) >= self._max_queued_messages:
-                    if not queue_info.msg_ready.is_set():
-                        queue_info.msg_ready.set()
+                if len(q_info.queue) >= self._max_queued_messages:
+                    if not q_info.flush_ready.is_set():
+                        q_info.flush_ready.set()
 
     def _setup_queue(self, broker):
         """Spawn a worker for the given broker
@@ -353,9 +355,17 @@ class AsyncProducer():
         :param broker: The broker for which to instantiate this queue and worker
         :type broker: :class:`pykafka.broker.Broker`
         """
+        # this lock is used to ensure only one thread is manipulating these
+        # Events or the queue at a given moment
         lock = threading.Lock()
-        msg_ready = threading.Event()
-        queue_ready = threading.Event()
+        # When flush_ready is set, the queue is ready to be flushed to the
+        # broker
+        flush_ready = threading.Event()
+        # when slot_available is set, there is space in the queue for at least
+        # one message
+        slot_available = threading.Event()
+        # this queue contains the messages that have been produced and are
+        # waiting to be sent to the broker
         message_queue = deque()
 
         def queue_reader():
@@ -363,23 +373,20 @@ class AsyncProducer():
                 if len(message_queue) == 0:
                     with lock:
                         if len(message_queue) == 0:
-                            msg_ready.clear()
-                    msg_ready.wait()
+                            flush_ready.clear()
+                    flush_ready.wait()
                 with lock:
                     batch = [message_queue.pop() for _ in xrange(len(message_queue))]
-                    if not queue_ready.is_set():
-                        queue_ready.set()
+                    if not slot_available.is_set():
+                        slot_available.set()
                 self._build_request(batch, broker)
 
         self._cluster.handler.spawn(queue_reader)
         log.info("Starting new produce worker thread for broker %s", broker.id)
         return QueueInfo(lock=lock,
-                         msg_ready=msg_ready,
-                         queue_ready=queue_ready,
+                         flush_ready=flush_ready,
+                         slot_available=slot_available,
                          queue=message_queue)
-
-    def _queue_ready(self, queue):
-        return queue.qsize() >= self._max_queued_messages
 
     def _build_request(self, message_batch, broker):
         log.debug("Sending %d messages to broker %d", len(message_batch), broker.id)
