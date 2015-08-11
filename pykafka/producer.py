@@ -32,6 +32,7 @@ from .exceptions import (
 )
 from .partitioners import random_partitioner
 from .protocol import Message, ProduceRequest
+from .utils.compat import Semaphore
 
 
 log = logging.getLogger(__name__)
@@ -96,7 +97,7 @@ class Producer():
             id_=hex(id(self))
         )
 
-    def _send_request(self, broker, req, attempt):
+    def _send_request(self, broker, req, attempt, semaphore=None):
         """Send the produce request to the broker and handle the response.
 
         :param broker: The broker to which to send the request
@@ -129,6 +130,8 @@ class Producer():
             for topic, partitions in response.topics.iteritems():
                 for partition, presponse in partitions.iteritems():
                     if presponse.err == 0:
+                        if semaphore is not None:
+                            semaphore.acquire(blocking=False)
                         continue  # All's well
                     if presponse.err == UnknownTopicOrPartition.ERROR_CODE:
                         log.warning('Unknown topic: %s or partition: %s. '
@@ -229,7 +232,8 @@ class Producer():
 
 
 QueueInfo = namedtuple('QueueInfo', ['lock', 'flush_ready',
-                                     'slot_available', 'queue'])
+                                     'slot_available', 'queue',
+                                     'messages_inflight'])
 
 
 class AsyncProducer():
@@ -304,8 +308,31 @@ class AsyncProducer():
         self._linger_ms = linger_ms
         self._block_on_queue_full = block_on_queue_full
 
-        self._setup_internal_producer()
-        self._setup_workers()
+        self._running = False
+        self.start()
+
+    def start(self):
+        if not self._running:
+            self._setup_internal_producer()
+            self._setup_workers()
+            self._running = True
+
+    def stop(self):
+        self._running = False
+
+    def __enter__(self):
+        self.start()
+        return self
+
+    def __exit__(self, type, value, traceback):
+        self.stop()
+
+        last_log = time.time()
+        while any(q_info.messages_inflight._value
+                  for leader, q_info in self._workers_by_leader.iteritems()):
+            if time.time() - last_log >= .5:
+                log.info("Waiting for all worker threads to exit")
+                last_log = time.time()
 
     def _setup_internal_producer(self):
         self._producer = Producer(
@@ -356,8 +383,9 @@ class AsyncProducer():
                     raise ProducerQueueFullError("Queue full for broker %d",
                                                  broker_id)
             with q_info.lock:
-                to_extend = itertools.islice(
-                    messages, self._max_queued_messages - len(q_info.queue))
+                to_extend = messages[:self._max_queued_messages - len(q_info.queue)]
+                for message in to_extend:
+                    q_info.messages_inflight.release()
                 q_info.queue.extendleft(to_extend)
                 log.debug("Enqueued %d messages for broker %d",
                           len(messages), broker_id)
@@ -387,6 +415,7 @@ class AsyncProducer():
         # this queue contains the messages that have been produced and are
         # waiting to be sent to the broker
         message_queue = deque()
+        messages_inflight = Semaphore(value=0)
 
         def queue_reader():
             while True:
@@ -403,16 +432,17 @@ class AsyncProducer():
                 # the queue is still empty (in cases where self._linger_ms is
                 # reached)
                 if batch:
-                    self._send_request(batch, broker)
+                    self._send_request(batch, broker, messages_inflight)
 
         self._cluster.handler.spawn(queue_reader)
         log.info("Starting new produce worker thread for broker %s", broker.id)
         return QueueInfo(lock=lock,
                          flush_ready=flush_ready,
                          slot_available=slot_available,
-                         queue=message_queue)
+                         queue=message_queue,
+                         messages_inflight=messages_inflight)
 
-    def _send_request(self, message_batch, broker):
+    def _send_request(self, message_batch, broker, messages_inflight):
         log.debug("Sending %d messages to broker %d", len(message_batch), broker.id)
         request = ProduceRequest(
             compression_type=self._compression,
@@ -426,7 +456,7 @@ class AsyncProducer():
                 partition_id
             )
         try:
-            self._producer._send_request(broker, request, 0)
+            self._producer._send_request(broker, request, 0, messages_inflight)
         except ProduceFailureError as e:
             log.error("Producer error: %s", e)
 
