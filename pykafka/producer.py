@@ -32,7 +32,6 @@ from .exceptions import (
 )
 from .partitioners import random_partitioner
 from .protocol import Message, ProduceRequest
-from .utils.compat import Semaphore
 
 
 log = logging.getLogger(__name__)
@@ -97,7 +96,7 @@ class Producer():
             id_=hex(id(self))
         )
 
-    def _send_request(self, broker, req, attempt, semaphore=None):
+    def _send_request(self, broker, req, attempt, q_info=None):
         """Send the produce request to the broker and handle the response.
 
         :param broker: The broker to which to send the request
@@ -106,6 +105,9 @@ class Producer():
         :type req: :class:`pykafka.protocol.ProduceRequest`
         :param attempt: The current attempt count. Used for retry logic
         :type attempt: int
+        :param q_info: A QueueInfo namedtuple containing information
+            about the queue from which the messages in `req` were removed
+        :type q_info: :class:`pykafka.producer.QueueInfo`
         """
 
         def _get_partition_msgs(partition_id, req):
@@ -130,8 +132,9 @@ class Producer():
             for topic, partitions in response.topics.iteritems():
                 for partition, presponse in partitions.iteritems():
                     if presponse.err == 0:
-                        if semaphore is not None:
-                            semaphore.acquire(blocking=False)
+                        if q_info is not None:
+                            with q_info.lock:
+                                q_info.messages_inflight -= 1
                         continue  # All's well
                     if presponse.err == UnknownTopicOrPartition.ERROR_CODE:
                         log.warning('Unknown topic: %s or partition: %s. '
@@ -231,9 +234,37 @@ class Producer():
         self._produce(self._partition_messages(messages), 0)
 
 
-QueueInfo = namedtuple('QueueInfo', ['lock', 'flush_ready',
-                                     'slot_available', 'queue',
-                                     'messages_inflight'])
+_QueueInfo = namedtuple('QueueInfo', ['lock', 'flush_ready',
+                                      'slot_available', 'queue'])
+
+
+class QueueInfo(_QueueInfo):
+    """A packet of information for a producer queue
+
+    A QueueInfo object contains thread-synchronization primitives corresponding
+    to a single broker for this producer.
+
+    :ivar lock: The lock used to control access to shared resources for this
+        queue
+    :type lock: threading.Lock
+    :ivar flush_ready: A condition variable that indicates that the queue is
+        ready to be flushed
+    :type flush_ready: threading.Condition
+    :ivar slot_available: A condition variable that indicates that there is
+        at least one position free in the queue for a new message
+    :type slot_available: threading.Condition
+    :ivar queue: The message queue for this broker
+    :type queue: collections.deque
+    :ivar messages_inflight: A counter indicating how many messages have been
+        enqueued for this broker and not yet sent in a request.
+    :type messages_inflight: int
+    """
+    def __new__(cls, lock, flush_ready, slot_available, queue, messages_inflight):
+        ins = super(QueueInfo, cls).__new__(
+            cls, lock, flush_ready, slot_available, queue)
+        # store messages_inflight separately to allow updating
+        ins.messages_inflight = messages_inflight
+        return ins
 
 
 class AsyncProducer():
@@ -319,6 +350,12 @@ class AsyncProducer():
 
     def stop(self):
         self._running = False
+        last_log = time.time()
+        while any(q_info.messages_inflight
+                  for leader, q_info in self._workers_by_leader.iteritems()):
+            if time.time() - last_log >= .5:
+                log.info("Waiting for all worker threads to exit")
+                last_log = time.time()
 
     def __enter__(self):
         self.start()
@@ -326,13 +363,6 @@ class AsyncProducer():
 
     def __exit__(self, type, value, traceback):
         self.stop()
-
-        last_log = time.time()
-        while any(q_info.messages_inflight._value
-                  for leader, q_info in self._workers_by_leader.iteritems()):
-            if time.time() - last_log >= .5:
-                log.info("Waiting for all worker threads to exit")
-                last_log = time.time()
 
     def _setup_internal_producer(self):
         self._producer = Producer(
@@ -385,7 +415,7 @@ class AsyncProducer():
             with q_info.lock:
                 to_extend = messages[:self._max_queued_messages - len(q_info.queue)]
                 for message in to_extend:
-                    q_info.messages_inflight.release()
+                    q_info.messages_inflight += 1
                 q_info.queue.extendleft(to_extend)
                 log.debug("Enqueued %d messages for broker %d",
                           len(messages), broker_id)
@@ -415,7 +445,15 @@ class AsyncProducer():
         # this queue contains the messages that have been produced and are
         # waiting to be sent to the broker
         message_queue = deque()
-        messages_inflight = Semaphore(value=0)
+        # counter that indicates the number of messages that have been
+        # enqueued and not yet sent successfully.
+        messages_inflight = 0
+
+        q_info = QueueInfo(lock=lock,
+                           flush_ready=flush_ready,
+                           slot_available=slot_available,
+                           queue=message_queue,
+                           messages_inflight=messages_inflight)
 
         def queue_reader():
             while True:
@@ -432,17 +470,23 @@ class AsyncProducer():
                 # the queue is still empty (in cases where self._linger_ms is
                 # reached)
                 if batch:
-                    self._send_request(batch, broker, messages_inflight)
+                    self._send_request(batch, broker, q_info)
 
         self._cluster.handler.spawn(queue_reader)
         log.info("Starting new produce worker thread for broker %s", broker.id)
-        return QueueInfo(lock=lock,
-                         flush_ready=flush_ready,
-                         slot_available=slot_available,
-                         queue=message_queue,
-                         messages_inflight=messages_inflight)
+        return q_info
 
-    def _send_request(self, message_batch, broker, messages_inflight):
+    def _send_request(self, message_batch, broker, q_info):
+        """Prepare a request and send it to the broker
+
+        :param message_batch: An iterable of messages to send
+        :type message_batch: iterable of `((key, value), partition_id)` tuples
+        :param broker: The broker to which to send the request
+        :type broker: :class:`pykafka.broker.Broker`
+        :param q_info: A namedtuple containing information about the queue
+            from which the messages in `message_batch` were taken
+        :type q_info: :class:`pykafka.producer.QueueInfo`
+        """
         log.debug("Sending %d messages to broker %d", len(message_batch), broker.id)
         request = ProduceRequest(
             compression_type=self._compression,
@@ -456,7 +500,7 @@ class AsyncProducer():
                 partition_id
             )
         try:
-            self._producer._send_request(broker, request, 0, messages_inflight)
+            self._producer._send_request(broker, request, 0, q_info)
         except ProduceFailureError as e:
             log.error("Producer error: %s", e)
 
