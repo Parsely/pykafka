@@ -135,7 +135,7 @@ class Producer():
                 for partition, presponse in partitions.iteritems():
                     if presponse.err == 0:
                         if q_info is not None:
-                            q_info.decrement_inflight()
+                            q_info.messages_inflight -= 1
                         continue  # All's well
                     if presponse.err == UnknownTopicOrPartition.ERROR_CODE:
                         log.warning('Unknown topic: %s or partition: %s. '
@@ -146,7 +146,7 @@ class Producer():
                         # Update cluster metadata to get new leader
                         self._cluster.update()
                         if q_info is not None:
-                            q_info.update_leader()
+                            q_info.producer._update_leaders()
                     elif presponse.err == RequestTimedOut.ERROR_CODE:
                         log.warning('Produce request to %s:%s timed out. '
                                     'Retrying.', broker.host, broker.port)
@@ -273,23 +273,6 @@ class QueueInfo(_QueueInfo):
         ins.messages_inflight = messages_inflight
         return ins
 
-    def decrement_inflight(self, acquire=True):
-        if acquire:
-            self.lock.acquire()
-        self.messages_inflight -= 1
-        if acquire:
-            self.lock.release()
-
-    def increment_inflight(self, acquire=True):
-        if acquire:
-            self.lock.acquire()
-        self.messages_inflight += 1
-        if acquire:
-            self.lock.release()
-
-    def update_leader(self):
-        self.producer._update_leaders()
-
 
 class AsyncProducer():
     """
@@ -375,7 +358,7 @@ class AsyncProducer():
     def stop(self):
         self._running = False
         last_log = time.time()
-        while any(q_info.messages_inflight
+        while any(q_info.messages_inflight > 0
                   for leader, q_info in self._workers_by_leader.iteritems()):
             if time.time() - last_log >= .5:
                 log.info("Waiting for all worker threads to exit")
@@ -439,7 +422,7 @@ class AsyncProducer():
             with q_info.lock:
                 to_extend = messages[:self._max_queued_messages - len(q_info.queue)]
                 for message in to_extend:
-                    q_info.increment_inflight(acquire=False)
+                    q_info.messages_inflight += 1
                 q_info.queue.extendleft(to_extend)
                 log.debug("Enqueued %d messages for broker %d",
                           len(messages), broker_id)
@@ -538,13 +521,20 @@ class AsyncProducer():
         self._produce(self._producer._partition_messages(messages))
 
     def _update_leaders(self):
+        """Ensure each message in each queue is in the queue owned by its
+            partition's leader
+
+        This function empties all broker queues, maps their messages to the
+        current leaders for their partitions, and enqueues the messages in
+        the appropriate queues.
+        """
         # empty queues and figure out updated partition leaders
         new_queue_contents = defaultdict(list)
         for broker, q_info in self._workers_by_leader.iteritems():
             q_info.lock.acquire()
             messages = [q_info.queue.pop() for _ in xrange(len(q_info.queue))]
             for (key, value), partition_id in messages:
-                q_info.decrement_inflight(acquire=False)
+                q_info.messages_inflight -= 1
                 new_leader = self._topic.partitions[partition_id].leader
                 new_queue_contents[new_leader.id].append(
                     ((key, value), partition_id))
@@ -556,6 +546,17 @@ class AsyncProducer():
             messages = new_queue_contents[broker.id]
             q_info.queue.extendleft(messages)
             for message in messages:
-                q_info.increment_inflight(acquire=False)
+                q_info.messages_inflight += 1
+
+            # manage condition variable state
+            if len(q_info.queue) >= self._max_queued_messages:
+                q_info.slot_available.clear()
+                q_info.flush_ready.set()
+            elif len(q_info.queue) == 0:
+                q_info.slot_available.set()
+                q_info.flush_ready.clear()
+            else:
+                q_info.slot_available.set()
+
             # when we get here, we're finally done with this broker
             q_info.lock.release()
