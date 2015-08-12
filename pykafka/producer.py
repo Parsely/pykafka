@@ -106,7 +106,9 @@ class Producer():
         :param attempt: The current attempt count. Used for retry logic
         :type attempt: int
         :param q_info: A QueueInfo namedtuple containing information
-            about the queue from which the messages in `req` were removed
+            about the queue from which the messages in `req` were removed.
+            Only used when called from the
+            :class:`pykafka.producer.AsyncProducer`
         :type q_info: :class:`pykafka.producer.QueueInfo`
         """
 
@@ -133,8 +135,7 @@ class Producer():
                 for partition, presponse in partitions.iteritems():
                     if presponse.err == 0:
                         if q_info is not None:
-                            with q_info.lock:
-                                q_info.messages_inflight -= 1
+                            q_info.decrement_inflight()
                         continue  # All's well
                     if presponse.err == UnknownTopicOrPartition.ERROR_CODE:
                         log.warning('Unknown topic: %s or partition: %s. '
@@ -235,7 +236,8 @@ class Producer():
 
 
 _QueueInfo = namedtuple('QueueInfo', ['lock', 'flush_ready',
-                                      'slot_available', 'queue'])
+                                      'slot_available', 'queue',
+                                      'producer'])
 
 
 class QueueInfo(_QueueInfo):
@@ -258,13 +260,25 @@ class QueueInfo(_QueueInfo):
     :ivar messages_inflight: A counter indicating how many messages have been
         enqueued for this broker and not yet sent in a request.
     :type messages_inflight: int
+    :ivar producer: The producer to which this QueueInfo instance belongs
+    :type producer: :class:`pykafka.producer.AsyncProducer`
     """
-    def __new__(cls, lock, flush_ready, slot_available, queue, messages_inflight):
+    def __new__(cls, lock, flush_ready, slot_available, queue, producer,
+                messages_inflight):
         ins = super(QueueInfo, cls).__new__(
-            cls, lock, flush_ready, slot_available, queue)
+            cls, lock, flush_ready, slot_available, queue, producer)
         # store messages_inflight separately to allow updating
         ins.messages_inflight = messages_inflight
         return ins
+
+    def decrement_inflight(self):
+        with self.lock:
+            self.messages_inflight -= 1
+
+    def increment_inflight(self, acquire=True):
+        if acquire:
+            self.lock.acquire()
+        self.messages_inflight += 1
 
 
 class AsyncProducer():
@@ -415,7 +429,7 @@ class AsyncProducer():
             with q_info.lock:
                 to_extend = messages[:self._max_queued_messages - len(q_info.queue)]
                 for message in to_extend:
-                    q_info.messages_inflight += 1
+                    q_info.increment_inflight(acquire=False)
                 q_info.queue.extendleft(to_extend)
                 log.debug("Enqueued %d messages for broker %d",
                           len(messages), broker_id)
@@ -453,6 +467,7 @@ class AsyncProducer():
                            flush_ready=flush_ready,
                            slot_available=slot_available,
                            queue=message_queue,
+                           producer=self,
                            messages_inflight=messages_inflight)
 
         def queue_reader():
