@@ -145,6 +145,8 @@ class Producer():
                                     'Retrying.', topic, partition)
                         # Update cluster metadata to get new leader
                         self._cluster.update()
+                        if q_info is not None:
+                            q_info.update_leader()
                     elif presponse.err == RequestTimedOut.ERROR_CODE:
                         log.warning('Produce request to %s:%s timed out. '
                                     'Retrying.', broker.host, broker.port)
@@ -271,14 +273,22 @@ class QueueInfo(_QueueInfo):
         ins.messages_inflight = messages_inflight
         return ins
 
-    def decrement_inflight(self):
-        with self.lock:
-            self.messages_inflight -= 1
+    def decrement_inflight(self, acquire=True):
+        if acquire:
+            self.lock.acquire()
+        self.messages_inflight -= 1
+        if acquire:
+            self.lock.release()
 
     def increment_inflight(self, acquire=True):
         if acquire:
             self.lock.acquire()
         self.messages_inflight += 1
+        if acquire:
+            self.lock.release()
+
+    def update_leader(self):
+        self.producer._update_leaders()
 
 
 class AsyncProducer():
@@ -526,3 +536,26 @@ class AsyncProducer():
         :type messages: Iterable of str or (str, str) tuples
         """
         self._produce(self._producer._partition_messages(messages))
+
+    def _update_leaders(self):
+        # empty queues and figure out updated partition leaders
+        new_queue_contents = defaultdict(list)
+        for broker, q_info in self._workers_by_leader.iteritems():
+            q_info.lock.acquire()
+            messages = [q_info.queue.pop() for _ in xrange(len(q_info.queue))]
+            for (key, value), partition_id in messages:
+                q_info.decrement_inflight(acquire=False)
+                new_leader = self._topic.partitions[partition_id].leader
+                new_queue_contents[new_leader.id].append(
+                    ((key, value), partition_id))
+
+        # retain locks for all brokers between these two steps
+
+        # enqueue each new set of messages at the correct broker
+        for broker, q_info in self._workers_by_leader.iteritems():
+            messages = new_queue_contents[broker.id]
+            q_info.queue.extendleft(messages)
+            for message in messages:
+                q_info.increment_inflight(acquire=False)
+            # when we get here, we're finally done with this broker
+            q_info.lock.release()
