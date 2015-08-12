@@ -136,7 +136,8 @@ class Producer():
                     if presponse.err == 0:
                         if q_info is not None:
                             msg_count = len(req.msets[topic][partition].messages)
-                            q_info.messages_inflight -= msg_count
+                            with q_info.lock:
+                                q_info.messages_inflight -= msg_count
                         continue  # All's well
                     if presponse.err == UnknownTopicOrPartition.ERROR_CODE:
                         log.warning('Unknown topic: %s or partition: %s. '
@@ -434,9 +435,9 @@ class AsyncProducer():
                                                  broker_id)
             with q_info.lock:
                 to_extend = messages[:self._max_queued_messages - len(q_info.queue)]
+                q_info.queue.extendleft(to_extend)
                 for message in to_extend:
                     q_info.messages_inflight += 1
-                q_info.queue.extendleft(to_extend)
                 log.debug("Enqueued %d messages for broker %d",
                           len(messages), broker_id)
                 # should only set this if queue is full or timeout
