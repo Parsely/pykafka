@@ -135,7 +135,8 @@ class Producer():
                 for partition, presponse in partitions.iteritems():
                     if presponse.err == 0:
                         if q_info is not None:
-                            q_info.messages_inflight -= 1
+                            msg_count = len(req.msets[topic][partition].messages)
+                            q_info.messages_inflight -= msg_count
                         continue  # All's well
                     if presponse.err == UnknownTopicOrPartition.ERROR_CODE:
                         log.warning('Unknown topic: %s or partition: %s. '
