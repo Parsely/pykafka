@@ -275,6 +275,7 @@ class SimpleConsumer():
             while True:
                 if not self._running:
                     break
+                log.debug("fetch loop %s", self._consumer_group)
                 self.fetch()
                 time.sleep(.0001)
             log.debug("Fetcher thread exiting")
