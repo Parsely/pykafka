@@ -252,12 +252,14 @@ class QueueInfo(_QueueInfo):
         queue
     :type lock: threading.Lock
     :ivar flush_ready: A condition variable that indicates that the queue is
-        ready to be flushed
+        ready to be flushed via requests to the broker
     :type flush_ready: threading.Condition
     :ivar slot_available: A condition variable that indicates that there is
         at least one position free in the queue for a new message
     :type slot_available: threading.Condition
-    :ivar queue: The message queue for this broker
+    :ivar queue: The message queue for this broker. Contains messages that have
+        been supplied as arguments to `produce()` waiting to be sent to the
+        broker.
     :type queue: collections.deque
     :ivar messages_inflight: A counter indicating how many messages have been
         enqueued for this broker and not yet sent in a request.
@@ -350,12 +352,14 @@ class AsyncProducer():
         self.start()
 
     def start(self):
+        """Connect to brokers and start worker threads"""
         if not self._running:
             self._setup_internal_producer()
             self._setup_workers()
             self._running = True
 
     def stop(self):
+        """Mark as stopped and wait for all inflight messages to send"""
         self._running = False
         last_log = time.time()
         while any(q_info.messages_inflight > 0
@@ -365,13 +369,16 @@ class AsyncProducer():
                 last_log = time.time()
 
     def __enter__(self):
+        """Context manager entry point - start the producer"""
         self.start()
         return self
 
-    def __exit__(self, type, value, traceback):
+    def __exit__(self, exc_type, exc_value, traceback):
+        """Context manager exit point - stop the producer"""
         self.stop()
 
     def _setup_internal_producer(self):
+        """Instantiate the internal producer"""
         self._producer = Producer(
             self._cluster,
             self._topic,
@@ -387,7 +394,7 @@ class AsyncProducer():
         """Spawn workers for connected brokers
 
         Creates one :class:`queue.Queue` instance and one worker thread per
-        broker. The queue holds requests waiting to be sent, and the worker
+        broker. The queue holds messages waiting to be sent, and the worker
         thread reads the end of the queue and sends requests.
         """
         # _workers_by_leader maps each broker id to a QueueInfo instance
@@ -400,6 +407,11 @@ class AsyncProducer():
                 self._workers_by_leader[partition.leader.id] = q_info
 
     def _produce(self, message_partition_tups):
+        """Enqueue a set of messages for the relevant brokers
+
+        :param message_partition_tups: Messages with partitions assigned.
+        :type message_partition_tups: tuples of ((key, value), partition_id)
+        """
         # group messages by destination broker
         messages_by_leader = defaultdict(list)
         for ((key, value), partition_id) in message_partition_tups:
@@ -440,20 +452,10 @@ class AsyncProducer():
         :param broker: The broker for which to instantiate this queue and worker
         :type broker: :class:`pykafka.broker.Broker`
         """
-        # this lock is used to ensure only one thread is manipulating these
-        # Events or the queue at a given moment
         lock = threading.Lock()
-        # When flush_ready is set, the queue is ready to be flushed to the
-        # broker
         flush_ready = threading.Event()
-        # when slot_available is set, there is space in the queue for at least
-        # one message
         slot_available = threading.Event()
-        # this queue contains the messages that have been produced and are
-        # waiting to be sent to the broker
         message_queue = deque()
-        # counter that indicates the number of messages that have been
-        # enqueued and not yet sent successfully.
         messages_inflight = 0
 
         q_info = QueueInfo(lock=lock,
