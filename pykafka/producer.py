@@ -18,11 +18,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 __all__ = ["Producer", "AsyncProducer"]
+from collections import defaultdict, deque, namedtuple
 import itertools
 import logging
-import time
-from collections import defaultdict, deque, namedtuple
 import threading
+import time
 
 from .common import CompressionType
 from .exceptions import (
@@ -105,7 +105,7 @@ class Producer():
         :type req: :class:`pykafka.protocol.ProduceRequest`
         :param attempt: The current attempt count. Used for retry logic
         :type attempt: int
-        :param q_info: A QueueInfo namedtuple containing information
+        :param q_info: A QueueInfo instance containing information
             about the queue from which the messages in `req` were removed.
             Only used when called from the
             :class:`pykafka.producer.AsyncProducer`
@@ -408,43 +408,6 @@ class AsyncProducer():
                 q_info = self._setup_queue(partition.leader)
                 self._workers_by_leader[partition.leader.id] = q_info
 
-    def _produce(self, message_partition_tups):
-        """Enqueue a set of messages for the relevant brokers
-
-        :param message_partition_tups: Messages with partitions assigned.
-        :type message_partition_tups: tuples of ((key, value), partition_id)
-        """
-        # group messages by destination broker
-        messages_by_leader = defaultdict(list)
-        for ((key, value), partition_id) in message_partition_tups:
-            leader = self._topic.partitions[partition_id].leader
-            messages_by_leader[leader.id].append(((key, value), partition_id))
-
-        # enqueue messages in the appropriate queue
-        for broker_id, messages in messages_by_leader.iteritems():
-            # get the queue associated with this broker
-            q_info = self._workers_by_leader[broker_id]
-            if len(q_info.queue) >= self._max_queued_messages:
-                with q_info.lock:
-                    if len(q_info.queue) >= self._max_queued_messages:
-                        q_info.slot_available.clear()
-                if self._block_on_queue_full:
-                    q_info.slot_available.wait()
-                else:
-                    raise ProducerQueueFullError("Queue full for broker %d",
-                                                 broker_id)
-            with q_info.lock:
-                to_extend = messages[:self._max_queued_messages - len(q_info.queue)]
-                q_info.queue.extendleft(to_extend)
-                for message in to_extend:
-                    q_info.messages_inflight += 1
-                log.debug("Enqueued %d messages for broker %d",
-                          len(messages), broker_id)
-                # should only set this if queue is full or timeout
-                if len(q_info.queue) >= self._max_queued_messages:
-                    if not q_info.flush_ready.is_set():
-                        q_info.flush_ready.set()
-
     def _setup_queue(self, broker):
         """Spawn a worker for the given broker
 
@@ -488,6 +451,42 @@ class AsyncProducer():
         log.info("Starting new produce worker thread for broker %s", broker.id)
         return q_info
 
+    def _produce(self, message_partition_tups):
+        """Enqueue a set of messages for the relevant brokers
+
+        :param message_partition_tups: Messages with partitions assigned.
+        :type message_partition_tups: tuples of ((key, value), partition_id)
+        """
+        # group messages by destination broker
+        messages_by_leader = defaultdict(list)
+        for ((key, value), partition_id) in message_partition_tups:
+            leader = self._topic.partitions[partition_id].leader
+            messages_by_leader[leader.id].append(((key, value), partition_id))
+
+        # enqueue messages in the appropriate queue
+        for broker_id, messages in messages_by_leader.iteritems():
+            # get the queue associated with this broker
+            q_info = self._workers_by_leader[broker_id]
+            if len(q_info.queue) >= self._max_queued_messages:
+                with q_info.lock:
+                    if len(q_info.queue) >= self._max_queued_messages:
+                        q_info.slot_available.clear()
+                if self._block_on_queue_full:
+                    q_info.slot_available.wait()
+                else:
+                    raise ProducerQueueFullError("Queue full for broker %d",
+                                                 broker_id)
+            with q_info.lock:
+                to_extend = messages[:self._max_queued_messages - len(q_info.queue)]
+                q_info.queue.extendleft(to_extend)
+                q_info.messages_inflight += len(to_extend)
+                log.debug("Enqueued %d messages for broker %d",
+                          len(messages), broker_id)
+                # should only set this if queue is full or timeout
+                if len(q_info.queue) >= self._max_queued_messages:
+                    if not q_info.flush_ready.is_set():
+                        q_info.flush_ready.set()
+
     def _send_request(self, message_batch, broker, q_info):
         """Prepare a request and send it to the broker
 
@@ -515,14 +514,6 @@ class AsyncProducer():
             self._producer._send_request(broker, request, 0, q_info)
         except ProduceFailureError as e:
             log.error("Producer error: %s", e)
-
-    def produce(self, messages):
-        """Produce a set of messages.
-
-        :param messages: The messages to produce
-        :type messages: Iterable of str or (str, str) tuples
-        """
-        self._produce(self._producer._partition_messages(messages))
 
     def _update_leaders(self):
         """Ensure each message in each queue is in the queue owned by its
@@ -564,3 +555,11 @@ class AsyncProducer():
 
             # when we get here, we're finally done with this broker
             q_info.lock.release()
+
+    def produce(self, messages):
+        """Produce a set of messages.
+
+        :param messages: The messages to produce
+        :type messages: Iterable of str or (str, str) tuples
+        """
+        self._produce(self._producer._partition_messages(messages))
