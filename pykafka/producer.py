@@ -462,12 +462,6 @@ class AsyncProducer():
         :param message_partition_tups: Messages with partitions assigned.
         :type message_partition_tups: tuples of ((key, value), partition_id)
         """
-        # group messages by destination broker
-        messages_by_leader = defaultdict(list)
-        for ((key, value), partition_id) in message_partition_tups:
-            leader = self._topic.partitions[partition_id].leader
-            messages_by_leader[leader.id].append(((key, value), partition_id))
-
         # enqueue messages in the appropriate queue
         for ((key, value), partition_id) in message_partition_tups:
             leader = self._topic.partitions[partition_id].leader
@@ -483,7 +477,7 @@ class AsyncProducer():
                     raise ProducerQueueFullError("Queue full for broker %d",
                                                  leader.id)
             with q_info.lock:
-                q_info.queue.extendleft(((key, value), partition_id))
+                q_info.queue.extendleft([((key, value), partition_id)])
                 q_info.messages_inflight += 1
                 # should only set this if queue is full or timeout
                 if len(q_info.queue) >= self._max_queued_messages:
