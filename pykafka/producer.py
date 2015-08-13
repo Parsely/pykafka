@@ -269,7 +269,12 @@ class QueueInfo(_QueueInfo):
     :ivar producer: The producer to which this QueueInfo instance belongs
     :type producer: :class:`pykafka.producer.AsyncProducer`
     """
-    def __new__(cls, lock, flush_ready, slot_available, queue, producer,
+    def __new__(cls,
+                lock,
+                flush_ready,
+                slot_available,
+                queue,
+                producer,
                 messages_inflight):
         ins = super(QueueInfo, cls).__new__(
             cls, lock, flush_ready, slot_available, queue, producer)
@@ -464,9 +469,10 @@ class AsyncProducer():
             messages_by_leader[leader.id].append(((key, value), partition_id))
 
         # enqueue messages in the appropriate queue
-        for broker_id, messages in messages_by_leader.iteritems():
+        for ((key, value), partition_id) in message_partition_tups:
+            leader = self._topic.partitions[partition_id].leader
             # get the queue associated with this broker
-            q_info = self._workers_by_leader[broker_id]
+            q_info = self._workers_by_leader[leader.id]
             if len(q_info.queue) >= self._max_queued_messages:
                 with q_info.lock:
                     if len(q_info.queue) >= self._max_queued_messages:
@@ -475,13 +481,10 @@ class AsyncProducer():
                     q_info.slot_available.wait()
                 else:
                     raise ProducerQueueFullError("Queue full for broker %d",
-                                                 broker_id)
+                                                 leader.id)
             with q_info.lock:
-                to_extend = messages[:self._max_queued_messages - len(q_info.queue)]
-                q_info.queue.extendleft(to_extend)
-                q_info.messages_inflight += len(to_extend)
-                log.debug("Enqueued %d messages for broker %d",
-                          len(messages), broker_id)
+                q_info.queue.extendleft(((key, value), partition_id))
+                q_info.messages_inflight += 1
                 # should only set this if queue is full or timeout
                 if len(q_info.queue) >= self._max_queued_messages:
                     if not q_info.flush_ready.is_set():
