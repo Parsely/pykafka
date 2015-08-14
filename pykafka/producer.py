@@ -336,9 +336,7 @@ class AsyncProducer(object):
 
 
 class Producer(AsyncProducer):
-    """
-    This class implements the synchronous producer logic found in the
-    JVM driver.
+    """ This class implements the synchronous producer logic found in the JVM driver.
     """
     def __init__(self,
                  cluster,
