@@ -27,7 +27,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
         # produced in a previous test
         payload = uuid4().bytes
 
-        prod = self.client.topics[self.topic_name].get_producer()
+        prod = self.client.topics[self.topic_name].get_sync_producer()
         prod.produce([payload])
 
         # set a timeout so we don't wait forever if we break producer code
@@ -37,7 +37,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
     def test_async_produce(self):
         payload = uuid4().bytes
 
-        prod = self.client.topics[self.topic_name].get_async_producer()
+        prod = self.client.topics[self.topic_name].get_producer()
         prod.produce([payload])
 
         message = self.consumer.consume()
@@ -46,7 +46,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
     def test_async_produce_context(self):
         payload = uuid4().bytes
 
-        with self.client.topics[self.topic_name].get_async_producer() as producer:
+        with self.client.topics[self.topic_name].get_producer() as producer:
             producer.produce([payload])
 
         message = self.consumer.consume()

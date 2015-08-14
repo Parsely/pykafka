@@ -17,7 +17,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-__all__ = ["Producer", "AsyncProducer"]
+__all__ = ["Producer", "SynchronousProducer"]
 from collections import defaultdict, deque
 import itertools
 import logging
@@ -36,7 +36,7 @@ from .protocol import Message, ProduceRequest
 log = logging.getLogger(__name__)
 
 
-class AsyncProducer(object):
+class Producer(object):
     """
     This class implements asynchronous producer logic similar to that found in
     the JVM driver. In inherits from the synchronous implementation.
@@ -332,7 +332,7 @@ class AsyncProducer(object):
         self._produce(self._partition_messages(messages))
 
 
-class Producer(AsyncProducer):
+class SynchronousProducer(Producer):
     """ This class implements the synchronous producer logic found in the JVM driver.
     """
     def __init__(self,
@@ -390,7 +390,7 @@ class Producer(AsyncProducer):
             indicates we should block until space is available in the queue.
         :type block_on_queue_full: bool
         """
-        super(Producer, self).__init__(
+        super(SynchronousProducer, self).__init__(
             cluster,
             topic,
             partitioner=partitioner,
@@ -410,7 +410,7 @@ class Producer(AsyncProducer):
         :param messages: The messages to produce
         :type messages: Iterable of str or (str, str) tuples
         """
-        super(Producer, self).produce(messages)
+        super(SynchronousProducer, self).produce(messages)
         self._wait_all()
 
 
