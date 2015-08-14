@@ -107,6 +107,7 @@ class Producer(object):
         self._max_queued_messages = max_queued_messages
         self._linger_ms = linger_ms
         self._block_on_queue_full = block_on_queue_full
+        self._exception = None
 
         self._running = False
         self.start()
@@ -137,10 +138,15 @@ class Producer(object):
                         self, partition.leader)
             self._running = True
 
-    def stop(self):
-        """Mark as stopped and wait for all inflight messages to send"""
+    def stop(self, wait=True):
+        """Mark as stopped and wait for all inflight messages to send
+
+        :param wait: Whether to wait for all inflight messages to be sent
+        :type wait: bool
+        """
         self._running = False
-        self._wait_all()
+        if wait:
+            self._wait_all()
 
     def _wait_all(self):
         """Block until all messages in flight are sent"""
@@ -155,6 +161,9 @@ class Producer(object):
 
     def __exit__(self, exc_type, exc_value, traceback):
         """Context manager exit point - stop the producer"""
+        if exc_value is not None:
+            log.exception(traceback)
+            raise exc_value
         self.stop()
 
     def _produce(self, message_partition_tups):
@@ -168,6 +177,9 @@ class Producer(object):
             self._owned_brokers[leader.id].enqueue(
                 [((key, value), partition_id)],
                 self._block_on_queue_full)
+
+        if self._exception is not None:
+            raise self._exception
 
     def _prepare_request(self, message_batch, owned_broker):
         """Prepare a request and send it to the broker
@@ -444,9 +456,14 @@ class OwnedBroker(object):
 
         def queue_reader():
             while True:
-                batch = self.flush(self.producer._linger_ms)
-                if batch:
-                    self.producer._prepare_request(batch, self)
+                try:
+                    batch = self.flush(self.producer._linger_ms)
+                    if batch:
+                        self.producer._prepare_request(batch, self)
+                except Exception as e:
+                    self.producer._exception = e
+                    self.producer.stop(wait=False)
+                    break
         log.info("Starting new produce worker for broker %s", broker.id)
         self.producer._cluster.handler.spawn(queue_reader)
 
