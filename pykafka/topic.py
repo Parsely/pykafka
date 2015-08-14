@@ -75,7 +75,7 @@ class Topic():
         return Producer(self._cluster, self, **kwargs)
 
     def get_sync_producer(self, **kwargs):
-        """Create a :class:`pykafka.producer.AsyncProducer` for this topic.
+        """Create a :class:`pykafka.producer.SynchronousProducer` for this topic.
 
         For a description of all available `kwargs`, see the Producer docstring.
         """

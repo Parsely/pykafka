@@ -190,10 +190,7 @@ class Producer(object):
                 self._topic.name,
                 partition_id
             )
-        try:
-            self._send_request(request, 0, owned_broker)
-        except ProduceFailureError as e:
-            log.error("Producer error: %s", e)
+        self._send_request(request, 0, owned_broker)
 
     def _update_leaders(self):
         """Ensure each message in each queue is in the queue owned by its
@@ -217,7 +214,7 @@ class Producer(object):
             owned_broker.enqueue(new_queue_contents[owned_broker.broker.id],
                                  self._block_on_queue_full,
                                  acquire=False)
-            owned_broker.resolve_event_state(self._max_queued_messages)
+            owned_broker.resolve_event_state()
             owned_broker.lock.release()
 
     def _partition_messages(self, messages):
@@ -473,7 +470,7 @@ class OwnedBroker(object):
         :type acquire: bool
         """
         assert acquire or self.lock.locked()
-        self._wait_for_available_slot(acquire=acquire)
+        self._wait_for_slot_available(acquire=acquire)
         if acquire:
             self.lock.acquire()
         self.queue.extendleft(messages)
@@ -501,7 +498,7 @@ class OwnedBroker(object):
         :type release_inflight: bool
         """
         assert acquire or self.lock.locked()
-        self._wait_for_used_slot(linger_ms, acquire=acquire)
+        self._wait_for_flush_ready(linger_ms, acquire=acquire)
         if acquire:
             self.lock.acquire()
         batch = [self.queue.pop() for _ in xrange(len(self.queue))]
@@ -513,8 +510,8 @@ class OwnedBroker(object):
             self.lock.release()
         return batch
 
-    def _wait_for_used_slot(self, linger_ms, acquire=True):
-        """Block until the queue has at least one message in it
+    def _wait_for_flush_ready(self, linger_ms, acquire=True):
+        """Block until the queue is ready to be flushed
 
         If the queue does not contain at least one message after blocking for
         `linger_ms` milliseconds, return.
@@ -537,7 +534,7 @@ class OwnedBroker(object):
                 self.lock.release()
             self.flush_ready.wait(linger_ms / 1000)
 
-    def _wait_for_available_slot(self, acquire=True):
+    def _wait_for_slot_available(self, acquire=True):
         """Block until the queue has at least one slot not containing a message
 
         :param acquire: Whether to acquire and release the lock. If False,
