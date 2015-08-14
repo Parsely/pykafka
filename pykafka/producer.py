@@ -18,7 +18,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 __all__ = ["Producer", "AsyncProducer"]
-from collections import defaultdict, deque, namedtuple
+from collections import defaultdict, deque
 import itertools
 import logging
 import threading
@@ -96,7 +96,7 @@ class Producer():
             id_=hex(id(self))
         )
 
-    def _send_request(self, broker, req, attempt, q_info=None):
+    def _send_request(self, broker, req, attempt, owned_broker=None):
         """Send the produce request to the broker and handle the response.
 
         :param broker: The broker to which to send the request
@@ -105,11 +105,11 @@ class Producer():
         :type req: :class:`pykafka.protocol.ProduceRequest`
         :param attempt: The current attempt count. Used for retry logic
         :type attempt: int
-        :param q_info: A QueueInfo instance containing information
+        :param owned_broker: An OwnedBroker instance containing information
             about the queue from which the messages in `req` were removed.
             Only used when called from the
             :class:`pykafka.producer.AsyncProducer`
-        :type q_info: :class:`pykafka.producer.QueueInfo`
+        :type owned_broker: :class:`pykafka.producer.OwnedBroker`
         """
 
         def _get_partition_msgs(partition_id, req):
@@ -134,10 +134,10 @@ class Producer():
             for topic, partitions in response.topics.iteritems():
                 for partition, presponse in partitions.iteritems():
                     if presponse.err == 0:
-                        if q_info is not None:
+                        if owned_broker is not None:
                             msg_count = len(req.msets[topic][partition].messages)
-                            with q_info.lock:
-                                q_info.messages_inflight -= msg_count
+                            with owned_broker.lock:
+                                owned_broker.messages_inflight -= msg_count
                         continue  # All's well
                     if presponse.err == UnknownTopicOrPartition.ERROR_CODE:
                         log.warning('Unknown topic: %s or partition: %s. '
@@ -147,8 +147,8 @@ class Producer():
                                     'Retrying.', topic, partition)
                         # Update cluster metadata to get new leader
                         self._cluster.update()
-                        if q_info is not None:
-                            q_info.producer._update_leaders()
+                        if owned_broker is not None:
+                            owned_broker.producer._update_leaders()
                     elif presponse.err == RequestTimedOut.ERROR_CODE:
                         log.warning('Produce request to %s:%s timed out. '
                                     'Retrying.', broker.host, broker.port)
@@ -239,15 +239,10 @@ class Producer():
         self._produce(self._partition_messages(messages), 0)
 
 
-_QueueInfo = namedtuple('QueueInfo', ['lock', 'flush_ready',
-                                      'slot_available', 'queue',
-                                      'producer'])
-
-
-class QueueInfo(_QueueInfo):
+class OwnedBroker():
     """A packet of information for a producer queue
 
-    A QueueInfo object contains thread-synchronization primitives corresponding
+    An OwnedBroker object contains thread-synchronization primitives corresponding
     to a single broker for this producer.
 
     :ivar lock: The lock used to control access to shared resources for this
@@ -266,21 +261,92 @@ class QueueInfo(_QueueInfo):
     :ivar messages_inflight: A counter indicating how many messages have been
         enqueued for this broker and not yet sent in a request.
     :type messages_inflight: int
-    :ivar producer: The producer to which this QueueInfo instance belongs
+    :ivar producer: The producer to which this OwnedBroker instance belongs
     :type producer: :class:`pykafka.producer.AsyncProducer`
     """
-    def __new__(cls,
-                lock,
-                flush_ready,
-                slot_available,
-                queue,
-                producer,
-                messages_inflight):
-        ins = super(QueueInfo, cls).__new__(
-            cls, lock, flush_ready, slot_available, queue, producer)
-        # store messages_inflight separately to allow updating
-        ins.messages_inflight = messages_inflight
-        return ins
+    def __init__(self, producer, broker):
+        self.producer = producer
+        self.broker = broker
+        self.lock = threading.Lock()
+        self.flush_ready = threading.Event()
+        self.slot_available = threading.Event()
+        self.queue = deque()
+        self.messages_inflight = 0
+
+        def queue_reader():
+            while True:
+                batch = self.flush(self.producer._linger_ms)
+                if batch:
+                    self.producer._send_request(batch, self)
+        log.info("Starting new produce worker thread for broker %s", broker.id)
+        self.producer._cluster.handler.spawn(queue_reader)
+
+    @property
+    def message_inflight(self):
+        """
+        Indicates whether there are currently any messages that have been
+            `produce()`d and not yet sent to the broker
+        """
+        return self.messages_inflight > 0
+
+    def enqueue(self,
+                messages,
+                max_queued_messages,
+                block_on_queue_full,
+                acquire=True):
+        self._wait_for_available_slot(max_queued_messages, block_on_queue_full)
+        if acquire:
+            self.lock.acquire()
+        self.queue.extendleft(messages)
+        self.messages_inflight += len(messages)
+        if len(self.queue) >= max_queued_messages:
+            if not self.flush_ready.is_set():
+                self.flush_ready.set()
+        if acquire:
+            self.lock.release()
+
+    def flush(self, linger_ms, acquire=True, release_inflight=False):
+        self._wait_for_used_slot(linger_ms)
+        if acquire:
+            self.lock.acquire()
+        batch = [self.queue.pop() for _ in xrange(len(self.queue))]
+        if release_inflight:
+            self.messages_inflight -= len(batch)
+        if not self.slot_available.is_set():
+            self.slot_available.set()
+        if acquire:
+            self.lock.release()
+        return batch
+
+    def resolve_event_state(self, max_queued_messages):
+        if len(self.queue) >= max_queued_messages:
+            self.slot_available.clear()
+            self.flush_ready.set()
+        elif len(self.queue) == 0:
+            self.slot_available.set()
+            self.flush_ready.clear()
+        else:
+            self.slot_available.set()
+
+    def _wait_for_used_slot(self, linger_ms):
+        if len(self.queue) == 0:
+            with self.lock:
+                if len(self.queue) == 0:
+                    self.flush_ready.clear()
+            self.flush_ready.wait(linger_ms / 1000)
+
+    def _wait_for_available_slot(self,
+                                 max_queued_messages,
+                                 block_on_queue_full):
+        if len(self.queue) >= max_queued_messages:
+            with self.lock:
+                if len(self.queue) >= max_queued_messages:
+                    self.slot_available.clear()
+            if block_on_queue_full:
+                self.slot_available.wait()
+            else:
+                raise ProducerQueueFullError("Queue full for broker %d",
+                                             self.broker.id)
 
 
 class AsyncProducer():
@@ -362,15 +428,18 @@ class AsyncProducer():
         """Connect to brokers and start worker threads"""
         if not self._running:
             self._setup_internal_producer()
-            self._setup_workers()
+            self._owned_brokers = {}
+            for partition in self._topic.partitions.values():
+                if partition.leader.id not in self._owned_brokers:
+                    self._owned_brokers[partition.leader.id] = OwnedBroker(
+                        self, partition.leader)
             self._running = True
 
     def stop(self):
         """Mark as stopped and wait for all inflight messages to send"""
         self._running = False
         last_log = time.time()
-        while any(q_info.messages_inflight > 0
-                  for leader, q_info in self._workers_by_leader.iteritems()):
+        while any(q.message_inflight for q in self._owned_brokers.itervalues()):
             if time.time() - last_log >= .5:
                 log.info("Waiting for all worker threads to exit")
                 last_log = time.time()
@@ -397,105 +466,29 @@ class AsyncProducer():
             ack_timeout_ms=self._ack_timeout_ms,
         )
 
-    def _setup_workers(self):
-        """Spawn workers for connected brokers
-
-        Creates one :class:`queue.Queue` instance and one worker thread per
-        broker. The queue holds messages waiting to be sent, and the worker
-        thread reads the end of the queue and sends requests.
-        """
-        # _workers_by_leader maps each broker id to a QueueInfo instance
-        # containing references to that broker's queue and its associated
-        # synchronization primitives
-        self._workers_by_leader = {}
-        for partition in self._topic.partitions.values():
-            if partition.leader.id not in self._workers_by_leader:
-                q_info = self._setup_queue(partition.leader)
-                self._workers_by_leader[partition.leader.id] = q_info
-
-    def _setup_queue(self, broker):
-        """Spawn a worker for the given broker
-
-        Creates a :class:`queue.Queue` instance and a worker thread for the
-        given broker.
-
-        :param broker: The broker for which to instantiate this queue and worker
-        :type broker: :class:`pykafka.broker.Broker`
-        """
-        lock = threading.Lock()
-        flush_ready = threading.Event()
-        slot_available = threading.Event()
-        message_queue = deque()
-        messages_inflight = 0
-
-        q_info = QueueInfo(lock=lock,
-                           flush_ready=flush_ready,
-                           slot_available=slot_available,
-                           queue=message_queue,
-                           producer=self,
-                           messages_inflight=messages_inflight)
-
-        def queue_reader():
-            while True:
-                if len(message_queue) == 0:
-                    with lock:
-                        if len(message_queue) == 0:
-                            flush_ready.clear()
-                    flush_ready.wait(self._linger_ms / 1000)
-                with lock:
-                    batch = [message_queue.pop() for _ in xrange(len(message_queue))]
-                    if not slot_available.is_set():
-                        slot_available.set()
-                # this check is necessary since it's possible to get here when
-                # the queue is still empty (in cases where self._linger_ms is
-                # reached)
-                if batch:
-                    self._send_request(batch, broker, q_info)
-
-        self._cluster.handler.spawn(queue_reader)
-        log.info("Starting new produce worker thread for broker %s", broker.id)
-        return q_info
-
     def _produce(self, message_partition_tups):
         """Enqueue a set of messages for the relevant brokers
 
         :param message_partition_tups: Messages with partitions assigned.
         :type message_partition_tups: tuples of ((key, value), partition_id)
         """
-        # enqueue messages in the appropriate queue
         for ((key, value), partition_id) in message_partition_tups:
             leader = self._topic.partitions[partition_id].leader
-            # get the queue associated with this broker
-            q_info = self._workers_by_leader[leader.id]
-            if len(q_info.queue) >= self._max_queued_messages:
-                with q_info.lock:
-                    if len(q_info.queue) >= self._max_queued_messages:
-                        q_info.slot_available.clear()
-                if self._block_on_queue_full:
-                    q_info.slot_available.wait()
-                else:
-                    raise ProducerQueueFullError("Queue full for broker %d",
-                                                 leader.id)
-            with q_info.lock:
-                q_info.queue.extendleft([((key, value), partition_id)])
-                q_info.messages_inflight += 1
-                # should only set this if queue is full or timeout
-                if len(q_info.queue) >= self._max_queued_messages:
-                    if not q_info.flush_ready.is_set():
-                        q_info.flush_ready.set()
+            self._owned_brokers[leader.id].enqueue(
+                [((key, value), partition_id)],
+                self._max_queued_messages,
+                self._block_on_queue_full)
 
-    def _send_request(self, message_batch, broker, q_info):
+    def _send_request(self, message_batch, owned_broker):
         """Prepare a request and send it to the broker
 
         :param message_batch: An iterable of messages to send
         :type message_batch: iterable of `((key, value), partition_id)` tuples
-        :param broker: The broker to which to send the request
-        :type broker: :class:`pykafka.broker.Broker`
-        :param q_info: A namedtuple containing information about the queue
-            from which the messages in `message_batch` were taken
-        :type q_info: :class:`pykafka.producer.QueueInfo`
+        :param owned_broker: The `OwnedBroker` to which to send the request
+        :type owned_broker: :class:`pykafka.producer.OwnedBroker`
         """
-        log.debug("Sending %d messages to broker %d", len(message_batch), broker.id)
+        log.debug("Sending %d messages to broker %d",
+                  len(message_batch), owned_broker.broker.id)
         request = ProduceRequest(
             compression_type=self._compression,
             required_acks=self._required_acks,
@@ -508,7 +501,8 @@ class AsyncProducer():
                 partition_id
             )
         try:
-            self._producer._send_request(broker, request, 0, q_info)
+            self._producer._send_request(owned_broker.broker, request, 0,
+                                         owned_broker)
         except ProduceFailureError as e:
             log.error("Producer error: %s", e)
 
@@ -522,36 +516,21 @@ class AsyncProducer():
         """
         # empty queues and figure out updated partition leaders
         new_queue_contents = defaultdict(list)
-        for broker, q_info in self._workers_by_leader.iteritems():
-            q_info.lock.acquire()
-            messages = [q_info.queue.pop() for _ in xrange(len(q_info.queue))]
-            for (key, value), partition_id in messages:
-                q_info.messages_inflight -= 1
-                new_leader = self._topic.partitions[partition_id].leader
-                new_queue_contents[new_leader.id].append(
-                    ((key, value), partition_id))
-
+        for owned_broker in self._owned_brokers.itervalues():
+            owned_broker.lock.acquire()
+            current_queue_contents = owned_broker.flush(0, acquire=False,
+                                                        release_inflight=True)
+            for kv, partition_id in current_queue_contents:
+                partition_leader = self._topic.partitions[partition_id].leader
+                new_queue_contents[partition_leader.id].append((kv, partition_id))
         # retain locks for all brokers between these two steps
-
-        # enqueue each new set of messages at the correct broker
-        for broker, q_info in self._workers_by_leader.iteritems():
-            messages = new_queue_contents[broker.id]
-            q_info.queue.extendleft(messages)
-            for message in messages:
-                q_info.messages_inflight += 1
-
-            # manage condition variable state
-            if len(q_info.queue) >= self._max_queued_messages:
-                q_info.slot_available.clear()
-                q_info.flush_ready.set()
-            elif len(q_info.queue) == 0:
-                q_info.slot_available.set()
-                q_info.flush_ready.clear()
-            else:
-                q_info.slot_available.set()
-
-            # when we get here, we're finally done with this broker
-            q_info.lock.release()
+        for owned_broker in self._owned_brokers.itervalues():
+            owned_broker.enqueue(new_queue_contents[owned_broker.broker.id],
+                                 self._max_queued_messages,
+                                 self._block_on_queue_full,
+                                 acquire=False)
+            owned_broker.resolve_event_state(self._max_queued_messages)
+            owned_broker.lock.release()
 
     def produce(self, messages):
         """Produce a set of messages.
