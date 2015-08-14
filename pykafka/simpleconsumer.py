@@ -157,14 +157,14 @@ class SimpleConsumer():
         self._discover_offset_manager()
 
         if partitions:
-            self._partitions = dict((p, OwnedPartition(p, self._messages_arrived))
-                                    for p in partitions)
+            self._partitions = {p: OwnedPartition(p, self._messages_arrived)
+                                for p in partitions}
         else:
-            self._partitions = dict((topic.partitions[k],
-                                     OwnedPartition(p, self._messages_arrived))
-                                    for k, p in topic.partitions.iteritems())
-        self._partitions_by_id = dict((p.partition.id, p)
-                                      for p in self._partitions.itervalues())
+            self._partitions = {topic.partitions[k]:
+                                OwnedPartition(p, self._messages_arrived)
+                                for k, p in topic.partitions.iteritems()}
+        self._partitions_by_id = {p.partition.id: p
+                                  for p in self._partitions.itervalues()}
         # Organize partitions by leader for efficient queries
         self._partitions_by_leader = defaultdict(list)
         for p in self._partitions.itervalues():
@@ -239,14 +239,14 @@ class SimpleConsumer():
     @property
     def partitions(self):
         """A list of the partitions that this consumer consumes"""
-        return dict((id_, partition.partition)
-                    for id_, partition in self._partitions_by_id.iteritems())
+        return {id_: partition.partition
+                for id_, partition in self._partitions_by_id.iteritems()}
 
     @property
     def held_offsets(self):
         """Return a map from partition id to held offset for each partition"""
-        return dict((p.partition.id, p.last_offset_consumed)
-                    for p in self._partitions_by_id.itervalues())
+        return {p.partition.id: p.last_offset_consumed
+                for p in self._partitions_by_id.itervalues()}
 
     def __del__(self):
         """Stop consumption and workers when object is deleted"""
@@ -356,8 +356,8 @@ class SimpleConsumer():
                 break
             log.error("Error committing offsets for topic %s (errors: %s)",
                       self._topic.name,
-                      dict((ERROR_CODES[err], [op.partition.id for op, _ in parts])
-                           for err, parts in parts_by_error.iteritems()))
+                      {ERROR_CODES[err]: [op.partition.id for op, _ in parts]
+                       for err, parts in parts_by_error.iteritems()})
 
             # retry only the partitions that errored
             if 0 in parts_by_error:
@@ -407,8 +407,8 @@ class SimpleConsumer():
                 return success_responses
             log.error("Error fetching offsets for topic %s (errors: %s)",
                       self._topic.name,
-                      dict((ERROR_CODES[err], [op.partition.id for op, _ in parts])
-                           for err, parts in parts_by_error.iteritems()))
+                      {ERROR_CODES[err]: [op.partition.id for op, _ in parts]
+                       for err, parts in parts_by_error.iteritems()})
 
             time.sleep(i * (self._offsets_channel_backoff_ms / 1000))
 
@@ -478,8 +478,8 @@ class SimpleConsumer():
 
         # turn Partitions into their corresponding OwnedPartitions
         try:
-            owned_partition_offsets = dict((self._partitions[p], offset)
-                                           for p, offset in partition_offsets)
+            owned_partition_offsets = {self._partitions[p]: offset
+                                       for p, offset in partition_offsets}
         except KeyError as e:
             raise KafkaException("Unknown partition supplied to reset_offsets\n%s", e)
 
@@ -497,9 +497,6 @@ class SimpleConsumer():
                     partition.flush()
                     by_leader[partition.partition.leader].append((partition, offset))
 
-            # reset this dict to prepare it for next retry
-            owned_partition_offsets = {}
-
             # get valid offset ranges for each partition
             for broker, offsets in by_leader.iteritems():
                 reqs = [owned_partition.build_offset_request(offset)
@@ -511,34 +508,29 @@ class SimpleConsumer():
                     success_handler=_handle_success,
                     partitions_by_id=self._partitions_by_id)
 
-                if len(parts_by_error) == 1 and 0 in parts_by_error:
+                if 0 in parts_by_error:
+                    # drop successfully reset partitions for next retry
+                    successful = [part for part, _ in parts_by_error.pop(0)]
+                    map(owned_partition_offsets.pop, successful)
+                if not parts_by_error:
                     continue
                 log.error("Error resetting offsets for topic %s (errors: %s)",
                           self._topic.name,
-                          dict((ERROR_CODES[err], [op.partition.id for op, _ in parts])
-                               for err, parts in parts_by_error.iteritems()))
+                          {ERROR_CODES[err]: [op.partition.id for op, _ in parts]
+                           for err, parts in parts_by_error.iteritems()})
 
                 time.sleep(i * (self._offsets_channel_backoff_ms / 1000))
 
-                if 0 in parts_by_error:
-                    parts_by_error.pop(0)
-                errored_partitions = dict(
-                    (part, owned_partition_offsets[part])
-                    for errcode, parts in parts_by_error.iteritems()
-                    for part, _ in parts)
-                owned_partition_offsets = dict(errored_partitions.items() +
-                                               owned_partition_offsets.items())
+                for errcode, owned_partitions in parts_by_error.iteritems():
+                    if errcode != 0:
+                        for owned_partition in owned_partitions:
+                            owned_partition.fetch_lock.release()
 
-            for errcode, owned_partitions in parts_by_error.iteritems():
-                if errcode != 0:
-                    for owned_partition in owned_partitions:
-                        owned_partition.fetch_lock.release()
-
-            if len(parts_by_error) == 1 and 0 in parts_by_error:
+            if not owned_partition_offsets:
                 break
             log.debug("Retrying offset reset")
 
-        if any([a != 0 for a in parts_by_error]):
+        if owned_partition_offsets:
             raise OffsetRequestFailedError("reset_offsets failed after %d "
                                            "retries",
                                            self._offsets_reset_max_retries)
@@ -644,7 +636,16 @@ class OwnedPartition(object):
         return self._messages.qsize()
 
     def flush(self):
+        """Flush internal queue"""
+        # Swap out _messages so a concurrent consume/enqueue won't interfere
+        tmp = self._messages
         self._messages = Queue()
+        while True:
+            try:
+                tmp.get_nowait()
+                self._messages_arrived.acquire(blocking=False)
+            except Empty:
+                break
         log.info("Flushed queue for partition %d", self.partition.id)
 
     def set_offset(self, last_offset_consumed):

@@ -123,10 +123,10 @@ class Topic():
         # Remove old partitions
         removed = set(self._partitions.keys()) - set(p_metas.keys())
         if len(removed) > 0:
-            log.info('Removing %d partitons', len(removed))
+            log.info('Removing %d partitions', len(removed))
         for id_ in removed:
-            log.debug('Removing partiton %s', self._partitons[id_])
-            self._partitons.pop(id_)
+            log.debug('Removing partition %s', self._partitions[id_])
+            self._partitions.pop(id_)
 
         # Add/update current partitions
         brokers = self._cluster.brokers

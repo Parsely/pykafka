@@ -83,7 +83,8 @@ class Cluster(object):
                  handler,
                  socket_timeout_ms=30 * 1000,
                  offsets_channel_socket_timeout_ms=10 * 1000,
-                 exclude_internal_topics=True):
+                 exclude_internal_topics=True,
+                 source_address=''):
         """Create a new Cluster instance.
 
         :param hosts: Comma-separated list of kafka hosts to used to connect.
@@ -100,6 +101,8 @@ class Cluster(object):
         :param exclude_internal_topics: Whether messages from internal topics
             (specifically, the offsets topic) should be exposed to consumers.
         :type exclude_internal_topics: bool
+        :param source_address: The source address for socket connections
+        :type source_address: str `'host:port'`
         """
         self._seed_hosts = hosts
         self._socket_timeout_ms = socket_timeout_ms
@@ -108,6 +111,11 @@ class Cluster(object):
         self._brokers = {}
         self._topics = TopicDict(self)
         self._exclude_internal_topics = exclude_internal_topics
+        self._source_address = source_address
+        self._source_host = self._source_address.split(':')[0]
+        self._source_port = 0
+        if ':' in self._source_address:
+            self._source_port = int(self._source_address.split(':')[1])
         self.update()
 
     def __repr__(self):
@@ -150,15 +158,18 @@ class Cluster(object):
                     broker = Broker(-1, h, p, self._handler,
                                     self._socket_timeout_ms,
                                     self._offsets_channel_socket_timeout_ms,
-                                    buffer_size=1024 * 1024)
+                                    buffer_size=1024 * 1024,
+                                    source_host=self._source_host,
+                                    source_port=self._source_port)
                     response = broker.request_metadata()
                     if response is not None:
                         return response
-                except:
-                    log.exception('Unable to connect to broker %s',
-                                  broker_str)
+                except Exception as e:
+                    log.error('Unable to connect to broker %s', broker_str)
+                    log.exception(e)
         # Couldn't connect anywhere. Raise an error.
-        raise Exception('Unable to connect to a broker to fetch metadata.')
+        raise RuntimeError(
+            'Unable to connect to a broker to fetch metadata. See logs.')
 
     def _update_brokers(self, broker_metadata):
         """Update brokers with fresh metadata.
@@ -184,7 +195,9 @@ class Cluster(object):
                 self._brokers[id_] = Broker.from_metadata(
                     meta, self._handler, self._socket_timeout_ms,
                     self._offsets_channel_socket_timeout_ms,
-                    buffer_size=1024 * 1024
+                    buffer_size=1024 * 1024,
+                    source_host=self._source_host,
+                    source_port=self._source_port
                 )
             else:
                 broker = self._brokers[id_]
