@@ -121,6 +121,11 @@ class AsyncProducer(object):
 
     @property
     def messages_inflight(self):
+        """Indicates whether any messages are currently "in flight"
+
+        "In flight" messages are those that have been used in calls to `produce`
+        and have not yet been dequeued and sent to the broker
+        """
         return any(q.message_inflight for q in self._owned_brokers.itervalues())
 
     def start(self):
@@ -136,10 +141,14 @@ class AsyncProducer(object):
     def stop(self):
         """Mark as stopped and wait for all inflight messages to send"""
         self._running = False
+        self._wait_all()
+
+    def _wait_all(self):
+        """Block until all messages in flight are sent"""
         last_log = time.time()
         while self.messages_inflight:
             if time.time() - last_log >= .5:
-                log.info("Waiting for all worker threads to exit")
+                log.debug("Blocking until all messages are sent")
                 last_log = time.time()
 
     def __enter__(self):
@@ -283,8 +292,7 @@ class AsyncProducer(object):
                                     'Retrying.', topic, partition)
                         # Update cluster metadata to get new leader
                         self._cluster.update()
-                        if owned_broker is not None:
-                            owned_broker.producer._update_leaders()
+                        self._update_leaders()
                     elif presponse.err == RequestTimedOut.ERROR_CODE:
                         log.warning('Produce request to %s:%s timed out. '
                                     'Retrying.', owned_broker.broker.host,
@@ -410,11 +418,7 @@ class Producer(AsyncProducer):
         :type messages: Iterable of str or (str, str) tuples
         """
         super(Producer, self).produce(messages)
-        last_log = time.time()
-        while self.messages_inflight:
-            if time.time() - last_log >= .5:
-                log.debug("Blocking until all messages are sent")
-                last_log = time.time()
+        self._wait_all()
 
 
 class OwnedBroker(object):
