@@ -98,7 +98,7 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
         cls.topic_name = 'test-data'
         cls.kafka.create_topic(cls.topic_name, 3, 2)
         cls.client = KafkaClient(cls.kafka.brokers)
-        prod = cls.client.topics[cls.topic_name].get_producer(batch_size=5)
+        prod = cls.client.topics[cls.topic_name].get_producer()
         prod.produce('msg {num}'.format(num=i) for i in xrange(1000))
 
     @classmethod
