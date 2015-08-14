@@ -144,11 +144,9 @@ class AsyncProducer(object):
 
     def _wait_all(self):
         """Block until all messages in flight are sent"""
-        last_log = time.time()
+        log.info("Blocking until all messages are sent")
         while self.messages_inflight:
-            if time.time() - last_log >= .5:
-                log.debug("Blocking until all messages are sent")
-                last_log = time.time()
+            time.sleep(.3)
 
     def __enter__(self):
         """Context manager entry point - start the producer"""
