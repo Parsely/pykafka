@@ -170,7 +170,6 @@ class AsyncProducer(object):
             leader = self._topic.partitions[partition_id].leader
             self._owned_brokers[leader.id].enqueue(
                 [((key, value), partition_id)],
-                self._max_queued_messages,
                 self._block_on_queue_full)
 
     def _prepare_request(self, message_batch, owned_broker):
@@ -219,7 +218,6 @@ class AsyncProducer(object):
         # retain locks for all brokers between these two steps
         for owned_broker in self._owned_brokers.itervalues():
             owned_broker.enqueue(new_queue_contents[owned_broker.broker.id],
-                                 self._max_queued_messages,
                                  self._block_on_queue_full,
                                  acquire=False)
             owned_broker.resolve_event_state(self._max_queued_messages)
@@ -424,8 +422,8 @@ class Producer(AsyncProducer):
 class OwnedBroker(object):
     """An abstraction over a broker connected to by the producer
 
-    An OwnedBroker object contains thread-synchronization primitives corresponding
-    to a single broker for this producer.
+    An OwnedBroker object contains thread-synchronization primitives
+    and message queue corresponding to a single broker for this producer.
 
     :ivar lock: The lock used to control access to shared resources for this
         queue
@@ -471,24 +469,47 @@ class OwnedBroker(object):
         """
         return self.messages_inflight > 0
 
-    def enqueue(self,
-                messages,
-                max_queued_messages,
-                block_on_queue_full,
-                acquire=True):
-        self._wait_for_available_slot(max_queued_messages, block_on_queue_full)
+    def enqueue(self, messages, acquire=True):
+        """Push messages onto the queue
+
+        :param messages: The messages to push onto the queue
+        :type messages: iterable of tuples of the form
+            `((key, value), partition_id)`
+        :param acquire: Whether to acquire and release the lock. If False,
+            this function assumes that the lock is already held by the caller
+            and raises an AssertionError if not.
+        :type acquire: bool
+        """
+        assert acquire or self.lock.locked()
+        self._wait_for_available_slot(acquire=acquire)
         if acquire:
             self.lock.acquire()
         self.queue.extendleft(messages)
         self.messages_inflight += len(messages)
-        if len(self.queue) >= max_queued_messages:
+        if len(self.queue) >= self.producer._max_queued_messages:
             if not self.flush_ready.is_set():
                 self.flush_ready.set()
         if acquire:
             self.lock.release()
 
     def flush(self, linger_ms, acquire=True, release_inflight=False):
-        self._wait_for_used_slot(linger_ms)
+        """Pop messages from the end of the queue
+
+        :param linger_ms: How long (in milliseconds) to wait for the queue
+            to contain messages before flushing
+        :type linger_ms: int
+        :param acquire: Whether to acquire and release the lock. If False,
+            this function assumes that the lock is already held by the caller
+            and raises an AssertionError if not.
+        :type acquire: bool
+        :param release_inflight: Whether to decrement the messages_inflight
+            counter when the queue is flushed. True means that the messages
+            popped from the queue will be discarded unless re-enqueued
+            by the caller.
+        :type release_inflight: bool
+        """
+        assert acquire or self.lock.locked()
+        self._wait_for_used_slot(linger_ms, acquire=acquire)
         if acquire:
             self.lock.acquire()
         batch = [self.queue.pop() for _ in xrange(len(self.queue))]
@@ -500,8 +521,56 @@ class OwnedBroker(object):
             self.lock.release()
         return batch
 
-    def resolve_event_state(self, max_queued_messages):
-        if len(self.queue) >= max_queued_messages:
+    def _wait_for_used_slot(self, linger_ms, acquire=True):
+        """Block until the queue has at least one message in it
+
+        If the queue does not contain at least one message after blocking for
+        `linger_ms` milliseconds, return.
+
+        :param linger_ms: How long (in milliseconds) to wait for the queue
+            to contain messages before returning
+        :type linger_ms: int
+        :param acquire: Whether to acquire and release the lock. If False,
+            this function assumes that the lock is already held by the caller
+            and raises an AssertionError if not.
+        :type acquire: bool
+        """
+        assert acquire or self.lock.locked()
+        if len(self.queue) == 0:
+            if acquire:
+                self.lock.acquire()
+            if len(self.queue) == 0:
+                self.flush_ready.clear()
+            if acquire:
+                self.lock.release()
+            self.flush_ready.wait(linger_ms / 1000)
+
+    def _wait_for_available_slot(self, acquire=True):
+        """Block until the queue has at least one slot not containing a message
+
+        :param acquire: Whether to acquire and release the lock. If False,
+            this function assumes that the lock is already held by the caller
+            and raises an AssertionError if not.
+        :type acquire: bool
+        """
+        assert acquire or self.lock.locked()
+        if len(self.queue) >= self.producer._max_queued_messages:
+            if acquire:
+                self.lock.acquire()
+            if len(self.queue) >= self.producer._max_queued_messages:
+                self.slot_available.clear()
+            if acquire:
+                self.lock.release()
+            if self.producer.block_on_queue_full:
+                self.slot_available.wait()
+            else:
+                raise ProducerQueueFullError("Queue full for broker %d",
+                                             self.broker.id)
+
+    def resolve_event_state(self):
+        """Invariants for the Event variables used for thread synchronization
+        """
+        if len(self.queue) >= self.producer._max_queued_messages:
             self.slot_available.clear()
             self.flush_ready.set()
         elif len(self.queue) == 0:
@@ -509,23 +578,3 @@ class OwnedBroker(object):
             self.flush_ready.clear()
         else:
             self.slot_available.set()
-
-    def _wait_for_used_slot(self, linger_ms):
-        if len(self.queue) == 0:
-            with self.lock:
-                if len(self.queue) == 0:
-                    self.flush_ready.clear()
-            self.flush_ready.wait(linger_ms / 1000)
-
-    def _wait_for_available_slot(self,
-                                 max_queued_messages,
-                                 block_on_queue_full):
-        if len(self.queue) >= max_queued_messages:
-            with self.lock:
-                if len(self.queue) >= max_queued_messages:
-                    self.slot_available.clear()
-            if block_on_queue_full:
-                self.slot_available.wait()
-            else:
-                raise ProducerQueueFullError("Queue full for broker %d",
-                                             self.broker.id)
