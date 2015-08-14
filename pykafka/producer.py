@@ -21,7 +21,6 @@ __all__ = ["Producer", "AsyncProducer"]
 from collections import defaultdict, deque
 import itertools
 import logging
-import threading
 import time
 
 from .common import CompressionType
@@ -425,13 +424,10 @@ class OwnedBroker(object):
 
     :ivar lock: The lock used to control access to shared resources for this
         queue
-    :type lock: threading.Lock
     :ivar flush_ready: A condition variable that indicates that the queue is
         ready to be flushed via requests to the broker
-    :type flush_ready: threading.Condition
     :ivar slot_available: A condition variable that indicates that there is
         at least one position free in the queue for a new message
-    :type slot_available: threading.Condition
     :ivar queue: The message queue for this broker. Contains messages that have
         been supplied as arguments to `produce()` waiting to be sent to the
         broker.
@@ -445,9 +441,9 @@ class OwnedBroker(object):
     def __init__(self, producer, broker):
         self.producer = producer
         self.broker = broker
-        self.lock = threading.Lock()
-        self.flush_ready = threading.Event()
-        self.slot_available = threading.Event()
+        self.lock = self.producer._cluster.handler.Lock()
+        self.flush_ready = self.producer._cluster.handler.Event()
+        self.slot_available = self.producer._cluster.handler.Event()
         self.queue = deque()
         self.messages_inflight = 0
 
@@ -456,7 +452,7 @@ class OwnedBroker(object):
                 batch = self.flush(self.producer._linger_ms)
                 if batch:
                     self.producer._prepare_request(batch, self)
-        log.info("Starting new produce worker thread for broker %s", broker.id)
+        log.info("Starting new produce worker for broker %s", broker.id)
         self.producer._cluster.handler.spawn(queue_reader)
 
     @property
