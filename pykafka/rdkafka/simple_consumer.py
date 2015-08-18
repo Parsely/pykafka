@@ -35,12 +35,16 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
         conf, topic_conf = self._mk_rdkafka_config_lists()
 
         self._rdk_consumer = _rd_kafka.Consumer()
+        log.debug("Configuring _rdk_consumer...")
         self._rdk_consumer.configure(conf=conf)
         self._rdk_consumer.configure(topic_conf=topic_conf)
-        self._rdk_consumer.start(brokers,
-                                 self._topic.name,
-                                 partition_ids,
-                                 start_offsets)
+
+        start_kwargs = {"brokers": brokers,
+                        "topic_name": self._topic.name,
+                        "partition_ids": partition_ids,
+                        "start_offsets": start_offsets}
+        log.debug("Starting _rdk_consumer with {}".format(start_kwargs))
+        self._rdk_consumer.start(**start_kwargs)
 
     def consume(self, block=True):
         timeout_ms = self._consumer_timeout_ms if block else 1
@@ -57,6 +61,7 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
         if hasattr(self, "_rdk_consumer") and self._rdk_consumer is not None:
             # Call _rd_kafka.Consumer.stop explicitly, so we may catch errors:
             self._rdk_consumer.stop()
+            log.debug("Issued stop to _rdk_consumer.")
             self._rdk_consumer = None
         super(RdKafkaSimpleConsumer, self).stop()
 
@@ -80,10 +85,11 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
             # SimpleConsumer threads too, and if we'd have to start() again
             # that could have other side effects (eg resetting offsets).
             self._rdk_consumer.stop()
-            restart_required = True
+            log.debug("Temporarily stopped _rdk_consumer.")
         yield
         if restart_required:
             self._setup_fetch_workers()
+            log.debug("Restarted _rdk_consumer.")
 
     def _mk_rdkafka_config_lists(self):
         """Populate conf, topic_conf to configure the rdkafka consumer"""
