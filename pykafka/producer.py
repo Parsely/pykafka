@@ -1,6 +1,6 @@
 from __future__ import division
 """
-Author: Keith Bourgoin
+Author: Emmett Butler, Keith Bourgoin
 """
 __license__ = """
 Copyright 2015 Parse.ly, Inc.
@@ -25,9 +25,15 @@ import time
 
 from .common import CompressionType
 from .exceptions import (
-    UnknownTopicOrPartition, NotLeaderForPartition, RequestTimedOut,
-    ProduceFailureError, SocketDisconnectedError, InvalidMessageError,
-    InvalidMessageSize, MessageSizeTooLarge, ProducerQueueFullError
+    InvalidMessageError,
+    InvalidMessageSize,
+    MessageSizeTooLarge,
+    NotLeaderForPartition,
+    ProduceFailureError,
+    ProducerQueueFullError,
+    RequestTimedOut,
+    SocketDisconnectedError,
+    UnknownTopicOrPartition
 )
 from .partitioners import random_partitioner
 from .protocol import Message, ProduceRequest
@@ -39,7 +45,7 @@ log = logging.getLogger(__name__)
 class Producer(object):
     """
     This class implements asynchronous producer logic similar to that found in
-    the JVM driver. In inherits from the synchronous implementation.
+    the JVM driver.
     """
     def __init__(self,
                  cluster,
@@ -69,18 +75,18 @@ class Producer(object):
         :param retry_backoff_ms: The amount of time (in milliseconds) to
             back off during produce request retries.
         :type retry_backoff_ms: int
-        :param required_acks: How many other brokers must have committed the
-            data to their log and acknowledged this to the leader before a
-            request is considered complete?
+        :param required_acks: The number of other brokers must have committed
+            the data to their log and acknowledged this to the leader before a
+            request is considered complete
         :type required_acks: int
-        :param ack_timeout_ms: Amount of time (in milliseconds) to wait for
+        :param ack_timeout_ms: The amount of time (in milliseconds) to wait for
             acknowledgment of a produce request.
         :type ack_timeout_ms: int
         :param max_queued_messages: The maximum number of messages the producer
             can have waiting to be sent to the broker. If messages are sent
             faster than they can be delivered to the broker, the producer will
             either block or throw an exception based on the preference specified
-            by block_on_queue_full.
+            with block_on_queue_full.
         :type max_queued_messages: int
         :param linger_ms: This setting gives the upper bound on the delay for
             batching: once the producer gets max_queued_messages worth of
@@ -94,6 +100,7 @@ class Producer(object):
             broker contains max_queued_messages, we must either stop accepting
             new messages (block) or throw an error. If True, this setting
             indicates we should block until space is available in the queue.
+            If False, we should throw an error immediately.
         :type block_on_queue_full: bool
         """
         self._cluster = cluster
@@ -108,7 +115,6 @@ class Producer(object):
         self._linger_ms = linger_ms
         self._block_on_queue_full = block_on_queue_full
         self._exception = None
-
         self._running = False
         self.start()
 
@@ -119,17 +125,22 @@ class Producer(object):
             id_=hex(id(self))
         )
 
-    @property
-    def messages_inflight(self):
-        """Indicates whether any messages are currently "in flight"
+    def __enter__(self):
+        """Context manager entry point - start the producer"""
+        self.start()
+        return self
 
-        "In flight" messages are those that have been used in calls to `produce`
-        and have not yet been dequeued and sent to the broker
-        """
-        return any(q.message_inflight for q in self._owned_brokers.itervalues())
+    def __exit__(self, exc_type, exc_value, traceback):
+        """Context manager exit point - stop the producer"""
+        if self._exception is not None:
+            log.exception(traceback)
+            self.stop(wait=False)
+            raise self._exception
+        else:
+            self.stop()
 
     def start(self):
-        """Connect to brokers and start worker threads"""
+        """Set up data structures and start worker threads"""
         if not self._running:
             self._owned_brokers = {}
             for partition in self._topic.partitions.values():
@@ -137,6 +148,8 @@ class Producer(object):
                     self._owned_brokers[partition.leader.id] = OwnedBroker(
                         self, partition.leader)
             self._running = True
+        if self._exception is not None:
+            raise self._exception
 
     def stop(self, wait=True):
         """Mark as stopped and wait for all inflight messages to send
@@ -148,23 +161,13 @@ class Producer(object):
         if wait:
             self._wait_all()
 
-    def _wait_all(self):
-        """Block until all messages in flight are sent"""
-        log.info("Blocking until all messages are sent")
-        while self.messages_inflight:
-            time.sleep(.3)
+    def produce(self, messages):
+        """Produce a set of messages.
 
-    def __enter__(self):
-        """Context manager entry point - start the producer"""
-        self.start()
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        """Context manager exit point - stop the producer"""
-        if exc_value is not None:
-            log.exception(traceback)
-            raise exc_value
-        self.stop()
+        :param messages: The messages to produce
+        :type messages: Iterable of str or (str, str) tuples
+        """
+        self._produce(self._partition_messages(messages))
 
     def _produce(self, message_partition_tups):
         """Enqueue a set of messages for the relevant brokers
@@ -177,7 +180,6 @@ class Producer(object):
             self._owned_brokers[leader.id].enqueue(
                 [((key, value), partition_id)],
                 self._block_on_queue_full)
-
         if self._exception is not None:
             raise self._exception
 
@@ -189,8 +191,6 @@ class Producer(object):
         :param owned_broker: The `OwnedBroker` to which to send the request
         :type owned_broker: :class:`pykafka.producer.OwnedBroker`
         """
-        log.debug("Sending %d messages to broker %d",
-                  len(message_batch), owned_broker.broker.id)
         request = ProduceRequest(
             compression_type=self._compression,
             required_acks=self._required_acks,
@@ -202,6 +202,8 @@ class Producer(object):
                 self._topic.name,
                 partition_id
             )
+        log.debug("Sending %d messages to broker %d",
+                  len(message_batch), owned_broker.broker.id)
         self._send_request(request, 0, owned_broker)
 
     def _update_leaders(self):
@@ -332,13 +334,21 @@ class Producer(object):
             else:
                 raise ProduceFailureError('Unable to produce messages. See log for details.')
 
-    def produce(self, messages):
-        """Produce a set of messages.
+    def _messages_are_inflight(self):
+        """Indicates whether any messages are currently "in flight"
 
-        :param messages: The messages to produce
-        :type messages: Iterable of str or (str, str) tuples
+        "In flight" messages are those that have been used in calls to `produce`
+        and have not yet been dequeued and sent to the broker
         """
-        self._produce(self._partition_messages(messages))
+        return any(q.message_is_inflight() for q in self._owned_brokers.itervalues())
+
+    def _wait_all(self):
+        """Block until all messages in flight are sent"""
+        log.info("Blocking until all messages are sent")
+        while self._messages_are_inflight():
+            time.sleep(.3)
+            if self._exception is not None:
+                raise self._exception
 
 
 class SynchronousProducer(Producer):
@@ -462,13 +472,11 @@ class OwnedBroker(object):
                         self.producer._prepare_request(batch, self)
                 except Exception as e:
                     self.producer._exception = e
-                    self.producer.stop(wait=False)
                     break
         log.info("Starting new produce worker for broker %s", broker.id)
         self.producer._cluster.handler.spawn(queue_reader)
 
-    @property
-    def message_inflight(self):
+    def message_is_inflight(self):
         """
         Indicates whether there are currently any messages that have been
             `produce()`d and not yet sent to the broker
