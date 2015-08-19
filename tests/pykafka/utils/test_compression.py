@@ -1,8 +1,7 @@
-import unittest2
-
+from pykafka.test.utils import unittest
 from pykafka.utils import compression
 
-class CompressionTests(unittest2.TestCase):
+class CompressionTests(unittest.TestCase):
     """Keeping these simple by verifying what goes in is what comes out."""
     text = "The man in black fled across the desert, and the gunslinger followed."
 
@@ -29,4 +28,4 @@ class CompressionTests(unittest2.TestCase):
 
 
 if __name__ == '__main__':
-    unittest2.main()
+    unittest.main()

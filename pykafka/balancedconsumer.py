@@ -303,10 +303,10 @@ class BalancedConsumer():
         # Freeze and sort partitions so we always have the same results
         p_to_str = lambda p: '-'.join([p.topic.name, str(p.leader.id), str(p.id)])
         all_parts = self._topic.partitions.values()
-        all_parts.sort(key=p_to_str)
+        all_parts = sorted(all_parts, key=p_to_str)
 
         # get start point, # of partitions, and remainder
-        participants.sort()  # just make sure it's sorted.
+        participants = sorted(participants)  # just make sure it's sorted.
         idx = participants.index(self._consumer_id)
         parts_per_consumer = math.floor(len(all_parts) / len(participants))
         remainder_ppc = len(all_parts) % len(participants)
@@ -343,7 +343,7 @@ class BalancedConsumer():
                     participants.append(id_)
             except NoNodeException:
                 pass  # disappeared between ``get_children`` and ``get``
-        participants.sort()
+        participants = sorted(participants)
         return participants
 
     def _set_watches(self):

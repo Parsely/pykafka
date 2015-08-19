@@ -4,13 +4,30 @@ __all__ = ['PY3', 'Semaphore']
 
 PY3 = sys.version_info[0] >= 3
 
-
 if PY3:
     from threading import Semaphore
+    from queue import Queue, Empty
+    from io import BytesIO as StringIO
+    range = range
+
+    def iteritems(d, **kw):
+        return iter(d.items(**kw))
+
+    def itervalues(d, **kw):
+        return iter(d.values(**kw))
 else:
+    range = xrange
     from threading import Condition, Lock
     # could use monotonic.monotonic() backport as well here...
     from time import time as _time
+    from Queue import Queue, Empty
+    from StringIO import StringIO
+
+    def iteritems(d, **kw):
+        return iter(d.iteritems(**kw))
+
+    def itervalues(d, **kw):
+        return iter(d.itervalues(**kw))
 
     # -- begin unmodified backport of threading.Semaphore from Python 3.4 -- #
     class Semaphore:

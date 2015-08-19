@@ -2,6 +2,16 @@ import os
 
 from pykafka.test.kafka_instance import KafkaInstance, KafkaConnection
 
+try:
+    import unittest2 as unittest
+except ImportError:
+    import unittest
+
+try:
+    from unittest import mock
+except ImportError:
+    import mock
+
 
 def get_cluster():
     """Gets a Kafka cluster for testing, using one already running is possible.

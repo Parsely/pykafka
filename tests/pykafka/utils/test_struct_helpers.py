@@ -1,5 +1,4 @@
-import unittest
-
+from pykafka.test.utils import unittest
 from pykafka.utils import struct_helpers
 
 

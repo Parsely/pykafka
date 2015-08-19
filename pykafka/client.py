@@ -18,9 +18,9 @@ limitations under the License.
 """
 
 __all__ = ["KafkaClient"]
-import handlers
+from .handlers import ThreadingHandler
 import logging
-from cluster import Cluster
+from .cluster import Cluster
 
 try:
     import rd_kafka
@@ -71,7 +71,7 @@ class KafkaClient(object):
         self._source_address = source_address
         self._socket_timeout_ms = socket_timeout_ms
         self._offsets_channel_socket_timeout_ms = offsets_channel_socket_timeout_ms
-        self._handler = None if use_greenlets else handlers.ThreadingHandler()
+        self._handler = None if use_greenlets else ThreadingHandler()
         self._use_rdkafka = rd_kafka and not ignore_rdkafka
         if self._use_rdkafka:
             log.info('Using rd_kafka extensions.')

@@ -21,7 +21,7 @@ import gzip
 import logging
 import struct
 
-from cStringIO import StringIO
+from .compat import StringIO
 
 try:
     import snappy

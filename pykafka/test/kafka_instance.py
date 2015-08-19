@@ -128,12 +128,14 @@ class KafkaInstance(ManagedInstance):
     def __init__(self,
                  num_instances=1,
                  kafka_version='0.8.2.1',
+                 scala_version='2.10',
                  bin_dir='/tmp/kafka-bin',
                  name='kafka',
                  use_gevent=False):
         """Start kafkainstace with given settings"""
         self._num_instances = num_instances
         self._kafka_version = kafka_version
+        self._scala_version = scala_version
         self._bin_dir = bin_dir
         self._processes = []
         self.zookeeper = None
@@ -174,9 +176,15 @@ class KafkaInstance(ManagedInstance):
         log.info('Downloading Kafka.')
         curr_dir = os.getcwd()
         os.chdir(self._bin_dir)
-        url = 'http://mirror.reverse.net/pub/apache/kafka/{version}/kafka_2.10-{version}.tgz'.format(version=self._kafka_version)
+        url_fmt = 'http://mirror.reverse.net/pub/apache/kafka/{kafka_version}/kafka_{scala_version}-{kafka_version}.tgz'
+        url = url_fmt.format(
+            scala_version=self._scala_version,
+            kafka_version=self._kafka_version
+        )
         p1 = subprocess.Popen(['curl', '-vs', url], stdout=subprocess.PIPE)
-        p2 = subprocess.Popen(['tar', 'xvz', '-C', self._bin_dir, '--strip-components', '1'], stdin=p1.stdout, stdout=subprocess.PIPE)
+        p2 = subprocess.Popen(['tar', 'xvz', '-C', self._bin_dir,
+                               '--strip-components', '1'],
+                              stdin=p1.stdout, stdout=subprocess.PIPE)
         p1.stdout.close()
         output, err = p2.communicate()
         os.chdir(curr_dir)
@@ -189,7 +197,7 @@ class KafkaInstance(ManagedInstance):
             s = socket.create_connection(('localhost', port))
             s.close()
             return False
-        except IOError, err:
+        except IOError as err:
             return err.errno == errno.ECONNREFUSED
 
     def _port_generator(self, start):
@@ -341,18 +349,18 @@ if __name__ == '__main__':
     def _catch_sigint(signum, frame):
         global _exiting
         _exiting = True
-        print 'SIGINT received.'
+        print('SIGINT received.')
     signal.signal(signal.SIGINT, _catch_sigint)
 
     cluster = KafkaInstance(num_instances=args.num_brokers,
                             kafka_version=args.kafka_version,
                             bin_dir=args.download_dir)
-    print 'Cluster started.'
-    print 'Brokers: {brokers}'.format(brokers=cluster.brokers)
-    print 'Zookeeper: {zk}'.format(zk=cluster.zookeeper)
-    print 'Waiting for SIGINT to exit.'
+    print('Cluster started.')
+    print('Brokers: {brokers}'.format(brokers=cluster.brokers))
+    print('Zookeeper: {zk}'.format(zk=cluster.zookeeper))
+    print('Waiting for SIGINT to exit.')
     while True:
         if _exiting:
-            print 'Exiting.'
+            print('Exiting.')
             sys.exit(0)
         time.sleep(1)

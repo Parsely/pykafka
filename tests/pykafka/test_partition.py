@@ -1,10 +1,9 @@
-import unittest2
-
+from pykafka.test.utils import unittest
 from pykafka import KafkaClient
 from pykafka.test.utils import get_cluster, stop_cluster
 
 
-class TestPartitionInfo(unittest2.TestCase):
+class TestPartitionInfo(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.kafka = get_cluster()
@@ -31,4 +30,4 @@ class TestPartitionInfo(unittest2.TestCase):
             self.assertTrue(partition.latest_available_offset())
 
 if __name__ == "__main__":
-    unittest2.main()
+    unittest.main()

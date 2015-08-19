@@ -23,10 +23,9 @@ import logging
 import time
 import threading
 from collections import defaultdict
-from Queue import Queue, Empty
 
 from .common import OffsetType
-from .utils.compat import Semaphore
+from .utils.compat import Semaphore, Queue, Empty, iteritems, itervalues
 from .exceptions import (OffsetOutOfRangeError, UnknownTopicOrPartition,
                          OffsetMetadataTooLarge, OffsetsLoadInProgress,
                          NotCoordinatorForConsumer, SocketDisconnectedError,
@@ -162,12 +161,12 @@ class SimpleConsumer():
         else:
             self._partitions = {topic.partitions[k]:
                                 OwnedPartition(p, self._messages_arrived)
-                                for k, p in topic.partitions.iteritems()}
+                                for k, p in iteritems(topic.partitions)}
         self._partitions_by_id = {p.partition.id: p
-                                  for p in self._partitions.itervalues()}
+                                  for p in itervalues(self._partitions)}
         # Organize partitions by leader for efficient queries
         self._partitions_by_leader = defaultdict(list)
-        for p in self._partitions.itervalues():
+        for p in itervalues(self._partitions):
             self._partitions_by_leader[p.partition.leader].append(p)
         self.partition_cycle = itertools.cycle(self._partitions.values())
 
@@ -240,13 +239,13 @@ class SimpleConsumer():
     def partitions(self):
         """A list of the partitions that this consumer consumes"""
         return {id_: partition.partition
-                for id_, partition in self._partitions_by_id.iteritems()}
+                for id_, partition in iteritems(self._partitions_by_id.iteritems)}
 
     @property
     def held_offsets(self):
         """Return a map from partition id to held offset for each partition"""
         return {p.partition.id: p.last_offset_consumed
-                for p in self._partitions_by_id.itervalues()}
+                for p in itervalues(self._partitions_by_id)}
 
     def __del__(self):
         """Stop consumption and workers when object is deleted"""
@@ -357,13 +356,15 @@ class SimpleConsumer():
             log.error("Error committing offsets for topic %s (errors: %s)",
                       self._topic.name,
                       {ERROR_CODES[err]: [op.partition.id for op, _ in parts]
-                       for err, parts in parts_by_error.iteritems()})
+                       for err, parts in iteritems(parts_by_error)})
 
             # retry only the partitions that errored
             if 0 in parts_by_error:
                 parts_by_error.pop(0)
-            errored_partitions = [op for code, err_group in parts_by_error.iteritems()
-                                  for op, res in err_group]
+            errored_partitions = [
+                op for code, err_group in iteritems(parts_by_error)
+                for op, res in err_group
+            ]
             reqs = [p.build_offset_commit_request() for p in errored_partitions]
 
     def fetch_offsets(self):
@@ -408,7 +409,7 @@ class SimpleConsumer():
             log.error("Error fetching offsets for topic %s (errors: %s)",
                       self._topic.name,
                       {ERROR_CODES[err]: [op.partition.id for op, _ in parts]
-                       for err, parts in parts_by_error.iteritems()})
+                       for err, parts in iteritems(parts_by_error)})
 
             time.sleep(i * (self._offsets_channel_backoff_ms / 1000))
 
@@ -488,7 +489,7 @@ class SimpleConsumer():
         for i in xrange(self._offsets_reset_max_retries):
             # group partitions by leader
             by_leader = defaultdict(list)
-            for partition, offset in owned_partition_offsets.iteritems():
+            for partition, offset in iteritems(owned_partition_offsets):
                 # acquire lock for each partition to stop fetching during offset
                 # reset
                 if partition.fetch_lock.acquire(True):
@@ -498,7 +499,7 @@ class SimpleConsumer():
                     by_leader[partition.partition.leader].append((partition, offset))
 
             # get valid offset ranges for each partition
-            for broker, offsets in by_leader.iteritems():
+            for broker, offsets in iteritems(by_leader):
                 reqs = [owned_partition.build_offset_request(offset)
                         for owned_partition, offset in offsets]
                 response = broker.request_offset_limits(reqs)
@@ -517,11 +518,11 @@ class SimpleConsumer():
                 log.error("Error resetting offsets for topic %s (errors: %s)",
                           self._topic.name,
                           {ERROR_CODES[err]: [op.partition.id for op, _ in parts]
-                           for err, parts in parts_by_error.iteritems()})
+                           for err, parts in iteritems(parts_by_error)})
 
                 time.sleep(i * (self._offsets_channel_backoff_ms / 1000))
 
-                for errcode, owned_partitions in parts_by_error.iteritems():
+                for errcode, owned_partitions in iteritems(parts_by_error):
                     if errcode != 0:
                         for owned_partition in owned_partitions:
                             owned_partition.fetch_lock.release()
@@ -554,7 +555,7 @@ class SimpleConsumer():
                               owned_partition.partition.id,
                               owned_partition.message_count)
 
-        for broker, owned_partitions in self._partitions_by_leader.iteritems():
+        for broker, owned_partitions in iteritems(self._partitions_by_leader):
             partition_reqs = {}
             for owned_partition in owned_partitions:
                 # attempt to acquire lock, just pass if we can't
@@ -571,7 +572,7 @@ class SimpleConsumer():
             if partition_reqs:
                 try:
                     response = broker.fetch_messages(
-                        [a for a in partition_reqs.itervalues() if a],
+                        [a for a in itervalues(partition_reqs) if a],
                         timeout=self._fetch_wait_max_ms,
                         min_bytes=self._fetch_min_bytes
                     )

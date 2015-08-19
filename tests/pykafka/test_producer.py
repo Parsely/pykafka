@@ -1,11 +1,11 @@
-import unittest2
+from pykafka.test.utils import unittest
 from uuid import uuid4
 
 from pykafka import KafkaClient
 from pykafka.test.utils import get_cluster, stop_cluster
 
 
-class ProducerIntegrationTests(unittest2.TestCase):
+class ProducerIntegrationTests(unittest.TestCase):
     maxDiff = None
 
     @classmethod
@@ -38,4 +38,4 @@ class ProducerIntegrationTests(unittest2.TestCase):
             consumer.stop()
 
 if __name__ == "__main__":
-    unittest2.main()
+    unittest.main()
