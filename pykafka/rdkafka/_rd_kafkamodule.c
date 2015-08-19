@@ -124,11 +124,14 @@ Consumer_stop(Consumer *self, PyObject *args)
         Py_ssize_t i, len = PyList_Size(self->partition_ids);
         for (i = 0; i != len; ++i) {
             /* Error handling here is a bit poor; we cannot bail out directly
-               if we want to clean up as much as we can.  TODO logging */
+               if we want to clean up as much as we can. */
             long part_id = PyLong_AsLong(
                     PyList_GetItem(self->partition_ids, i));
             if (part_id == -1) {
                 retval = NULL;
+                PyObject *log_res = PyObject_CallMethod(
+                        logger, "exception", "s", "In Consumer_stop:");
+                Py_XDECREF(log_res);
                 continue;
             }
             int res;
@@ -138,6 +141,11 @@ Consumer_stop(Consumer *self, PyObject *args)
             if (res == -1) {
                 set_PyRdKafkaError(rd_kafka_errno2err(errno), NULL);
                 retval = NULL;
+                PyObject *log_res = PyObject_CallMethod(
+                        logger, "exception", "sl",
+                        "Error in rd_kafka_consume_stop, part_id=%s",
+                        part_id);
+                Py_XDECREF(log_res);
                 continue;
             }
         }
@@ -176,7 +184,11 @@ Consumer_dealloc(PyObject *self)
 {
     PyObject *stop_result = Consumer_stop((Consumer *)self, NULL);
     if (!stop_result) {
-        /* TODO log exception but do not re-raise */
+        /* We'll swallow the exception, so let's try to log info first */
+        PyObject *res = PyObject_CallMethod(
+                logger, "exception", "s", "Consumer_stop failure in dealloc");
+        PyErr_Clear();
+        Py_XDECREF(res);
     } else {
         Py_DECREF(stop_result);
     }
