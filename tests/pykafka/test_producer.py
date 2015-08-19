@@ -73,9 +73,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
         """Ensure that the context manager waits for linger_ms milliseconds"""
         linger = 3
         topic = self.client.topics[self.topic_name]
-        with topic.get_producer(block_on_queue_full=False,
-                                max_queued_messages=10,
-                                linger_ms=linger * 1000) as producer:
+        with topic.get_producer(linger_ms=linger * 1000) as producer:
             start = time.time()
             producer.produce([uuid4().bytes])
             producer.produce([uuid4().bytes])

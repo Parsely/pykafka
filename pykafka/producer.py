@@ -21,7 +21,9 @@ __all__ = ["Producer", "SynchronousProducer"]
 from collections import defaultdict, deque
 import itertools
 import logging
+import sys
 import time
+import traceback
 
 from .common import CompressionType
 from .exceptions import (
@@ -121,8 +123,27 @@ class Producer(object):
         self._linger_ms = linger_ms
         self._block_on_queue_full = block_on_queue_full
         self._worker_exception = None
+        self._worker_trace_logged = False
         self._running = False
         self.start()
+
+    def raise_worker_exceptions(fn):
+        """Decorator that raises exceptions encountered on worker threads
+        """
+        def wrapped(self, *args, **kwargs):
+            retval = fn(self, *args, **kwargs)
+            if self._worker_exception is not None:
+                _, ex, tb = self._worker_exception
+                # avoid logging worker exceptions more than once, which can
+                # happen when this function's `raise` triggers `__exit__`
+                # which calls `stop`
+                if not self._worker_trace_logged:
+                    self._worker_trace_logged = True
+                    log.error("Exception encountered in worker thread:\n%s",
+                              "".join(traceback.format_tb(tb)))
+                raise ex
+            return retval
+        return wrapped
 
     def __repr__(self):
         return "<{module}.{name} at {id_}>".format(
@@ -146,6 +167,7 @@ class Producer(object):
         # If the thread crashed, don't wait for it
         self.stop(wait=self._worker_exception is None)
 
+    @raise_worker_exceptions
     def start(self):
         """Set up data structures and start worker threads"""
         if not self._running:
@@ -155,10 +177,8 @@ class Producer(object):
                     self._owned_brokers[partition.leader.id] = OwnedBroker(
                         self, partition.leader)
             self._running = True
-        # If an error was encountered on the worker thread, raise it
-        if self._worker_exception is not None:
-            raise self._worker_exception
 
+    @raise_worker_exceptions
     def stop(self, wait=True):
         """Mark the producer as stopped
 
@@ -169,9 +189,8 @@ class Producer(object):
         self._running = False
         if wait:
             self._wait_all()
-        if self._worker_exception is not None:
-            raise self._worker_exception
 
+    @raise_worker_exceptions
     def produce(self, messages):
         """Produce a set of messages.
 
@@ -190,6 +209,7 @@ class Producer(object):
                 yield (key, str(value)), self._partitioner(partitions, message).id
         self._produce(_partition_messages())
 
+    @raise_worker_exceptions
     def _produce(self, message_partition_tups):
         """Enqueue a set of messages for the relevant brokers
 
@@ -199,10 +219,8 @@ class Producer(object):
         for kv, partition_id in message_partition_tups:
             leader_id = self._topic.partitions[partition_id].leader.id
             self._owned_brokers[leader_id].enqueue([(kv, partition_id)])
-        # If an error was encountered on the worker thread, raise it
-        if self._worker_exception is not None:
-            raise self._worker_exception
 
+    @raise_worker_exceptions
     def _prepare_request(self, message_batch, owned_broker):
         """Prepare a request and send it to the broker
 
@@ -226,6 +244,7 @@ class Producer(object):
                   len(message_batch), owned_broker.broker.id)
         self._send_request(request, 0, owned_broker)
 
+    @raise_worker_exceptions
     def _send_request(self, req, attempt, owned_broker):
         """Send the produce request to the broker and handle the response.
 
@@ -308,6 +327,7 @@ class Producer(object):
             else:
                 raise ProduceFailureError('Unable to produce messages. See log for details.')
 
+    @raise_worker_exceptions
     def _update_leaders(self):
         """Ensure each message in each queue is in the queue owned by its
             partition's leader
@@ -333,21 +353,16 @@ class Producer(object):
             owned_broker.resolve_event_state()
             owned_broker.lock.release()
 
-    def _messages_are_inflight(self):
-        """Indicates whether any messages are currently "in flight"
+    @raise_worker_exceptions
+    def _wait_all(self):
+        """Block until all messages in flight are sent
 
         "In flight" messages are those that have been used in calls to `produce`
         and have not yet been dequeued and sent to the broker
         """
-        return any(q.message_is_inflight() for q in self._owned_brokers.itervalues())
-
-    def _wait_all(self):
-        """Block until all messages in flight are sent"""
         log.info("Blocking until all messages are sent")
-        while self._messages_are_inflight():
+        while any(q.message_is_inflight() for q in self._owned_brokers.itervalues()):
             time.sleep(.3)
-            if self._worker_exception is not None:
-                raise self._worker_exception
 
 
 class SynchronousProducer(Producer):
@@ -469,9 +484,9 @@ class OwnedBroker(object):
                     batch = self.flush(self.producer._linger_ms)
                     if batch:
                         self.producer._prepare_request(batch, self)
-                except Exception as e:
+                except Exception:
                     # surface all exceptions to the main thread
-                    self.producer._worker_exception = e
+                    self.producer._worker_exception = sys.exc_info()
                     break
         log.info("Starting new produce worker for broker %s", broker.id)
         self.producer._cluster.handler.spawn(queue_reader)
