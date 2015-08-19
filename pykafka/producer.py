@@ -114,7 +114,7 @@ class Producer(object):
         self._max_queued_messages = max_queued_messages
         self._linger_ms = linger_ms
         self._block_on_queue_full = block_on_queue_full
-        self._exception = None
+        self._worker_exception = None
         self._running = False
         self.start()
 
@@ -131,11 +131,18 @@ class Producer(object):
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        """Context manager exit point - stop the producer"""
-        if self._exception is not None:
+        """Context manager exit point - stop the producer
+
+        If __exit__ is being called as a result of self._worker_exception
+        being raised, don't wait on the workers to finish - just re-raise
+        the exception. If __exit__ is being called because the with: block
+        has ended, do wait for workers to finish.
+        """
+        # If the thread crashed, don't wait for it
+        if self._worker_exception is not None:
             log.exception(traceback)
             self.stop(wait=False)
-            raise self._exception
+            raise self._worker_exception
         else:
             self.stop()
 
@@ -148,13 +155,15 @@ class Producer(object):
                     self._owned_brokers[partition.leader.id] = OwnedBroker(
                         self, partition.leader)
             self._running = True
-        if self._exception is not None:
-            raise self._exception
+        # If an error was encountered on the worker thread, raise it
+        if self._worker_exception is not None:
+            raise self._worker_exception
 
     def stop(self, wait=True):
-        """Mark as stopped and wait for all inflight messages to send
+        """Mark the producer as stopped
 
         :param wait: Whether to wait for all inflight messages to be sent
+            before returning
         :type wait: bool
         """
         self._running = False
@@ -167,21 +176,30 @@ class Producer(object):
         :param messages: The messages to produce
         :type messages: Iterable of str or (str, str) tuples
         """
-        self._produce(self._partition_messages(messages))
+        def _partition_messages():
+            """Assign messages to partitions using the partitioner."""
+            partitions = self._topic.partitions.values()
+            for message in messages:
+                if isinstance(message, basestring):
+                    key = None
+                    value = message
+                else:
+                    key, value = message
+                yield (key, str(value)), self._partitioner(partitions, message).id
+        self._produce(_partition_messages())
 
     def _produce(self, message_partition_tups):
         """Enqueue a set of messages for the relevant brokers
 
         :param message_partition_tups: Messages with partitions assigned.
-        :type message_partition_tups: tuples of ((key, value), partition_id)
+        :type message_partition_tups: Iterable of ((str, str), int) tuples
         """
-        for ((key, value), partition_id) in message_partition_tups:
-            leader = self._topic.partitions[partition_id].leader
-            self._owned_brokers[leader.id].enqueue(
-                [((key, value), partition_id)],
-                self._block_on_queue_full)
-        if self._exception is not None:
-            raise self._exception
+        for kv, partition_id in message_partition_tups:
+            leader_id = self._topic.partitions[partition_id].leader.id
+            self._owned_brokers[leader_id].enqueue([(kv, partition_id)])
+        # If an error was encountered on the worker thread, raise it
+        if self._worker_exception is not None:
+            raise self._worker_exception
 
     def _prepare_request(self, message_batch, owned_broker):
         """Prepare a request and send it to the broker
@@ -206,60 +224,14 @@ class Producer(object):
                   len(message_batch), owned_broker.broker.id)
         self._send_request(request, 0, owned_broker)
 
-    def _update_leaders(self):
-        """Ensure each message in each queue is in the queue owned by its
-            partition's leader
-
-        This function empties all broker queues, maps their messages to the
-        current leaders for their partitions, and enqueues the messages in
-        the appropriate queues.
-        """
-        # empty queues and figure out updated partition leaders
-        new_queue_contents = defaultdict(list)
-        for owned_broker in self._owned_brokers.itervalues():
-            owned_broker.lock.acquire()
-            current_queue_contents = owned_broker.flush(0, acquire=False,
-                                                        release_inflight=True)
-            for kv, partition_id in current_queue_contents:
-                partition_leader = self._topic.partitions[partition_id].leader
-                new_queue_contents[partition_leader.id].append((kv, partition_id))
-        # retain locks for all brokers between these two steps
-        for owned_broker in self._owned_brokers.itervalues():
-            owned_broker.enqueue(new_queue_contents[owned_broker.broker.id],
-                                 self._block_on_queue_full,
-                                 acquire=False)
-            owned_broker.resolve_event_state()
-            owned_broker.lock.release()
-
-    def _partition_messages(self, messages):
-        """Assign messages to partitions using the partitioner.
-
-        :param messages: Iterable of messages to publish.
-        :returns:        Generator of ((key, value), partition_id)
-        """
-        partitions = self._topic.partitions.values()
-        for message in messages:
-            if isinstance(message, basestring):
-                key = None
-                value = message
-            else:
-                key, value = message
-            value = str(value)
-            yield (key, value), self._partitioner(partitions, message).id
-
     def _send_request(self, req, attempt, owned_broker):
         """Send the produce request to the broker and handle the response.
 
-        :param broker: The broker to which to send the request
-        :type broker: :class:`pykafka.broker.Broker`
         :param req: The produce request to send
         :type req: :class:`pykafka.protocol.ProduceRequest`
         :param attempt: The current attempt count. Used for retry logic
         :type attempt: int
-        :param owned_broker: An OwnedBroker instance containing information
-            about the queue from which the messages in `req` were removed.
-            Only used when called from the
-            :class:`pykafka.producer.AsyncProducer`
+        :param owned_broker: The broker to which to send the request
         :type owned_broker: :class:`pykafka.producer.OwnedBroker`
         """
 
@@ -285,10 +257,10 @@ class Producer(object):
             for topic, partitions in response.topics.iteritems():
                 for partition, presponse in partitions.iteritems():
                     if presponse.err == 0:
-                        if owned_broker is not None:
-                            msg_count = len(req.msets[topic][partition].messages)
-                            with owned_broker.lock:
-                                owned_broker.messages_inflight -= msg_count
+                        # mark msg_count messages as successfully delivered
+                        msg_count = len(req.msets[topic][partition].messages)
+                        with owned_broker.lock:
+                            owned_broker.messages_inflight -= msg_count
                         continue  # All's well
                     if presponse.err == UnknownTopicOrPartition.ERROR_CODE:
                         log.warning('Unknown topic: %s or partition: %s. '
@@ -334,6 +306,31 @@ class Producer(object):
             else:
                 raise ProduceFailureError('Unable to produce messages. See log for details.')
 
+    def _update_leaders(self):
+        """Ensure each message in each queue is in the queue owned by its
+            partition's leader
+
+        This function empties all broker queues, maps their messages to the
+        current leaders for their partitions, and enqueues the messages in
+        the appropriate queues.
+        """
+        # empty queues and figure out updated partition leaders
+        new_queue_contents = defaultdict(list)
+        for owned_broker in self._owned_brokers.itervalues():
+            owned_broker.lock.acquire()
+            current_queue_contents = owned_broker.flush(0, acquire=False,
+                                                        release_inflight=True)
+            for kv, partition_id in current_queue_contents:
+                partition_leader = self._topic.partitions[partition_id].leader
+                new_queue_contents[partition_leader.id].append((kv, partition_id))
+        # retain locks for all brokers between these two steps
+        for owned_broker in self._owned_brokers.itervalues():
+            owned_broker.enqueue(new_queue_contents[owned_broker.broker.id],
+                                 self._block_on_queue_full,
+                                 acquire=False)
+            owned_broker.resolve_event_state()
+            owned_broker.lock.release()
+
     def _messages_are_inflight(self):
         """Indicates whether any messages are currently "in flight"
 
@@ -347,8 +344,8 @@ class Producer(object):
         log.info("Blocking until all messages are sent")
         while self._messages_are_inflight():
             time.sleep(.3)
-            if self._exception is not None:
-                raise self._exception
+            if self._worker_exception is not None:
+                raise self._worker_exception
 
 
 class SynchronousProducer(Producer):
@@ -471,7 +468,8 @@ class OwnedBroker(object):
                     if batch:
                         self.producer._prepare_request(batch, self)
                 except Exception as e:
-                    self.producer._exception = e
+                    # surface all exceptions to the main thread
+                    self.producer._worker_exception = e
                     break
         log.info("Starting new produce worker for broker %s", broker.id)
         self.producer._cluster.handler.spawn(queue_reader)
@@ -575,7 +573,7 @@ class OwnedBroker(object):
                 self.slot_available.clear()
             if acquire:
                 self.lock.release()
-            if self.producer.block_on_queue_full:
+            if self.producer._block_on_queue_full:
                 self.slot_available.wait()
             else:
                 raise ProducerQueueFullError("Queue full for broker %d",
