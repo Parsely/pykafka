@@ -65,6 +65,7 @@ class Producer(object):
                  required_acks=1,
                  ack_timeout_ms=10 * 1000,
                  max_queued_messages=10000,
+                 min_queued_messages=5000,
                  linger_ms=0,
                  block_on_queue_full=True):
         """Instantiate a new AsyncProducer
@@ -96,6 +97,10 @@ class Producer(object):
             either block or throw an exception based on the preference specified
             with block_on_queue_full.
         :type max_queued_messages: int
+        :param min_queued_messages: The minimum number of messages the producer
+            can have waiting in a queue before it flushes that queue to its
+            broker.
+        :type min_queued_messages: int
         :param linger_ms: This setting gives the upper bound on the delay for
             batching: once the producer gets max_queued_messages worth of
             messages for a broker, it will be sent immediately regardless of
@@ -120,6 +125,7 @@ class Producer(object):
         self._required_acks = required_acks
         self._ack_timeout_ms = ack_timeout_ms
         self._max_queued_messages = max_queued_messages
+        self._min_queued_messages = min_queued_messages
         self._linger_ms = linger_ms
         self._block_on_queue_full = block_on_queue_full
         self._worker_exception = None
@@ -383,6 +389,7 @@ class SynchronousProducer(Producer):
                  required_acks=1,
                  ack_timeout_ms=10000,
                  max_queued_messages=10000,
+                 min_queued_messages=5000,
                  linger_ms=0,
                  block_on_queue_full=True):
         """Instantiate a new Producer.
@@ -414,6 +421,10 @@ class SynchronousProducer(Producer):
             either block or throw an exception based on the preference specified
             by block_on_queue_full.
         :type max_queued_messages: int
+        :param min_queued_messages: The minimum number of messages the producer
+            can have waiting in a queue before it flushes that queue to its
+            broker.
+        :type min_queued_messages: int
         :param linger_ms: This setting gives the upper bound on the delay for
             batching: once the producer gets max_queued_messages worth of
             messages for a broker, it will be sent immediately regardless of
@@ -523,7 +534,7 @@ class OwnedBroker(object):
             self.lock.acquire()
         self.queue.extendleft(messages)
         self.messages_inflight += len(messages)
-        if len(self.queue) >= self.producer._max_queued_messages:
+        if len(self.queue) >= self.producer._min_queued_messages:
             if not self.flush_ready.is_set():
                 self.flush_ready.set()
         if acquire:
