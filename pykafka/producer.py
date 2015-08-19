@@ -46,6 +46,12 @@ class Producer(object):
     """
     This class implements asynchronous producer logic similar to that found in
     the JVM driver.
+
+    It creates a thread of execution for each broker that is the leader of
+    one or more of its topic's partitions. Each of these threads (which may
+    use `threading` or some other parallelism implementation like `gevent`)
+    is associated with a queue that holds the messages that are waiting to be
+    sent to that queue's broker.
     """
     def __init__(self,
                  cluster,
@@ -75,9 +81,9 @@ class Producer(object):
         :param retry_backoff_ms: The amount of time (in milliseconds) to
             back off during produce request retries.
         :type retry_backoff_ms: int
-        :param required_acks: The number of other brokers must have committed
-            the data to their log and acknowledged this to the leader before a
-            request is considered complete
+        :param required_acks: The number of other brokers that must have
+            committed the data to their log and acknowledged this to the leader
+            before a request is considered complete
         :type required_acks: int
         :param ack_timeout_ms: The amount of time (in milliseconds) to wait for
             acknowledgment of a produce request.
