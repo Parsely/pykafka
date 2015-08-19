@@ -50,6 +50,11 @@ class ProducerQueueFullError(KafkaException):
     pass
 
 
+class ProducerStoppedException(KafkaException):
+    """Raised when the Producer is used while not running"""
+    pass
+
+
 class OffsetRequestFailedError(KafkaException):
     """Indicates that OffsetRequests for offset resetting failed more times than the configured maximum"""
     pass

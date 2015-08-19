@@ -33,6 +33,7 @@ from .exceptions import (
     NotLeaderForPartition,
     ProduceFailureError,
     ProducerQueueFullError,
+    ProducerStoppedException,
     RequestTimedOut,
     SocketDisconnectedError,
     UnknownTopicOrPartition
@@ -207,6 +208,8 @@ class Producer(object):
                 else:
                     key, value = message
                 yield (key, str(value)), self._partitioner(partitions, message).id
+        if not self._running:
+            raise ProducerStoppedException()
         self._produce(_partition_messages())
 
     @raise_worker_exceptions
