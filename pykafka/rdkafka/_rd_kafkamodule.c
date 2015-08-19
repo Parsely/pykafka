@@ -103,6 +103,12 @@ static PyStructSequence_Desc Message_desc = {
  */
 
 
+/* Note that with this RdkHandle, we hold a separate rd_kafka_t handle for each
+ * rd_kafka_topic_t, whereas librdkafka would allow sharing the same rd_kafka_t
+ * handle between many topic handles, which would be far more efficient.  The
+ * problem with that is that it would require the same rd_kafka_conf_t settings
+ * across all class instances sharing a handle, which is somewhat incompatible
+ * with the current pykafka API. */
 typedef struct {
     PyObject_HEAD
     rd_kafka_t *rdk_handle;
