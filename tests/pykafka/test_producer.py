@@ -1,7 +1,11 @@
+from __future__ import division
+
+import time
 import unittest2
 from uuid import uuid4
 
 from pykafka import KafkaClient
+from pykafka.exceptions import ProducerQueueFullError
 from pykafka.test.utils import get_cluster, stop_cluster
 
 
@@ -44,6 +48,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
         self.assertTrue(message.value == payload)
 
     def test_async_produce_context(self):
+        """Ensure that the producer works as a context manager"""
         payload = uuid4().bytes
 
         with self.client.topics[self.topic_name].get_producer() as producer:
@@ -51,6 +56,32 @@ class ProducerIntegrationTests(unittest2.TestCase):
 
         message = self.consumer.consume()
         self.assertTrue(message.value == payload)
+
+    def test_async_produce_queue_full(self):
+        """Ensure that the producer raises an error when its queue is full"""
+        topic = self.client.topics[self.topic_name]
+        with topic.get_producer(block_on_queue_full=False,
+                                max_queued_messages=1,
+                                linger_ms=1000) as producer:
+            with self.assertRaises(ProducerQueueFullError):
+                while True:
+                    producer.produce([uuid4().bytes])
+        while self.consumer.consume() is not None:
+            time.sleep(.05)
+
+    def test_async_produce_lingers(self):
+        """Ensure that the context manager waits for linger_ms milliseconds"""
+        linger = 3
+        topic = self.client.topics[self.topic_name]
+        with topic.get_producer(block_on_queue_full=False,
+                                max_queued_messages=10,
+                                linger_ms=linger * 1000) as producer:
+            start = time.time()
+            producer.produce([uuid4().bytes])
+            producer.produce([uuid4().bytes])
+        self.assertEqual(int(time.time() - start), int(linger))
+        self.consumer.consume()
+        self.consumer.consume()
 
 
 if __name__ == "__main__":
