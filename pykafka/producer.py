@@ -32,7 +32,6 @@ from .exceptions import (
     MessageSizeTooLarge,
     NotLeaderForPartition,
     ProduceFailureError,
-    ProducerQueueFullError,
     ProducerStoppedException,
     RequestTimedOut,
     SocketDisconnectedError,
@@ -107,9 +106,9 @@ class Producer(object):
         :type linger_ms: int
         :param block_on_queue_full: When the producer's message queue for a
             broker contains max_queued_messages, we must either stop accepting
-            new messages (block) or throw an error. If True, this setting
+            new messages (block) or register an error. If True, this setting
             indicates we should block until space is available in the queue.
-            If False, we should throw an error immediately.
+            If False, we should return immediately and indicate the error.
         :type block_on_queue_full: bool
         """
         self._cluster = cluster
@@ -210,7 +209,9 @@ class Producer(object):
                 yield (key, str(value)), self._partitioner(partitions, message).id
         if not self._running:
             raise ProducerStoppedException()
-        self._produce(_partition_messages())
+        pairs = itertools.izip(self._produce(_partition_messages()), messages)
+        for message_enqueued in pairs:
+            yield message_enqueued
 
     @raise_worker_exceptions
     def _produce(self, message_partition_tups):
@@ -221,7 +222,7 @@ class Producer(object):
         """
         for kv, partition_id in message_partition_tups:
             leader_id = self._topic.partitions[partition_id].leader.id
-            self._owned_brokers[leader_id].enqueue([(kv, partition_id)])
+            yield self._owned_brokers[leader_id].enqueue([(kv, partition_id)])
 
     @raise_worker_exceptions
     def _prepare_request(self, message_batch, owned_broker):
@@ -326,7 +327,8 @@ class Producer(object):
                 time.sleep(self._retry_backoff_ms / 1000)
                 # we have to call _produce here since the broker/partition
                 # target for each message may have changed
-                self._produce(to_retry, attempt)
+                for _ in self._produce(to_retry, attempt):
+                    pass
             else:
                 raise ProduceFailureError('Unable to produce messages. See log for details.')
 
@@ -422,8 +424,9 @@ class SynchronousProducer(Producer):
         :type linger_ms: int
         :param block_on_queue_full: When the producer's message queue for a
             broker contains max_queued_messages, we must either stop accepting
-            new messages (block) or throw an error. If True, this setting
+            new messages (block) or register an error. If True, this setting
             indicates we should block until space is available in the queue.
+            If False, we should return immediately and indicate the error.
         :type block_on_queue_full: bool
         """
         super(SynchronousProducer, self).__init__(
@@ -513,7 +516,9 @@ class OwnedBroker(object):
         :type acquire: bool
         """
         assert acquire or self.lock.locked()
-        self._wait_for_slot_available(acquire=acquire)
+        available = self._wait_for_slot_available(acquire=acquire)
+        if not available:
+            return False
         if acquire:
             self.lock.acquire()
         self.queue.extendleft(messages)
@@ -523,6 +528,7 @@ class OwnedBroker(object):
                 self.flush_ready.set()
         if acquire:
             self.lock.release()
+        return True
 
     def flush(self, linger_ms, acquire=True, release_inflight=False):
         """Pop messages from the end of the queue
@@ -596,8 +602,8 @@ class OwnedBroker(object):
             if self.producer._block_on_queue_full:
                 self.slot_available.wait()
             else:
-                raise ProducerQueueFullError("Queue full for broker %d",
-                                             self.broker.id)
+                return False
+        return True
 
     def resolve_event_state(self):
         """Invariants for the Event variables used for thread synchronization
