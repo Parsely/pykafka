@@ -115,7 +115,7 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
             ##"topic.metadata.refresh.fast.interval.ms"
             ##"topic.metadata.refresh.sparse"
 
-            "debug": "all",
+            ##"debug": "all",
 
             "socket.timeout.ms": self._cluster._socket_timeout_ms,
             ##"socket.send.buffer.bytes"
@@ -131,7 +131,7 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
             ##"stats_cb"
 
             ##"log_cb"  # gets set in _rd_kafka module
-            "log_level": 7,
+            ##"log_level": 7,
 
             ##"socket_cb"
             ##"open_cb"
