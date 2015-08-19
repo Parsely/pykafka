@@ -140,17 +140,11 @@ class Producer(object):
         """Context manager exit point - stop the producer
 
         If __exit__ is being called as a result of self._worker_exception
-        being raised, don't wait on the workers to finish - just re-raise
-        the exception. If __exit__ is being called because the with: block
-        has ended, do wait for workers to finish.
+        being raised, don't wait on the workers to finish. If __exit__ is being
+        called because the with: block has ended, do wait for workers to finish.
         """
         # If the thread crashed, don't wait for it
-        if self._worker_exception is not None:
-            log.exception(traceback)
-            self.stop(wait=False)
-            raise self._worker_exception
-        else:
-            self.stop()
+        self.stop(wait=self._worker_exception is None)
 
     def start(self):
         """Set up data structures and start worker threads"""
@@ -175,6 +169,8 @@ class Producer(object):
         self._running = False
         if wait:
             self._wait_all()
+        if self._worker_exception is not None:
+            raise self._worker_exception
 
     def produce(self, messages):
         """Produce a set of messages.
