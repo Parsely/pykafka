@@ -99,7 +99,7 @@ static PyStructSequence_Desc Message_desc = {
 
 
 /**
- * Consumer type
+ * Shared bits of Producer and Consumer types
  */
 
 
@@ -107,60 +107,31 @@ typedef struct {
     PyObject_HEAD
     rd_kafka_t *rdk_handle;
     rd_kafka_conf_t *rdk_conf;
-    rd_kafka_queue_t *rdk_queue_handle;
     rd_kafka_topic_t *rdk_topic_handle;
     rd_kafka_topic_conf_t *rdk_topic_conf;
+
+    /* Consumer-specific fields */
+    rd_kafka_queue_t *rdk_queue_handle;
     PyObject *partition_ids;
-} Consumer;
+} RdkHandle;
 
 
 static PyObject *
-Consumer_stop(Consumer *self, PyObject *args)
+RdkHandle_stop(RdkHandle *self)
 {
-    /* Call stop on all partitions, then destroy all handles */
+    /* NB Consumer_stop assumes this never raises exceptions, ie always returns
+     * Py_None */
 
-    PyObject *retval = Py_None;
-    if (self->rdk_topic_handle != NULL) {
-        Py_ssize_t i, len = PyList_Size(self->partition_ids);
-        for (i = 0; i != len; ++i) {
-            /* Error handling here is a bit poor; we cannot bail out directly
-               if we want to clean up as much as we can. */
-            long part_id = PyLong_AsLong(
-                    PyList_GetItem(self->partition_ids, i));
-            if (part_id == -1) {
-                retval = NULL;
-                PyObject *log_res = PyObject_CallMethod(
-                        logger, "exception", "s", "In Consumer_stop:");
-                Py_XDECREF(log_res);
-                continue;
-            }
-            int res;
-            Py_BEGIN_ALLOW_THREADS  /* avoid callbacks deadlocking */
-                res = rd_kafka_consume_stop(self->rdk_topic_handle, part_id);
-            Py_END_ALLOW_THREADS
-            if (res == -1) {
-                set_PyRdKafkaError(rd_kafka_errno2err(errno), NULL);
-                retval = NULL;
-                PyObject *log_res = PyObject_CallMethod(
-                        logger, "exception", "sl",
-                        "Error in rd_kafka_consume_stop, part_id=%s",
-                        part_id);
-                Py_XDECREF(log_res);
-                continue;
-            }
-        }
-        Py_CLEAR(self->partition_ids);
-        Py_BEGIN_ALLOW_THREADS  /* avoid callbacks deadlocking */
-            rd_kafka_topic_destroy(self->rdk_topic_handle);
-        Py_END_ALLOW_THREADS
-        self->rdk_topic_handle = NULL;
-    }
     Py_BEGIN_ALLOW_THREADS  /* avoid callbacks deadlocking */
-        if (self->rdk_queue_handle != NULL) {
+        if (self->rdk_queue_handle) {
             rd_kafka_queue_destroy(self->rdk_queue_handle);
             self->rdk_queue_handle = NULL;
         }
-        if (self->rdk_handle != NULL) {
+        if (self->rdk_topic_handle) {
+            rd_kafka_topic_destroy(self->rdk_topic_handle);
+            self->rdk_topic_handle = NULL;
+        }
+        if (self->rdk_handle) {
             rd_kafka_destroy(self->rdk_handle);
             self->rdk_handle = NULL;
         }
@@ -173,20 +144,21 @@ Consumer_stop(Consumer *self, PyObject *args)
             self->rdk_topic_conf = NULL;
         }
     Py_END_ALLOW_THREADS
+    Py_CLEAR(self->partition_ids);
 
-    Py_XINCREF(retval);
-    return retval;
+    Py_INCREF(Py_None);
+    return Py_None;
 }
 
 
 static void
-Consumer_dealloc(PyObject *self)
+RdkHandle_dealloc(PyObject *self, PyObject *(*stop_func) (RdkHandle *))
 {
-    PyObject *stop_result = Consumer_stop((Consumer *)self, NULL);
+    PyObject *stop_result = stop_func((RdkHandle *)self);
     if (!stop_result) {
         /* We'll swallow the exception, so let's try to log info first */
         PyObject *res = PyObject_CallMethod(
-                logger, "exception", "s", "Consumer_stop failure in dealloc");
+                logger, "exception", "s", "In dealloc: stop() failed.");
         PyErr_Clear();
         Py_XDECREF(res);
     } else {
@@ -196,7 +168,7 @@ Consumer_dealloc(PyObject *self)
 }
 
 
-PyDoc_STRVAR(Consumer_configure__doc__,
+PyDoc_STRVAR(RdkHandle_configure__doc__,
 "Set up and populate the rd_kafka_(topic_)conf_t\n"
 "\n"
 "Somewhat inelegantly (for the benefit of code reuse, whilst avoiding some\n"
@@ -207,7 +179,7 @@ PyDoc_STRVAR(Consumer_configure__doc__,
 "by calling Consumer_stop()\n");
 
 static PyObject *
-Consumer_configure(Consumer *self, PyObject *args, PyObject *kwds)
+RdkHandle_configure(RdkHandle *self, PyObject *args, PyObject *kwds)
 {
     char *keywords[] = {"conf", "topic_conf", NULL};
     PyObject *conf = NULL;
@@ -270,16 +242,17 @@ Consumer_configure(Consumer *self, PyObject *args, PyObject *kwds)
 }
 
 
-/* Cleanup helper for Consumer_start, returns NULL to allow shorthand in use */
+/* Cleanup helper for *_start(), returns NULL to allow shorthand in use */
 static PyObject *
-Consumer_start_fail(Consumer *self)
+RdkHandle_start_fail(RdkHandle *self, PyObject *(*stop_func) (RdkHandle *))
 {
     /* Something went wrong so we expect an exception has been set */
     PyObject *err_type, *err_value, *err_traceback;
     PyErr_Fetch(&err_type, &err_value, &err_traceback);
 
-    PyObject *stop_result = Consumer_stop(self, NULL);
-    /* Consumer_stop is likely to raise exceptions, as start was incomplete */
+    PyObject *stop_result = stop_func(self);
+
+    /* stop_func is likely to raise exceptions, as start was incomplete */
     if (! stop_result) PyErr_Clear();
     else Py_DECREF(stop_result);
 
@@ -289,7 +262,116 @@ Consumer_start_fail(Consumer *self)
 
 
 static PyObject *
-Consumer_start(Consumer *self, PyObject *args, PyObject *kwds)
+RdkHandle_start(RdkHandle *self,
+                rd_kafka_type_t rdk_type,
+                const char *brokers,
+                const char *topic_name)
+{
+    /* Configure and start rdk_handle */
+    char errstr[512];
+    Py_BEGIN_ALLOW_THREADS  /* avoid callbacks deadlocking */
+        self->rdk_handle = rd_kafka_new(
+                rdk_type, self->rdk_conf, errstr, sizeof(errstr));
+        self->rdk_conf = NULL;  /* deallocated by rd_kafka_new() */
+    Py_END_ALLOW_THREADS
+    if (! self->rdk_handle) {
+        set_PyRdKafkaError(RD_KAFKA_RESP_ERR__FAIL, errstr);
+        return NULL;
+    }
+
+    /* Set logger and brokers */
+    int brokers_added;
+    Py_BEGIN_ALLOW_THREADS  /* avoid callbacks deadlocking */
+        rd_kafka_set_logger(self->rdk_handle, logging_callback);
+        brokers_added = rd_kafka_brokers_add(self->rdk_handle, brokers);
+    Py_END_ALLOW_THREADS
+    if (brokers_added == 0) {
+        set_PyRdKafkaError(RD_KAFKA_RESP_ERR__FAIL, "adding brokers failed");
+        return RdkHandle_start_fail(self, RdkHandle_stop);
+    }
+
+    /* Configure and take out a topic handle */
+    Py_BEGIN_ALLOW_THREADS  /* avoid callbacks deadlocking */
+        self->rdk_topic_handle = rd_kafka_topic_new(self->rdk_handle,
+                                                    topic_name,
+                                                    self->rdk_topic_conf);
+        self->rdk_topic_conf = NULL;  /* deallocated by rd_kafka_topic_new() */
+    Py_END_ALLOW_THREADS
+    if (! self->rdk_topic_handle) {
+        set_PyRdKafkaError(rd_kafka_errno2err(errno), NULL);
+        return RdkHandle_start_fail(self, RdkHandle_stop);
+    }
+
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
+
+/**
+ * Consumer type
+ */
+
+
+static PyObject *
+Consumer_stop(RdkHandle *self)
+{
+    /* Call stop on all partitions, then destroy all handles */
+
+    PyObject *retval = Py_None;
+    if (self->rdk_topic_handle && self->partition_ids) {
+        Py_ssize_t i, len = PyList_Size(self->partition_ids);
+        for (i = 0; i != len; ++i) {
+            /* Error handling here is a bit poor; we cannot bail out directly
+               if we want to clean up as much as we can. */
+            long part_id = PyLong_AsLong(
+                    PyList_GetItem(self->partition_ids, i));
+            if (part_id == -1) {
+                retval = NULL;
+                PyObject *log_res = PyObject_CallMethod(
+                        logger, "exception", "s", "In Consumer_stop:");
+                Py_XDECREF(log_res);
+                continue;
+            }
+            int res;
+            Py_BEGIN_ALLOW_THREADS  /* avoid callbacks deadlocking */
+                res = rd_kafka_consume_stop(self->rdk_topic_handle, part_id);
+            Py_END_ALLOW_THREADS
+            if (res == -1) {
+                set_PyRdKafkaError(rd_kafka_errno2err(errno), NULL);
+                retval = NULL;
+                PyObject *log_res = PyObject_CallMethod(
+                        logger, "exception", "sl",
+                        "Error in rd_kafka_consume_stop, part_id=%s",
+                        part_id);
+                Py_XDECREF(log_res);
+                continue;
+            }
+        }
+    }
+    PyObject *res = RdkHandle_stop(self);
+    Py_XDECREF(res);  /* res should always be Py_None, the X is a formality */
+
+    Py_XINCREF(retval);
+    return retval;
+}
+
+
+static void
+Consumer_dealloc(PyObject *self)
+{
+    RdkHandle_dealloc(self, Consumer_stop);
+}
+
+
+static PyObject *
+Consumer_start_fail(RdkHandle *self)
+{
+    return RdkHandle_start_fail(self, Consumer_stop);
+}
+
+
+static PyObject *
+Consumer_start(RdkHandle *self, PyObject *args, PyObject *kwds)
 {
     char *keywords[] = {
         "brokers",
@@ -312,49 +394,20 @@ Consumer_start(Consumer *self, PyObject *args, PyObject *kwds)
         return NULL;
     }
 
+    /* Basic setup */
+    PyObject *res = RdkHandle_start(
+            self, RD_KAFKA_CONSUMER, brokers, topic_name);
+    if (! res) return NULL;
+
     /* We'll keep our own copy of partition_ids, because the one handed to us
        might be mutable, and weird things could happen if the list used on init
        is different than that on dealloc */
     if (self->partition_ids) {
         set_PyRdKafkaError(RD_KAFKA_RESP_ERR__FAIL, "Already started.");
-        return NULL;
+        return Consumer_start_fail(self);
     }
     self->partition_ids = PySequence_List(partition_ids);
-    if (! self->partition_ids) return NULL;
-
-    /* Configure and start a new RD_KAFKA_CONSUMER */
-    char errstr[512];
-    Py_BEGIN_ALLOW_THREADS  /* avoid callbacks deadlocking */
-        self->rdk_handle = rd_kafka_new(
-                RD_KAFKA_CONSUMER, self->rdk_conf, errstr, sizeof(errstr));
-    Py_END_ALLOW_THREADS
-    self->rdk_conf = NULL;  /* deallocated by rd_kafka_new() */
-    if (! self->rdk_handle) {
-        set_PyRdKafkaError(RD_KAFKA_RESP_ERR__FAIL, errstr);
-        return NULL;
-    }
-
-    int brokers_added;
-    Py_BEGIN_ALLOW_THREADS  /* avoid callbacks deadlocking */
-        rd_kafka_set_logger(self->rdk_handle, logging_callback);
-        brokers_added = rd_kafka_brokers_add(self->rdk_handle, brokers);
-    Py_END_ALLOW_THREADS
-    if (brokers_added == 0) {
-        set_PyRdKafkaError(RD_KAFKA_RESP_ERR__FAIL, "adding brokers failed");
-        return Consumer_start_fail(self);
-    }
-
-    /* Configure and take out a topic handle */
-    Py_BEGIN_ALLOW_THREADS  /* avoid callbacks deadlocking */
-        self->rdk_topic_handle = rd_kafka_topic_new(self->rdk_handle,
-                                                    topic_name,
-                                                    self->rdk_topic_conf);
-        self->rdk_topic_conf = NULL;  /* deallocated by rd_kafka_topic_new() */
-    Py_END_ALLOW_THREADS
-    if (! self->rdk_topic_handle) {
-        set_PyRdKafkaError(rd_kafka_errno2err(errno), NULL);
-        return Consumer_start_fail(self);
-    }
+    if (! self->partition_ids) return Consumer_start_fail(self);
 
     /* Start a queue and add all partition_ids to it */
     Py_BEGIN_ALLOW_THREADS  /* avoid callbacks deadlocking */
@@ -397,7 +450,7 @@ Consumer_start(Consumer *self, PyObject *args, PyObject *kwds)
 
 
 static PyObject *
-Consumer_consume(Consumer *self, PyObject *args)
+Consumer_consume(RdkHandle *self, PyObject *args)
 {
     int timeout_ms = 0;
     if (! PyArg_ParseTuple(args, "i", &timeout_ms)) return NULL;
@@ -451,8 +504,8 @@ static PyMethodDef Consumer_methods[] = {
     {"consume", (PyCFunction)Consumer_consume,
         METH_VARARGS, "Consume from kafka."},
     {"stop", (PyCFunction)Consumer_stop, METH_NOARGS, "Destroy consumer."},
-    {"configure", (PyCFunction)Consumer_configure,
-        METH_KEYWORDS, Consumer_configure__doc__},
+    {"configure", (PyCFunction)RdkHandle_configure,
+        METH_KEYWORDS, RdkHandle_configure__doc__},
     {"start", (PyCFunction)Consumer_start, METH_VARARGS | METH_KEYWORDS, NULL},
     {NULL, NULL, 0, NULL}
 };
@@ -461,7 +514,7 @@ static PyMethodDef Consumer_methods[] = {
 static PyTypeObject ConsumerType = {
     PyVarObject_HEAD_INIT(NULL, 0)
     "pykafka.rd_kafka.Consumer",
-    sizeof(Consumer),
+    sizeof(RdkHandle),
     0,                             /* tp_itemsize */
     (destructor)Consumer_dealloc,  /* tp_dealloc */
     0,                             /* tp_print */
