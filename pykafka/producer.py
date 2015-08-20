@@ -193,21 +193,20 @@ class Producer(object):
         if wait:
             self._wait_all()
 
-    def produce(self, message):
+    def produce(self, message, partition_key=None):
         """Produce a message.
 
         :param message: The message to produce
-        :type message: str or (str, str) tuple
+        :type message: str
+        :param partition_key: The key to use when deciding which partition to send this
+            message to
+        :type partition_key: str
         """
         if not self._running:
             raise ProducerStoppedException()
         partitions = self._topic.partitions.values()
-        if isinstance(message, basestring):
-            key = None
-            value = message
-        else:
-            key, value = message
-        message_partition_tup = (key, str(value)), self._partitioner(partitions, message).id
+        partition_id = self._partitioner(partitions, (message, partition_key)).id
+        message_partition_tup = (partition_key, message), partition_id
         self._produce(message_partition_tup)
         if self._synchronous:
             self._wait_all()
