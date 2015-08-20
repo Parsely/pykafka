@@ -198,36 +198,33 @@ class Producer(object):
             self._wait_all()
 
     @raise_worker_exceptions
-    def produce(self, messages):
-        """Produce a set of messages.
+    def produce(self, message):
+        """Produce a message.
 
-        :param messages: The messages to produce
-        :type messages: Iterable of str or (str, str) tuples
+        :param message: The message to produce
+        :type message: str or (str, str) tuple
         """
-        def _partition_messages():
-            """Assign messages to partitions using the partitioner."""
-            partitions = self._topic.partitions.values()
-            for message in messages:
-                if isinstance(message, basestring):
-                    key = None
-                    value = message
-                else:
-                    key, value = message
-                yield (key, str(value)), self._partitioner(partitions, message).id
         if not self._running:
             raise ProducerStoppedException()
-        self._produce(_partition_messages())
+        partitions = self._topic.partitions.values()
+        if isinstance(message, basestring):
+            key = None
+            value = message
+        else:
+            key, value = message
+        message_partition_tup = (key, str(value)), self._partitioner(partitions, message).id
+        self._produce(message_partition_tup)
 
     @raise_worker_exceptions
-    def _produce(self, message_partition_tups):
-        """Enqueue a set of messages for the relevant brokers
+    def _produce(self, message_partition_tup):
+        """Enqueue a message for the relevant broker
 
-        :param message_partition_tups: Messages with partitions assigned.
-        :type message_partition_tups: Iterable of ((str, str), int) tuples
+        :param message_partition_tup: Message with partition assigned.
+        :type message_partition_tup: ((str, str), int) tuple
         """
-        for kv, partition_id in message_partition_tups:
-            leader_id = self._topic.partitions[partition_id].leader.id
-            self._owned_brokers[leader_id].enqueue([(kv, partition_id)])
+        kv, partition_id = message_partition_tup
+        leader_id = self._topic.partitions[partition_id].leader.id
+        self._owned_brokers[leader_id].enqueue([(kv, partition_id)])
 
     @raise_worker_exceptions
     def _prepare_request(self, message_batch, owned_broker):
@@ -451,13 +448,13 @@ class SynchronousProducer(Producer):
             block_on_queue_full=block_on_queue_full
         )
 
-    def produce(self, messages):
-        """Produce a set of messages.
+    def produce(self, message):
+        """Produce a message.
 
-        :param messages: The messages to produce
-        :type messages: Iterable of str or (str, str) tuples
+        :param message: The message to produce
+        :type message: str or (str, str) tuple
         """
-        super(SynchronousProducer, self).produce(messages)
+        super(SynchronousProducer, self).produce(message)
         self._wait_all()
 
 
