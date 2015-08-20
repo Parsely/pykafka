@@ -28,7 +28,9 @@ if PY3:
     def itervalues(d, **kw):
         return iter(d.values(**kw))
 
-    buffer = memoryview
+    def buffer(val):
+        return bytes(memoryview(val))
+
     string_types = str,
 else:
     range = xrange

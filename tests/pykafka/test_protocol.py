@@ -128,15 +128,15 @@ class TestFetchAPI(unittest.TestCase):
         msg = '\x00\x00\x00\x01\x00\ttest_gzip\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x9b\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x8f\xbb\xe7\x1f\xb8\x00\x01\xff\xff\xff\xff\x00\x00\x00\x81\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x00c`\x80\x03\r\xbe.I\x7f0\x8b%\xb18%\rH\x8b\x95dd\x16+\x00Q\xa2BIjq\x89Bnjqqbz*T=#\x10\x1b\xb2\xf3\xcb\xf4\x81y\x1c \x15\xf1\xd9\xa9\x95@\xb64\\_Nq>v\xcdL@\xac\x7f\xb5(\xd9\x98\x81\xe1?\x10\x00y\x8a`M)\xf9\xa9\xc5y\xea%\n\x19\x89e\xa9@\x9d\x05\x89E%\x99%\x99\xf9y\n@\x93\x01N1\x9f[\xac\x00\x00\x00'
         response = protocol.FetchResponse(msg)
         self.assertDictEqual(
-            response.topics['test_gzip'][0].messages[0].__dict__,
+            response.topics[b'test_gzip'][0].messages[0].__dict__,
             {'partition_key': 'asdf', 'compression_type': 0, 'value': 'this is a test message', 'offset': 0, 'partition_id': 0, 'partition': None},
         )
         self.assertDictEqual(
-            response.topics['test_gzip'][0].messages[1].__dict__,
+            response.topics[b'test_gzip'][0].messages[1].__dict__,
             {'partition_key': 'test_key', 'compression_type': 0, 'value': 'this is also a test message', 'offset': 1, 'partition_id': 0, 'partition': None},
         )
         self.assertDictEqual(
-            response.topics['test_gzip'][0].messages[2].__dict__,
+            response.topics[b'test_gzip'][0].messages[2].__dict__,
             {'partition_key': None, 'compression_type': 0, 'value': "this doesn't have a partition key", 'offset': 2, 'partition_id': 0, 'partition': None}
         )
         return

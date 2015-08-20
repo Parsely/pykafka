@@ -117,4 +117,5 @@ def _unpack_array(fmt, buff, offset, count):
         output.append(item)
     if len(fmt) == 1:
         output = list(itertools.chain.from_iterable(output))
+
     return output, offset

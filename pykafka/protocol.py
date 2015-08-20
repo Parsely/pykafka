@@ -203,8 +203,9 @@ class Message(Message, Serializable):
 
         struct.pack_into(fmt, buff, offset + 4, *args)
         fmt_size = struct.calcsize(fmt)
-        crc = crc32(buffer(buff[(offset + 4):(offset + 4 + fmt_size)]))
-        struct.pack_into('!i', buff, offset, crc)
+        data = buffer(buff[(offset + 4):(offset + 4 + fmt_size)])
+        crc = crc32(data) & 0xffffffff
+        struct.pack_into('!I', buff, offset, crc)
 
 
 class MessageSet(Serializable):
@@ -289,6 +290,7 @@ class MessageSet(Serializable):
             attempted = True
             if len(buff) - offset < size:
                 break
+
             # TODO: Check we have all the requisite bytes
             message = Message.decode(buff[offset:offset + size],
                                      msg_offset,
@@ -296,6 +298,7 @@ class MessageSet(Serializable):
             # print '[%d] (%s) %s' % (message.offset, message.partition_key, message.value)
             messages.append(message)
             offset += size
+
         if len(messages) == 0 and attempted:
             raise NoMessagesConsumedError()
         return MessageSet(messages=messages)
