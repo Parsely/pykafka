@@ -63,7 +63,7 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
             self._rdk_consumer.stop()
             log.debug("Issued stop to _rdk_consumer.")
             self._rdk_consumer = None
-        super(RdKafkaSimpleConsumer, self).stop()
+        return super(RdKafkaSimpleConsumer, self).stop()
 
     def fetch_offsets(self):
         # Restart, because _rdk_consumer needs its internal offsets resynced
@@ -73,11 +73,18 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
     def reset_offsets(self, partition_offsets=None):
         # Restart, because _rdk_consumer needs its internal offsets resynced
         with self._stop_start_rdk_consumer():
-            super(RdKafkaSimpleConsumer, self).reset_offsets(partition_offsets)
+            return super(
+                RdKafkaSimpleConsumer, self).reset_offsets(partition_offsets)
 
     @contextmanager
     def _stop_start_rdk_consumer(self):
-        """Context manager for methods to temporarily stop _rdk_consumer"""
+        """Context manager for methods to temporarily stop _rdk_consumer
+
+        We need this because we hold read-offsets both in pykafka and
+        internally in _rdk_consumer.  We'll hold the one in pykafka to be the
+        ultimate source of truth.  So whenever offsets are to be changed (other
+        than through consume() that is), we need to clobber _rdk_consumer.
+        """
         restart_required = (self._running and hasattr(self, "_rdk_consumer")
                             and self._rdk_consumer is not None)
         if restart_required:
