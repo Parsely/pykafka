@@ -480,11 +480,11 @@ class OwnedBroker(object):
     def resolve_event_state(self):
         """Invariants for the Event variables used for thread synchronization
         """
-        if len(self.queue) >= self.producer._max_queued_messages:
-            self.slot_available.clear()
-            self.flush_ready.set()
-        elif len(self.queue) == 0:
+        if len(self.queue) < self.producer._max_queued_messages:
             self.slot_available.set()
-            self.flush_ready.clear()
         else:
-            self.slot_available.set()
+            self.slot_available.clear()
+        if len(self.queue) >= self.producer._min_queued_messages:
+            self.flush_ready.set()
+        else:
+            self.flush_ready.clear()
