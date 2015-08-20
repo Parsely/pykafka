@@ -46,9 +46,7 @@ log = logging.getLogger(__name__)
 
 
 class Producer(object):
-    """
-    This class implements asynchronous producer logic similar to that found in
-    the JVM driver.
+    """Implements asynchronous producer logic similar to the JVM driver.
 
     It creates a thread of execution for each broker that is the leader of
     one or more of its topic's partitions. Each of these threads (which may
@@ -140,8 +138,7 @@ class Producer(object):
         self.start()
 
     def raise_worker_exceptions(fn):
-        """Decorator that raises exceptions encountered on worker threads
-        """
+        """Decorator that raises exceptions encountered on worker threads"""
         def wrapped(self, *args, **kwargs):
             retval = fn(self, *args, **kwargs)
             if self._worker_exception is not None:
@@ -166,7 +163,6 @@ class Producer(object):
 
     def __enter__(self):
         """Context manager entry point - start the producer"""
-        self.start()
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
