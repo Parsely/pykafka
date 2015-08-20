@@ -18,6 +18,7 @@ limitations under the License.
 """
 __all__ = ["ResponseFuture", "Handler", "ThreadingHandler", "RequestHandler"]
 import atexit
+import functools
 import threading
 import Queue
 
@@ -72,6 +73,8 @@ class ThreadingHandler(Handler):
     Queue = Queue.Queue
     Event = threading.Event
     Lock = threading.Lock
+    # turn off RLock's super annoying default logging
+    RLock = functools.partial(threading.RLock, verbose=False)
 
     def spawn(self, target, *args, **kwargs):
         t = threading.Thread(target=target, *args, **kwargs)

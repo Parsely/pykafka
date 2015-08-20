@@ -340,16 +340,14 @@ class Producer(object):
         new_queue_contents = defaultdict(list)
         for owned_broker in self._owned_brokers.itervalues():
             owned_broker.lock.acquire()
-            current_queue_contents = owned_broker.flush(0, acquire=False,
-                                                        release_pending=True)
+            current_queue_contents = owned_broker.flush(0, release_pending=True)
             for kv, partition_id in current_queue_contents:
                 partition_leader = self._topic.partitions[partition_id].leader
                 new_queue_contents[partition_leader.id].append((kv, partition_id))
         # retain locks for all brokers between these two steps
         for owned_broker in self._owned_brokers.itervalues():
             owned_broker.enqueue(new_queue_contents[owned_broker.broker.id],
-                                 self._block_on_queue_full,
-                                 acquire=False)
+                                 self._block_on_queue_full)
             owned_broker.resolve_event_state()
             owned_broker.lock.release()
 
@@ -389,7 +387,7 @@ class OwnedBroker(object):
     def __init__(self, producer, broker):
         self.producer = producer
         self.broker = broker
-        self.lock = self.producer._cluster.handler.Lock()
+        self.lock = self.producer._cluster.handler.RLock()
         self.flush_ready = self.producer._cluster.handler.Event()
         self.slot_available = self.producer._cluster.handler.Event()
         self.queue = deque()
@@ -415,59 +413,43 @@ class OwnedBroker(object):
         """
         return self.messages_pending > 0
 
-    def enqueue(self, messages, acquire=True):
+    def enqueue(self, messages):
         """Push messages onto the queue
 
         :param messages: The messages to push onto the queue
         :type messages: iterable of tuples of the form
             `((key, value), partition_id)`
-        :param acquire: Whether to acquire and release the lock. If False,
-            this function assumes that the lock is already held by the caller
-            and raises an AssertionError if not.
-        :type acquire: bool
         """
-        assert acquire or self.lock.locked()
-        self._wait_for_slot_available(acquire=acquire)
-        if acquire:
-            self.lock.acquire()
-        self.queue.extendleft(messages)
-        self.messages_pending += len(messages)
-        if len(self.queue) >= self.producer._min_queued_messages:
-            if not self.flush_ready.is_set():
-                self.flush_ready.set()
-        if acquire:
-            self.lock.release()
+        self._wait_for_slot_available()
+        with self.lock:
+            self.queue.extendleft(messages)
+            self.messages_pending += len(messages)
+            if len(self.queue) >= self.producer._min_queued_messages:
+                if not self.flush_ready.is_set():
+                    self.flush_ready.set()
 
-    def flush(self, linger_ms, acquire=True, release_pending=False):
+    def flush(self, linger_ms, release_pending=False):
         """Pop messages from the end of the queue
 
         :param linger_ms: How long (in milliseconds) to wait for the queue
             to contain messages before flushing
         :type linger_ms: int
-        :param acquire: Whether to acquire and release the lock. If False,
-            this function assumes that the lock is already held by the caller
-            and raises an AssertionError if not.
-        :type acquire: bool
         :param release_pending: Whether to decrement the messages_pending
             counter when the queue is flushed. True means that the messages
             popped from the queue will be discarded unless re-enqueued
             by the caller.
         :type release_pending: bool
         """
-        assert acquire or self.lock.locked()
-        self._wait_for_flush_ready(linger_ms, acquire=acquire)
-        if acquire:
-            self.lock.acquire()
-        batch = [self.queue.pop() for _ in xrange(len(self.queue))]
-        if release_pending:
-            self.messages_pending -= len(batch)
-        if not self.slot_available.is_set():
-            self.slot_available.set()
-        if acquire:
-            self.lock.release()
+        self._wait_for_flush_ready(linger_ms)
+        with self.lock:
+            batch = [self.queue.pop() for _ in xrange(len(self.queue))]
+            if release_pending:
+                self.messages_pending -= len(batch)
+            if not self.slot_available.is_set():
+                self.slot_available.set()
         return batch
 
-    def _wait_for_flush_ready(self, linger_ms, acquire=True):
+    def _wait_for_flush_ready(self, linger_ms):
         """Block until the queue is ready to be flushed
 
         If the queue does not contain at least one message after blocking for
@@ -476,37 +458,19 @@ class OwnedBroker(object):
         :param linger_ms: How long (in milliseconds) to wait for the queue
             to contain messages before returning
         :type linger_ms: int
-        :param acquire: Whether to acquire and release the lock. If False,
-            this function assumes that the lock is already held by the caller
-            and raises an AssertionError if not.
-        :type acquire: bool
         """
-        assert acquire or self.lock.locked()
         if len(self.queue) == 0:
-            if acquire:
-                self.lock.acquire()
-            if len(self.queue) == 0:
-                self.flush_ready.clear()
-            if acquire:
-                self.lock.release()
+            with self.lock:
+                if len(self.queue) == 0:
+                    self.flush_ready.clear()
             self.flush_ready.wait(linger_ms / 1000)
 
-    def _wait_for_slot_available(self, acquire=True):
-        """Block until the queue has at least one slot not containing a message
-
-        :param acquire: Whether to acquire and release the lock. If False,
-            this function assumes that the lock is already held by the caller
-            and raises an AssertionError if not.
-        :type acquire: bool
-        """
-        assert acquire or self.lock.locked()
+    def _wait_for_slot_available(self):
+        """Block until the queue has at least one slot not containing a message"""
         if len(self.queue) >= self.producer._max_queued_messages:
-            if acquire:
-                self.lock.acquire()
-            if len(self.queue) >= self.producer._max_queued_messages:
-                self.slot_available.clear()
-            if acquire:
-                self.lock.release()
+            with self.lock:
+                if len(self.queue) >= self.producer._max_queued_messages:
+                    self.slot_available.clear()
             if self.producer._block_on_queue_full:
                 self.slot_available.wait()
             else:
