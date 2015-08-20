@@ -453,9 +453,9 @@ class OwnedBroker(object):
             to contain messages before returning
         :type linger_ms: int
         """
-        if len(self.queue) == 0:
+        if len(self.queue) < self.producer._min_queued_messages:
             with self.lock:
-                if len(self.queue) == 0:
+                if len(self.queue) < self.producer._min_queued_messages:
                     self.flush_ready.clear()
             self.flush_ready.wait(linger_ms / 1000)
 
