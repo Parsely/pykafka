@@ -15,7 +15,7 @@ notifications:
     - emmett@parsely.com
 
 before_install:
-    - sudo apt-get install -qq libev-dev libsnappy-dev
+    - apt-get install -qq libev-dev libsnappy-dev
 
 install:
     - pip install python-snappy kazoo unittest2 mock nose
