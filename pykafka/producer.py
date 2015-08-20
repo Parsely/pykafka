@@ -65,7 +65,7 @@ class Producer(object):
                  ack_timeout_ms=10 * 1000,
                  max_queued_messages=100000,
                  min_queued_messages=70000,
-                 linger_ms=0,
+                 linger_ms=5 * 1000,
                  block_on_queue_full=True,
                  sync=False):
         """Instantiate a new AsyncProducer
