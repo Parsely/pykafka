@@ -20,7 +20,7 @@ notifications:
 
 
 install:
-    - pip install python-coveralls
+    - pip install python-coveralls kazoo
 
 before_script:
     - "python -m pykafka.test.kafka_instance 3 --download-dir /home/travis/kafka-bin &"
