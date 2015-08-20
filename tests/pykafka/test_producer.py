@@ -31,7 +31,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
         # produced in a previous test
         payload = uuid4().bytes
 
-        prod = self.client.topics[self.topic_name].get_sync_producer()
+        prod = self.client.topics[self.topic_name].get_sync_producer(min_queued_messages=1)
         prod.produce(payload)
 
         # set a timeout so we don't wait forever if we break producer code
@@ -41,7 +41,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
     def test_async_produce(self):
         payload = uuid4().bytes
 
-        prod = self.client.topics[self.topic_name].get_producer()
+        prod = self.client.topics[self.topic_name].get_producer(min_queued_messages=1)
         prod.produce(payload)
 
         message = self.consumer.consume()
@@ -51,7 +51,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
         """Ensure that the producer works as a context manager"""
         payload = uuid4().bytes
 
-        with self.client.topics[self.topic_name].get_producer() as producer:
+        with self.client.topics[self.topic_name].get_producer(min_queued_messages=1) as producer:
             producer.produce(payload)
 
         message = self.consumer.consume()
@@ -85,7 +85,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
         """Ensure that an exception on a worker thread is raised to the main thread"""
         topic = self.client.topics[self.topic_name]
         with self.assertRaises(ValueError):
-            with topic.get_producer() as producer:
+            with topic.get_producer(min_queued_messages=1) as producer:
                 # get some dummy data into the queue that will cause a crash when flushed
                 # specifically, this tuple causes a crash since its first element is
                 # not a two-tuple
@@ -97,7 +97,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
         """Ensure that the producer can handle unicode strings"""
         topic = self.client.topics[self.topic_name]
         payload = u"tester"
-        with topic.get_producer() as producer:
+        with topic.get_producer(min_queued_messages=1) as producer:
             producer.produce(payload)
         message = self.consumer.consume()
         self.assertTrue(message.value == payload)

@@ -63,8 +63,8 @@ class Producer(object):
                  retry_backoff_ms=100,
                  required_acks=1,
                  ack_timeout_ms=10 * 1000,
-                 max_queued_messages=10000,
-                 min_queued_messages=5000,
+                 max_queued_messages=100000,
+                 min_queued_messages=70000,
                  linger_ms=0,
                  block_on_queue_full=True,
                  sync=False):
@@ -102,7 +102,7 @@ class Producer(object):
             broker.
         :type min_queued_messages: int
         :param linger_ms: This setting gives the upper bound on the delay for
-            batching: once the producer gets max_queued_messages worth of
+            batching: once the producer gets min_queued_messages worth of
             messages for a broker, it will be sent immediately regardless of
             this setting.  However, if we have fewer than this many messages
             accumulated for this partition we will 'linger' for the specified
