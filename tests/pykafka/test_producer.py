@@ -20,6 +20,8 @@ class ProducerIntegrationTests(unittest.TestCase):
         stop_cluster(cls.kafka)
 
     def test_produce(self):
+        consumer = None
+
         try:
             # unique bytes, just to be absolutely sure we're not fetching data
             # produced in a previous test
@@ -35,7 +37,8 @@ class ProducerIntegrationTests(unittest.TestCase):
             message = consumer.consume()
             self.assertTrue(message.value == payload)
         finally:
-            consumer.stop()
+            if consumer:
+                consumer.stop()
 
 if __name__ == "__main__":
     unittest.main()

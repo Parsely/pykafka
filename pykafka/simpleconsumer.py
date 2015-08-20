@@ -239,7 +239,7 @@ class SimpleConsumer():
     def partitions(self):
         """A list of the partitions that this consumer consumes"""
         return {id_: partition.partition
-                for id_, partition in iteritems(self._partitions_by_id.iteritems)}
+                for id_, partition in iteritems(self._partitions_by_id)}
 
     @property
     def held_offsets(self):

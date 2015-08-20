@@ -21,7 +21,7 @@ import gzip
 import logging
 import struct
 
-from .compat import StringIO
+from .compat import StringIO, range, get_bytes, buffer
 
 try:
     import snappy
@@ -30,7 +30,7 @@ except ImportError:
 
 log = logging.getLogger(__name__)
 # constants used in snappy xerial encoding/decoding
-_XERIAL_V1_HEADER = (-126, 'S', 'N', 'A', 'P', 'P', 'Y', 0, 1, 1)
+_XERIAL_V1_HEADER = (-126, b'S', b'N', b'A', b'P', b'P', b'Y', 0, 1, 1)
 _XERIAL_V1_FORMAT = 'bccccccBii'
 
 
@@ -79,15 +79,20 @@ def encode_snappy(buff, xerial_compatible=False, xerial_blocksize=32 * 1024):
     Adapted from kafka-python
     https://github.com/mumrah/kafka-python/pull/127/files
     """
+    buff = get_bytes(buff)
+
     if snappy is None:
         raise ImportError("Please install python-snappy")
     if xerial_compatible:
         def _chunker():
-            for i in xrange(0, len(buff), xerial_blocksize):
+            for i in range(0, len(buff), xerial_blocksize):
                 yield buff[i:i + xerial_blocksize]
         out = StringIO()
-        header = ''.join([struct.pack('!' + fmt, dat) for fmt, dat
-                          in zip(_XERIAL_V1_FORMAT, _XERIAL_V1_HEADER)])
+        full_data = list(zip(_XERIAL_V1_FORMAT, _XERIAL_V1_HEADER))
+        header = b''.join(
+            [struct.pack('!' + fmt, dat) for fmt, dat in full_data
+         ])
+
         out.write(header)
         for chunk in _chunker():
             block = snappy.compress(chunk)
@@ -113,14 +118,17 @@ def decode_snappy(buff):
         raise ImportError("Please install python-snappy")
     if _detect_xerial_stream(buff):
         out = StringIO()
-        body = buffer(buff[16:])
+        body = bytes(buffer(buff[16:]))
         length = len(body)
         cursor = 0
         while cursor < length:
             block_size = struct.unpack_from('!i', body[cursor:])[0]
             cursor += 4
             end = cursor + block_size
-            out.write(snappy.decompress(body[cursor:end]))
+            try:
+                out.write(snappy.decompress(body[cursor:end]))
+            except:
+                import pdb; pdb.set_trace()
             cursor = end
         out.seek(0)
         return out.read()

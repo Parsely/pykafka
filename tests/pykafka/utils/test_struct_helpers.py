@@ -12,11 +12,11 @@ class StructHelpersTests(unittest.TestCase):
 
     def test_string_encoding(self):
         output = struct_helpers.unpack_from('S', b'\x00\x04test')
-        self.assertEqual(output, ('test',))
+        self.assertEqual(output, (b'test',))
 
     def test_bytearray_unpacking(self):
         output = struct_helpers.unpack_from('Y', b'\x00\x00\x00\x04test')
-        self.assertEqual(output, ('test',))
+        self.assertEqual(output, (b'test',))
 
     def test_array_unpacking(self):
         output = struct_helpers.unpack_from(

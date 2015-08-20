@@ -4,6 +4,18 @@ __all__ = ['PY3', 'Semaphore']
 
 PY3 = sys.version_info[0] >= 3
 
+
+def get_bytes(value):
+    if hasattr(value, 'encode'):
+        try:
+            value = value.encode('utf-8')
+        except:
+            # if we can't encode the value just pass it along
+            pass
+
+    return value
+
+
 if PY3:
     from threading import Semaphore
     from queue import Queue, Empty
@@ -15,6 +27,9 @@ if PY3:
 
     def itervalues(d, **kw):
         return iter(d.values(**kw))
+
+    buffer = memoryview
+    string_types = str,
 else:
     range = xrange
     from threading import Condition, Lock
@@ -28,6 +43,9 @@ else:
 
     def itervalues(d, **kw):
         return iter(d.itervalues(**kw))
+
+    buffer = buffer
+    string_types = basestring,
 
     # -- begin unmodified backport of threading.Semaphore from Python 3.4 -- #
     class Semaphore:

@@ -29,6 +29,8 @@ import time
 from testinstances import utils
 from testinstances.exceptions import ProcessNotStartingError
 from testinstances.managed_instance import ManagedInstance
+from pykafka.utils.compat import range
+
 
 log = logging.getLogger(__name__)
 
@@ -223,7 +225,7 @@ class KafkaInstance(ManagedInstance):
 
         # Process is started when the port isn't free anymore
         all_ports = [zk_port] + broker_ports
-        for i in xrange(10):
+        for i in range(10):
             if all(not self._is_port_free(port) for port in all_ports):
                 log.info('Kafka cluster started.')
                 return  # hooray! success
@@ -253,8 +255,8 @@ class KafkaInstance(ManagedInstance):
         self._broker_procs = []
         ports = self._port_generator(9092)
         used_ports = []
-        for i in xrange(self._num_instances):
-            port = ports.next()
+        for i in range(self._num_instances):
+            port = next(ports)
             used_ports.append(port)
             log.info('Starting Kafka on port %i.', port)
 
@@ -279,7 +281,7 @@ class KafkaInstance(ManagedInstance):
         return used_ports
 
     def _start_zookeeper(self):
-        port = self._port_generator(2181).next()
+        port = next(self._port_generator(2181))
         log.info('Starting zookeeper on port %i.', port)
 
         conf = os.path.join(self._conf_dir, 'zk.properties')

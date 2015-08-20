@@ -31,7 +31,7 @@ from .exceptions import (
 )
 from .partitioners import random_partitioner
 from .protocol import Message, ProduceRequest
-
+from .utils.compat import string_types, get_bytes
 
 log = logging.getLogger(__name__)
 
@@ -190,14 +190,17 @@ class Producer():
         :param messages: Iterable of messages to publish.
         :returns:        Generator of ((key, value), partition_id)
         """
-        partitions = self._topic.partitions.values()
+        partitions = list(self._topic.partitions.values())
+
         for message in messages:
-            if isinstance(message, basestring):
+            if isinstance(message, string_types):
                 key = None
                 value = message
             else:
                 key, value = message
-            value = str(value)
+
+            value = get_bytes(value)
+
             yield (key, value), self._partitioner(partitions, message).id
 
     def _produce(self, message_partition_tups, attempt):

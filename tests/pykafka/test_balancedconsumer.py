@@ -59,8 +59,8 @@ class TestBalancedConsumer(unittest.TestCase):
             # Set up partitions, cluster, etc
             num_participants = i + 1
             num_partitions = 100 - i
-            participants = ['test-debian:{p}'.format(p=p)
-                            for p in range(num_participants)]
+            participants = sorted(['test-debian:{p}'.format(p=p)
+                            for p in range(num_participants)])
             cns, topic = buildMockConsumer(num_partitions=num_partitions,
                                            num_participants=num_participants)
 
@@ -77,7 +77,9 @@ class TestBalancedConsumer(unittest.TestCase):
                 idx = participants.index(cns._consumer_id)
                 parts_per_consumer = num_partitions / num_participants
                 parts_per_consumer = math.floor(parts_per_consumer)
+
                 num_parts = parts_per_consumer + (0 if (idx + 1 > remainder_ppc) else 1)
+
                 self.assertEqual(len(partitions), int(num_parts))
 
             # Validate all partitions were assigned once and only once

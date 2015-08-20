@@ -3,6 +3,7 @@ from pykafka.test.utils import unittest
 from pykafka import exceptions
 from pykafka import protocol
 from pykafka.common import CompressionType
+from pykafka.utils.compat import buffer
 
 
 class TestMetadataAPI(unittest.TestCase):
@@ -18,30 +19,30 @@ class TestMetadataAPI(unittest.TestCase):
 
     def test_response(self):
         cluster = protocol.MetadataResponse(
-            buffer('\x00\x00\x00\x01\x00\x00\x00\x00\x00\x09localhost\x00\x00#\x84\x00\x00\x00\x01\x00\x00\x00\x04test\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00')
+            buffer(b'\x00\x00\x00\x01\x00\x00\x00\x00\x00\x09localhost\x00\x00#\x84\x00\x00\x00\x01\x00\x00\x00\x04test\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00')
         )
-        self.assertEqual(cluster.brokers[0].host, 'localhost')
+        self.assertEqual(cluster.brokers[0].host, b'localhost')
         self.assertEqual(cluster.brokers[0].port, 9092)
-        self.assertEqual(cluster.topics['test'].partitions[0].leader,
+        self.assertEqual(cluster.topics[b'test'].partitions[0].leader,
                          cluster.brokers[0].id)
-        self.assertEqual(cluster.topics['test'].partitions[0].replicas,
+        self.assertEqual(cluster.topics[b'test'].partitions[0].replicas,
                          [cluster.brokers[0].id])
-        self.assertEqual(cluster.topics['test'].partitions[0].isr,
+        self.assertEqual(cluster.topics[b'test'].partitions[0].isr,
                          [cluster.brokers[0].id])
 
     def test_partition_error(self):
         # Response has a UnknownTopicOrPartition error for test/0
         response = protocol.MetadataResponse(
-            buffer('\x00\x00\x00\x01\x00\x00\x00\x00\x00\x09localhost\x00\x00#\x84\x00\x00\x00\x01\x00\x00\x00\x04test\x00\x00\x00\x02\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00')
+            buffer(b'\x00\x00\x00\x01\x00\x00\x00\x00\x00\x09localhost\x00\x00#\x84\x00\x00\x00\x01\x00\x00\x00\x04test\x00\x00\x00\x02\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00')
         )
-        self.assertEqual(response.topics['test'].partitions[0].err, 3)
+        self.assertEqual(response.topics[b'test'].partitions[0].err, 3)
 
     def test_topic_error(self):
         # Response has a UnknownTopicOrPartition error for test/0
         response = protocol.MetadataResponse(
-                buffer('\x00\x00\x00\x01\x00\x00\x00\x00\x00\x09localhost\x00\x00#\x84\x00\x00\x00\x01\x00\x03\x00\x04test\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00')
+                buffer(b'\x00\x00\x00\x01\x00\x00\x00\x00\x00\x09localhost\x00\x00#\x84\x00\x00\x00\x01\x00\x03\x00\x04test\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00')
             )
-        self.assertEqual(response.topics['test'].err, 3)
+        self.assertEqual(response.topics[b'test'].err, 3)
 
 
 class TestProduceAPI(unittest.TestCase):
@@ -78,17 +79,17 @@ class TestProduceAPI(unittest.TestCase):
     def test_partition_error(self):
         # Response has a UnknownTopicOrPartition error for test/0
         response = protocol.ProduceResponse(
-                buffer('\x00\x00\x00\x01\x00\x04test\x00\x00\x00\x01\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x02')
+                buffer(b'\x00\x00\x00\x01\x00\x04test\x00\x00\x00\x01\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x02')
         )
-        self.assertEqual(response.topics['test'][0].err, 3)
+        self.assertEqual(response.topics[b'test'][0].err, 3)
 
     def test_response(self):
         response = protocol.ProduceResponse(
-            buffer('\x00\x00\x00\x01\x00\x04test\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02')
+            buffer(b'\x00\x00\x00\x01\x00\x04test\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02')
         )
         self.assertEqual(
             response.topics,
-            {'test': {0: protocol.ProducePartitionResponse(0, 2)}}
+            {b'test': {0: protocol.ProducePartitionResponse(0, 2)}}
         )
 
 
@@ -107,19 +108,19 @@ class TestFetchAPI(unittest.TestCase):
     def test_partition_error(self):
         # Response has a UnknownTopicOrPartition error for test/0
         response = protocol.FetchResponse(
-            buffer('\x00\x00\x00\x01\x00\x04test\x00\x00\x00\x01\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00B\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x006\xa3 ^B\x00\x00\x00\x00\x00\x12test_partition_key\x00\x00\x00\x16this is a test message')
+            buffer(b'\x00\x00\x00\x01\x00\x04test\x00\x00\x00\x01\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00B\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x006\xa3 ^B\x00\x00\x00\x00\x00\x12test_partition_key\x00\x00\x00\x16this is a test message')
         )
-        self.assertEqual(response.topics['test'][0].err, 3)
+        self.assertEqual(response.topics[b'test'][0].err, 3)
 
     def test_response(self):
         resp = protocol.FetchResponse(
-            buffer('\x00\x00\x00\x01\x00\x04test\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00B\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x006\xa3 ^B\x00\x00\x00\x00\x00\x12test_partition_key\x00\x00\x00\x16this is a test message')
+            buffer(b'\x00\x00\x00\x01\x00\x04test\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00B\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x006\xa3 ^B\x00\x00\x00\x00\x00\x12test_partition_key\x00\x00\x00\x16this is a test message')
         )
-        self.assertEqual(len(resp.topics['test'][0].messages), 1)
-        self.assertEqual(resp.topics['test'][0].max_offset, 2)
-        message = resp.topics['test'][0].messages[0]
-        self.assertEqual(message.value, 'this is a test message')
-        self.assertEqual(message.partition_key, 'test_partition_key')
+        self.assertEqual(len(resp.topics[b'test'][0].messages), 1)
+        self.assertEqual(resp.topics[b'test'][0].max_offset, 2)
+        message = resp.topics[b'test'][0].messages[0]
+        self.assertEqual(message.value, b'this is a test message')
+        self.assertEqual(message.partition_key, b'test_partition_key')
         self.assertEqual(message.compression_type, 0)
         self.assertEqual(message.offset, 1)
 
@@ -172,15 +173,15 @@ class TestOffsetAPI(unittest.TestCase):
     def test_partition_error(self):
         # Response has a UnknownTopicOrPartition error for test/0
         response = protocol.OffsetResponse(
-            buffer('\x00\x00\x00\x01\x00\x04test\x00\x00\x00\x01\x00\x00\x00\x00\x00\x03\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x02')
+            buffer(b'\x00\x00\x00\x01\x00\x04test\x00\x00\x00\x01\x00\x00\x00\x00\x00\x03\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x02')
         )
-        self.assertEqual(response.topics['test'][0].err, 3)
+        self.assertEqual(response.topics[b'test'][0].err, 3)
 
     def test_response(self):
         resp = protocol.OffsetResponse(
-            buffer('\x00\x00\x00\x01\x00\x04test\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x02')
+            buffer(b'\x00\x00\x00\x01\x00\x04test\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x02')
         )
-        self.assertEqual(resp.topics['test'][0].offset, [2])
+        self.assertEqual(resp.topics[b'test'][0].offset, [2])
 
 
 class TestOffsetCommitFetchAPI(unittest.TestCase):
@@ -196,10 +197,10 @@ class TestOffsetCommitFetchAPI(unittest.TestCase):
 
     def test_consumer_metadata_response(self):
         response = protocol.ConsumerMetadataResponse(
-            buffer('\x00\x00\x00\x00\x00\x00\x00\remmett-debian\x00\x00#\x84')
+            buffer(b'\x00\x00\x00\x00\x00\x00\x00\remmett-debian\x00\x00#\x84')
         )
         self.assertEqual(response.coordinator_id, 0)
-        self.assertEqual(response.coordinator_host, 'emmett-debian')
+        self.assertEqual(response.coordinator_host, b'emmett-debian')
         self.assertEqual(response.coordinator_port, 9092)
 
     def test_offset_commit_request(self):
@@ -214,9 +215,9 @@ class TestOffsetCommitFetchAPI(unittest.TestCase):
 
     def test_offset_commit_response(self):
         response = protocol.OffsetCommitResponse(
-            buffer('\x00\x00\x00\x01\x00\x0cemmett.dummy\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00')
+            buffer(b'\x00\x00\x00\x01\x00\x0cemmett.dummy\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00')
         )
-        self.assertEqual(response.topics['emmett.dummy'][0].err, 0)
+        self.assertEqual(response.topics[b'emmett.dummy'][0].err, 0)
 
     def test_offset_fetch_request(self):
         preq = protocol.PartitionOffsetFetchRequest('testtopic', 0)
@@ -229,10 +230,10 @@ class TestOffsetCommitFetchAPI(unittest.TestCase):
 
     def test_offset_fetch_response(self):
         response = protocol.OffsetFetchResponse(
-            buffer('\x00\x00\x00\x01\x00\x0cemmett.dummy\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00')
+            buffer(b'\x00\x00\x00\x01\x00\x0cemmett.dummy\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00')
         )
-        self.assertEqual(response.topics['emmett.dummy'][0].metadata, '')
-        self.assertEqual(response.topics['emmett.dummy'][0].offset, 1)
+        self.assertEqual(response.topics[b'emmett.dummy'][0].metadata, b'')
+        self.assertEqual(response.topics[b'emmett.dummy'][0].offset, 1)
 
 
 if __name__ == '__main__':

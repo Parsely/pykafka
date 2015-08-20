@@ -29,7 +29,7 @@ from .protocol import (
     OffsetCommitRequest, OffsetCommitResponse,
     OffsetFetchRequest, OffsetFetchResponse,
     ProduceResponse)
-
+from .utils.compat import range, iteritems
 
 log = logging.getLogger(__name__)
 
@@ -274,7 +274,7 @@ class Broker():
         :type topics: Iterable of int
         """
         max_retries = 3
-        for i in xrange(max_retries):
+        for i in range(max_retries):
             if i > 0:
                 log.debug("Retrying")
             time.sleep(i)
@@ -283,11 +283,11 @@ class Broker():
             response = future.get(MetadataResponse)
 
             errored = False
-            for name, topic_metadata in response.topics.iteritems():
+            for name, topic_metadata in iteritems(response.topics):
                 if topic_metadata.err == LeaderNotAvailable.ERROR_CODE:
                     log.warning("Leader not available.")
                     errored = True
-                for pid, partition_metadata in topic_metadata.partitions.iteritems():
+                for pid, partition_metadata in iteritems(topic_metadata.partitions):
                     if partition_metadata.err == LeaderNotAvailable.ERROR_CODE:
                         log.warning("Leader not available.")
                         errored = True
