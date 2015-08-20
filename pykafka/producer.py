@@ -190,7 +190,7 @@ class Producer(object):
     def stop(self, wait=True):
         """Mark the producer as stopped
 
-        :param wait: Whether to wait for all inflight messages to be sent
+        :param wait: Whether to wait for all pending messages to be sent
             before returning
         :type wait: bool
         """
@@ -290,7 +290,7 @@ class Producer(object):
                         # mark msg_count messages as successfully delivered
                         msg_count = len(req.msets[topic][partition].messages)
                         with owned_broker.lock:
-                            owned_broker.messages_inflight -= msg_count
+                            owned_broker.messages_pending -= msg_count
                         continue  # All's well
                     if presponse.err == UnknownTopicOrPartition.ERROR_CODE:
                         log.warning('Unknown topic: %s or partition: %s. '
@@ -350,7 +350,7 @@ class Producer(object):
         for owned_broker in self._owned_brokers.itervalues():
             owned_broker.lock.acquire()
             current_queue_contents = owned_broker.flush(0, acquire=False,
-                                                        release_inflight=True)
+                                                        release_pending=True)
             for kv, partition_id in current_queue_contents:
                 partition_leader = self._topic.partitions[partition_id].leader
                 new_queue_contents[partition_leader.id].append((kv, partition_id))
@@ -364,13 +364,13 @@ class Producer(object):
 
     @raise_worker_exceptions
     def _wait_all(self):
-        """Block until all messages in flight are sent
+        """Block until all pending messages are sent
 
-        "In flight" messages are those that have been used in calls to `produce`
+        "Pending" messages are those that have been used in calls to `produce`
         and have not yet been dequeued and sent to the broker
         """
         log.info("Blocking until all messages are sent")
-        while any(q.message_is_inflight() for q in self._owned_brokers.itervalues()):
+        while any(q.message_is_pending() for q in self._owned_brokers.itervalues()):
             time.sleep(.3)
 
 
@@ -390,9 +390,9 @@ class OwnedBroker(object):
         been supplied as arguments to `produce()` waiting to be sent to the
         broker.
     :type queue: collections.deque
-    :ivar messages_inflight: A counter indicating how many messages have been
+    :ivar messages_pending: A counter indicating how many messages have been
         enqueued for this broker and not yet sent in a request.
-    :type messages_inflight: int
+    :type messages_pending: int
     :ivar producer: The producer to which this OwnedBroker instance belongs
     :type producer: :class:`pykafka.producer.AsyncProducer`
     """
@@ -403,7 +403,7 @@ class OwnedBroker(object):
         self.flush_ready = self.producer._cluster.handler.Event()
         self.slot_available = self.producer._cluster.handler.Event()
         self.queue = deque()
-        self.messages_inflight = 0
+        self.messages_pending = 0
 
         def queue_reader():
             while True:
@@ -418,12 +418,12 @@ class OwnedBroker(object):
         log.info("Starting new produce worker for broker %s", broker.id)
         self.producer._cluster.handler.spawn(queue_reader)
 
-    def message_is_inflight(self):
+    def message_is_pending(self):
         """
         Indicates whether there are currently any messages that have been
             `produce()`d and not yet sent to the broker
         """
-        return self.messages_inflight > 0
+        return self.messages_pending > 0
 
     def enqueue(self, messages, acquire=True):
         """Push messages onto the queue
@@ -441,14 +441,14 @@ class OwnedBroker(object):
         if acquire:
             self.lock.acquire()
         self.queue.extendleft(messages)
-        self.messages_inflight += len(messages)
+        self.messages_pending += len(messages)
         if len(self.queue) >= self.producer._min_queued_messages:
             if not self.flush_ready.is_set():
                 self.flush_ready.set()
         if acquire:
             self.lock.release()
 
-    def flush(self, linger_ms, acquire=True, release_inflight=False):
+    def flush(self, linger_ms, acquire=True, release_pending=False):
         """Pop messages from the end of the queue
 
         :param linger_ms: How long (in milliseconds) to wait for the queue
@@ -458,19 +458,19 @@ class OwnedBroker(object):
             this function assumes that the lock is already held by the caller
             and raises an AssertionError if not.
         :type acquire: bool
-        :param release_inflight: Whether to decrement the messages_inflight
+        :param release_pending: Whether to decrement the messages_pending
             counter when the queue is flushed. True means that the messages
             popped from the queue will be discarded unless re-enqueued
             by the caller.
-        :type release_inflight: bool
+        :type release_pending: bool
         """
         assert acquire or self.lock.locked()
         self._wait_for_flush_ready(linger_ms, acquire=acquire)
         if acquire:
             self.lock.acquire()
         batch = [self.queue.pop() for _ in xrange(len(self.queue))]
-        if release_inflight:
-            self.messages_inflight -= len(batch)
+        if release_pending:
+            self.messages_pending -= len(batch)
         if not self.slot_available.is_set():
             self.slot_available.set()
         if acquire:
