@@ -17,7 +17,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-__all__ = ["Producer", "SynchronousProducer"]
+__all__ = ["Producer"]
 from collections import defaultdict, deque
 import itertools
 import logging
@@ -68,7 +68,8 @@ class Producer(object):
                  max_queued_messages=10000,
                  min_queued_messages=5000,
                  linger_ms=0,
-                 block_on_queue_full=True):
+                 block_on_queue_full=True,
+                 sync=False):
         """Instantiate a new AsyncProducer
 
         :param cluster: The cluster to which to connect
@@ -116,6 +117,9 @@ class Producer(object):
             indicates we should block until space is available in the queue.
             If False, we should throw an error immediately.
         :type block_on_queue_full: bool
+        :param sync: Whether calls to `produce` should wait for the
+            message to send before returning
+        :type sync: bool
         """
         self._cluster = cluster
         self._topic = topic
@@ -129,6 +133,7 @@ class Producer(object):
         self._min_queued_messages = min_queued_messages
         self._linger_ms = linger_ms
         self._block_on_queue_full = block_on_queue_full
+        self._synchronous = sync
         self._worker_exception = None
         self._worker_trace_logged = False
         self._running = False
@@ -214,6 +219,8 @@ class Producer(object):
             key, value = message
         message_partition_tup = (key, str(value)), self._partitioner(partitions, message).id
         self._produce(message_partition_tup)
+        if self._synchronous:
+            self._wait_all()
 
     @raise_worker_exceptions
     def _produce(self, message_partition_tup):
@@ -369,93 +376,6 @@ class Producer(object):
         log.info("Blocking until all messages are sent")
         while any(q.message_is_inflight() for q in self._owned_brokers.itervalues()):
             time.sleep(.3)
-
-
-class SynchronousProducer(Producer):
-    """ This class implements the synchronous producer logic found in the JVM driver.
-    """
-    def __init__(self,
-                 cluster,
-                 topic,
-                 partitioner=random_partitioner,
-                 compression=CompressionType.NONE,
-                 max_retries=3,
-                 retry_backoff_ms=100,
-                 required_acks=1,
-                 ack_timeout_ms=10000,
-                 max_queued_messages=10000,
-                 min_queued_messages=5000,
-                 linger_ms=0,
-                 block_on_queue_full=True):
-        """Instantiate a new Producer.
-
-        :param cluster: The cluster to which to connect
-        :type cluster: :class:`pykafka.cluster.Cluster`
-        :param topic: The topic to which to produce messages
-        :type topic: :class:`pykafka.topic.Topic`
-        :param partitioner: The partitioner to use during message production
-        :type partitioner: :class:`pykafka.partitioners.BasePartitioner`
-        :param compression: The type of compression to use.
-        :type compression: :class:`pykafka.common.CompressionType`
-        :param max_retries: How many times to attempt to produce messages
-            before raising an error.
-        :type max_retries: int
-        :param retry_backoff_ms: The amount of time (in milliseconds) to
-            back off during produce request retries.
-        :type retry_backoff_ms: int
-        :param required_acks: How many other brokers must have committed the
-            data to their log and acknowledged this to the leader before a
-            request is considered complete?
-        :type required_acks: int
-        :param ack_timeout_ms: Amount of time (in milliseconds) to wait for
-            acknowledgment of a produce request.
-        :type ack_timeout_ms: int
-        :param max_queued_messages: The maximum number of messages the producer
-            can have waiting to be sent to the broker. If messages are sent
-            faster than they can be delivered to the broker, the producer will
-            either block or throw an exception based on the preference specified
-            by block_on_queue_full.
-        :type max_queued_messages: int
-        :param min_queued_messages: The minimum number of messages the producer
-            can have waiting in a queue before it flushes that queue to its
-            broker.
-        :type min_queued_messages: int
-        :param linger_ms: This setting gives the upper bound on the delay for
-            batching: once the producer gets max_queued_messages worth of
-            messages for a broker, it will be sent immediately regardless of
-            this setting.  However, if we have fewer than this many messages
-            accumulated for this partition we will 'linger' for the specified
-            time waiting for more records to show up. linger_ms=0 indicates no
-            lingering.
-        :type linger_ms: int
-        :param block_on_queue_full: When the producer's message queue for a
-            broker contains max_queued_messages, we must either stop accepting
-            new messages (block) or throw an error. If True, this setting
-            indicates we should block until space is available in the queue.
-        :type block_on_queue_full: bool
-        """
-        super(SynchronousProducer, self).__init__(
-            cluster,
-            topic,
-            partitioner=partitioner,
-            compression=compression,
-            max_retries=max_retries,
-            retry_backoff_ms=retry_backoff_ms,
-            required_acks=required_acks,
-            ack_timeout_ms=ack_timeout_ms,
-            max_queued_messages=max_queued_messages,
-            linger_ms=linger_ms,
-            block_on_queue_full=block_on_queue_full
-        )
-
-    def produce(self, message):
-        """Produce a message.
-
-        :param message: The message to produce
-        :type message: str or (str, str) tuple
-        """
-        super(SynchronousProducer, self).produce(message)
-        self._wait_all()
 
 
 class OwnedBroker(object):
