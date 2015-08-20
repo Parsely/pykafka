@@ -360,6 +360,7 @@ class Producer(object):
         log.info("Blocking until all messages are sent")
         while any(q.message_is_pending() for q in self._owned_brokers.itervalues()):
             time.sleep(.3)
+            self.raise_worker_exceptions()
 
 
 class OwnedBroker(object):

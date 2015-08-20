@@ -81,6 +81,18 @@ class ProducerIntegrationTests(unittest2.TestCase):
         self.consumer.consume()
         self.consumer.consume()
 
+    def test_async_produce_thread_exception(self):
+        """Ensure that an exception on a worker thread is raised to the main thread"""
+        topic = self.client.topics[self.topic_name]
+        with self.assertRaises(ValueError):
+            with topic.get_producer() as producer:
+                # get some dummy data into the queue that will cause a crash when flushed
+                # specifically, this tuple causes a crash since its first element is
+                # not a two-tuple
+                producer._produce(("anything", 0))
+        while self.consumer.consume() is not None:
+            time.sleep(.05)
+
 
 if __name__ == "__main__":
     unittest2.main()
