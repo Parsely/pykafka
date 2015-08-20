@@ -1,9 +1,13 @@
 language: python
+sudo: false
 python:
   - "2.7"
 
 env:
-  - BROKERS=localhost:9092,localhost:9093,localhost:9094 ZOOKEEPER=localhost:2181 KAFKA_BIN=/home/travis/kafka-bin
+  - TOXENV=py26 BROKERS=localhost:9092,localhost:9093,localhost:9094 ZOOKEEPER=localhost:2181 KAFKA_BIN=/home/travis/kafka-bin
+  - TOXENV=py27 BROKERS=localhost:9092,localhost:9093,localhost:9094 ZOOKEEPER=localhost:2181 KAFKA_BIN=/home/travis/kafka-bin
+  - TOXENV=py34 BROKERS=localhost:9092,localhost:9093,localhost:9094 ZOOKEEPER=localhost:2181 KAFKA_BIN=/home/travis/kafka-bin
+  - TOXENV=pypy BROKERS=localhost:9092,localhost:9093,localhost:9094 ZOOKEEPER=localhost:2181 KAFKA_BIN=/home/travis/kafka-bin
 
 notifications:
   email:
@@ -24,7 +28,7 @@ before_script:
     - "sleep 10"
 
 script:
-    - nosetests -v --with-cov --cov pykafka --cover-branches --cov-config  .coveragerc --logging-level=DEBUG
+    - tox
 
 # Calculate coverage on success
 after_success:
