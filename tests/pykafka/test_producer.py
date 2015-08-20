@@ -93,6 +93,14 @@ class ProducerIntegrationTests(unittest2.TestCase):
         while self.consumer.consume() is not None:
             time.sleep(.05)
 
+    def test_async_produce_unicode(self):
+        """Ensure that the producer can handle unicode strings"""
+        topic = self.client.topics[self.topic_name]
+        payload = u"tester"
+        with topic.get_producer() as producer:
+            producer.produce(payload)
+        message = self.consumer.consume()
+        self.assertTrue(message.value == payload)
 
 if __name__ == "__main__":
     unittest2.main()
