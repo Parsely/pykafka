@@ -32,7 +32,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
         payload = uuid4().bytes
 
         prod = self.client.topics[self.topic_name].get_sync_producer()
-        prod.produce([payload])
+        prod.produce(payload)
 
         # set a timeout so we don't wait forever if we break producer code
         message = self.consumer.consume()
@@ -42,7 +42,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
         payload = uuid4().bytes
 
         prod = self.client.topics[self.topic_name].get_producer()
-        prod.produce([payload])
+        prod.produce(payload)
 
         message = self.consumer.consume()
         self.assertTrue(message.value == payload)
@@ -52,7 +52,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
         payload = uuid4().bytes
 
         with self.client.topics[self.topic_name].get_producer() as producer:
-            producer.produce([payload])
+            producer.produce(payload)
 
         message = self.consumer.consume()
         self.assertTrue(message.value == payload)
@@ -65,7 +65,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
                                 linger_ms=1000) as producer:
             with self.assertRaises(ProducerQueueFullError):
                 while True:
-                    producer.produce([uuid4().bytes])
+                    producer.produce(uuid4().bytes)
         while self.consumer.consume() is not None:
             time.sleep(.05)
 
@@ -75,8 +75,8 @@ class ProducerIntegrationTests(unittest2.TestCase):
         topic = self.client.topics[self.topic_name]
         with topic.get_producer(linger_ms=linger * 1000) as producer:
             start = time.time()
-            producer.produce([uuid4().bytes])
-            producer.produce([uuid4().bytes])
+            producer.produce(uuid4().bytes)
+            producer.produce(uuid4().bytes)
         self.assertEqual(int(time.time() - start), int(linger))
         self.consumer.consume()
         self.consumer.consume()

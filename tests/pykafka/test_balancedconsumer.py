@@ -99,7 +99,8 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
         cls.kafka.create_topic(cls.topic_name, 3, 2)
         cls.client = KafkaClient(cls.kafka.brokers)
         prod = cls.client.topics[cls.topic_name].get_producer()
-        prod.produce('msg {num}'.format(num=i) for i in xrange(1000))
+        for i in xrange(1000):
+            prod.produce('msg {num}'.format(num=i))
 
     @classmethod
     def tearDownClass(cls):

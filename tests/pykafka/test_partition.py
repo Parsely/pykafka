@@ -14,7 +14,7 @@ class TestPartitionInfo(unittest2.TestCase):
         cls.producer = cls.client.topics[cls.topic_name].get_producer()
         cls.total_messages = 99
         for i in range(cls.total_messages):
-            cls.producer.produce(["message %s" % i])
+            cls.producer.produce("message %s" % i)
 
     @classmethod
     def tearDownClass(cls):
