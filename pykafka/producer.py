@@ -457,7 +457,7 @@ class OwnedBroker(object):
             with self.lock:
                 if len(self.queue) < self.producer._min_queued_messages:
                     self.flush_ready.clear()
-            self.flush_ready.wait(linger_ms / 1000)
+            self.flush_ready.wait((linger_ms / 1000) if linger_ms > 0 else None)
 
     def _wait_for_slot_available(self):
         """Block until the queue has at least one slot not containing a message"""
