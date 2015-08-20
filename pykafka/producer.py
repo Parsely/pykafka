@@ -169,7 +169,7 @@ class Producer(object):
         called because the with: block has ended, do wait for workers to finish.
         """
         # If the thread crashed, don't wait for it
-        self.stop(wait=self._worker_exception is None)
+        self.stop()
 
     def start(self):
         """Set up data structures and start worker threads"""
@@ -182,16 +182,10 @@ class Producer(object):
             self._running = True
         self.raise_worker_exceptions()
 
-    def stop(self, wait=True):
-        """Mark the producer as stopped
-
-        :param wait: Whether to wait for all pending messages to be sent
-            before returning
-        :type wait: bool
-        """
+    def stop(self):
+        """Mark the producer as stopped"""
         self._running = False
-        if wait:
-            self._wait_all()
+        self._wait_all()
 
     def produce(self, message, partition_key=None):
         """Produce a message.
