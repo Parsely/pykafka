@@ -46,6 +46,7 @@ def unpack_from(fmt, buff, offset=0):
     if fmt[0] in '!><':
         fmt = fmt[1:]  # It's always network ordering
 
+    buff = get_bytes(buff)
     output = _unpack(fmt, buff, offset, 1)[0]
 
     # whole-message arrays come back weird
@@ -94,7 +95,8 @@ def _unpack(fmt, buff, offset, count=1):
                     items.append(None)
                     continue
                 ch = '%ds' % len_
-            items.extend(struct.unpack_from('!' + ch, buff, offset))
+            unpacked_data = struct.unpack_from('!' + ch, buff, offset)
+            items.extend(unpacked_data)
             offset += struct.calcsize(ch)
     return tuple(items), offset
 

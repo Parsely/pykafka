@@ -2,7 +2,11 @@ language: python
 sudo: false
 python:
   - "2.7"
-
+addons:
+  apt:
+    packages:
+    - libev-dev
+    - libsnappy-dev
 env:
   - TOXENV=py26 BROKERS=localhost:9092,localhost:9093,localhost:9094 ZOOKEEPER=localhost:2181 KAFKA_BIN=/home/travis/kafka-bin
   - TOXENV=py27 BROKERS=localhost:9092,localhost:9093,localhost:9094 ZOOKEEPER=localhost:2181 KAFKA_BIN=/home/travis/kafka-bin
@@ -14,14 +18,9 @@ notifications:
     - keith@parsely.com
     - emmett@parsely.com
 
-before_install:
-    - apt-get install -qq libev-dev libsnappy-dev
 
 install:
-    - pip install python-snappy kazoo unittest2 mock nose
-    - pip install python-coveralls coverage nose-cov
-    - pip install testinstances
-    - python setup.py develop
+    - pip install python-coveralls
 
 before_script:
     - "python -m pykafka.test.kafka_instance 3 --download-dir /home/travis/kafka-bin &"
