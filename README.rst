@@ -55,9 +55,9 @@ producing messages.
 
 .. sourcecode:: python
 
-    >>> producer = topic.get_producer()
-    >>> for i in range(4):
-    ...     producer.produce('test message ' + i ** 2)
+    >>> with topic.get_producer() as producer:
+    ...     for i in range(4):
+    ...         producer.produce('test message ' + i ** 2)
 
 You can also consume messages from this topic using a `Consumer` instance.
 
