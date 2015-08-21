@@ -1,3 +1,5 @@
+#define PY_SSIZE_T_CLEAN
+
 #include <Python.h>
 #include <structseq.h>
 
@@ -120,6 +122,32 @@ typedef struct {
     rd_kafka_queue_t *rdk_queue_handle;
     PyObject *partition_ids;
 } RdkHandle;
+
+
+static PyObject *
+RdkHandle_outq_len(RdkHandle *self) {
+    int outq_len = -1;
+    Py_BEGIN_ALLOW_THREADS  /* avoid callbacks deadlocking */
+        outq_len = rd_kafka_outq_len(self->rdk_handle);
+    Py_END_ALLOW_THREADS
+    return Py_BuildValue("i", outq_len);
+}
+
+
+static PyObject *
+RdkHandle_poll(RdkHandle *self, PyObject *args, PyObject *kwds)
+{
+    char *keywords[] = {"timeout_ms", NULL};
+    int timeout_ms = 0;
+    if (! PyArg_ParseTupleAndKeywords(args, kwds, "i", keywords, &timeout_ms)) {
+            return NULL;
+    }
+    int n_events = 0;
+    Py_BEGIN_ALLOW_THREADS  /* avoid callbacks deadlocking */
+        n_events = rd_kafka_poll(self->rdk_handle, timeout_ms);
+    Py_END_ALLOW_THREADS
+    return Py_BuildValue("i", n_events);
+}
 
 
 static PyObject *
@@ -311,6 +339,128 @@ RdkHandle_start(RdkHandle *self,
     Py_INCREF(Py_None);
     return Py_None;
 }
+
+
+/**
+ * Producer type
+ */
+
+
+/* NB this doesn't check if RdkHandle_outq_len is zero, and generally assumes
+ * the wrapping python class will take care of ensuring any such preconditions
+ * for a clean termination */
+static void
+Producer_dealloc(PyObject *self)
+{
+    RdkHandle_dealloc(self, RdkHandle_stop);
+}
+
+
+static PyObject *
+Producer_start(RdkHandle *self, PyObject *args, PyObject *kwds)
+{
+    char *keywords[] = {"brokers", "topic_name", NULL};
+    const char *brokers = NULL;
+    const char *topic_name = NULL;
+    if (! PyArg_ParseTupleAndKeywords(
+            args, kwds, "ss", keywords, &brokers, &topic_name)) {
+        return NULL;
+    }
+
+    return RdkHandle_start(self, RD_KAFKA_PRODUCER, brokers, topic_name);
+    /* TODO configure delivery-report callback */
+}
+
+
+static PyObject *
+Producer_produce(RdkHandle *self, PyObject *args)
+{
+    char *message = NULL;
+    Py_ssize_t message_len = 0;
+    char *partition_key= NULL;
+    Py_ssize_t partition_key_len = 0;
+    int partition_id = -1;
+    PyObject *future = NULL;  /* will be passed to rdkafka as msg_opaque */
+    if (! PyArg_ParseTuple(args,
+                           "z#z#iO",
+                           &message, &message_len,
+                           &partition_key, &partition_key_len,
+                           &partition_id,
+                           &future)) {
+        return NULL;
+    }
+
+    /* TODO assert that we correctly handle NULL payloads and keys */
+
+    int res = 0;
+    Py_INCREF(future);  /* Keep alive until delivery-report comes */
+    Py_BEGIN_ALLOW_THREADS
+        res = rd_kafka_produce(self->rdk_topic_handle,
+                               partition_id,
+                               RD_KAFKA_MSG_F_COPY,
+                               message, message_len,
+                               partition_key, partition_key_len,
+                               future);
+    Py_END_ALLOW_THREADS
+    if (res == -1) {
+        set_PyRdKafkaError(rd_kafka_errno2err(errno), NULL);
+        return NULL;
+    }
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
+
+static PyMethodDef Producer_methods[] = {
+    {"produce", (PyCFunction)Producer_produce,
+        METH_VARARGS, "Produce to kafka."},
+    {"configure", (PyCFunction)RdkHandle_configure,
+        METH_KEYWORDS, RdkHandle_configure__doc__},
+    {"start", (PyCFunction)Producer_start, METH_VARARGS | METH_KEYWORDS, NULL},
+    {"outq_len", (PyCFunction)RdkHandle_outq_len, METH_NOARGS, NULL},
+    {"poll", (PyCFunction)RdkHandle_poll, METH_VARARGS | METH_KEYWORDS, NULL},
+    {NULL, NULL, 0, NULL}
+};
+
+
+static PyTypeObject ProducerType = {
+    PyVarObject_HEAD_INIT(NULL, 0)
+    "pykafka.rd_kafka.Producer",
+    sizeof(RdkHandle),
+    0,                             /* tp_itemsize */
+    (destructor)Producer_dealloc,  /* tp_dealloc */
+    0,                             /* tp_print */
+    0,                             /* tp_getattr */
+    0,                             /* tp_setattr */
+    0,                             /* tp_compare */
+    0,                             /* tp_repr */
+    0,                             /* tp_as_number */
+    0,                             /* tp_as_sequence */
+    0,                             /* tp_as_mapping */
+    0,                             /* tp_hash */
+    0,                             /* tp_call */
+    0,                             /* tp_str */
+    0,                             /* tp_getattro */
+    0,                             /* tp_setattro */
+    0,                             /* tp_as_buffer */
+    Py_TPFLAGS_DEFAULT,            /* tp_flags */
+    0,                             /* tp_doc */
+    0,                             /* tp_traverse */
+    0,                             /* tp_clear */
+    0,                             /* tp_richcompare */
+    0,                             /* tp_weaklistoffset */
+    0,                             /* tp_iter */
+    0,                             /* tp_iternext */
+    Producer_methods,              /* tp_methods */
+    0,                             /* tp_members */
+    0,                             /* tp_getset */
+    0,                             /* tp_base */
+    0,                             /* tp_dict */
+    0,                             /* tp_descr_get */
+    0,                             /* tp_descr_set */
+    0,                             /* tp_dictoffset */
+    0,                             /* tp_init */
+};
 
 
 /**
@@ -635,6 +785,13 @@ _rd_kafkamodule_init(void)
     }
     Py_INCREF(&MessageType);
     if (PyModule_AddObject(mod, "Message", (PyObject *)&MessageType)) {
+        return NULL;
+    }
+
+    ProducerType.tp_new = PyType_GenericNew;
+    if (PyType_Ready(&ProducerType)) return NULL;
+    Py_INCREF(&ProducerType);
+    if (PyModule_AddObject(mod, "Producer", (PyObject *)&ProducerType)) {
         return NULL;
     }
 
