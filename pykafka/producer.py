@@ -162,13 +162,7 @@ class Producer(object):
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        """Context manager exit point - stop the producer
-
-        If __exit__ is being called as a result of self._worker_exception
-        being raised, don't wait on the workers to finish. If __exit__ is being
-        called because the with: block has ended, do wait for workers to finish.
-        """
-        # If the thread crashed, don't wait for it
+        """Context manager exit point - stop the producer"""
         self.stop()
 
     def start(self):
