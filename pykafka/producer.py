@@ -193,7 +193,7 @@ class Producer(object):
         if not self._running:
             raise ProducerStoppedException()
         partitions = self._topic.partitions.values()
-        partition_id = self._partitioner(partitions, (message, partition_key)).id
+        partition_id = self._partitioner(partitions, partition_key).id
         message_partition_tup = (partition_key, str(message)), partition_id
         self._produce(message_partition_tup)
         if self._synchronous:
