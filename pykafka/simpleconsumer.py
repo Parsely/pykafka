@@ -20,8 +20,10 @@ limitations under the License.
 __all__ = ["SimpleConsumer"]
 import itertools
 import logging
+import sys
 import time
 import threading
+import traceback
 from collections import defaultdict
 
 from .common import OffsetType
@@ -153,6 +155,8 @@ class SimpleConsumer():
         self._auto_commit_enable = auto_commit_enable
         self._auto_commit_interval_ms = auto_commit_interval_ms
         self._last_auto_commit = time.time()
+        self._worker_exception = None
+        self._worker_trace_logged = False
 
         self._discover_offset_manager()
 
@@ -185,6 +189,19 @@ class SimpleConsumer():
             group=self._consumer_group
         )
 
+    def _raise_worker_exceptions(self):
+        """Raises exceptions encountered on worker threads"""
+        if self._worker_exception is not None:
+            _, ex, tb = self._worker_exception
+            # avoid logging worker exceptions more than once, which can
+            # happen when this function's `raise` triggers `__exit__`
+            # which calls `stop`
+            if not self._worker_trace_logged:
+                self._worker_trace_logged = True
+                log.error("Exception encountered in worker thread:\n%s",
+                          "".join(traceback.format_tb(tb)))
+            raise ex
+
     def start(self):
         """Begin communicating with Kafka, including setting up worker threads
 
@@ -203,6 +220,7 @@ class SimpleConsumer():
 
         if self._auto_commit_enable:
             self._autocommit_worker_thread = self._setup_autocommit_worker()
+        self._raise_worker_exceptions()
 
     def _build_default_error_handlers(self):
         """Set up the error handlers to use for partition errors."""
@@ -260,11 +278,16 @@ class SimpleConsumer():
         """Start the autocommitter thread"""
         def autocommitter():
             while True:
-                if not self._running:
+                try:
+                    if not self._running:
+                        break
+                    if self._auto_commit_enable:
+                        self._auto_commit()
+                    time.sleep(self._auto_commit_interval_ms / 1000)
+                except Exception:
+                    # surface all exceptions to the main thread
+                    self._worker_exception = sys.exc_info()
                     break
-                if self._auto_commit_enable:
-                    self._auto_commit()
-                time.sleep(self._auto_commit_interval_ms / 1000)
             log.debug("Autocommitter thread exiting")
         log.debug("Starting autocommitter thread")
         return self._cluster.handler.spawn(autocommitter)
@@ -273,10 +296,16 @@ class SimpleConsumer():
         """Start the fetcher threads"""
         def fetcher():
             while True:
-                if not self._running:
+                try:
+                    if not self._running:
+                        break
+                    self.fetch()
+                    time.sleep(.0001)
+                except Exception:
+                    # surface all exceptions to the main thread
+                    print sys.exc_info()[0]
+                    self._worker_exception = sys.exc_info()
                     break
-                self.fetch()
-                time.sleep(.0001)
             log.debug("Fetcher thread exiting")
         log.info("Starting %s fetcher threads", self._num_consumer_fetchers)
         return [self._cluster.handler.spawn(fetcher)
@@ -302,6 +331,8 @@ class SimpleConsumer():
                 timeout = float(self._consumer_timeout_ms) / 1000
             else:
                 timeout = 1.0
+
+        self._raise_worker_exceptions()
 
         while True:
             if self._messages_arrived.acquire(blocking=block, timeout=timeout):
