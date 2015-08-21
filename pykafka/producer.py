@@ -137,7 +137,7 @@ class Producer(object):
         self._running = False
         self.start()
 
-    def raise_worker_exceptions(self):
+    def _raise_worker_exceptions(self):
         """Raises exceptions encountered on worker threads"""
         if self._worker_exception is not None:
             _, ex, tb = self._worker_exception
@@ -174,7 +174,7 @@ class Producer(object):
                     self._owned_brokers[partition.leader.id] = OwnedBroker(
                         self, partition.leader)
             self._running = True
-        self.raise_worker_exceptions()
+        self._raise_worker_exceptions()
 
     def stop(self):
         """Mark the producer as stopped"""
@@ -198,7 +198,7 @@ class Producer(object):
         self._produce(message_partition_tup)
         if self._synchronous:
             self._wait_all()
-        self.raise_worker_exceptions()
+        self._raise_worker_exceptions()
 
     def _produce(self, message_partition_tup):
         """Enqueue a message for the relevant broker
@@ -347,7 +347,7 @@ class Producer(object):
         log.info("Blocking until all messages are sent")
         while any(q.message_is_pending() for q in self._owned_brokers.itervalues()):
             time.sleep(.3)
-            self.raise_worker_exceptions()
+            self._raise_worker_exceptions()
 
 
 class OwnedBroker(object):
