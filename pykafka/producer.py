@@ -29,6 +29,7 @@ from .common import CompressionType
 from .exceptions import (
     InvalidMessageError,
     InvalidMessageSize,
+    LeaderNotAvailable,
     MessageSizeTooLarge,
     NotLeaderForPartition,
     ProduceFailureError,
@@ -284,6 +285,9 @@ class Producer(object):
                         log.warning('Produce request to %s:%s timed out. '
                                     'Retrying.', owned_broker.broker.host,
                                     owned_broker.broker.port)
+                    elif presponse.err == LeaderNotAvailable.ERROR_CODE:
+                        log.warning('Leader not available for partition %s.'
+                                    'Retrying.', partition)
                     elif presponse.err == InvalidMessageError.ERROR_CODE:
                         log.warning('Encountered InvalidMessageError')
                     elif presponse.err == InvalidMessageSize.ERROR_CODE:
