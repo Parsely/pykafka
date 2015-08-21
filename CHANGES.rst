@@ -1,6 +1,16 @@
 Changelog
 =========
 
+2.0.0 (2015-08-21)
+------------------
+
+Features
+********
+
+Rewrote the producer in an asynchronous style and made small breaking changes
+to its interface. Specifically, it doesn't accept sequences of messages
+anymore - only one message at a time.
+
 1.0.0 (2015-05-31)
 ------------------
 
