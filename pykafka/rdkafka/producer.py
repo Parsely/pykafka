@@ -43,7 +43,7 @@ class RdKafkaProducer(Producer):
 
     def _wait_all(self):
         # XXX should this have a timeout_ms param, or potentially wait forever?
-        while self._rdk_producer.outq_len > 0:
+        while self._rdk_producer.outq_len() > 0:
             self._rdk_producer.poll(timeout_ms=50)
 
     def _mk_rdkafka_config_lists(self):
