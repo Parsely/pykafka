@@ -45,6 +45,16 @@ class NoMessagesConsumedError(KafkaException):
     pass
 
 
+class ProducerQueueFullError(KafkaException):
+    """Indicates that one or more of the AsyncProducer's internal queues contain at least max_queued_messages messages"""
+    pass
+
+
+class ProducerStoppedException(KafkaException):
+    """Raised when the Producer is used while not running"""
+    pass
+
+
 class OffsetRequestFailedError(KafkaException):
     """Indicates that OffsetRequests for offset resetting failed more times than the configured maximum"""
     pass

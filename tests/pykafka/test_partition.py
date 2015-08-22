@@ -11,10 +11,11 @@ class TestPartitionInfo(unittest2.TestCase):
         cls.topic_name = 'test-data'
         cls.kafka.create_topic(cls.topic_name, 3, 2)
         cls.client = KafkaClient(cls.kafka.brokers)
-        cls.producer = cls.client.topics[cls.topic_name].get_producer()
+        topic = cls.client.topics[cls.topic_name]
+        cls.producer = topic.get_producer(min_queued_messages=1)
         cls.total_messages = 99
         for i in range(cls.total_messages):
-            cls.producer.produce(["message %s" % i])
+            cls.producer.produce("message %s" % i)
 
     @classmethod
     def tearDownClass(cls):
