@@ -24,7 +24,7 @@ def buildMockConsumer(num_partitions=10, num_participants=1, timeout=2000):
     cluster = mock.MagicMock()
     zk = mock.MagicMock()
     return BalancedConsumer(topic, cluster, consumer_group,
-                            zookeeper=zk, auto_start=False,
+                            zookeeper=zk, auto_start=False, use_rdkafka=False,
                             consumer_timeout_ms=timeout), topic
 
 
@@ -91,6 +91,7 @@ class TestBalancedConsumer(unittest2.TestCase):
 
 class BalancedConsumerIntegrationTests(unittest2.TestCase):
     maxDiff = None
+    USE_RDKAFKA = False
 
     @classmethod
     def setUpClass(cls):
@@ -110,14 +111,17 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
 
     def test_consume_earliest(self):
         try:
-            consumer_a = self.client.topics[self.topic_name].get_balanced_consumer(
-                b'test_consume_earliest', zookeeper_connect=self.kafka.zookeeper,
-                auto_offset_reset=OffsetType.EARLIEST
-            )
-            consumer_b = self.client.topics[self.topic_name].get_balanced_consumer(
-                b'test_consume_earliest', zookeeper_connect=self.kafka.zookeeper,
-                auto_offset_reset=OffsetType.EARLIEST
-            )
+            topic = self.client.topics[self.topic_name]
+            consumer_a = topic.get_balanced_consumer(
+                b'test_consume_earliest',
+                zookeeper_connect=self.kafka.zookeeper,
+                auto_offset_reset=OffsetType.EARLIEST,
+                use_rdkafka=self.USE_RDKAFKA)
+            consumer_b = topic.get_balanced_consumer(
+                b'test_consume_earliest',
+                zookeeper_connect=self.kafka.zookeeper,
+                auto_offset_reset=OffsetType.EARLIEST,
+                use_rdkafka=self.USE_RDKAFKA)
 
             # Consume from both a few times
             messages = [consumer_a.consume() for i in range(1)]
@@ -142,14 +146,17 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
 
     def test_consume_latest(self):
         try:
-            consumer_a = self.client.topics[self.topic_name].get_balanced_consumer(
-                b'test_consume_latest', zookeeper_connect=self.kafka.zookeeper,
-                auto_offset_reset=OffsetType.LATEST
-            )
-            consumer_b = self.client.topics[self.topic_name].get_balanced_consumer(
-                b'test_consume_latest', zookeeper_connect=self.kafka.zookeeper,
-                auto_offset_reset=OffsetType.LATEST
-            )
+            topic = self.client.topics[self.topic_name]
+            consumer_a = topic.get_balanced_consumer(
+                b'test_consume_latest',
+                zookeeper_connect=self.kafka.zookeeper,
+                auto_offset_reset=OffsetType.LATEST,
+                use_rdkafka=self.USE_RDKAFKA)
+            consumer_b = topic.get_balanced_consumer(
+                b'test_consume_latest',
+                zookeeper_connect=self.kafka.zookeeper,
+                auto_offset_reset=OffsetType.LATEST,
+                use_rdkafka=self.USE_RDKAFKA)
 
             # Since we are consuming from the latest offset,
             # produce more messages to consume.
