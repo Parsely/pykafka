@@ -25,7 +25,8 @@ import threading
 from collections import defaultdict
 
 from .common import OffsetType
-from .utils.compat import Semaphore, Queue, Empty, iteritems, itervalues
+from .utils.compat import (Semaphore, Queue, Empty, iteritems, itervalues,
+                           range)
 from .exceptions import (OffsetOutOfRangeError, UnknownTopicOrPartition,
                          OffsetMetadataTooLarge, OffsetsLoadInProgress,
                          NotCoordinatorForConsumer, SocketDisconnectedError,
@@ -279,7 +280,7 @@ class SimpleConsumer():
             log.debug("Fetcher thread exiting")
         log.info("Starting %s fetcher threads", self._num_consumer_fetchers)
         return [self._cluster.handler.spawn(fetcher)
-                for i in xrange(self._num_consumer_fetchers)]
+                for i in range(self._num_consumer_fetchers)]
 
     def __iter__(self):
         """Yield an infinite stream of messages until the consumer times out"""
@@ -340,7 +341,7 @@ class SimpleConsumer():
         reqs = [p.build_offset_commit_request() for p in self._partitions.values()]
         log.debug("Committing offsets for %d partitions to broker id %s", len(reqs),
                   self._offset_manager.id)
-        for i in xrange(self._offsets_commit_max_retries):
+        for i in range(self._offsets_commit_max_retries):
             if i > 0:
                 log.debug("Retrying")
             time.sleep(i * (self._offsets_channel_backoff_ms / 1000))
@@ -391,7 +392,7 @@ class SimpleConsumer():
         log.debug("Fetching offsets for %d partitions from broker id %s", len(reqs),
                   self._offset_manager.id)
 
-        for i in xrange(self._offsets_fetch_max_retries):
+        for i in range(self._offsets_fetch_max_retries):
             if i > 0:
                 log.debug("Retrying offset fetch")
 
@@ -486,7 +487,7 @@ class SimpleConsumer():
 
         log.info("Resetting offsets for %s partitions", len(list(owned_partition_offsets)))
 
-        for i in xrange(self._offsets_reset_max_retries):
+        for i in range(self._offsets_reset_max_retries):
             # group partitions by leader
             by_leader = defaultdict(list)
             for partition, offset in iteritems(owned_partition_offsets):

@@ -6,6 +6,7 @@ from uuid import uuid4
 from pykafka import KafkaClient
 from pykafka.simpleconsumer import OwnedPartition, OffsetType
 from pykafka.test.utils import get_cluster, stop_cluster
+from pykafka.utils.compat import range
 
 
 class TestSimpleConsumer(unittest.TestCase):
@@ -26,7 +27,7 @@ class TestSimpleConsumer(unittest.TestCase):
         for _ in range(3):
             cls.kafka.produce_messages(
                 cls.topic_name,
-                ('msg {i}'.format(i=i) for i in xrange(batch)))
+                ('msg {i}'.format(i=i) for i in range(batch)))
 
         cls.client = KafkaClient(cls.kafka.brokers)
 
@@ -44,7 +45,7 @@ class TestSimpleConsumer(unittest.TestCase):
 
     def test_consume(self):
         with self._get_simple_consumer() as consumer:
-            messages = [consumer.consume() for _ in xrange(self.total_msgs)]
+            messages = [consumer.consume() for _ in range(self.total_msgs)]
             self.assertEquals(len(messages), self.total_msgs)
             self.assertTrue(None not in messages)
 
@@ -52,7 +53,7 @@ class TestSimpleConsumer(unittest.TestCase):
         """Check fetched offsets match pre-commit internal state"""
         with self._get_simple_consumer(
                 consumer_group='test_offset_commit') as consumer:
-            [consumer.consume() for _ in xrange(100)]
+            [consumer.consume() for _ in range(100)]
             offsets_committed = consumer.held_offsets
             consumer.commit_offsets()
 
@@ -64,7 +65,7 @@ class TestSimpleConsumer(unittest.TestCase):
         """Check resumed internal state matches committed offsets"""
         with self._get_simple_consumer(
                 consumer_group='test_offset_resume') as consumer:
-            [consumer.consume() for _ in xrange(100)]
+            [consumer.consume() for _ in range(100)]
             offsets_committed = consumer.held_offsets
             consumer.commit_offsets()
 
