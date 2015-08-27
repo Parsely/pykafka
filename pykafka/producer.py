@@ -31,7 +31,7 @@ from .exceptions import (
 )
 from .partitioners import random_partitioner
 from .protocol import Message, ProduceRequest
-from .utils.compat import string_types, get_bytes
+from .utils.compat import string_types, get_bytes, iteritems
 
 log = logging.getLogger(__name__)
 
@@ -126,8 +126,8 @@ class Producer():
             """Get all the messages for the partitions from the request."""
             messages = itertools.chain.from_iterable(
                 mset.messages
-                for topic, partitions in req.msets.iteritems()
-                for p_id, mset in partitions.iteritems()
+                for topic, partitions in iteritems(req.msets)
+                for p_id, mset in iteritems(partitions)
                 if p_id == partition_id
             )
             for message in messages:
@@ -141,8 +141,8 @@ class Producer():
             # Figure out if we need to retry any messages
             # TODO: Convert to using utils.handle_partition_responses
             to_retry = []
-            for topic, partitions in response.topics.iteritems():
-                for partition, presponse in partitions.iteritems():
+            for topic, partitions in iteritems(response.topics):
+                for partition, presponse in iteritems(partitions):
                     if presponse.err == 0:
                         continue  # All's well
                     if presponse.err == UnknownTopicOrPartition.ERROR_CODE:
@@ -171,8 +171,8 @@ class Producer():
             self._cluster.update()
             to_retry = [
                 ((message.partition_key, message.value), p_id)
-                for topic, partitions in req.msets.iteritems()
-                for p_id, mset in partitions.iteritems()
+                for topic, partitions in iteritems(req.msets)
+                for p_id, mset in iteritems(partitions)
                 for message in mset.messages
             ]
 
@@ -231,7 +231,7 @@ class Producer():
                                    attempt)
 
         # Send any still not sent
-        for leader, req in requests.iteritems():
+        for leader, req in iteritems(requests):
             self._send_request(leader, req, attempt)
 
     def produce(self, messages):

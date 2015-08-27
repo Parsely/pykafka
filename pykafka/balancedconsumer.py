@@ -33,6 +33,7 @@ from .common import OffsetType
 from .exceptions import (KafkaException, PartitionOwnedError,
                          ConsumerStoppedException)
 from .simpleconsumer import SimpleConsumer
+from .utils.compat import range
 
 
 log = logging.getLogger(__name__)
@@ -409,7 +410,7 @@ class BalancedConsumer():
                 self._consumer_id, self._topic.name)
             )
 
-            for i in xrange(self._rebalance_max_retries):
+            for i in range(self._rebalance_max_retries):
                 try:
                     # If retrying, be sure to make sure the
                     # partition allocation is correct.
