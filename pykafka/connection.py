@@ -102,6 +102,7 @@ class BrokerConnection(object):
         bytes = request.get_bytes()
         if not self._socket:
             raise SocketDisconnectedError
+
         self._socket.sendall(bytes)
 
     def response(self):
@@ -111,6 +112,7 @@ class BrokerConnection(object):
             # Happens when broker has shut down
             self.disconnect()
             raise SocketDisconnectedError
+
         size = struct.unpack('!i', size)[0]
         recvall_into(self._socket, self._buff, size)
         return buffer(self._buff[4:4 + size])

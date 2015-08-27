@@ -15,6 +15,17 @@ def get_bytes(value):
 
     return value
 
+def get_string(value):
+    if hasattr(value, 'decode'):
+        try:
+            value = value.decode('utf-8')
+        except:
+            # if we can't decode the value just pass it along
+            pass
+    else:
+        value = str(value)
+
+    return value
 
 if PY3:
     from threading import Semaphore
@@ -27,6 +38,9 @@ if PY3:
 
     def itervalues(d, **kw):
         return iter(d.values(**kw))
+
+    def iterkeys(d, **kw):
+        return iter(d.keys(**kw))
 
     def buffer(val):
         return bytes(memoryview(val))
@@ -45,6 +59,9 @@ else:
 
     def itervalues(d, **kw):
         return iter(d.itervalues(**kw))
+
+    def iterkeys(d, **kw):
+        return iter(d.iterkeys(**kw))
 
     buffer = buffer
     string_types = basestring,

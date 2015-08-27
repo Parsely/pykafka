@@ -33,7 +33,7 @@ from .common import OffsetType
 from .exceptions import (KafkaException, PartitionOwnedError,
                          ConsumerStoppedException)
 from .simpleconsumer import SimpleConsumer
-from .utils.compat import range
+from .utils.compat import range, get_bytes
 
 
 log = logging.getLogger(__name__)
@@ -302,7 +302,9 @@ class BalancedConsumer():
         :type participants: Iterable of str
         """
         # Freeze and sort partitions so we always have the same results
-        p_to_str = lambda p: '-'.join([p.topic.name, str(p.leader.id), str(p.id)])
+        p_to_str = lambda p: b'-'.join([
+            get_bytes(p.topic.name), bytes(p.leader.id), bytes(p.id)]
+        )
         all_parts = self._topic.partitions.values()
         all_parts = sorted(all_parts, key=p_to_str)
 
@@ -321,6 +323,7 @@ class BalancedConsumer():
         log.info('Balancing %i participants for %i partitions.\nOwning %i partitions.',
                  len(participants), len(all_parts), len(new_partitions))
         log.debug('My partitions: %s', [p_to_str(p) for p in new_partitions])
+
         return new_partitions
 
     def _get_participants(self):
@@ -416,7 +419,6 @@ class BalancedConsumer():
                     # partition allocation is correct.
                     participants = self._get_participants()
                     partitions = self._decide_partitions(participants)
-
                     old_partitions = self._partitions - partitions
                     self._remove_partitions(old_partitions)
 
@@ -470,7 +472,7 @@ class BalancedConsumer():
             try:
                 self._zookeeper.create(
                     self._path_from_partition(p),
-                    value=self._consumer_id,
+                    value=get_bytes(self._consumer_id),
                     ephemeral=True
                 )
                 self._partitions.add(p)

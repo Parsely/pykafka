@@ -95,11 +95,13 @@ class BalancedConsumerIntegrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.kafka = get_cluster()
-        cls.topic_name = 'test-data'
+        cls.topic_name = b'test-data'
         cls.kafka.create_topic(cls.topic_name, 3, 2)
         cls.client = KafkaClient(cls.kafka.brokers)
-        prod = cls.client.topics[cls.topic_name].get_producer(min_queued_messages=1)
-        for i in xrange(1000):
+        prod = cls.client.topics[cls.topic_name].get_producer(
+            min_queued_messages=1
+        )
+        for i in range(1000):
             prod.produce('msg {num}'.format(num=i))
 
     @classmethod
@@ -108,8 +110,12 @@ class BalancedConsumerIntegrationTests(unittest.TestCase):
 
     def test_consume(self):
         try:
-            consumer_a = self.client.topics[self.topic_name].get_balanced_consumer('test_consume', zookeeper_connect=self.kafka.zookeeper)
-            consumer_b = self.client.topics[self.topic_name].get_balanced_consumer('test_consume', zookeeper_connect=self.kafka.zookeeper)
+            consumer_a = self.client.topics[self.topic_name].get_balanced_consumer(
+                'test_consume', zookeeper_connect=self.kafka.zookeeper
+            )
+            consumer_b = self.client.topics[self.topic_name].get_balanced_consumer(
+                'test_consume', zookeeper_connect=self.kafka.zookeeper
+            )
 
             # Consume from both a few times
             messages = [consumer_a.consume() for i in range(1)]
@@ -128,6 +134,10 @@ class BalancedConsumerIntegrationTests(unittest.TestCase):
                 consumer_a._partitions | consumer_b._partitions,
                 set(self.client.topics[self.topic_name].partitions.values())
             )
+        except Exception as e:
+            print(e)
+            raise
+            print(hi)
         finally:
             consumer_a.stop()
             consumer_b.stop()

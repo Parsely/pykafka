@@ -26,7 +26,7 @@ from .partition import Partition
 from .producer import Producer
 from .protocol import PartitionOffsetRequest
 from .simpleconsumer import SimpleConsumer
-from .utils.compat import iteritems
+from .utils.compat import iteritems, itervalues
 
 
 log = logging.getLogger(__name__)
@@ -95,7 +95,7 @@ class Topic():
         :type max_offsets: int
         """
         requests = defaultdict(list)  # one request for each broker
-        for part in self.partitions.itervalues():
+        for part in itervalues(self.partitions):
             requests[part.leader].append(PartitionOffsetRequest(
                 self.name, part.id, offsets_before, max_offsets
             ))

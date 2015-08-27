@@ -29,7 +29,7 @@ import time
 from testinstances import utils
 from testinstances.exceptions import ProcessNotStartingError
 from testinstances.managed_instance import ManagedInstance
-from pykafka.utils.compat import range
+from pykafka.utils.compat import range, get_bytes, get_string
 
 
 log = logging.getLogger(__name__)
@@ -82,7 +82,7 @@ class KafkaConnection(object):
         """Run kafka-topics.sh with the provided list of arguments."""
         binfile = os.path.join(self._bin_dir, 'bin/kafka-topics.sh')
         cmd = [binfile, '--zookeeper', self.zookeeper] + args
-        cmd = [str(c) for c in cmd]  # execv needs only strings
+        cmd = [get_string(c) for c in cmd]  # execv needs only strings
         log.debug('running: %s', ' '.join(cmd))
         return subprocess.check_output(cmd)
 
@@ -107,7 +107,7 @@ class KafkaConnection(object):
     def list_topics(self):
         """Use kafka-topics.sh to get topic information."""
         res = self._run_topics_sh(['--list'])
-        return res.strip().split('\n')
+        return res.strip().split(b'\n')
 
     def produce_messages(self, topic_name, messages, batch_size=200):
         """Produce some messages to a topic."""
@@ -116,10 +116,10 @@ class KafkaConnection(object):
                '--broker-list', self.brokers,
                '--topic', topic_name,
                '--batch-size', batch_size]
-        cmd = [str(c) for c in cmd]  # execv needs only strings
+        cmd = [get_string(c) for c in cmd]  # execv needs only strings
         log.debug('running: %s', ' '.join(cmd))
         proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
-        proc.communicate(input='\n'.join(messages))
+        proc.communicate(input=get_bytes('\n'.join(messages)))
         if proc.poll() is None:
             proc.kill()
 
@@ -319,7 +319,8 @@ class KafkaInstance(ManagedInstance):
 
     def create_topic(self, topic_name, num_partitions, replication_factor):
         """Use kafka-topics.sh to create a topic."""
-        return self.connection.create_topic(topic_name, num_partitions, replication_factor)
+        return self.connection.create_topic(topic_name, num_partitions,
+                                            replication_factor)
 
     def delete_topic(self, topic_name):
         return self.connection.delete_topic(topic_name)

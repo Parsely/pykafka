@@ -29,7 +29,7 @@ from .exceptions import (ConsumerCoordinatorNotAvailable,
                          UnknownTopicOrPartition)
 from .protocol import ConsumerMetadataRequest, ConsumerMetadataResponse
 from .topic import Topic
-from .utils.compat import iteritems, range
+from .utils.compat import iteritems, range, get_bytes
 
 log = logging.getLogger(__name__)
 
@@ -44,8 +44,7 @@ class TopicDict(dict):
     def __missing__(self, key):
         log.warning('Topic %s not found. Attempting to auto-create.', key)
 
-        if hasattr(key, 'encode'):
-            key = key.encode('utf-8')
+        key = get_bytes(key)
 
         if self._create_topic(key):
             return self[key]
@@ -60,8 +59,7 @@ class TopicDict(dict):
         with settings and everything, we'll implement that. To expose just
         this now would be disingenuous, since it's features would be hobbled.
         """
-        if hasattr(topic_name, 'encode'):
-            topic_name = topic_name.encode('utf-8')
+        topic_name = get_bytes(topic_name)
 
         if len(self._cluster.brokers) == 0:
             log.warning("No brokers found. This is probably because of "
@@ -162,7 +160,7 @@ class Cluster(object):
             for broker_str in brokers:
                 try:
                     h, p = broker_str.split(':')
-                    broker = Broker(-1, h, p, self._handler,
+                    broker = Broker(-1, h, int(p), self._handler,
                                     self._socket_timeout_ms,
                                     self._offsets_channel_socket_timeout_ms,
                                     buffer_size=1024 * 1024,
@@ -258,7 +256,7 @@ class Cluster(object):
         log.info("Attempting to discover offset manager for consumer group '%s'",
                  consumer_group)
         # arbitrarily choose a broker, since this request can go to any
-        broker = self.brokers[random.choice(self.brokers.keys())]
+        broker = self.brokers[random.choice(list(self.brokers.keys()))]
         MAX_RETRIES = 5
 
         for i in range(MAX_RETRIES):

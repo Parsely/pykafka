@@ -1,12 +1,11 @@
 from __future__ import division
 
 import time
-import unittest2
 from uuid import uuid4
 
 from pykafka import KafkaClient
 from pykafka.exceptions import ProducerQueueFullError
-from pykafka.test.utils import get_cluster, stop_cluster
+from pykafka.test.utils import get_cluster, stop_cluster, unittest
 
 
 class ProducerIntegrationTests(unittest.TestCase):
@@ -36,7 +35,7 @@ class ProducerIntegrationTests(unittest.TestCase):
 
         # set a timeout so we don't wait forever if we break producer code
         message = self.consumer.consume()
-        self.assertTrue(message.value == payload)
+        assert message.value == payload
 
     def test_async_produce(self):
         payload = uuid4().bytes
@@ -45,7 +44,7 @@ class ProducerIntegrationTests(unittest.TestCase):
         prod.produce(payload)
 
         message = self.consumer.consume()
-        self.assertTrue(message.value == payload)
+        assert message.value == payload
 
     def test_async_produce_context(self):
         """Ensure that the producer works as a context manager"""
@@ -55,7 +54,7 @@ class ProducerIntegrationTests(unittest.TestCase):
             producer.produce(payload)
 
         message = self.consumer.consume()
-        self.assertTrue(message.value == payload)
+        assert message.value == payload
 
     def test_async_produce_queue_full(self):
         """Ensure that the producer raises an error when its queue is full"""
@@ -96,11 +95,11 @@ class ProducerIntegrationTests(unittest.TestCase):
     def test_async_produce_unicode(self):
         """Ensure that the producer can handle unicode strings"""
         topic = self.client.topics[self.topic_name]
-        payload = u"tester"
+        payload = b"tester"
         with topic.get_producer(min_queued_messages=1) as producer:
             producer.produce(payload)
         message = self.consumer.consume()
-        self.assertTrue(message.value == payload)
+        assert message.value == payload
 
 if __name__ == "__main__":
     unittest.main()

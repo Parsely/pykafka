@@ -346,9 +346,7 @@ class MetadataRequest(Request):
     @property
     def topics(self):
         if self._topics:
-            return [
-                t.encode('utf-8') for t in self._topics if hasattr(t, 'encode')
-            ]
+            return [get_bytes(t) for t in self._topics]
 
         return self._topics
 
@@ -368,6 +366,7 @@ class MetadataRequest(Request):
         :rtype: :class:`bytearray`
         """
         output = bytearray(len(self))
+
         self._write_header(output)
         struct.pack_into('!i', output, self.HEADER_LEN, len(self.topics))
         offset = self.HEADER_LEN + 4
@@ -410,7 +409,6 @@ class MetadataResponse(Response):
         fmt = '[iSi] [hS [hii [i] [i] ] ]'
         response = struct_helpers.unpack_from(fmt, buff, 0)
         broker_info, topics = response
-
         self.brokers = {}
         for (id_, host, port) in broker_info:
             self.brokers[id_] = BrokerMetadata(id_, host, port)

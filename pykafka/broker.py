@@ -282,10 +282,10 @@ class Broker():
             future = self._req_handler.request(MetadataRequest(topics=topics))
             response = future.get(MetadataResponse)
 
-            for name, topic_metadata in response.topics.iteritems():
+            for name, topic_metadata in iteritems(response.topics):
                 if topic_metadata.err == LeaderNotAvailable.ERROR_CODE:
                     log.warning("Leader not available for topic '%s'.", name)
-                for pid, partition_metadata in topic_metadata.partitions.iteritems():
+                for pid, partition_metadata in iteritems(topic_metadata.partitions):
                     if partition_metadata.err == LeaderNotAvailable.ERROR_CODE:
                         log.warning("Leader not available for topic '%s' partition %d.",
                                     name, pid)

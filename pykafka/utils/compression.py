@@ -125,10 +125,7 @@ def decode_snappy(buff):
             block_size = struct.unpack_from('!i', body[cursor:])[0]
             cursor += 4
             end = cursor + block_size
-            try:
-                out.write(snappy.decompress(body[cursor:end]))
-            except:
-                import pdb; pdb.set_trace()
+            out.write(snappy.decompress(body[cursor:end]))
             cursor = end
         out.seek(0)
         return out.read()

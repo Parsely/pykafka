@@ -26,7 +26,7 @@ from collections import defaultdict
 
 from .common import OffsetType
 from .utils.compat import (Semaphore, Queue, Empty, iteritems, itervalues,
-                           range)
+                           range, iterkeys)
 from .exceptions import (OffsetOutOfRangeError, UnknownTopicOrPartition,
                          OffsetMetadataTooLarge, OffsetsLoadInProgress,
                          NotCoordinatorForConsumer, SocketDisconnectedError,
@@ -309,7 +309,7 @@ class SimpleConsumer():
                 # least one message is waiting in some queue.
                 message = None
                 while not message:
-                    owned_partition = self.partition_cycle.next()
+                    owned_partition = next(self.partition_cycle)
                     message = owned_partition.consume()
                 return message
             else:
@@ -513,7 +513,9 @@ class SimpleConsumer():
                 if 0 in parts_by_error:
                     # drop successfully reset partitions for next retry
                     successful = [part for part, _ in parts_by_error.pop(0)]
-                    map(owned_partition_offsets.pop, successful)
+                    # py3 creates a generate so we need to evaluate this
+                    # operation
+                    list(map(owned_partition_offsets.pop, successful))
                 if not parts_by_error:
                     continue
                 log.error("Error resetting offsets for topic %s (errors: %s)",
@@ -605,7 +607,7 @@ class SimpleConsumer():
                     parts_by_error=parts_by_error,
                     success_handler=_handle_success)
                 # unlock the rest of the partitions
-                for owned_partition in partition_reqs.iterkeys():
+                for owned_partition in iterkeys(partition_reqs):
                     owned_partition.fetch_lock.release()
 
 
