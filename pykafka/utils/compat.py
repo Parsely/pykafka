@@ -1,9 +1,10 @@
 import sys
+import platform;
 
 __all__ = ['PY3', 'Semaphore']
 
 PY3 = sys.version_info[0] >= 3
-
+IS_PYPY = platform.python_implementation().lower() == 'pypy'
 
 def get_bytes(value):
     if hasattr(value, 'encode'):

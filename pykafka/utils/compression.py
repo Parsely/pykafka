@@ -21,7 +21,7 @@ import gzip
 import logging
 import struct
 
-from .compat import StringIO, range, get_bytes, buffer
+from .compat import StringIO, range, get_bytes, buffer, IS_PYPY
 
 try:
     import snappy
@@ -80,7 +80,9 @@ def encode_snappy(buff, xerial_compatible=False, xerial_blocksize=32 * 1024):
     https://github.com/mumrah/kafka-python/pull/127/files
     """
     buff = get_bytes(buff)
-
+    #snappy segfaults if it gets a read-only buffer on PyPy
+    if IS_PYPY:
+        buff = bytes(buff)
     if snappy is None:
         raise ImportError("Please install python-snappy")
     if xerial_compatible:

@@ -314,8 +314,8 @@ class BalancedConsumer():
         parts_per_consumer = math.floor(len(all_parts) / len(participants))
         remainder_ppc = len(all_parts) % len(participants)
 
-        start = parts_per_consumer * idx + min(idx, remainder_ppc)
-        num_parts = parts_per_consumer + (0 if (idx + 1 > remainder_ppc) else 1)
+        start = int(parts_per_consumer * idx + min(idx, remainder_ppc))
+        num_parts = int(parts_per_consumer + (0 if (idx + 1 > remainder_ppc) else 1))
 
         # assign partitions from i*N to (i+1)*N - 1 to consumer Ci
         new_partitions = itertools.islice(all_parts, start, start + num_parts)
