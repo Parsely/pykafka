@@ -155,7 +155,7 @@ class Cluster(object):
             for broker_str in brokers:
                 try:
                     h, p = broker_str.split(':')
-                    broker = Broker(-1, h, p, self._handler,
+                    broker = Broker(-1, h, int(p), self._handler,
                                     self._socket_timeout_ms,
                                     self._offsets_channel_socket_timeout_ms,
                                     buffer_size=1024 * 1024,
