@@ -41,7 +41,9 @@ def read_lines(fname):
     with open(os.path.join(os.path.dirname(__file__), fname)) as f:
         return f.readlines()
 
-tests_require = [x.strip() for x in read_lines('test-requirements.txt')]
+tests_require = [
+    x.strip() for x in read_lines('test-requirements.txt') if not x.startswith('-')
+]
 
 dependency_links = []
 setup_requires = []
