@@ -1,6 +1,7 @@
 from contextlib import contextmanager
-from pykafka.test.utils import unittest, mock
 
+import mock
+import unittest2
 from uuid import uuid4
 
 from pykafka import KafkaClient
@@ -9,7 +10,7 @@ from pykafka.test.utils import get_cluster, stop_cluster
 from pykafka.utils.compat import range
 
 
-class TestSimpleConsumer(unittest.TestCase):
+class TestSimpleConsumer(unittest2.TestCase):
     maxDiff = None
 
     @classmethod
@@ -137,7 +138,7 @@ class TestSimpleConsumer(unittest.TestCase):
             self.assertEqual(consumer.held_offsets[part_id], expected_offset)
 
 
-class TestOwnedPartition(unittest.TestCase):
+class TestOwnedPartition(unittest2.TestCase):
     def test_partition_saves_offset(self):
         msgval = "test"
         partition = mock.MagicMock()
@@ -218,4 +219,4 @@ class TestOwnedPartition(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    unittest2.main()

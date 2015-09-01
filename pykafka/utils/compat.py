@@ -1,10 +1,11 @@
 import sys
-import platform;
+import platform
 
 __all__ = ['PY3', 'Semaphore']
 
 PY3 = sys.version_info[0] >= 3
 IS_PYPY = platform.python_implementation().lower() == 'pypy'
+
 
 def get_bytes(value):
     if hasattr(value, 'encode'):
@@ -13,8 +14,8 @@ def get_bytes(value):
         except:
             # if we can't encode the value just pass it along
             pass
-
     return value
+
 
 def get_string(value):
     if hasattr(value, 'decode'):
@@ -25,13 +26,12 @@ def get_string(value):
             pass
     else:
         value = str(value)
-
     return value
 
 if PY3:
     from threading import Semaphore
-    from queue import Queue, Empty
-    from io import BytesIO as StringIO
+    from queue import Queue, Empty  # noqa
+    from io import BytesIO as StringIO  # noqa
     range = range
 
     def iteritems(d, **kw):
@@ -52,17 +52,17 @@ else:
     from threading import Condition, Lock
     # could use monotonic.monotonic() backport as well here...
     from time import time as _time
-    from Queue import Queue, Empty
-    from StringIO import StringIO
+    from Queue import Queue, Empty  # noqa
+    from StringIO import StringIO  # noqa
 
     def iteritems(d, **kw):
-        return iter(d.iteritems(**kw))
+        return d.iteritems(**kw)
 
     def itervalues(d, **kw):
-        return iter(d.itervalues(**kw))
+        return d.itervalues(**kw)
 
     def iterkeys(d, **kw):
-        return iter(d.iterkeys(**kw))
+        return d.iterkeys(**kw)
 
     buffer = buffer
     string_types = basestring,

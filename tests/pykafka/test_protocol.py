@@ -1,12 +1,11 @@
-from pykafka.test.utils import unittest
+import unittest2
 
-from pykafka import exceptions
 from pykafka import protocol
 from pykafka.common import CompressionType
 from pykafka.utils.compat import buffer
 
 
-class TestMetadataAPI(unittest.TestCase):
+class TestMetadataAPI(unittest2.TestCase):
     maxDiff = None
 
     def test_request(self):
@@ -45,7 +44,7 @@ class TestMetadataAPI(unittest.TestCase):
         self.assertEqual(response.topics[b'test'].err, 3)
 
 
-class TestProduceAPI(unittest.TestCase):
+class TestProduceAPI(unittest2.TestCase):
     maxDiff = None
 
     test_messages = [
@@ -93,7 +92,7 @@ class TestProduceAPI(unittest.TestCase):
         )
 
 
-class TestFetchAPI(unittest.TestCase):
+class TestFetchAPI(unittest2.TestCase):
     maxDiff = None
 
     def test_request(self):
@@ -183,7 +182,7 @@ class TestFetchAPI(unittest.TestCase):
         )
 
 
-class TestOffsetAPI(unittest.TestCase):
+class TestOffsetAPI(unittest2.TestCase):
     maxDiff = None
 
     def test_request(self):
@@ -209,7 +208,7 @@ class TestOffsetAPI(unittest.TestCase):
         self.assertEqual(resp.topics[b'test'][0].offset, [2])
 
 
-class TestOffsetCommitFetchAPI(unittest.TestCase):
+class TestOffsetCommitFetchAPI(unittest2.TestCase):
     maxDiff = None
 
     def test_consumer_metadata_request(self):
@@ -262,4 +261,4 @@ class TestOffsetCommitFetchAPI(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    unittest.main()
+    unittest2.main()

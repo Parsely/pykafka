@@ -1,14 +1,15 @@
 from __future__ import division
 
 import time
+import unittest2
 from uuid import uuid4
 
 from pykafka import KafkaClient
 from pykafka.exceptions import ProducerQueueFullError
-from pykafka.test.utils import get_cluster, stop_cluster, unittest
+from pykafka.test.utils import get_cluster, stop_cluster
 
 
-class ProducerIntegrationTests(unittest.TestCase):
+class ProducerIntegrationTests(unittest2.TestCase):
     maxDiff = None
 
     @classmethod
@@ -102,4 +103,4 @@ class ProducerIntegrationTests(unittest.TestCase):
         assert message.value == payload
 
 if __name__ == "__main__":
-    unittest.main()
+    unittest2.main()

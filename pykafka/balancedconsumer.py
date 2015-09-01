@@ -323,7 +323,6 @@ class BalancedConsumer():
         log.info('Balancing %i participants for %i partitions.\nOwning %i partitions.',
                  len(participants), len(all_parts), len(new_partitions))
         log.debug('My partitions: %s', [p_to_str(p) for p in new_partitions])
-
         return new_partitions
 
     def _get_participants(self):

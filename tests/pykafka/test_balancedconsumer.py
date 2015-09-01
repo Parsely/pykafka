@@ -1,12 +1,13 @@
 import math
 import time
-
-from pykafka.test.utils import unittest, mock
+import mock
+import unittest2
 
 from pykafka import KafkaClient
 from pykafka.balancedconsumer import BalancedConsumer
 from pykafka.test.utils import get_cluster, stop_cluster
 from pykafka.utils.compat import range
+
 
 def buildMockConsumer(num_partitions=10, num_participants=1, timeout=2000):
     consumer_group = 'testgroup'
@@ -28,7 +29,7 @@ def buildMockConsumer(num_partitions=10, num_participants=1, timeout=2000):
                             consumer_timeout_ms=timeout), topic
 
 
-class TestBalancedConsumer(unittest.TestCase):
+class TestBalancedConsumer(unittest2.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._consumer_timeout = 2000
@@ -60,7 +61,7 @@ class TestBalancedConsumer(unittest.TestCase):
             num_participants = i + 1
             num_partitions = 100 - i
             participants = sorted(['test-debian:{p}'.format(p=p)
-                            for p in range(num_participants)])
+                                   for p in range(num_participants)])
             cns, topic = buildMockConsumer(num_partitions=num_partitions,
                                            num_participants=num_participants)
 
@@ -89,7 +90,7 @@ class TestBalancedConsumer(unittest.TestCase):
             self.assertListEqual(assigned_parts, all_partitions)
 
 
-class BalancedConsumerIntegrationTests(unittest.TestCase):
+class BalancedConsumerIntegrationTests(unittest2.TestCase):
     maxDiff = None
 
     @classmethod
@@ -137,11 +138,10 @@ class BalancedConsumerIntegrationTests(unittest.TestCase):
         except Exception as e:
             print(e)
             raise
-            print(hi)
         finally:
             consumer_a.stop()
             consumer_b.stop()
 
 
 if __name__ == "__main__":
-    unittest.main()
+    unittest2.main()

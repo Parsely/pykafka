@@ -1,8 +1,9 @@
-from pykafka.test.utils import unittest
+import unittest2
+
 from pykafka.utils import struct_helpers
 
 
-class StructHelpersTests(unittest.TestCase):
+class StructHelpersTests(unittest2.TestCase):
     def test_basic_unpack(self):
         output = struct_helpers.unpack_from(
             'iiqhi',
@@ -27,4 +28,4 @@ class StructHelpersTests(unittest.TestCase):
         self.assertEqual(output, [1, 2, 3, 4])
 
 if __name__ == '__main__':
-    unittest.main()
+    unittest2.main()

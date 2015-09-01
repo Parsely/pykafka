@@ -290,7 +290,6 @@ class MessageSet(Serializable):
             attempted = True
             if len(buff) - offset < size:
                 break
-
             # TODO: Check we have all the requisite bytes
             message = Message.decode(buff[offset:offset + size],
                                      msg_offset,
@@ -298,7 +297,6 @@ class MessageSet(Serializable):
             # print '[%d] (%s) %s' % (message.offset, message.partition_key, message.value)
             messages.append(message)
             offset += size
-
         if len(messages) == 0 and attempted:
             raise NoMessagesConsumedError()
         return MessageSet(messages=messages)
@@ -366,7 +364,6 @@ class MetadataRequest(Request):
         :rtype: :class:`bytearray`
         """
         output = bytearray(len(self))
-
         self._write_header(output)
         struct.pack_into('!i', output, self.HEADER_LEN, len(self.topics))
         offset = self.HEADER_LEN + 4
@@ -409,6 +406,7 @@ class MetadataResponse(Response):
         fmt = '[iSi] [hS [hii [i] [i] ] ]'
         response = struct_helpers.unpack_from(fmt, buff, 0)
         broker_info, topics = response
+
         self.brokers = {}
         for (id_, host, port) in broker_info:
             self.brokers[id_] = BrokerMetadata(id_, host, port)
@@ -1009,7 +1007,6 @@ class OffsetCommitRequest(Request):
                 if metalen != -1:
                     fmt += '%ds' % metalen
                     pack_args = [fmt, output, offset, metalen, metadata]
-
                 struct.pack_into(*pack_args)
                 offset += struct.calcsize(fmt)
         return output

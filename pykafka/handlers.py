@@ -129,7 +129,6 @@ class RequestHandler(object):
                 task = self._requests.get()
                 try:
                     self.connection.request(task.request)
-
                     if task.future:
                         res = self.connection.response()
                         task.future.set_response(res)
