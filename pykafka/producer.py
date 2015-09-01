@@ -211,13 +211,15 @@ class Producer(object):
         leader_id = self._topic.partitions[partition_id].leader.id
         self._owned_brokers[leader_id].enqueue([(kv, partition_id)])
 
-    def _prepare_request(self, message_batch, owned_broker):
+    def _prepare_request(self, message_batch, owned_broker, attempt):
         """Prepare a request and send it to the broker
 
         :param message_batch: An iterable of messages to send
         :type message_batch: iterable of `((key, value), partition_id)` tuples
         :param owned_broker: The `OwnedBroker` to which to send the request
         :type owned_broker: :class:`pykafka.producer.OwnedBroker`
+        :param attempt: The current attempt count. Used for retry logic
+        :type attempt: int
         """
         request = ProduceRequest(
             compression_type=self._compression,
@@ -232,7 +234,7 @@ class Producer(object):
             )
         log.debug("Sending %d messages to broker %d",
                   len(message_batch), owned_broker.broker.id)
-        self._send_request(request, 0, owned_broker)
+        self._send_request(request, attempt, owned_broker)
 
     def _send_request(self, req, attempt, owned_broker):
         """Send the produce request to the broker and handle the response.
@@ -313,9 +315,7 @@ class Producer(object):
             attempt += 1
             if attempt < self._max_retries:
                 time.sleep(self._retry_backoff_ms / 1000)
-                # we have to call _produce here since the broker/partition
-                # target for each message may have changed
-                self._produce(to_retry, attempt)
+                self._prepare_request(to_retry, owned_broker, attempt)
             else:
                 raise ProduceFailureError('Unable to produce messages. See log for details.')
 
@@ -390,7 +390,7 @@ class OwnedBroker(object):
                 try:
                     batch = self.flush(self.producer._linger_ms)
                     if batch:
-                        self.producer._prepare_request(batch, self)
+                        self.producer._prepare_request(batch, self, 0)
                 except Exception:
                     # surface all exceptions to the main thread
                     self.producer._worker_exception = sys.exc_info()
