@@ -21,7 +21,7 @@ import gzip
 import logging
 import struct
 
-from .compat import StringIO, range, get_bytes, buffer, IS_PYPY
+from .compat import StringIO, range, get_bytes, buffer, IS_PYPY, PY3
 
 try:
     import snappy
@@ -81,7 +81,7 @@ def encode_snappy(buff, xerial_compatible=False, xerial_blocksize=32 * 1024):
     """
     buff = get_bytes(buff)
     #snappy segfaults if it gets a read-only buffer on PyPy
-    if IS_PYPY:
+    if IS_PYPY or PY3:
         buff = bytes(buff)
     if snappy is None:
         raise ImportError("Please install python-snappy")

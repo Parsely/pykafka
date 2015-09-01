@@ -44,7 +44,7 @@ if PY3:
         return iter(d.keys(**kw))
 
     def buffer(val):
-        return bytes(memoryview(val))
+        return memoryview(val)
 
     string_types = str,
 else:
