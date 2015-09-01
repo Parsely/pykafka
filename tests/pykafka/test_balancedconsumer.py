@@ -1,6 +1,6 @@
 import math
-import time
 import mock
+import time
 import unittest2
 
 from pykafka import KafkaClient

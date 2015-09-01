@@ -1,5 +1,4 @@
 from contextlib import contextmanager
-
 import mock
 import unittest2
 from uuid import uuid4

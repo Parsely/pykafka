@@ -418,6 +418,7 @@ class BalancedConsumer():
                     # partition allocation is correct.
                     participants = self._get_participants()
                     partitions = self._decide_partitions(participants)
+
                     old_partitions = self._partitions - partitions
                     self._remove_partitions(old_partitions)
 
