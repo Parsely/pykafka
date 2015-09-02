@@ -4,10 +4,9 @@ import time
 import unittest2
 
 from pykafka import KafkaClient
-from pykafka.balancedconsumer import BalancedConsumer
+from pykafka.balancedconsumer import BalancedConsumer, OffsetType
 from pykafka.test.utils import get_cluster, stop_cluster
 from pykafka.utils.compat import range
-
 
 def buildMockConsumer(num_partitions=10, num_participants=1, timeout=2000):
     consumer_group = 'testgroup'
@@ -99,24 +98,63 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
         cls.topic_name = b'test-data'
         cls.kafka.create_topic(cls.topic_name, 3, 2)
         cls.client = KafkaClient(cls.kafka.brokers)
-        prod = cls.client.topics[cls.topic_name].get_producer(
+        cls.prod = cls.client.topics[cls.topic_name].get_producer(
             min_queued_messages=1
         )
         for i in range(1000):
-            prod.produce('msg {num}'.format(num=i).encode())
+            cls.prod.produce('msg {num}'.format(num=i).encode())
 
     @classmethod
     def tearDownClass(cls):
         stop_cluster(cls.kafka)
 
-    def test_consume(self):
+    def test_consume_earliest(self):
         try:
             consumer_a = self.client.topics[self.topic_name].get_balanced_consumer(
-                b'test_consume', zookeeper_connect=self.kafka.zookeeper
+                b'test_consume_earliest', zookeeper_connect=self.kafka.zookeeper,
+                auto_offset_reset=OffsetType.EARLIEST
             )
             consumer_b = self.client.topics[self.topic_name].get_balanced_consumer(
-                b'test_consume', zookeeper_connect=self.kafka.zookeeper
+                b'test_consume_earliest', zookeeper_connect=self.kafka.zookeeper,
+                auto_offset_reset=OffsetType.EARLIEST
             )
+
+            # Consume from both a few times
+            messages = [consumer_a.consume() for i in range(1)]
+            self.assertTrue(len(messages) == 1)
+            messages = [consumer_b.consume() for i in range(1)]
+            self.assertTrue(len(messages) == 1)
+
+            # Validate they aren't sharing partitions
+            self.assertSetEqual(
+                consumer_a._partitions & consumer_b._partitions,
+                set()
+            )
+
+            # Validate all partitions are here
+            self.assertSetEqual(
+                consumer_a._partitions | consumer_b._partitions,
+                set(self.client.topics[self.topic_name].partitions.values())
+            )
+        finally:
+            consumer_a.stop()
+            consumer_b.stop()
+
+    def test_consume_latest(self):
+        try:
+            consumer_a = self.client.topics[self.topic_name].get_balanced_consumer(
+                b'test_consume_latest', zookeeper_connect=self.kafka.zookeeper,
+                auto_offset_reset=OffsetType.LATEST
+            )
+            consumer_b = self.client.topics[self.topic_name].get_balanced_consumer(
+                b'test_consume_latest', zookeeper_connect=self.kafka.zookeeper,
+                auto_offset_reset=OffsetType.LATEST
+            )
+
+            # Since we are consuming from the latest offset,
+            # produce more messages to consume.
+            for i in range(3):
+                self.prod.produce('msg {num}'.format(num=i).encode())
 
             # Consume from both a few times
             messages = [consumer_a.consume() for i in range(1)]
