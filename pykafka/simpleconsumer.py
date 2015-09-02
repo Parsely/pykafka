@@ -386,11 +386,11 @@ class SimpleConsumer():
                 # offset was associated with this consumer group.
                 # This partition will have its offset reset.
                 if pres.offset == -1:
-                    log.debug("Partition %s has no committed offsets in consumer group %s.  Resetting to %s",
-                        owned_partition.partition.id,
-                        self._consumer_group,
-                        self._auto_offset_reset
-                    )
+                    log.debug("Partition %s has no committed offsets in "
+                              "consumer group %s.  Resetting to %s",
+                              owned_partition.partition.id,
+                              self._consumer_group,
+                              self._auto_offset_reset)
                     partition_offsets_to_reset.append((
                         owned_partition.partition,
                         self._auto_offset_reset
