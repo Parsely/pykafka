@@ -31,7 +31,6 @@ def get_string(value):
 if PY3:
     from threading import Semaphore
     from queue import Queue, Empty  # noqa
-    from io import BytesIO as StringIO  # noqa
     range = range
 
     def iteritems(d, **kw):
@@ -43,17 +42,14 @@ if PY3:
     def iterkeys(d, **kw):
         return iter(d.keys(**kw))
 
-    def buffer(val):
-        return memoryview(val)
+    buffer = memoryview
 
-    string_types = str,
 else:
     range = xrange
     from threading import Condition, Lock
     # could use monotonic.monotonic() backport as well here...
     from time import time as _time
     from Queue import Queue, Empty  # noqa
-    from StringIO import StringIO  # noqa
 
     def iteritems(d, **kw):
         return d.iteritems(**kw)
@@ -65,7 +61,6 @@ else:
         return d.iterkeys(**kw)
 
     buffer = buffer
-    string_types = basestring,
 
     # -- begin unmodified backport of threading.Semaphore from Python 3.4 -- #
     class Semaphore:

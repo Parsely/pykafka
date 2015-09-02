@@ -18,11 +18,11 @@ limitations under the License.
 """
 __all__ = ["encode_gzip", "decode_gzip", "encode_snappy", "decode_snappy"]
 import gzip
+from io import BytesIO
 import logging
 import struct
 
-from .compat import StringIO, range, buffer, IS_PYPY, PY3
-from .compat import StringIO, range, buffer, IS_PYPY
+from .compat import range, buffer, IS_PYPY, PY3
 
 try:
     import snappy
@@ -37,7 +37,7 @@ _XERIAL_V1_FORMAT = 'bccccccBii'
 
 def encode_gzip(buff):
     """Encode a buffer using gzip"""
-    sio = StringIO()
+    sio = BytesIO()
     f = gzip.GzipFile(fileobj=sio, mode="w")
     f.write(buff)
     f.close()
@@ -49,7 +49,7 @@ def encode_gzip(buff):
 
 def decode_gzip(buff):
     """Decode a buffer using gzip"""
-    sio = StringIO(buff)
+    sio = BytesIO(buff)
     f = gzip.GzipFile(fileobj=sio, mode='r')
     output = f.read()
     f.close()
@@ -89,7 +89,7 @@ def encode_snappy(buff, xerial_compatible=False, xerial_blocksize=32 * 1024):
         def _chunker():
             for i in range(0, len(buff), xerial_blocksize):
                 yield buff[i:i + xerial_blocksize]
-        out = StringIO()
+        out = BytesIO()
         full_data = list(zip(_XERIAL_V1_FORMAT, _XERIAL_V1_HEADER))
         header = b''.join(
             [struct.pack('!' + fmt, dat) for fmt, dat in full_data
@@ -119,7 +119,7 @@ def decode_snappy(buff):
     if snappy is None:
         raise ImportError("Please install python-snappy")
     if _detect_xerial_stream(buff):
-        out = StringIO()
+        out = BytesIO()
         body = buffer(buff[16:])
         if PY3:  # workaround for snappy bug
             body = bytes(body)
