@@ -153,7 +153,7 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
 
             # Since we are consuming from the latest offset,
             # produce more messages to consume.
-            for i in range(1000):
+            for i in range(2):
                 self.prod.produce('msg {num}'.format(num=i).encode())
 
             # Consume from both a few times
