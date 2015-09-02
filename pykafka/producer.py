@@ -41,7 +41,7 @@ from .exceptions import (
 )
 from .partitioners import random_partitioner
 from .protocol import Message, ProduceRequest
-from .utils.compat import get_bytes, iteritems, range, itervalues
+from .utils.compat import iteritems, range, itervalues
 
 log = logging.getLogger(__name__)
 
@@ -195,7 +195,7 @@ class Producer(object):
             raise ProducerStoppedException()
         partitions = list(self._topic.partitions.values())
         partition_id = self._partitioner(partitions, partition_key).id
-        message_partition_tup = (partition_key, get_bytes(message)), partition_id
+        message_partition_tup = (partition_key, message), partition_id
         self._produce(message_partition_tup)
         if self._synchronous:
             self._wait_all()

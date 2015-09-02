@@ -103,7 +103,7 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
             min_queued_messages=1
         )
         for i in range(1000):
-            prod.produce('msg {num}'.format(num=i))
+            prod.produce('msg {num}'.format(num=i).encode())
 
     @classmethod
     def tearDownClass(cls):
