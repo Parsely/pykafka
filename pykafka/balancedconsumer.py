@@ -301,7 +301,8 @@ class BalancedConsumer():
         :type participants: Iterable of `bytes`
         """
         # Freeze and sort partitions so we always have the same results
-        p_to_str = lambda p: (p.topic.name, p.leader.id, p.id)
+        p_to_str = lambda p: b'-'.join([p.topic.name, get_bytes(str(p.leader.id)),
+                                        get_bytes(str(p.id))])
         all_parts = self._topic.partitions.values()
         all_parts = sorted(all_parts, key=p_to_str)
 
