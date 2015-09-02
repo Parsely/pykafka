@@ -49,7 +49,7 @@ class KafkaClient(object):
         https://docs.python.org/2/library/socket.html#socket.create_connection
 
         :param hosts: Comma-separated list of kafka hosts to used to connect.
-        :type hosts: str
+        :type hosts: bytes
         :param use_greenlets: If True, use gevent instead of threading.
         :type use_greenlets: bool
         :param socket_timeout_ms: The socket timeout (in milliseconds) for

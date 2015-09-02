@@ -77,7 +77,7 @@ class BalancedConsumer():
         :type cluster: :class:`pykafka.cluster.Cluster`
         :param consumer_group: The name of the consumer group this consumer
             should join.
-        :type consumer_group: str
+        :type consumer_group: bytes
         :param fetch_message_max_bytes: The number of bytes of messages to
             attempt to fetch with each fetch request
         :type fetch_message_max_bytes: int
@@ -298,7 +298,7 @@ class BalancedConsumer():
 
         :param participants: Sorted list of ids of all other consumers in this
             consumer group.
-        :type participants: Iterable of str
+        :type participants: Iterable of `bytes`
         """
         # Freeze and sort partitions so we always have the same results
         p_to_str = lambda p: (p.topic.name, p.leader.id, p.id)

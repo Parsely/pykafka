@@ -77,7 +77,7 @@ class SimpleConsumer():
         :type cluster: :class:`pykafka.cluster.Cluster`
         :param consumer_group: The name of the consumer group this consumer
             should use for offset committing and fetching.
-        :type consumer_group: str
+        :type consumer_group: bytes
         :param partitions: Existing partitions to which to connect
         :type partitions: Iterable of :class:`pykafka.partition.Partition`
         :param fetch_message_max_bytes: The number of bytes of messages to

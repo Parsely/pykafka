@@ -88,7 +88,7 @@ class Cluster(object):
         """Create a new Cluster instance.
 
         :param hosts: Comma-separated list of kafka hosts to used to connect.
-        :type hosts: str
+        :type hosts: bytes
         :param handler: The concurrency handler for network requests.
         :type handler: :class:`pykafka.handlers.Handler`
         :param socket_timeout_ms: The socket timeout (in milliseconds) for

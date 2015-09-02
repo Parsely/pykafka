@@ -186,10 +186,10 @@ class Producer(object):
         """Produce a message.
 
         :param message: The message to produce
-        :type message: str
+        :type message: bytes
         :param partition_key: The key to use when deciding which partition to send this
             message to
-        :type partition_key: str
+        :type partition_key: bytes
         """
         if not self._running:
             raise ProducerStoppedException()
@@ -205,7 +205,7 @@ class Producer(object):
         """Enqueue a message for the relevant broker
 
         :param message_partition_tup: Message with partition assigned.
-        :type message_partition_tup: ((str, str), int) tuple
+        :type message_partition_tup: ((bytes, bytes), int) tuple
         """
         kv, partition_id = message_partition_tup
         leader_id = self._topic.partitions[partition_id].leader.id
