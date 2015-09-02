@@ -19,7 +19,7 @@ limitations under the License.
 __all__ = ["unpack_from"]
 import itertools
 import struct
-from .compat import range, get_bytes
+from .compat import range
 
 
 def unpack_from(fmt, buff, offset=0):
@@ -46,7 +46,6 @@ def unpack_from(fmt, buff, offset=0):
     if fmt[0] in '!><':
         fmt = fmt[1:]  # It's always network ordering
 
-    buff = get_bytes(buff)
     output = _unpack(fmt, buff, offset, 1)[0]
 
     # whole-message arrays come back weird
@@ -70,7 +69,6 @@ def _unpack(fmt, buff, offset, count=1):
     """
     items = []
     array_fmt = None
-    buff = get_bytes(buff)
     for i, ch in enumerate(fmt):
         if array_fmt is not None:
             if ch == ']':
@@ -95,8 +93,7 @@ def _unpack(fmt, buff, offset, count=1):
                     items.append(None)
                     continue
                 ch = '%ds' % len_
-            unpacked_data = struct.unpack_from('!' + ch, buff, offset)
-            items.extend(unpacked_data)
+            items.extend(struct.unpack_from('!' + ch, buff, offset))
             offset += struct.calcsize(ch)
     return tuple(items), offset
 

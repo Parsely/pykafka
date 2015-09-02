@@ -347,7 +347,7 @@ class SimpleConsumer():
             time.sleep(i * (self._offsets_channel_backoff_ms / 1000))
 
             response = self._offset_manager.commit_consumer_group_offsets(
-                self._consumer_group, 1, 'pykafka', reqs)
+                self._consumer_group, 1, b'pykafka', reqs)
             parts_by_error = handle_partition_responses(
                 self._default_error_handlers,
                 response=response,
@@ -699,7 +699,7 @@ class OwnedPartition(object):
             self.partition.id,
             self.last_offset_consumed,
             int(time.time() * 1000),
-            'pykafka'
+            b'pykafka'
         )
 
     def build_offset_fetch_request(self):

@@ -29,7 +29,7 @@ from .exceptions import (ConsumerCoordinatorNotAvailable,
                          UnknownTopicOrPartition)
 from .protocol import ConsumerMetadataRequest, ConsumerMetadataResponse
 from .topic import Topic
-from .utils.compat import iteritems, range, get_bytes
+from .utils.compat import iteritems, range
 
 log = logging.getLogger(__name__)
 
@@ -43,9 +43,6 @@ class TopicDict(dict):
 
     def __missing__(self, key):
         log.warning('Topic %s not found. Attempting to auto-create.', key)
-
-        key = get_bytes(key)
-
         if self._create_topic(key):
             return self[key]
         else:
@@ -59,8 +56,6 @@ class TopicDict(dict):
         with settings and everything, we'll implement that. To expose just
         this now would be disingenuous, since it's features would be hobbled.
         """
-        topic_name = get_bytes(topic_name)
-
         if len(self._cluster.brokers) == 0:
             log.warning("No brokers found. This is probably because of "
                         "KAFKA-2154, which will be fixed in Kafka 0.8.3")

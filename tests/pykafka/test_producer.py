@@ -15,7 +15,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.kafka = get_cluster()
-        cls.topic_name = 'test-data'
+        cls.topic_name = b'test-data'
         cls.kafka.create_topic(cls.topic_name, 3, 2)
         cls.client = KafkaClient(cls.kafka.brokers)
         cls.consumer = cls.client.topics[cls.topic_name].get_simple_consumer(

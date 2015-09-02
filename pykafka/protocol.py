@@ -63,7 +63,7 @@ from zlib import crc32
 from .common import CompressionType, Message
 from .exceptions import ERROR_CODES, NoMessagesConsumedError
 from .utils import Serializable, compression, struct_helpers
-from .utils.compat import iteritems, itervalues, buffer, get_bytes
+from .utils.compat import iteritems, itervalues, buffer
 
 
 log = logging.getLogger(__name__)
@@ -192,15 +192,12 @@ class Message(Message, Serializable):
         if self.partition_key is None:
             fmt = '!BBii%ds' % len(self.value)
             args = (self.MAGIC, self.compression_type, -1,
-                    len(self.value), get_bytes(self.value))
+                    len(self.value), self.value)
         else:
             fmt = '!BBi%dsi%ds' % (len(self.partition_key), len(self.value))
             args = (self.MAGIC, self.compression_type,
-                    len(self.partition_key),
-                    get_bytes(self.partition_key),
-                    len(self.value),
-                    get_bytes(self.value))
-
+                    len(self.partition_key), self.partition_key,
+                    len(self.value), self.value)
         struct.pack_into(fmt, buff, offset + 4, *args)
         fmt_size = struct.calcsize(fmt)
         data = buffer(buff[(offset + 4):(offset + 4 + fmt_size)])
@@ -339,14 +336,7 @@ class MetadataRequest(Request):
 
         :param topics: Topics to query. Leave empty for all available topics.
         """
-        self._topics = topics or []
-
-    @property
-    def topics(self):
-        if self._topics:
-            return [get_bytes(t) for t in self._topics]
-
-        return self._topics
+        self.topics = topics or []
 
     def __len__(self):
         """Length of the serialized message, in bytes"""
@@ -510,7 +500,6 @@ class ProduceRequest(Request):
                          self.required_acks, self.timeout, len(self.msets))
         offset += 10
         for topic_name, partitions in iteritems(self.msets):
-            topic_name = get_bytes(topic_name)
             fmt = '!h%dsi' % len(topic_name)
             struct.pack_into(fmt, output, offset, len(topic_name),
                              topic_name, len(partitions))
@@ -656,7 +645,6 @@ class FetchRequest(Request):
                          -1, self.timeout, self.min_bytes, len(self._reqs))
         offset += 16
         for topic_name, partitions in iteritems(self._reqs):
-            topic_name = get_bytes(topic_name)
             fmt = '!h%dsi' % len(topic_name)
             struct.pack_into(
                 fmt, output, offset, len(topic_name), topic_name,
@@ -793,8 +781,7 @@ class OffsetRequest(Request):
         for topic_name, partitions in iteritems(self._reqs):
             fmt = '!h%dsi' % len(topic_name)
             struct.pack_into(fmt, output, offset, len(topic_name),
-                             get_bytes(topic_name), len(partitions))
-
+                             topic_name, len(partitions))
             offset += struct.calcsize(fmt)
             for pnum, (offsets_before, max_offsets) in iteritems(partitions):
                 struct.pack_into('!iqi', output, offset,
@@ -843,7 +830,7 @@ class ConsumerMetadataRequest(Request):
     """
     def __init__(self, consumer_group):
         """Create a new consumer metadata request"""
-        self.consumer_group = get_bytes(consumer_group)
+        self.consumer_group = consumer_group
 
     def __len__(self):
         """Length of the serialized message, in bytes"""
@@ -977,27 +964,20 @@ class OffsetCommitRequest(Request):
         self._write_header(output, api_version=1)
         offset = self.HEADER_LEN
         fmt = '!h%dsih%dsi' % (len(self.consumer_group), len(self.consumer_id))
-
-        consumer_group = get_bytes(self.consumer_group)
-        consumer_id = get_bytes(self.consumer_id)
-
         struct.pack_into(fmt, output, offset,
-                         len(consumer_group),
-                         consumer_group,
+                         len(self.consumer_group), self.consumer_group,
                          self.consumer_group_generation_id,
-                         len(consumer_id), consumer_id,
+                         len(self.consumer_id), self.consumer_id,
                          len(self._reqs))
 
         offset += struct.calcsize(fmt)
         for topic_name, partitions in iteritems(self._reqs):
-            topic_name = get_bytes(topic_name)
             fmt = '!h%dsi' % len(topic_name)
             struct.pack_into(fmt, output, offset, len(topic_name),
                              topic_name, len(partitions))
             offset += struct.calcsize(fmt)
             for pnum, (poffset, timestamp, metadata) in iteritems(partitions):
                 fmt = '!iqq'
-                metadata = get_bytes(metadata)
                 struct.pack_into(fmt, output, offset,
                                  pnum, poffset, timestamp)
                 offset += struct.calcsize(fmt)
@@ -1104,14 +1084,13 @@ class OffsetFetchRequest(Request):
         offset = self.HEADER_LEN
         fmt = '!h%dsi' % len(self.consumer_group)
         struct.pack_into(fmt, output, offset,
-                         len(self.consumer_group),
-                         get_bytes(self.consumer_group),
+                         len(self.consumer_group), self.consumer_group,
                          len(self._reqs))
         offset += struct.calcsize(fmt)
         for topic_name, partitions in iteritems(self._reqs):
             fmt = '!h%dsi' % len(topic_name)
             struct.pack_into(fmt, output, offset, len(topic_name),
-                             get_bytes(topic_name), len(partitions))
+                             topic_name, len(partitions))
             offset += struct.calcsize(fmt)
             for pnum in partitions:
                 fmt = '!i'

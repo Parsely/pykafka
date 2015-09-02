@@ -15,7 +15,7 @@ class TestSimpleConsumer(unittest2.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.kafka = get_cluster()
-        cls.topic_name = uuid4().hex
+        cls.topic_name = uuid4().hex.encode()
         cls.kafka.create_topic(cls.topic_name, 3, 2)
 
         # It turns out that the underlying producer used by KafkaInstance will
@@ -52,7 +52,7 @@ class TestSimpleConsumer(unittest2.TestCase):
     def test_offset_commit(self):
         """Check fetched offsets match pre-commit internal state"""
         with self._get_simple_consumer(
-                consumer_group='test_offset_commit') as consumer:
+                consumer_group=b'test_offset_commit') as consumer:
             [consumer.consume() for _ in range(100)]
             offsets_committed = consumer.held_offsets
             consumer.commit_offsets()
@@ -64,13 +64,13 @@ class TestSimpleConsumer(unittest2.TestCase):
     def test_offset_resume(self):
         """Check resumed internal state matches committed offsets"""
         with self._get_simple_consumer(
-                consumer_group='test_offset_resume') as consumer:
+                consumer_group=b'test_offset_resume') as consumer:
             [consumer.consume() for _ in range(100)]
             offsets_committed = consumer.held_offsets
             consumer.commit_offsets()
 
         with self._get_simple_consumer(
-                consumer_group='test_offset_resume') as consumer:
+                consumer_group=b'test_offset_resume') as consumer:
             self.assertEquals(consumer.held_offsets, offsets_committed)
 
     def test_reset_offset_on_start(self):
@@ -190,7 +190,7 @@ class TestOwnedPartition(unittest2.TestCase):
         self.assertEqual(request.topic_name, topic.name)
         self.assertEqual(request.partition_id, partition.id)
         self.assertEqual(request.offset, op.last_offset_consumed)
-        self.assertEqual(request.metadata, 'pykafka')
+        self.assertEqual(request.metadata, b'pykafka')
 
     def test_partition_offset_fetch_request(self):
         topic = mock.Mock()

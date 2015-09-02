@@ -48,15 +48,15 @@ class TestProduceAPI(unittest2.TestCase):
     maxDiff = None
 
     test_messages = [
-        protocol.Message('this is a test message', partition_key='asdf'),
-        protocol.Message('this is also a test message', partition_key='test_key'),
-        protocol.Message("this doesn't have a partition key"),
+        protocol.Message(b'this is a test message', partition_key=b'asdf'),
+        protocol.Message(b'this is also a test message', partition_key=b'test_key'),
+        protocol.Message(b"this doesn't have a partition key"),
     ]
 
     def test_request(self):
         message = self.test_messages[0]
         req = protocol.ProduceRequest()
-        req.add_message(message, 'test', 0)
+        req.add_message(message, b'test', 0)
         msg = req.get_bytes()
         self.assertEqual(
             msg,
@@ -65,13 +65,13 @@ class TestProduceAPI(unittest2.TestCase):
 
     def test_gzip_compression(self):
         req = protocol.ProduceRequest(compression_type=CompressionType.GZIP)
-        [req.add_message(m, 'test_gzip', 0) for m in self.test_messages]
+        [req.add_message(m, b'test_gzip', 0) for m in self.test_messages]
         msg = req.get_bytes()
         self.assertEqual(len(msg), 207)  # this isn't a good test
 
     def test_snappy_compression(self):
         req = protocol.ProduceRequest(compression_type=CompressionType.SNAPPY)
-        [req.add_message(m, 'test_snappy', 0) for m in self.test_messages]
+        [req.add_message(m, b'test_snappy', 0) for m in self.test_messages]
         msg = req.get_bytes()
         self.assertEqual(len(msg), 212)  # this isn't a good test
 
@@ -96,7 +96,7 @@ class TestFetchAPI(unittest2.TestCase):
     maxDiff = None
 
     def test_request(self):
-        preq = protocol.PartitionFetchRequest('test', 0, 1)
+        preq = protocol.PartitionFetchRequest(b'test', 0, 1)
         req = protocol.FetchRequest(partition_requests=[preq, ])
         msg = req.get_bytes()
         self.assertEqual(
@@ -186,7 +186,7 @@ class TestOffsetAPI(unittest2.TestCase):
     maxDiff = None
 
     def test_request(self):
-        preq = protocol.PartitionOffsetRequest('test', 0, -1, 1)
+        preq = protocol.PartitionOffsetRequest(b'test', 0, -1, 1)
         req = protocol.OffsetRequest(partition_requests=[preq, ])
         msg = req.get_bytes()
         self.assertEqual(
@@ -212,7 +212,7 @@ class TestOffsetCommitFetchAPI(unittest2.TestCase):
     maxDiff = None
 
     def test_consumer_metadata_request(self):
-        req = protocol.ConsumerMetadataRequest('test')
+        req = protocol.ConsumerMetadataRequest(b'test')
         msg = req.get_bytes()
         self.assertEqual(
             msg,
@@ -228,9 +228,10 @@ class TestOffsetCommitFetchAPI(unittest2.TestCase):
         self.assertEqual(response.coordinator_port, 9092)
 
     def test_offset_commit_request(self):
-        preq = protocol.PartitionOffsetCommitRequest('test', 0, 68, 1426632066,
-                                                     'testmetadata')
-        req = protocol.OffsetCommitRequest('test', 1, 'pykafka', partition_requests=[preq, ])
+        preq = protocol.PartitionOffsetCommitRequest(
+            b'test', 0, 68, 1426632066, b'testmetadata')
+        req = protocol.OffsetCommitRequest(
+            b'test', 1, b'pykafka', partition_requests=[preq, ])
         msg = req.get_bytes()
         self.assertEqual(
             msg,
@@ -244,8 +245,8 @@ class TestOffsetCommitFetchAPI(unittest2.TestCase):
         self.assertEqual(response.topics[b'emmett.dummy'][0].err, 0)
 
     def test_offset_fetch_request(self):
-        preq = protocol.PartitionOffsetFetchRequest('testtopic', 0)
-        req = protocol.OffsetFetchRequest('test', partition_requests=[preq, ])
+        preq = protocol.PartitionOffsetFetchRequest(b'testtopic', 0)
+        req = protocol.OffsetFetchRequest(b'test', partition_requests=[preq, ])
         msg = req.get_bytes()
         self.assertEqual(
             msg,

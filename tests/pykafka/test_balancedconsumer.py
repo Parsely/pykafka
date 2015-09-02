@@ -112,10 +112,10 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
     def test_consume(self):
         try:
             consumer_a = self.client.topics[self.topic_name].get_balanced_consumer(
-                'test_consume', zookeeper_connect=self.kafka.zookeeper
+                b'test_consume', zookeeper_connect=self.kafka.zookeeper
             )
             consumer_b = self.client.topics[self.topic_name].get_balanced_consumer(
-                'test_consume', zookeeper_connect=self.kafka.zookeeper
+                b'test_consume', zookeeper_connect=self.kafka.zookeeper
             )
 
             # Consume from both a few times
@@ -135,9 +135,6 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
                 consumer_a._partitions | consumer_b._partitions,
                 set(self.client.topics[self.topic_name].partitions.values())
             )
-        except Exception as e:
-            print(e)
-            raise
         finally:
             consumer_a.stop()
             consumer_b.stop()
