@@ -19,6 +19,7 @@ limitations under the License.
 __all__ = ["unpack_from"]
 import itertools
 import struct
+from .compat import range
 
 
 def unpack_from(fmt, buff, offset=0):
@@ -110,7 +111,7 @@ def _unpack_array(fmt, buff, offset, count):
     :type count: int
     """
     output = []
-    for i in xrange(count):
+    for i in range(count):
         item, offset = _unpack(fmt, buff, offset)
         output.append(item)
     if len(fmt) == 1:

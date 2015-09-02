@@ -24,6 +24,7 @@ import struct
 
 from .exceptions import SocketDisconnectedError
 from .utils.socket import recvall_into
+from .utils.compat import buffer
 
 log = logging.getLogger(__name__)
 

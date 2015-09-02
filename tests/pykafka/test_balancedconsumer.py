@@ -1,12 +1,12 @@
 import math
-import time
-
 import mock
+import time
 import unittest2
 
 from pykafka import KafkaClient
 from pykafka.balancedconsumer import BalancedConsumer
 from pykafka.test.utils import get_cluster, stop_cluster
+from pykafka.utils.compat import range
 
 
 def buildMockConsumer(num_partitions=10, num_participants=1, timeout=2000):
@@ -14,7 +14,7 @@ def buildMockConsumer(num_partitions=10, num_participants=1, timeout=2000):
     topic = mock.Mock()
     topic.name = 'testtopic'
     topic.partitions = {}
-    for k in xrange(num_partitions):
+    for k in range(num_partitions):
         part = mock.Mock(name='part-{part}'.format(part=k))
         part.id = k
         part.topic = topic
@@ -56,18 +56,18 @@ class TestBalancedConsumer(unittest2.TestCase):
     def test_decide_partitions(self):
         """Test partition assignment for a number of partitions/consumers."""
         # 100 test iterations
-        for i in xrange(100):
+        for i in range(100):
             # Set up partitions, cluster, etc
             num_participants = i + 1
             num_partitions = 100 - i
-            participants = ['test-debian:{p}'.format(p=p)
-                            for p in xrange(num_participants)]
+            participants = sorted(['test-debian:{p}'.format(p=p)
+                                   for p in range(num_participants)])
             cns, topic = buildMockConsumer(num_partitions=num_partitions,
                                            num_participants=num_participants)
 
             # Simulate each participant to ensure they're correct
             assigned_parts = []
-            for p_id in xrange(num_participants):
+            for p_id in range(num_participants):
                 cns._consumer_id = participants[p_id]  # override consumer id
 
                 # Decide partitions then validate
@@ -78,14 +78,15 @@ class TestBalancedConsumer(unittest2.TestCase):
                 idx = participants.index(cns._consumer_id)
                 parts_per_consumer = num_partitions / num_participants
                 parts_per_consumer = math.floor(parts_per_consumer)
+
                 num_parts = parts_per_consumer + (0 if (idx + 1 > remainder_ppc) else 1)
 
-                self.assertEqual(len(partitions), num_parts)
+                self.assertEqual(len(partitions), int(num_parts))
 
             # Validate all partitions were assigned once and only once
             all_partitions = topic.partitions.values()
-            all_partitions.sort()
-            assigned_parts.sort()
+            all_partitions = sorted(all_partitions, key=lambda x: x.id)
+            assigned_parts = sorted(assigned_parts, key=lambda x: x.id)
             self.assertListEqual(assigned_parts, all_partitions)
 
 
@@ -95,12 +96,14 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.kafka = get_cluster()
-        cls.topic_name = 'test-data'
+        cls.topic_name = b'test-data'
         cls.kafka.create_topic(cls.topic_name, 3, 2)
         cls.client = KafkaClient(cls.kafka.brokers)
-        prod = cls.client.topics[cls.topic_name].get_producer(min_queued_messages=1)
-        for i in xrange(1000):
-            prod.produce('msg {num}'.format(num=i))
+        prod = cls.client.topics[cls.topic_name].get_producer(
+            min_queued_messages=1
+        )
+        for i in range(1000):
+            prod.produce('msg {num}'.format(num=i).encode())
 
     @classmethod
     def tearDownClass(cls):
@@ -108,13 +111,17 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
 
     def test_consume(self):
         try:
-            consumer_a = self.client.topics[self.topic_name].get_balanced_consumer('test_consume', zookeeper_connect=self.kafka.zookeeper)
-            consumer_b = self.client.topics[self.topic_name].get_balanced_consumer('test_consume', zookeeper_connect=self.kafka.zookeeper)
+            consumer_a = self.client.topics[self.topic_name].get_balanced_consumer(
+                b'test_consume', zookeeper_connect=self.kafka.zookeeper
+            )
+            consumer_b = self.client.topics[self.topic_name].get_balanced_consumer(
+                b'test_consume', zookeeper_connect=self.kafka.zookeeper
+            )
 
             # Consume from both a few times
-            messages = [consumer_a.consume() for i in xrange(1)]
+            messages = [consumer_a.consume() for i in range(1)]
             self.assertTrue(len(messages) == 1)
-            messages = [consumer_b.consume() for i in xrange(1)]
+            messages = [consumer_b.consume() for i in range(1)]
             self.assertTrue(len(messages) == 1)
 
             # Validate they aren't sharing partitions

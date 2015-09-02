@@ -20,7 +20,6 @@ limitations under the License.
 __all__ = ["BalancedConsumer"]
 import itertools
 import logging
-import math
 import socket
 import time
 from uuid import uuid4
@@ -33,6 +32,7 @@ from .common import OffsetType
 from .exceptions import (KafkaException, PartitionOwnedError,
                          ConsumerStoppedException)
 from .simpleconsumer import SimpleConsumer
+from .utils.compat import range, get_bytes
 
 
 log = logging.getLogger(__name__)
@@ -77,7 +77,7 @@ class BalancedConsumer():
         :type cluster: :class:`pykafka.cluster.Cluster`
         :param consumer_group: The name of the consumer group this consumer
             should join.
-        :type consumer_group: str
+        :type consumer_group: bytes
         :param fetch_message_max_bytes: The number of bytes of messages to
             attempt to fetch with each fetch request
         :type fetch_message_max_bytes: int
@@ -298,17 +298,17 @@ class BalancedConsumer():
 
         :param participants: Sorted list of ids of all other consumers in this
             consumer group.
-        :type participants: Iterable of str
+        :type participants: Iterable of `bytes`
         """
         # Freeze and sort partitions so we always have the same results
-        p_to_str = lambda p: '-'.join([p.topic.name, str(p.leader.id), str(p.id)])
+        p_to_str = lambda p: '-'.join([str(p.topic.name), str(p.leader.id), str(p.id)])
         all_parts = self._topic.partitions.values()
-        all_parts.sort(key=p_to_str)
+        all_parts = sorted(all_parts, key=p_to_str)
 
         # get start point, # of partitions, and remainder
-        participants.sort()  # just make sure it's sorted.
+        participants = sorted(participants)  # just make sure it's sorted.
         idx = participants.index(self._consumer_id)
-        parts_per_consumer = math.floor(len(all_parts) / len(participants))
+        parts_per_consumer = len(all_parts) // len(participants)
         remainder_ppc = len(all_parts) % len(participants)
 
         start = parts_per_consumer * idx + min(idx, remainder_ppc)
@@ -343,7 +343,7 @@ class BalancedConsumer():
                     participants.append(id_)
             except NoNodeException:
                 pass  # disappeared between ``get_children`` and ``get``
-        participants.sort()
+        participants = sorted(participants)
         return participants
 
     def _set_watches(self):
@@ -409,7 +409,7 @@ class BalancedConsumer():
                 self._consumer_id, self._topic.name)
             )
 
-            for i in xrange(self._rebalance_max_retries):
+            for i in range(self._rebalance_max_retries):
                 try:
                     # If retrying, be sure to make sure the
                     # partition allocation is correct.
@@ -469,7 +469,7 @@ class BalancedConsumer():
             try:
                 self._zookeeper.create(
                     self._path_from_partition(p),
-                    value=self._consumer_id,
+                    value=get_bytes(self._consumer_id),
                     ephemeral=True
                 )
                 self._partitions.add(p)

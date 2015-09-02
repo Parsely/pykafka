@@ -6,6 +6,7 @@ from uuid import uuid4
 from pykafka import KafkaClient
 from pykafka.simpleconsumer import OwnedPartition, OffsetType
 from pykafka.test.utils import get_cluster, stop_cluster
+from pykafka.utils.compat import range
 
 
 class TestSimpleConsumer(unittest2.TestCase):
@@ -14,7 +15,7 @@ class TestSimpleConsumer(unittest2.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.kafka = get_cluster()
-        cls.topic_name = uuid4().hex
+        cls.topic_name = uuid4().hex.encode()
         cls.kafka.create_topic(cls.topic_name, 3, 2)
 
         # It turns out that the underlying producer used by KafkaInstance will
@@ -26,7 +27,7 @@ class TestSimpleConsumer(unittest2.TestCase):
         for _ in range(3):
             cls.kafka.produce_messages(
                 cls.topic_name,
-                ('msg {i}'.format(i=i) for i in xrange(batch)))
+                ('msg {i}'.format(i=i) for i in range(batch)))
 
         cls.client = KafkaClient(cls.kafka.brokers)
 
@@ -44,15 +45,15 @@ class TestSimpleConsumer(unittest2.TestCase):
 
     def test_consume(self):
         with self._get_simple_consumer() as consumer:
-            messages = [consumer.consume() for _ in xrange(self.total_msgs)]
+            messages = [consumer.consume() for _ in range(self.total_msgs)]
             self.assertEquals(len(messages), self.total_msgs)
             self.assertTrue(None not in messages)
 
     def test_offset_commit(self):
         """Check fetched offsets match pre-commit internal state"""
         with self._get_simple_consumer(
-                consumer_group='test_offset_commit') as consumer:
-            [consumer.consume() for _ in xrange(100)]
+                consumer_group=b'test_offset_commit') as consumer:
+            [consumer.consume() for _ in range(100)]
             offsets_committed = consumer.held_offsets
             consumer.commit_offsets()
 
@@ -63,13 +64,13 @@ class TestSimpleConsumer(unittest2.TestCase):
     def test_offset_resume(self):
         """Check resumed internal state matches committed offsets"""
         with self._get_simple_consumer(
-                consumer_group='test_offset_resume') as consumer:
-            [consumer.consume() for _ in xrange(100)]
+                consumer_group=b'test_offset_resume') as consumer:
+            [consumer.consume() for _ in range(100)]
             offsets_committed = consumer.held_offsets
             consumer.commit_offsets()
 
         with self._get_simple_consumer(
-                consumer_group='test_offset_resume') as consumer:
+                consumer_group=b'test_offset_resume') as consumer:
             self.assertEquals(consumer.held_offsets, offsets_committed)
 
     def test_reset_offset_on_start(self):
@@ -189,7 +190,7 @@ class TestOwnedPartition(unittest2.TestCase):
         self.assertEqual(request.topic_name, topic.name)
         self.assertEqual(request.partition_id, partition.id)
         self.assertEqual(request.offset, op.last_offset_consumed)
-        self.assertEqual(request.metadata, 'pykafka')
+        self.assertEqual(request.metadata, b'pykafka')
 
     def test_partition_offset_fetch_request(self):
         topic = mock.Mock()

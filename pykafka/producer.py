@@ -41,7 +41,7 @@ from .exceptions import (
 )
 from .partitioners import random_partitioner
 from .protocol import Message, ProduceRequest
-
+from .utils.compat import iteritems, range, itervalues
 
 log = logging.getLogger(__name__)
 
@@ -186,16 +186,16 @@ class Producer(object):
         """Produce a message.
 
         :param message: The message to produce
-        :type message: str
+        :type message: bytes
         :param partition_key: The key to use when deciding which partition to send this
             message to
-        :type partition_key: str
+        :type partition_key: bytes
         """
         if not self._running:
             raise ProducerStoppedException()
-        partitions = self._topic.partitions.values()
+        partitions = list(self._topic.partitions.values())
         partition_id = self._partitioner(partitions, partition_key).id
-        message_partition_tup = (partition_key, str(message)), partition_id
+        message_partition_tup = (partition_key, message), partition_id
         self._produce(message_partition_tup)
         if self._synchronous:
             self._wait_all()
@@ -205,7 +205,7 @@ class Producer(object):
         """Enqueue a message for the relevant broker
 
         :param message_partition_tup: Message with partition assigned.
-        :type message_partition_tup: ((str, str), int) tuple
+        :type message_partition_tup: ((bytes, bytes), int) tuple
         """
         kv, partition_id = message_partition_tup
         leader_id = self._topic.partitions[partition_id].leader.id
@@ -251,8 +251,8 @@ class Producer(object):
             """Get all the messages for the partitions from the request."""
             messages = itertools.chain.from_iterable(
                 mset.messages
-                for topic, partitions in req.msets.iteritems()
-                for p_id, mset in partitions.iteritems()
+                for topic, partitions in iteritems(req.msets)
+                for p_id, mset in iteritems(partitions)
                 if p_id == partition_id
             )
             for message in messages:
@@ -266,8 +266,8 @@ class Producer(object):
             # Figure out if we need to retry any messages
             # TODO: Convert to using utils.handle_partition_responses
             to_retry = []
-            for topic, partitions in response.topics.iteritems():
-                for partition, presponse in partitions.iteritems():
+            for topic, partitions in iteritems(response.topics):
+                for partition, presponse in iteritems(partitions):
                     if presponse.err == 0:
                         # mark msg_count messages as successfully delivered
                         msg_count = len(req.msets[topic][partition].messages)
@@ -306,8 +306,8 @@ class Producer(object):
             self._cluster.update()
             to_retry = [
                 ((message.partition_key, message.value), p_id)
-                for topic, partitions in req.msets.iteritems()
-                for p_id, mset in partitions.iteritems()
+                for topic, partitions in iteritems(req.msets)
+                for p_id, mset in iteritems(partitions)
                 for message in mset.messages
             ]
 
@@ -329,14 +329,14 @@ class Producer(object):
         """
         # empty queues and figure out updated partition leaders
         new_queue_contents = defaultdict(list)
-        for owned_broker in self._owned_brokers.itervalues():
+        for owned_broker in itervalues(self._owned_brokers):
             owned_broker.lock.acquire()
             current_queue_contents = owned_broker.flush(0, release_pending=True)
             for kv, partition_id in current_queue_contents:
                 partition_leader = self._topic.partitions[partition_id].leader
                 new_queue_contents[partition_leader.id].append((kv, partition_id))
         # retain locks for all brokers between these two steps
-        for owned_broker in self._owned_brokers.itervalues():
+        for owned_broker in itervalues(self._owned_brokers):
             owned_broker.enqueue(new_queue_contents[owned_broker.broker.id],
                                  self._block_on_queue_full)
             owned_broker.resolve_event_state()
@@ -349,7 +349,7 @@ class Producer(object):
         and have not yet been dequeued and sent to the broker
         """
         log.info("Blocking until all messages are sent")
-        while any(q.message_is_pending() for q in self._owned_brokers.itervalues()):
+        while any(q.message_is_pending() for q in itervalues(self._owned_brokers)):
             time.sleep(.3)
             self._raise_worker_exceptions()
 
@@ -434,7 +434,7 @@ class OwnedBroker(object):
         """
         self._wait_for_flush_ready(linger_ms)
         with self.lock:
-            batch = [self.queue.pop() for _ in xrange(len(self.queue))]
+            batch = [self.queue.pop() for _ in range(len(self.queue))]
             if release_pending:
                 self.messages_pending -= len(batch)
             if not self.slot_available.is_set():

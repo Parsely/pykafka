@@ -18,6 +18,7 @@ limitations under the License.
 """
 __all__ = ["handle_partition_responses", "raise_error"]
 from collections import defaultdict
+from .compat import iteritems
 
 
 def handle_partition_responses(error_handlers,
@@ -48,7 +49,7 @@ def handle_partition_responses(error_handlers,
     if parts_by_error is None:
         parts_by_error = build_parts_by_error(response, partitions_by_id)
 
-    for errcode, parts in parts_by_error.iteritems():
+    for errcode, parts in iteritems(parts_by_error):
         if errcode in error_handlers:
             error_handlers[errcode](parts)
 
@@ -68,7 +69,7 @@ def build_parts_by_error(response, partitions_by_id):
     # group partition responses by error code
     parts_by_error = defaultdict(list)
     for topic_name in response.topics.keys():
-        for partition_id, pres in response.topics[topic_name].iteritems():
+        for partition_id, pres in iteritems(response.topics[topic_name]):
             owned_partition = None
             if partitions_by_id is not None:
                 owned_partition = partitions_by_id[partition_id]

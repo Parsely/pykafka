@@ -1,0 +1,4 @@
+pytest
+pytest-cov
+python-snappy
+-e git+https://github.com/Parsely/testinstances.git@master#egg=testinstances

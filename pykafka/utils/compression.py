@@ -18,10 +18,11 @@ limitations under the License.
 """
 __all__ = ["encode_gzip", "decode_gzip", "encode_snappy", "decode_snappy"]
 import gzip
+from io import BytesIO
 import logging
 import struct
 
-from cStringIO import StringIO
+from .compat import range, buffer, IS_PYPY, PY3
 
 try:
     import snappy
@@ -30,13 +31,13 @@ except ImportError:
 
 log = logging.getLogger(__name__)
 # constants used in snappy xerial encoding/decoding
-_XERIAL_V1_HEADER = (-126, 'S', 'N', 'A', 'P', 'P', 'Y', 0, 1, 1)
+_XERIAL_V1_HEADER = (-126, b'S', b'N', b'A', b'P', b'P', b'Y', 0, 1, 1)
 _XERIAL_V1_FORMAT = 'bccccccBii'
 
 
 def encode_gzip(buff):
     """Encode a buffer using gzip"""
-    sio = StringIO()
+    sio = BytesIO()
     f = gzip.GzipFile(fileobj=sio, mode="w")
     f.write(buff)
     f.close()
@@ -48,7 +49,7 @@ def encode_gzip(buff):
 
 def decode_gzip(buff):
     """Decode a buffer using gzip"""
-    sio = StringIO(buff)
+    sio = BytesIO(buff)
     f = gzip.GzipFile(fileobj=sio, mode='r')
     output = f.read()
     f.close()
@@ -79,15 +80,21 @@ def encode_snappy(buff, xerial_compatible=False, xerial_blocksize=32 * 1024):
     Adapted from kafka-python
     https://github.com/mumrah/kafka-python/pull/127/files
     """
+    #snappy segfaults if it gets a read-only buffer on PyPy
+    if IS_PYPY or PY3:
+        buff = bytes(buff)
     if snappy is None:
         raise ImportError("Please install python-snappy")
     if xerial_compatible:
         def _chunker():
-            for i in xrange(0, len(buff), xerial_blocksize):
+            for i in range(0, len(buff), xerial_blocksize):
                 yield buff[i:i + xerial_blocksize]
-        out = StringIO()
-        header = ''.join([struct.pack('!' + fmt, dat) for fmt, dat
-                          in zip(_XERIAL_V1_FORMAT, _XERIAL_V1_HEADER)])
+        out = BytesIO()
+        full_data = list(zip(_XERIAL_V1_FORMAT, _XERIAL_V1_HEADER))
+        header = b''.join(
+            [struct.pack('!' + fmt, dat) for fmt, dat in full_data
+         ])
+
         out.write(header)
         for chunk in _chunker():
             block = snappy.compress(chunk)
@@ -112,8 +119,10 @@ def decode_snappy(buff):
     if snappy is None:
         raise ImportError("Please install python-snappy")
     if _detect_xerial_stream(buff):
-        out = StringIO()
+        out = BytesIO()
         body = buffer(buff[16:])
+        if PY3:  # workaround for snappy bug
+            body = bytes(body)
         length = len(body)
         cursor = 0
         while cursor < length:
