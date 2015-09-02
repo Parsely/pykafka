@@ -59,7 +59,7 @@ class SimpleConsumer():
                  fetch_wait_max_ms=100,
                  offsets_channel_backoff_ms=1000,
                  offsets_commit_max_retries=5,
-                 auto_offset_reset=OffsetType.LATEST,
+                 auto_offset_reset=OffsetType.EARLIEST,
                  consumer_timeout_ms=-1,
                  auto_start=True,
                  reset_offset_on_start=False):
@@ -380,11 +380,31 @@ class SimpleConsumer():
             raise Exception("consumer group must be specified to fetch offsets")
 
         def _handle_success(parts):
+            partition_offsets_to_reset = []
             for owned_partition, pres in parts:
-                log.debug("Set offset for partition %s to %s",
-                          owned_partition.partition.id,
-                          pres.offset)
-                owned_partition.set_offset(pres.offset)
+                # If Kafka returned -1, that means that no
+                # offset was associated with this consumer group.
+                # This partition will have its offset reset.
+                if pres.offset == -1:
+                    log.debug("Partition %s has no committed offsets in consumer group %s.  Resetting to %s",
+                        owned_partition.partition.id,
+                        self._consumer_group,
+                        self._auto_offset_reset
+                    )
+                    partition_offsets_to_reset.append((
+                        owned_partition.partition,
+                        self._auto_offset_reset
+                    ))
+                else:
+                    log.debug("Set offset for partition %s to %s",
+                              owned_partition.partition.id,
+                              pres.offset)
+                    owned_partition.set_offset(pres.offset)
+
+            # If any partitions didn't have a committed offset,
+            # then reset those partition's offsets.
+            if partition_offsets_to_reset:
+                self.reset_offsets(partition_offsets_to_reset)
 
         reqs = [p.build_offset_fetch_request() for p in self._partitions.values()]
         success_responses = []

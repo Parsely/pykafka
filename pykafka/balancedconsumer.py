@@ -60,7 +60,7 @@ class BalancedConsumer():
                  fetch_wait_max_ms=100,
                  offsets_channel_backoff_ms=1000,
                  offsets_commit_max_retries=5,
-                 auto_offset_reset=OffsetType.LATEST,
+                 auto_offset_reset=OffsetType.EARLIEST,
                  consumer_timeout_ms=-1,
                  rebalance_max_retries=5,
                  rebalance_backoff_ms=2 * 1000,
