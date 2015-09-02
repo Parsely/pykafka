@@ -20,7 +20,6 @@ limitations under the License.
 __all__ = ["BalancedConsumer"]
 import itertools
 import logging
-import math
 import socket
 import time
 from uuid import uuid4
@@ -302,20 +301,18 @@ class BalancedConsumer():
         :type participants: Iterable of str
         """
         # Freeze and sort partitions so we always have the same results
-        p_to_str = lambda p: b'-'.join([
-            get_bytes(p.topic.name), bytes(p.leader.id), bytes(p.id)]
-        )
+        p_to_str = lambda p: '-'.join([p.topic.name, str(p.leader.id), str(p.id)])
         all_parts = self._topic.partitions.values()
         all_parts = sorted(all_parts, key=p_to_str)
 
         # get start point, # of partitions, and remainder
         participants = sorted(participants)  # just make sure it's sorted.
         idx = participants.index(self._consumer_id)
-        parts_per_consumer = math.floor(len(all_parts) / len(participants))
+        parts_per_consumer = len(all_parts) // len(participants)
         remainder_ppc = len(all_parts) % len(participants)
 
-        start = int(parts_per_consumer * idx + min(idx, remainder_ppc))
-        num_parts = int(parts_per_consumer + (0 if (idx + 1 > remainder_ppc) else 1))
+        start = parts_per_consumer * idx + min(idx, remainder_ppc)
+        num_parts = parts_per_consumer + (0 if (idx + 1 > remainder_ppc) else 1)
 
         # assign partitions from i*N to (i+1)*N - 1 to consumer Ci
         new_partitions = itertools.islice(all_parts, start, start + num_parts)
