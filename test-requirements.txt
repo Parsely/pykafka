@@ -1,4 +1,4 @@
 pytest
 pytest-cov
 python-snappy
-testinstances
+-e git+https://github.com/sontek/testinstances.git@master#egg=testinstances
