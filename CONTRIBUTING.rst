@@ -1,6 +1,31 @@
 PyKafka Contribution Guidelines
 ===============================
 
+Testing
+-------
+
+PyKafka uses Tox and pytest for testing. The preferred way to run the tests is via Tox:
+
+    pip install tox
+    tox
+
+This tests PyKafka under all of the currently supported Python interpreters.
+
+Master should always pass all tests, but branches are allowed to have failing tests.
+
+It can be helpful to set up a git hook to run the tests before pushing to master. This hook lives in `pykafka/.git/hooks/pre-push` and looks like this:
+
+    #! /usr/bin/env sh
+
+    BRANCH=`git symbolic-ref -q HEAD`
+    if [ "$BRANCH" = "refs/heads/master" ];
+    then
+        tox
+    else
+        echo "Not on master. Unit tests not required."
+    fi
+
+
 Pull Request Guidelines
 -----------------------
 
