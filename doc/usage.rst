@@ -13,14 +13,14 @@ Setting the initial offset
 This section applies to both the `SimpleConsumer` and the `BalancedConsumer`.
 
 When a PyKafka consumer starts fetching messages from a topic, its starting position in
-the log is defined by two keyword arguments: `auto_offset_reset` and `reset_offsets_on_start`.
+the log is defined by two keyword arguments: `auto_offset_reset` and `reset_offset_on_start`.
 
 .. sourcecode:: python
 
     consumer = topic.get_simple_consumer(
         consumer_group="mygroup",
         auto_offset_reset=OffsetType.EARLIEST,
-        reset_offsets_on_start=False
+        reset_offset_on_start=False
     )
 
 The starting offset is also affected by whether or not the Kafka cluster holds any
@@ -31,15 +31,15 @@ previously committed offsets, and an "existing" set is one for which Kafka does.
 The consumer's initial behavior can be summed up by these rules:
 
 - For any *new* group/topic/partitions, message consumption will start from
-  `auto_offset_reset`. This is true independent of the value of `reset_offsets_on_start`.
-- For any *existing* group/topic/partitions, assuming `reset_offsets_on_start=False`,
+  `auto_offset_reset`. This is true independent of the value of `reset_offset_on_start`.
+- For any *existing* group/topic/partitions, assuming `reset_offset_on_start=False`,
   consumption will start from the offset
   immediately following the last committed offset (if the last committed offset was
-  4, consumption starts at 5). If `reset_offsets_on_start=True`, consumption starts from
+  4, consumption starts at 5). If `reset_offset_on_start=True`, consumption starts from
   `auto_offset_reset`. If there is no committed offset, the group/topic/partition
   is considered *new*.
 
-Put another way: if `auto_offset_reset=True`, consumption will start from
+Put another way: if `reset_offset_on_start=True`, consumption will start from
 `auto_offset_reset`. If it is `False`, where consumption starts is dependent on the
 existence of committed offsets for the group/topic/partition in question.
 
@@ -66,7 +66,7 @@ Examples:
     consumer_3 = topic.get_simple_consumer(
         consumer_group="mygroup",
         auto_offset_reset=OffsetType.EARLIEST,
-        reset_offsets_on_start=True
+        reset_offset_on_start=True
     )
 
 This behavior is based on the `auto.offset.reset` section of the `Kafka documentation`_.
