@@ -18,7 +18,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 __all__ = ["Producer"]
-from collections import defaultdict, deque
+from collections import deque
 import itertools
 import logging
 import sys
@@ -32,7 +32,6 @@ from .exceptions import (
     LeaderNotAvailable,
     MessageSizeTooLarge,
     NotLeaderForPartition,
-    ProduceFailureError,
     ProducerQueueFullError,
     ProducerStoppedException,
     RequestTimedOut,
@@ -179,7 +178,7 @@ class Producer(object):
         self._setup_owned_brokers()
 
     def _setup_owned_brokers(self):
-        if self._owned_brokers:
+        if self._owned_brokers is not None:
             for owned_broker in self._owned_brokers.values():
                 owned_broker.stop()
         self._owned_brokers = {}
@@ -292,7 +291,6 @@ class Producer(object):
                                     'Retrying.', topic, partition)
                         # Update cluster metadata to get new leader
                         self._update()
-                        #self._update_leaders()
                     elif presponse.err == RequestTimedOut.ERROR_CODE:
                         log.warning('Produce request to %s:%s timed out. '
                                     'Retrying.', owned_broker.broker.host,
@@ -334,29 +332,6 @@ class Producer(object):
                     owned_broker.messages_pending -= len(to_retry)
                 for tup in to_retry:
                     self._produce(tup)
-
-    def _update_leaders(self):
-        """Ensure each message in each queue is in the queue owned by its
-            partition's leader
-
-        This function empties all broker queues, maps their messages to the
-        current leaders for their partitions, and enqueues the messages in
-        the appropriate queues.
-        """
-        # empty queues and figure out updated partition leaders
-        new_queue_contents = defaultdict(list)
-        for owned_broker in itervalues(self._owned_brokers):
-            owned_broker.lock.acquire()
-            current_queue_contents = owned_broker.flush(0, release_pending=True)
-            for kv, partition_id in current_queue_contents:
-                partition_leader = self._topic.partitions[partition_id].leader
-                new_queue_contents[partition_leader.id].append((kv, partition_id))
-        # retain locks for all brokers between these two steps
-        for owned_broker in itervalues(self._owned_brokers):
-            owned_broker.enqueue(new_queue_contents[owned_broker.broker.id],
-                                 self._block_on_queue_full)
-            owned_broker.resolve_event_state()
-            owned_broker.lock.release()
 
     def _wait_all(self):
         """Block until all pending messages are sent
