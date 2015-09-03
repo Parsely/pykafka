@@ -5,11 +5,16 @@ API Documentation
 *****************
 
 .. toctree::
-   :maxdepth: 2
-   :glob:
+    :maxdepth: 1
 
-   api/*
-   utils/*
+    usage.rst
+
+.. toctree::
+    :maxdepth: 2
+    :glob:
+
+    api/*
+    utils/*
 
 ******************
 Indices and tables
