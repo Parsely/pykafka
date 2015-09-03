@@ -20,6 +20,7 @@ __all__ = ["Partition"]
 import logging
 
 from .common import OffsetType
+from .exceptions import LeaderNotAvailable
 from .protocol import PartitionOffsetRequest
 
 log = logging.getLogger(__name__)
@@ -130,7 +131,7 @@ class Partition():
             # Check leader
             if metadata.leader != self._leader.id:
                 log.info('Updating leader for %s from broker %s to broker %s', self,
-                         self._leader.id, metadata.leader)
+                          self._leader.id, metadata.leader)
                 self._leader = brokers[metadata.leader]
             # Check Replicas
             if sorted(r.id for r in self.replicas) != sorted(metadata.replicas):
@@ -141,4 +142,6 @@ class Partition():
                 log.info('Updating in sync replicas list for %s', self)
                 self._isr = [brokers[b] for b in metadata.isr]
         except KeyError:
-            raise Exception("TODO: Type this exception")
+            raise LeaderNotAvailable("Leader for partition %s not available. This is "
+                                     "probably because none of its replicas are "
+                                     "available.", self.id)
