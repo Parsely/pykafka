@@ -258,7 +258,6 @@ class Producer(object):
             for message in messages:
                 yield (message.partition_key, message.value), partition_id
 
-        # Do the request
         to_retry = []
         try:
             response = owned_broker.broker.produce_messages(req)
@@ -317,7 +316,13 @@ class Producer(object):
                 time.sleep(self._retry_backoff_ms / 1000)
                 self._prepare_request(to_retry, owned_broker, attempt)
             else:
-                raise ProduceFailureError('Unable to produce messages. See log for details.')
+                log.error("Failed to produce messages to broker %s:%s after %s attempts. "
+                          "Re-enqueuing %s messages.", owned_broker.broker.host,
+                          owned_broker.broker.port, attempt, len(to_retry))
+                with owned_broker.lock:
+                    owned_broker.messages_pending -= len(to_retry)
+                for tup in to_retry:
+                    self._produce(tup)
 
     def _update_leaders(self):
         """Ensure each message in each queue is in the queue owned by its
