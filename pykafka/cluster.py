@@ -26,7 +26,8 @@ import weakref
 from .broker import Broker
 from .exceptions import (ConsumerCoordinatorNotAvailable,
                          KafkaException,
-                         UnknownTopicOrPartition)
+                         UnknownTopicOrPartition,
+                         LeaderNotAvailable)
 from .protocol import ConsumerMetadataRequest, ConsumerMetadataResponse
 from .topic import Topic
 from .utils.compat import iteritems, range
@@ -287,4 +288,8 @@ class Cluster(object):
                         'will NOT work. You need to create at least one topic '
                         'manually using the Kafka CLI tools.')
         self._update_brokers(metadata.brokers)
-        self._update_topics(metadata.topics)
+        try:
+            self._update_topics(metadata.topics)
+        except LeaderNotAvailable:
+            log.warning("LeaderNotAvailable encountered. This is "
+                        "because one or more partitions have no available replicas.")

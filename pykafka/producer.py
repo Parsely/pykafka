@@ -311,11 +311,7 @@ class Producer(object):
             log.warning('Broker %s:%s disconnected. Retrying.',
                         owned_broker.broker.host,
                         owned_broker.broker.port)
-            try:
-                self._update()
-            except LeaderNotAvailable:
-                log.warning("LeaderNotAvailable encountered. This is "
-                            "because one or more partition has no available replicas.")
+            self._update()
             to_retry = [
                 ((message.partition_key, message.value), p_id)
                 for topic, partitions in iteritems(req.msets)
