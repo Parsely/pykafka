@@ -135,6 +135,7 @@ class Producer(object):
         self._synchronous = sync
         self._worker_exception = None
         self._worker_trace_logged = False
+        self._owned_brokers = None
         self._running = False
         self.start()
 
@@ -169,13 +170,23 @@ class Producer(object):
     def start(self):
         """Set up data structures and start worker threads"""
         if not self._running:
-            self._owned_brokers = {}
-            for partition in self._topic.partitions.values():
-                if partition.leader.id not in self._owned_brokers:
-                    self._owned_brokers[partition.leader.id] = OwnedBroker(
-                        self, partition.leader)
+            self._setup_owned_brokers()
             self._running = True
         self._raise_worker_exceptions()
+
+    def _update(self):
+        self._cluster.update()
+        self._setup_owned_brokers()
+
+    def _setup_owned_brokers(self):
+        if self._owned_brokers:
+            for owned_broker in self._owned_brokers.values():
+                owned_broker.stop()
+        self._owned_brokers = {}
+        for partition in self._topic.partitions.values():
+            if partition.leader.id not in self._owned_brokers:
+                self._owned_brokers[partition.leader.id] = OwnedBroker(
+                    self, partition.leader)
 
     def stop(self):
         """Mark the producer as stopped"""
@@ -280,8 +291,8 @@ class Producer(object):
                         log.warning('Partition leader for %s/%s changed. '
                                     'Retrying.', topic, partition)
                         # Update cluster metadata to get new leader
-                        self._cluster.update()
-                        self._update_leaders()
+                        self._update()
+                        #self._update_leaders()
                     elif presponse.err == RequestTimedOut.ERROR_CODE:
                         log.warning('Produce request to %s:%s timed out. '
                                     'Retrying.', owned_broker.broker.host,
@@ -302,7 +313,7 @@ class Producer(object):
             log.warning('Broker %s:%s disconnected. Retrying.',
                         owned_broker.broker.host,
                         owned_broker.broker.port)
-            self._cluster.update()
+            self._update()
             to_retry = [
                 ((message.partition_key, message.value), p_id)
                 for topic, partitions in iteritems(req.msets)
@@ -389,9 +400,10 @@ class OwnedBroker(object):
         self.slot_available = self.producer._cluster.handler.Event()
         self.queue = deque()
         self.messages_pending = 0
+        self.running = True
 
         def queue_reader():
-            while True:
+            while self.running:
                 try:
                     batch = self.flush(self.producer._linger_ms)
                     if batch:
@@ -402,6 +414,9 @@ class OwnedBroker(object):
                     break
         log.info("Starting new produce worker for broker %s", broker.id)
         self.producer._cluster.handler.spawn(queue_reader)
+
+    def stop(self):
+        self.running = False
 
     def message_is_pending(self):
         """
