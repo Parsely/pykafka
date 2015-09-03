@@ -75,11 +75,14 @@ class BrokerConnection(object):
 
     def connect(self, timeout):
         """Connect to the broker."""
+        log.debug("Connecting to %s:%s", self.host, self.port)
         self._socket = socket.create_connection(
             (self.host, self.port),
             timeout / 1000,
             (self.source_host, self.source_port)
         )
+        if self._socket is not None:
+            log.debug("Successfully connected to %s:%s", self.host, self.port)
 
     def disconnect(self):
         """Disconnect from the broker."""
