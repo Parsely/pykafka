@@ -1,13 +1,17 @@
 .. include:: introduction.rst
 
-*****************
-API Documentation
-*****************
+**************
+Help Documents
+**************
 
 .. toctree::
     :maxdepth: 1
 
     usage.rst
+
+*****************
+API Documentation
+*****************
 
 .. toctree::
     :maxdepth: 2
