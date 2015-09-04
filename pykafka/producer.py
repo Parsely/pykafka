@@ -190,6 +190,9 @@ class Producer(object):
     def stop(self):
         """Mark the producer as stopped"""
         self._running = False
+        if self._owned_brokers is not None:
+            for owned_broker in self._owned_brokers.values():
+                owned_broker.stop()
         self._wait_all()
 
     def produce(self, message, partition_key=None):
