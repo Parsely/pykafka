@@ -17,11 +17,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 __all__ = ["ResponseFuture", "Handler", "ThreadingHandler", "RequestHandler"]
-import atexit
+
+from collections import namedtuple
 import functools
 import threading
+import weakref
+
 from .utils.compat import Queue, Empty
-from collections import namedtuple
 
 
 class ResponseFuture(object):
@@ -96,7 +98,9 @@ class RequestHandler(object):
         self.connection = connection
         self._requests = handler.Queue()
         self.ending = handler.Event()
-        atexit.register(self.stop)
+
+    def __del__(self):
+        self.stop()
 
     def request(self, request, has_response=True):
         """Construct a new request
@@ -124,17 +128,25 @@ class RequestHandler(object):
 
     def _start_thread(self):
         """Run the request processor"""
+        self = weakref.proxy(self)
         def worker():
-            while not self.ending.is_set():
-                task = self._requests.get()
-                try:
-                    self.connection.request(task.request)
-                    if task.future:
-                        res = self.connection.response()
-                        task.future.set_response(res)
-                except Exception as e:
-                    if task.future:
-                        task.future.set_error(e)
-                finally:
-                    self._requests.task_done()
+            try:
+                while not self.ending.is_set():
+                    try:
+                        # set a timeout so we check self.ending every so often
+                        task = self._requests.get(timeout=1)
+                    except Empty:
+                        continue
+                    try:
+                        self.connection.request(task.request)
+                        if task.future:
+                            res = self.connection.response()
+                            task.future.set_response(res)
+                    except Exception as e:
+                        if task.future:
+                            task.future.set_error(e)
+                    finally:
+                        self._requests.task_done()
+            except ReferenceError:  # dead weakref
+                pass
         return self.handler.spawn(worker)
