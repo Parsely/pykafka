@@ -29,6 +29,8 @@ import time
 from testinstances import utils
 from testinstances.exceptions import ProcessNotStartingError
 from testinstances.managed_instance import ManagedInstance
+from pykafka.utils.compat import range, get_bytes, get_string
+
 
 log = logging.getLogger(__name__)
 
@@ -80,7 +82,7 @@ class KafkaConnection(object):
         """Run kafka-topics.sh with the provided list of arguments."""
         binfile = os.path.join(self._bin_dir, 'bin/kafka-topics.sh')
         cmd = [binfile, '--zookeeper', self.zookeeper] + args
-        cmd = [str(c) for c in cmd]  # execv needs only strings
+        cmd = [get_string(c) for c in cmd]  # execv needs only strings
         log.debug('running: %s', ' '.join(cmd))
         return subprocess.check_output(cmd)
 
@@ -105,7 +107,7 @@ class KafkaConnection(object):
     def list_topics(self):
         """Use kafka-topics.sh to get topic information."""
         res = self._run_topics_sh(['--list'])
-        return res.strip().split('\n')
+        return res.strip().split(b'\n')
 
     def produce_messages(self, topic_name, messages, batch_size=200):
         """Produce some messages to a topic."""
@@ -114,10 +116,10 @@ class KafkaConnection(object):
                '--broker-list', self.brokers,
                '--topic', topic_name,
                '--batch-size', batch_size]
-        cmd = [str(c) for c in cmd]  # execv needs only strings
+        cmd = [get_string(c) for c in cmd]  # execv needs only strings
         log.debug('running: %s', ' '.join(cmd))
         proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
-        proc.communicate(input='\n'.join(messages))
+        proc.communicate(input=get_bytes('\n'.join(messages)))
         if proc.poll() is None:
             proc.kill()
 
@@ -128,12 +130,14 @@ class KafkaInstance(ManagedInstance):
     def __init__(self,
                  num_instances=1,
                  kafka_version='0.8.2.1',
+                 scala_version='2.10',
                  bin_dir='/tmp/kafka-bin',
                  name='kafka',
                  use_gevent=False):
         """Start kafkainstace with given settings"""
         self._num_instances = num_instances
         self._kafka_version = kafka_version
+        self._scala_version = scala_version
         self._bin_dir = bin_dir
         self._processes = []
         self.zookeeper = None
@@ -174,9 +178,15 @@ class KafkaInstance(ManagedInstance):
         log.info('Downloading Kafka.')
         curr_dir = os.getcwd()
         os.chdir(self._bin_dir)
-        url = 'http://mirror.reverse.net/pub/apache/kafka/{version}/kafka_2.10-{version}.tgz'.format(version=self._kafka_version)
+        url_fmt = 'http://mirror.reverse.net/pub/apache/kafka/{kafka_version}/kafka_{scala_version}-{kafka_version}.tgz'
+        url = url_fmt.format(
+            scala_version=self._scala_version,
+            kafka_version=self._kafka_version
+        )
         p1 = subprocess.Popen(['curl', '-vs', url], stdout=subprocess.PIPE)
-        p2 = subprocess.Popen(['tar', 'xvz', '-C', self._bin_dir, '--strip-components', '1'], stdin=p1.stdout, stdout=subprocess.PIPE)
+        p2 = subprocess.Popen(['tar', 'xvz', '-C', self._bin_dir,
+                               '--strip-components', '1'],
+                              stdin=p1.stdout, stdout=subprocess.PIPE)
         p1.stdout.close()
         output, err = p2.communicate()
         os.chdir(curr_dir)
@@ -189,7 +199,7 @@ class KafkaInstance(ManagedInstance):
             s = socket.create_connection(('localhost', port))
             s.close()
             return False
-        except IOError, err:
+        except IOError as err:
             return err.errno == errno.ECONNREFUSED
 
     def _port_generator(self, start):
@@ -215,7 +225,7 @@ class KafkaInstance(ManagedInstance):
 
         # Process is started when the port isn't free anymore
         all_ports = [zk_port] + broker_ports
-        for i in xrange(10):
+        for i in range(10):
             if all(not self._is_port_free(port) for port in all_ports):
                 log.info('Kafka cluster started.')
                 return  # hooray! success
@@ -245,8 +255,8 @@ class KafkaInstance(ManagedInstance):
         self._broker_procs = []
         ports = self._port_generator(9092)
         used_ports = []
-        for i in xrange(self._num_instances):
-            port = ports.next()
+        for i in range(self._num_instances):
+            port = next(ports)
             used_ports.append(port)
             log.info('Starting Kafka on port %i.', port)
 
@@ -271,7 +281,7 @@ class KafkaInstance(ManagedInstance):
         return used_ports
 
     def _start_zookeeper(self):
-        port = self._port_generator(2181).next()
+        port = next(self._port_generator(2181))
         log.info('Starting zookeeper on port %i.', port)
 
         conf = os.path.join(self._conf_dir, 'zk.properties')
@@ -309,7 +319,8 @@ class KafkaInstance(ManagedInstance):
 
     def create_topic(self, topic_name, num_partitions, replication_factor):
         """Use kafka-topics.sh to create a topic."""
-        return self.connection.create_topic(topic_name, num_partitions, replication_factor)
+        return self.connection.create_topic(topic_name, num_partitions,
+                                            replication_factor)
 
     def delete_topic(self, topic_name):
         return self.connection.delete_topic(topic_name)
@@ -341,18 +352,18 @@ if __name__ == '__main__':
     def _catch_sigint(signum, frame):
         global _exiting
         _exiting = True
-        print 'SIGINT received.'
+        print('SIGINT received.')
     signal.signal(signal.SIGINT, _catch_sigint)
 
     cluster = KafkaInstance(num_instances=args.num_brokers,
                             kafka_version=args.kafka_version,
                             bin_dir=args.download_dir)
-    print 'Cluster started.'
-    print 'Brokers: {brokers}'.format(brokers=cluster.brokers)
-    print 'Zookeeper: {zk}'.format(zk=cluster.zookeeper)
-    print 'Waiting for SIGINT to exit.'
+    print('Cluster started.')
+    print('Brokers: {brokers}'.format(brokers=cluster.brokers))
+    print('Zookeeper: {zk}'.format(zk=cluster.zookeeper))
+    print('Waiting for SIGINT to exit.')
     while True:
         if _exiting:
-            print 'Exiting.'
+            print('Exiting.')
             sys.exit(0)
         time.sleep(1)

@@ -8,3 +8,6 @@ dist/
 .*.swp
 .*.un~
 *.bak
+.coverage
+coverage.xml
+*#*#*

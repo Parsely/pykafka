@@ -15,7 +15,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.kafka = get_cluster()
-        cls.topic_name = 'test-data'
+        cls.topic_name = b'test-data'
         cls.kafka.create_topic(cls.topic_name, 3, 2)
         cls.client = KafkaClient(cls.kafka.brokers)
         cls.consumer = cls.client.topics[cls.topic_name].get_simple_consumer(
@@ -36,7 +36,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
 
         # set a timeout so we don't wait forever if we break producer code
         message = self.consumer.consume()
-        self.assertTrue(message.value == payload)
+        assert message.value == payload
 
     def test_async_produce(self):
         payload = uuid4().bytes
@@ -45,7 +45,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
         prod.produce(payload)
 
         message = self.consumer.consume()
-        self.assertTrue(message.value == payload)
+        assert message.value == payload
 
     def test_async_produce_context(self):
         """Ensure that the producer works as a context manager"""
@@ -55,7 +55,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
             producer.produce(payload)
 
         message = self.consumer.consume()
-        self.assertTrue(message.value == payload)
+        assert message.value == payload
 
     def test_async_produce_queue_full(self):
         """Ensure that the producer raises an error when its queue is full"""
@@ -92,15 +92,6 @@ class ProducerIntegrationTests(unittest2.TestCase):
                 producer._produce(("anything", 0))
         while self.consumer.consume() is not None:
             time.sleep(.05)
-
-    def test_async_produce_unicode(self):
-        """Ensure that the producer can handle unicode strings"""
-        topic = self.client.topics[self.topic_name]
-        payload = u"tester"
-        with topic.get_producer(min_queued_messages=1) as producer:
-            producer.produce(payload)
-        message = self.consumer.consume()
-        self.assertTrue(message.value == payload)
 
 if __name__ == "__main__":
     unittest2.main()

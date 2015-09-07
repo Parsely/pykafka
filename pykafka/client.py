@@ -18,9 +18,9 @@ limitations under the License.
 """
 
 __all__ = ["KafkaClient"]
-import handlers
+from .handlers import ThreadingHandler
 import logging
-from cluster import Cluster
+from .cluster import Cluster
 
 try:
     import rd_kafka
@@ -49,7 +49,7 @@ class KafkaClient(object):
         https://docs.python.org/2/library/socket.html#socket.create_connection
 
         :param hosts: Comma-separated list of kafka hosts to used to connect.
-        :type hosts: str
+        :type hosts: bytes
         :param use_greenlets: If True, use gevent instead of threading.
         :type use_greenlets: bool
         :param socket_timeout_ms: The socket timeout (in milliseconds) for
@@ -71,7 +71,7 @@ class KafkaClient(object):
         self._source_address = source_address
         self._socket_timeout_ms = socket_timeout_ms
         self._offsets_channel_socket_timeout_ms = offsets_channel_socket_timeout_ms
-        self._handler = None if use_greenlets else handlers.ThreadingHandler()
+        self._handler = None if use_greenlets else ThreadingHandler()
         self._use_rdkafka = rd_kafka and not ignore_rdkafka
         if self._use_rdkafka:
             log.info('Using rd_kafka extensions.')

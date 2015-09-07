@@ -16,9 +16,12 @@ limitations under the License.
 """
 import re
 import sys
+import os
 
 from setuptools import setup, find_packages
+from setuptools.command.test import test as TestCommand
 from setuptools.extension import Extension
+
 
 # Get version without importing, which avoids dependency issues
 def get_version():
@@ -36,9 +39,35 @@ lint_requires = [
     'pyflakes'
 ]
 
-tests_require = ['mock', 'nose', 'unittest2', 'python-snappy']
+def read_lines(fname):
+    with open(os.path.join(os.path.dirname(__file__), fname)) as f:
+        return f.readlines()
+
+tests_require = [
+    x.strip() for x in read_lines('test-requirements.txt') if not x.startswith('-')
+]
+
 dependency_links = []
 setup_requires = []
+
+class PyTest(TestCommand):
+    user_options = [('pytest-args=', 'a', "Arguments to pass to py.test")]
+
+    def initialize_options(self):
+        TestCommand.initialize_options(self)
+        self.pytest_args = []
+
+    def finalize_options(self):
+        TestCommand.finalize_options(self)
+        self.test_args = []
+        self.test_suite = True
+
+    def run_tests(self):
+        # import here, cause outside the eggs aren't loaded
+        import pytest
+        errno = pytest.main(self.pytest_args)
+        sys.exit(errno)
+
 if 'nosetests' in sys.argv[1:]:
     setup_requires.append('nose')
 
@@ -71,6 +100,7 @@ setup(
         'docs': ['sphinx'] + tests_require,
         'lint': lint_requires
     },
+    cmdclass={'test': PyTest},
     ext_modules=[rd_kafkamodule],
     dependency_links=dependency_links,
     zip_safe=False,

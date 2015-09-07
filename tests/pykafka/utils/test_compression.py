@@ -2,9 +2,10 @@ import unittest2
 
 from pykafka.utils import compression
 
+
 class CompressionTests(unittest2.TestCase):
     """Keeping these simple by verifying what goes in is what comes out."""
-    text = "The man in black fled across the desert, and the gunslinger followed."
+    text = b"The man in black fled across the desert, and the gunslinger followed."
 
     def test_gzip(self):
         encoded = compression.encode_gzip(self.text)

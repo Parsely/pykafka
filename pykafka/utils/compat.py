@@ -1,16 +1,66 @@
 import sys
+import platform
 
 __all__ = ['PY3', 'Semaphore']
 
 PY3 = sys.version_info[0] >= 3
+IS_PYPY = platform.python_implementation().lower() == 'pypy'
 
+
+def get_bytes(value):
+    if hasattr(value, 'encode'):
+        try:
+            value = value.encode('utf-8')
+        except:
+            # if we can't encode the value just pass it along
+            pass
+    return value
+
+
+def get_string(value):
+    if hasattr(value, 'decode'):
+        try:
+            value = value.decode('utf-8')
+        except:
+            # if we can't decode the value just pass it along
+            pass
+    else:
+        value = str(value)
+    return value
 
 if PY3:
     from threading import Semaphore
+    from queue import Queue, Empty  # noqa
+    range = range
+
+    def iteritems(d, **kw):
+        return iter(d.items(**kw))
+
+    def itervalues(d, **kw):
+        return iter(d.values(**kw))
+
+    def iterkeys(d, **kw):
+        return iter(d.keys(**kw))
+
+    buffer = memoryview
+
 else:
+    range = xrange
     from threading import Condition, Lock
     # could use monotonic.monotonic() backport as well here...
     from time import time as _time
+    from Queue import Queue, Empty  # noqa
+
+    def iteritems(d, **kw):
+        return d.iteritems(**kw)
+
+    def itervalues(d, **kw):
+        return d.itervalues(**kw)
+
+    def iterkeys(d, **kw):
+        return d.iterkeys(**kw)
+
+    buffer = buffer
 
     # -- begin unmodified backport of threading.Semaphore from Python 3.4 -- #
     class Semaphore:

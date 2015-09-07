@@ -1,9 +1,9 @@
-import unittest
+import unittest2
 
 from pykafka.utils import struct_helpers
 
 
-class StructHelpersTests(unittest.TestCase):
+class StructHelpersTests(unittest2.TestCase):
     def test_basic_unpack(self):
         output = struct_helpers.unpack_from(
             'iiqhi',
@@ -13,11 +13,11 @@ class StructHelpersTests(unittest.TestCase):
 
     def test_string_encoding(self):
         output = struct_helpers.unpack_from('S', b'\x00\x04test')
-        self.assertEqual(output, ('test',))
+        self.assertEqual(output, (b'test',))
 
     def test_bytearray_unpacking(self):
         output = struct_helpers.unpack_from('Y', b'\x00\x00\x00\x04test')
-        self.assertEqual(output, ('test',))
+        self.assertEqual(output, (b'test',))
 
     def test_array_unpacking(self):
         output = struct_helpers.unpack_from(
@@ -28,4 +28,4 @@ class StructHelpersTests(unittest.TestCase):
         self.assertEqual(output, [1, 2, 3, 4])
 
 if __name__ == '__main__':
-    unittest.main()
+    unittest2.main()

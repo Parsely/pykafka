@@ -29,7 +29,7 @@ from .exceptions import (ConsumerCoordinatorNotAvailable,
                          UnknownTopicOrPartition)
 from .protocol import ConsumerMetadataRequest, ConsumerMetadataResponse
 from .topic import Topic
-
+from .utils.compat import iteritems, range
 
 log = logging.getLogger(__name__)
 
@@ -61,11 +61,11 @@ class TopicDict(dict):
                         "KAFKA-2154, which will be fixed in Kafka 0.8.3")
             raise KafkaException("Unable to retrieve metdata. Can't auto-create topic. See log for details.")
         # Auto-creating will take a moment, so we try 5 times.
-        for i in xrange(5):
+        for i in range(5):
             # Auto-creating is as simple as issuing a metadata request
             # solely for that topic.  The update is just to be sure
             # our `Cluster` knows about it.
-            self._cluster.brokers[self._cluster.brokers.keys()[0]].request_metadata(topics=[topic_name])
+            self._cluster.brokers[list(self._cluster.brokers.keys())[0]].request_metadata(topics=[topic_name])
             self._cluster.update()
             if topic_name in self:
                 log.info('Topic %s successfully auto-created.', topic_name)
@@ -88,7 +88,7 @@ class Cluster(object):
         """Create a new Cluster instance.
 
         :param hosts: Comma-separated list of kafka hosts to used to connect.
-        :type hosts: str
+        :type hosts: bytes
         :param handler: The concurrency handler for network requests.
         :type handler: :class:`pykafka.handlers.Handler`
         :param socket_timeout_ms: The socket timeout (in milliseconds) for
@@ -155,7 +155,7 @@ class Cluster(object):
             for broker_str in brokers:
                 try:
                     h, p = broker_str.split(':')
-                    broker = Broker(-1, h, p, self._handler,
+                    broker = Broker(-1, h, int(p), self._handler,
                                     self._socket_timeout_ms,
                                     self._offsets_channel_socket_timeout_ms,
                                     buffer_size=1024 * 1024,
@@ -189,7 +189,7 @@ class Cluster(object):
         # Add/update current brokers
         if len(broker_metadata) > 0:
             log.info('Discovered %d brokers', len(broker_metadata))
-        for id_, meta in broker_metadata.iteritems():
+        for id_, meta in iteritems(broker_metadata):
             if id_ not in self._brokers:
                 log.debug('Discovered broker id %s: %s:%s', id_, meta.host, meta.port)
                 self._brokers[id_] = Broker.from_metadata(
@@ -225,7 +225,7 @@ class Cluster(object):
         # Add/update partition information
         if len(metadata) > 0:
             log.info("Discovered %d topics", len(metadata))
-        for name, meta in metadata.iteritems():
+        for name, meta in iteritems(metadata):
             if not self._should_exclude_topic(name):
                 if name not in self._topics:
                     self._topics[name] = Topic(self, meta)
@@ -237,7 +237,7 @@ class Cluster(object):
         """Should this topic be excluded from the list shown to the client?"""
         if not self._exclude_internal_topics:
             return False
-        return topic_name.startswith("__")
+        return topic_name.startswith(b"__")
 
     def get_offset_manager(self, consumer_group):
         """Get the broker designated as the offset manager for this consumer group.
@@ -251,10 +251,10 @@ class Cluster(object):
         log.info("Attempting to discover offset manager for consumer group '%s'",
                  consumer_group)
         # arbitrarily choose a broker, since this request can go to any
-        broker = self.brokers[random.choice(self.brokers.keys())]
+        broker = self.brokers[random.choice(list(self.brokers.keys()))]
         MAX_RETRIES = 5
 
-        for i in xrange(MAX_RETRIES):
+        for i in range(MAX_RETRIES):
             if i > 0:
                 log.debug("Retrying offset manager discovery")
             time.sleep(i * 2)
