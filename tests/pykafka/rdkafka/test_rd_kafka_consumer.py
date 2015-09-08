@@ -2,13 +2,14 @@ import unittest2
 
 from pykafka.rdkafka import _rd_kafka
 from pykafka.test.utils import get_cluster, stop_cluster
+from pykafka.utils.compat import get_bytes
 
 
 class TestRdKafkaConsumer(unittest2.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.kafka = get_cluster()
-        cls.topic_name = 'test-rdkafka-consumer'
+        cls.topic_name = b'test-rdkafka-consumer'
         cls.n_partitions = 3
         cls.kafka.create_topic(cls.topic_name, cls.n_partitions, 2)
         cls.partition_ids = list(range(cls.n_partitions))
@@ -22,7 +23,7 @@ class TestRdKafkaConsumer(unittest2.TestCase):
         """See if Consumer_start cleans up upon failure"""
         consumer = _rd_kafka.Consumer()
         with self.assertRaises(_rd_kafka.Error):
-            consumer.start(brokers="",
+            consumer.start(brokers=b"",
                        topic_name=self.topic_name,
                        partition_ids=self.partition_ids,
                        start_offsets=self.start_offsets)
@@ -40,7 +41,7 @@ class TestRdKafkaConsumer(unittest2.TestCase):
         loose ends.
         """
         consumer = _rd_kafka.Consumer()
-        consumer.start(brokers=self.kafka.brokers,
+        consumer.start(brokers=get_bytes(self.kafka.brokers),
                        topic_name=self.topic_name,
                        partition_ids=self.partition_ids,
                        start_offsets=self.start_offsets)
@@ -56,7 +57,7 @@ class TestRdKafkaConsumer(unittest2.TestCase):
 
     def test_stopped_exception(self):
         """Check Consumer_consume raises ConsumerStoppedException"""
-        consumer = _rd_kafka.Consumer(brokers=self.kafka.brokers,
+        consumer = _rd_kafka.Consumer(brokers=get_bytes(self.kafka.brokers),
                                       topic_name=self.topic_name,
                                       partition_ids=self.partition_ids,
                                       start_offsets=self.start_offsets)
