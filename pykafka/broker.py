@@ -270,8 +270,8 @@ class Broker():
     def request_metadata(self, topics=None):
         """Request cluster metadata
 
-        :param topics: The topic ids for which to request metadata
-        :type topics: Iterable of int
+        :param topics: The topic names for which to request metadata
+        :type topics: Iterable of `bytes`
         """
         max_retries = 3
         for i in range(max_retries):
