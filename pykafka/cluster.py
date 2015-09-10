@@ -56,7 +56,9 @@ class TopicDict(dict):
     def __missing__(self, key):
         log.warning('Topic %s not found. Attempting to auto-create.', key)
         if self._create_topic(key):
-            return self[key]
+            # Note that __missing__ is called from within dict.__getitem__, so
+            # that's what we should be returning (rather than self.__getitem__)
+            return super(TopicDict, self).__getitem__(key)
         else:
             raise UnknownTopicOrPartition('Unknown topic: {topic}'.format(topic=key))
 
@@ -71,13 +73,12 @@ class TopicDict(dict):
         if len(self._cluster.brokers) == 0:
             log.warning("No brokers found. This is probably because of "
                         "KAFKA-2154, which will be fixed in Kafka 0.8.3")
-            raise KafkaException("Unable to retrieve metdata. Can't auto-create topic. See log for details.")
         # Auto-creating will take a moment, so we try 5 times.
         for i in range(5):
             # Auto-creating is as simple as issuing a metadata request
             # solely for that topic.  The update is just to be sure
             # our `Cluster` knows about it.
-            self._cluster.brokers[list(self._cluster.brokers.keys())[0]].request_metadata(topics=[topic_name])
+            self._cluster._get_metadata(topics=[topic_name])
             self._cluster.update()
             if topic_name in self:
                 log.info('Topic %s successfully auto-created.', topic_name)
