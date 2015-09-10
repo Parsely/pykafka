@@ -35,11 +35,23 @@ log = logging.getLogger(__name__)
 
 
 class TopicDict(dict):
-    """Dictionary which will attempt to auto-create unknown topics."""
+    """Lazy dict, which will also attempt to auto-create unknown topics"""
 
-    def __init__(self, cluster, *args, **kwargs):
+    def __init__(self, cluster, exclude_internal_topics, *args, **kwargs):
         super(TopicDict, self).__init__(*args, **kwargs)
         self._cluster = weakref.proxy(cluster)
+        self._exclude_internal_topics = exclude_internal_topics
+
+    def __getitem__(self, key):
+        topic_ref = super(TopicDict, self).__getitem__(key)
+        if topic_ref is not None and topic_ref() is not None:
+            return topic_ref()
+        else:
+            # Topic exists, but needs to be instantiated locally
+            meta = self._cluster._get_metadata([key])
+            topic = Topic(self._cluster, meta.topics[key])
+            self[key] = weakref.ref(topic)
+            return topic
 
     def __missing__(self, key):
         log.warning('Topic %s not found. Attempting to auto-create.', key)
@@ -71,6 +83,41 @@ class TopicDict(dict):
                 log.info('Topic %s successfully auto-created.', topic_name)
                 return True
             time.sleep(0.1)
+
+    def _update_topics(self, metadata):
+        """Update topics with fresh metadata.
+
+        :param metadata: Metadata for all topics.
+        :type metadata: Dict of `{name, metadata}` where `metadata` is
+            :class:`pykafka.protocol.TopicMetadata` and `name` is `bytes`.
+        """
+        # Remove old topics
+        removed = set(self.keys()) - set(metadata.keys())
+        if len(removed) > 0:
+            log.info("Removing %d topics", len(removed))
+        for name in removed:
+            log.debug("Removing topic '%s'", name)
+            super(TopicDict, self).pop(name)
+
+        # Add/update partition information
+        if len(metadata) > 0:
+            log.info("Discovered %d topics", len(metadata))
+        for name, meta in iteritems(metadata):
+            if not self._should_exclude_topic(name):
+                if name not in self.keys():
+                    self[name] = None  # to be instantiated lazily
+                    log.debug("Discovered topic '%s'", name)
+                else:
+                    # avoid instantiating Topic if it isn't already there
+                    ref = super(TopicDict, self).__getitem__(name)
+                    if ref is not None and ref() is not None:
+                        self[name].update(meta)
+
+    def _should_exclude_topic(self, topic_name):
+        """Should this topic be excluded from the list shown to the client?"""
+        if not self._exclude_internal_topics:
+            return False
+        return topic_name.startswith(b"__")
 
 
 class Cluster(object):
@@ -109,8 +156,7 @@ class Cluster(object):
         self._offsets_channel_socket_timeout_ms = offsets_channel_socket_timeout_ms
         self._handler = handler
         self._brokers = {}
-        self._topics = TopicDict(self)
-        self._exclude_internal_topics = exclude_internal_topics
+        self._topics = TopicDict(self, exclude_internal_topics)
         self._source_address = source_address
         self._source_host = self._source_address.split(':')[0]
         self._source_port = 0
@@ -141,13 +187,13 @@ class Cluster(object):
         """The concurrency handler for network requests"""
         return self._handler
 
-    def _get_metadata(self):
+    def _get_metadata(self, topics=None):
         """Get fresh cluster metadata from a broker."""
         # Works either on existing brokers or seed_hosts list
         brokers = [b for b in self.brokers.values() if b.connected]
         if brokers:
             for broker in brokers:
-                response = broker.request_metadata()
+                response = broker.request_metadata(topics)
                 if response is not None:
                     return response
         else:  # try seed hosts
@@ -161,7 +207,7 @@ class Cluster(object):
                                     buffer_size=1024 * 1024,
                                     source_host=self._source_host,
                                     source_port=self._source_port)
-                    response = broker.request_metadata()
+                    response = broker.request_metadata(topics)
                     if response is not None:
                         return response
                 except Exception as e:
@@ -207,37 +253,6 @@ class Cluster(object):
                 #       Figure out and implement update/disconnect/reconnect if
                 #       needed.
                 raise Exception('Broker host/port change detected! %s', broker)
-
-    def _update_topics(self, metadata):
-        """Update topics with fresh metadata.
-
-        :param metadata: Metadata for all topics.
-        :type metadata: Dict of `{name, metadata}` where `metadata` is
-            :class:`pykafka.protocol.TopicMetadata` and `name` is str.
-        """
-        # Remove old topics
-        removed = set(self._topics.keys()) - set(metadata.keys())
-        if len(removed) > 0:
-            log.info("Removing %d topics", len(removed))
-        for name in removed:
-            log.debug('Removing topic %s', self._topics[name])
-            self._topics.pop(name)
-        # Add/update partition information
-        if len(metadata) > 0:
-            log.info("Discovered %d topics", len(metadata))
-        for name, meta in iteritems(metadata):
-            if not self._should_exclude_topic(name):
-                if name not in self._topics:
-                    self._topics[name] = Topic(self, meta)
-                    log.debug('Discovered topic %s', self._topics[name])
-                else:
-                    self._topics[name].update(meta)
-
-    def _should_exclude_topic(self, topic_name):
-        """Should this topic be excluded from the list shown to the client?"""
-        if not self._exclude_internal_topics:
-            return False
-        return topic_name.startswith(b"__")
 
     def get_offset_manager(self, consumer_group):
         """Get the broker designated as the offset manager for this consumer group.
@@ -287,4 +302,4 @@ class Cluster(object):
                         'will NOT work. You need to create at least one topic '
                         'manually using the Kafka CLI tools.')
         self._update_brokers(metadata.brokers)
-        self._update_topics(metadata.topics)
+        self._topics._update_topics(metadata.topics)
