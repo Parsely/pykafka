@@ -20,10 +20,13 @@ __all__ = ["ResponseFuture", "Handler", "ThreadingHandler", "RequestHandler"]
 
 from collections import namedtuple
 import functools
+import logging
 import threading
 import weakref
 
 from .utils.compat import Queue, Empty
+
+log = logging.getLogger(__name__)
 
 
 class ResponseFuture(object):
@@ -123,6 +126,7 @@ class RequestHandler(object):
 
     def stop(self):
         """Stop the request processor."""
+        log.info("RequestHandler.stop: about to flush requests queue")
         self._requests.join()
         self.ending.set()
 
@@ -149,4 +153,5 @@ class RequestHandler(object):
                         self._requests.task_done()
             except ReferenceError:  # dead weakref
                 pass
+            log.info("RequestHandler worker: exiting cleanly")
         return self.handler.spawn(worker)
