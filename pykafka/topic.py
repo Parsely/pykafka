@@ -26,6 +26,7 @@ from .partition import Partition
 from .producer import Producer
 from .protocol import PartitionOffsetRequest
 from .simpleconsumer import SimpleConsumer
+from .utils.compat import iteritems, itervalues
 
 
 log = logging.getLogger(__name__)
@@ -94,12 +95,12 @@ class Topic():
         :type max_offsets: int
         """
         requests = defaultdict(list)  # one request for each broker
-        for part in self.partitions.itervalues():
+        for part in itervalues(self.partitions):
             requests[part.leader].append(PartitionOffsetRequest(
                 self.name, part.id, offsets_before, max_offsets
             ))
         output = {}
-        for broker, reqs in requests.iteritems():
+        for broker, reqs in iteritems(requests):
             res = broker.request_offset_limits(reqs)
             output.update(res.topics[self.name])
         return output
@@ -132,7 +133,7 @@ class Topic():
         brokers = self._cluster.brokers
         if len(p_metas) > 0:
             log.info("Adding %d partitions", len(p_metas))
-        for id_, meta in p_metas.iteritems():
+        for id_, meta in iteritems(p_metas):
             if meta.id not in self._partitions:
                 log.debug('Adding partition %s/%s', self.name, meta.id)
                 self._partitions[meta.id] = Partition(

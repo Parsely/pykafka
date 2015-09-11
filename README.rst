@@ -21,7 +21,7 @@ You can install PyKafka from PyPI with
 
     $ pip install pykafka
 
-Full documentation for PyKafka can be found on `readthedocs`_.
+Full documentation and usage examples for PyKafka can be found on `readthedocs`_.
 
 You can install PyKafka for local development and testing with
 

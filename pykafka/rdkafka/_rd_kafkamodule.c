@@ -535,13 +535,13 @@ Consumer_start(RdkHandle *self, PyObject *args, PyObject *kwds)
         "partition_ids",
         "start_offsets",  /* same order as partition_ids */
         NULL};
-    const char *brokers = NULL;
-    const char *topic_name = NULL;
+    PyObject *brokers = NULL;
+    PyObject *topic_name = NULL;
     PyObject *partition_ids = NULL;
     PyObject *start_offsets = NULL;
     if (! PyArg_ParseTupleAndKeywords(args,
                                       kwds,
-                                      "ssOO",
+                                      "SSOO",
                                       keywords,
                                       &brokers,
                                       &topic_name,
@@ -552,7 +552,10 @@ Consumer_start(RdkHandle *self, PyObject *args, PyObject *kwds)
 
     /* Basic setup */
     PyObject *res = RdkHandle_start(
-            self, RD_KAFKA_CONSUMER, brokers, topic_name);
+            self,
+            RD_KAFKA_CONSUMER,
+            PyBytes_AS_STRING(brokers),
+            PyBytes_AS_STRING(topic_name));
     if (! res) return NULL;
 
     /* We'll keep our own copy of partition_ids, because the one handed to us
@@ -661,7 +664,7 @@ static PyMethodDef Consumer_methods[] = {
         METH_VARARGS, "Consume from kafka."},
     {"stop", (PyCFunction)Consumer_stop, METH_NOARGS, "Destroy consumer."},
     {"configure", (PyCFunction)RdkHandle_configure,
-        METH_KEYWORDS, RdkHandle_configure__doc__},
+        METH_VARARGS | METH_KEYWORDS, RdkHandle_configure__doc__},
     {"start", (PyCFunction)Consumer_start, METH_VARARGS | METH_KEYWORDS, NULL},
     {NULL, NULL, 0, NULL}
 };
@@ -743,6 +746,9 @@ debug_wait_destroyed(PyObject *self, PyObject *arg)
  * Module init
  */
 
+static const char module_name[] = "pykafka.rdkafka._rd_kafka";
+
+
 static PyMethodDef pyrdk_methods[] = {
     {"_thread_cnt", debug_thread_cnt, METH_NOARGS, NULL},
     {"_wait_destroyed", debug_wait_destroyed, METH_O, NULL},
@@ -750,11 +756,29 @@ static PyMethodDef pyrdk_methods[] = {
 };
 
 
+#if PY_MAJOR_VERSION >= 3
+    static struct PyModuleDef moduledef = {
+        PyModuleDef_HEAD_INIT,
+        module_name,
+        NULL,  /* m_doc */
+        -1,    /* m_size */
+        pyrdk_methods,
+        NULL,  /* m_reload */
+        NULL,  /* m_traverse */
+        NULL,  /* m_clear */
+        NULL,  /* m_free */
+    };
+#endif
+
+
 static PyObject *
 _rd_kafkamodule_init(void)
 {
-    const char *mod_name = "pykafka.rdkafka._rd_kafka";
-    PyObject *mod = Py_InitModule(mod_name, pyrdk_methods);
+#if PY_MAJOR_VERSION >= 3
+    PyObject *mod = PyModule_Create(&moduledef);
+#else
+    PyObject *mod = Py_InitModule(module_name, pyrdk_methods);
+#endif
     if (mod == NULL) return NULL;
 
     /* Callback logging requires the GIL */
@@ -762,7 +786,7 @@ _rd_kafkamodule_init(void)
 
     PyObject *logging = PyImport_ImportModule("logging");
     if (! logging) return NULL;
-    logger = PyObject_CallMethod(logging, "getLogger", "s", mod_name);
+    logger = PyObject_CallMethod(logging, "getLogger", "s", module_name);
     Py_DECREF(logging);
     if (! logger) return NULL;
 
@@ -806,8 +830,16 @@ _rd_kafkamodule_init(void)
 }
 
 
-PyMODINIT_FUNC
-init_rd_kafka(void)
-{
-    _rd_kafkamodule_init();
-}
+#if PY_MAJOR_VERSION >= 3
+    PyMODINIT_FUNC
+    PyInit__rd_kafka(void)
+    {
+        return _rd_kafkamodule_init();
+    }
+#else
+    PyMODINIT_FUNC
+    init_rd_kafka(void)
+    {
+        _rd_kafkamodule_init();
+    }
+#endif

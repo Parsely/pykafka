@@ -3,6 +3,7 @@ import logging
 
 from pykafka.simpleconsumer import (
     SimpleConsumer, ConsumerStoppedException, OffsetType)
+from pykafka.utils.compat import get_bytes
 from . import _rd_kafka
 
 
@@ -27,8 +28,8 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
     """
 
     def _setup_fetch_workers(self):
-        brokers = ','.join(map(lambda b: ':'.join((b.host, str(b.port))),
-                               self._cluster.brokers.values()))
+        brokers = b','.join(b.host + b":" + get_bytes(str(b.port))
+                           for b in self._cluster.brokers.values())
         partition_ids = list(self._partitions_by_id.keys())
         start_offsets = [
             self._partitions_by_id[p].next_offset for p in partition_ids]

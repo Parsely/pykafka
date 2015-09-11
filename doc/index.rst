@@ -1,15 +1,24 @@
 .. include:: introduction.rst
 
+**************
+Help Documents
+**************
+
+.. toctree::
+    :maxdepth: 1
+
+    usage.rst
+
 *****************
 API Documentation
 *****************
 
 .. toctree::
-   :maxdepth: 2
-   :glob:
+    :maxdepth: 2
+    :glob:
 
-   api/*
-   utils/*
+    api/*
+    utils/*
 
 ******************
 Indices and tables
