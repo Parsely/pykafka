@@ -2,6 +2,7 @@ import logging
 
 from pykafka.producer import Producer, CompressionType
 from pykafka.handlers import ResponseFuture
+from pykafka.utils.compat import get_bytes
 from . import _rd_kafka
 
 
@@ -20,8 +21,8 @@ class RdKafkaProducer(Producer):
     """
     def start(self):
         if not self._running:
-            brokers = ','.join(map(lambda b: ':'.join((b.host, str(b.port))),
-                                   self._cluster.brokers.values()))
+            brokers = b','.join(b.host + b":" + get_bytes(str(b.port))
+                               for b in self._cluster.brokers.values())
             conf, topic_conf = self._mk_rdkafka_config_lists()
 
             self._rdk_producer = _rd_kafka.Producer()

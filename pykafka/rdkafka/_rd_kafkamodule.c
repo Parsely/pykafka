@@ -360,14 +360,18 @@ static PyObject *
 Producer_start(RdkHandle *self, PyObject *args, PyObject *kwds)
 {
     char *keywords[] = {"brokers", "topic_name", NULL};
-    const char *brokers = NULL;
-    const char *topic_name = NULL;
+    PyObject *brokers = NULL;
+    PyObject *topic_name = NULL;
     if (! PyArg_ParseTupleAndKeywords(
-            args, kwds, "ss", keywords, &brokers, &topic_name)) {
+            args, kwds, "SS", keywords, &brokers, &topic_name)) {
         return NULL;
     }
 
-    return RdkHandle_start(self, RD_KAFKA_PRODUCER, brokers, topic_name);
+    return RdkHandle_start(
+            self,
+            RD_KAFKA_PRODUCER,
+            PyBytes_AS_STRING(brokers),
+            PyBytes_AS_STRING(topic_name));
     /* TODO configure delivery-report callback */
 }
 
@@ -415,7 +419,7 @@ static PyMethodDef Producer_methods[] = {
     {"produce", (PyCFunction)Producer_produce,
         METH_VARARGS, "Produce to kafka."},
     {"configure", (PyCFunction)RdkHandle_configure,
-        METH_KEYWORDS, RdkHandle_configure__doc__},
+        METH_VARARGS | METH_KEYWORDS, RdkHandle_configure__doc__},
     {"start", (PyCFunction)Producer_start, METH_VARARGS | METH_KEYWORDS, NULL},
     {"outq_len", (PyCFunction)RdkHandle_outq_len, METH_NOARGS, NULL},
     {"poll", (PyCFunction)RdkHandle_poll, METH_VARARGS | METH_KEYWORDS, NULL},
