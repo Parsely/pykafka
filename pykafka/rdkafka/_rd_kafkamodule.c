@@ -50,8 +50,22 @@ logging_callback(const rd_kafka_t *rk,
  * Exception types
  */
 
+static PyObject *pykafka_exceptions;
 static PyObject *ConsumerStoppedException;
 static PyObject *PyRdKafkaError;
+
+
+/* Raise an exception from pykafka.exceptions (always returns NULL, to allow
+ * shorthand `return set_pykafka_error("Exception")`) */
+static PyObject *
+set_pykafka_error(const char *err_name)
+{
+    PyObject *error = PyObject_GetAttrString(pykafka_exceptions, err_name);
+    if (! error) return NULL;
+    PyErr_SetNone(error);
+    Py_DECREF(error);
+    return NULL;
+}
 
 
 static void
@@ -639,6 +653,9 @@ _rd_kafkamodule_init(void)
     logger = PyObject_CallMethod(logging, "getLogger", "s", module_name);
     Py_DECREF(logging);
     if (! logger) return NULL;
+
+    pykafka_exceptions = PyImport_ImportModule("pykafka.exceptions");
+    if (! pykafka_exceptions) return NULL;
 
     ConsumerStoppedException = PyErr_NewException(
             "pykafka.rdkafka.ConsumerStoppedException", NULL, NULL);
