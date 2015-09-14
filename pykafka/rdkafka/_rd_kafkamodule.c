@@ -51,7 +51,6 @@ logging_callback(const rd_kafka_t *rk,
  */
 
 static PyObject *pykafka_exceptions;
-static PyObject *ConsumerStoppedException;
 static PyObject *PyRdKafkaError;
 
 
@@ -478,8 +477,7 @@ Consumer_consume(RdkHandle *self, PyObject *args)
     int timeout_ms = 0;
     if (! PyArg_ParseTuple(args, "i", &timeout_ms)) return NULL;
     if (! self->rdk_queue_handle) {
-        PyErr_SetNone(ConsumerStoppedException);
-        return NULL;
+        return set_pykafka_error("ConsumerStoppedException");
     }
 
     rd_kafka_message_t *rkmessage;
@@ -656,15 +654,6 @@ _rd_kafkamodule_init(void)
 
     pykafka_exceptions = PyImport_ImportModule("pykafka.exceptions");
     if (! pykafka_exceptions) return NULL;
-
-    ConsumerStoppedException = PyErr_NewException(
-            "pykafka.rdkafka.ConsumerStoppedException", NULL, NULL);
-    if (! ConsumerStoppedException) return NULL;
-    Py_INCREF(ConsumerStoppedException);
-    if (PyModule_AddObject(
-            mod, "ConsumerStoppedException", ConsumerStoppedException)) {
-        return NULL;
-    }
 
     PyRdKafkaError = PyErr_NewException("pykafka.rdkafka.Error", NULL, NULL);
     if (!PyRdKafkaError) return NULL;
