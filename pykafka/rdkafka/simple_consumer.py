@@ -1,8 +1,7 @@
 from contextlib import contextmanager
 import logging
 
-from pykafka.simpleconsumer import (
-    SimpleConsumer, ConsumerStoppedException, OffsetType)
+from pykafka.simpleconsumer import SimpleConsumer, OffsetType
 from pykafka.utils.compat import get_bytes
 from . import _rd_kafka
 
@@ -49,10 +48,7 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
 
     def consume(self, block=True):
         timeout_ms = self._consumer_timeout_ms if block else 1
-        try:
-            msg = self._rdk_consumer.consume(timeout_ms)
-        except _rd_kafka.ConsumerStoppedException:
-            raise ConsumerStoppedException
+        msg = self._rdk_consumer.consume(timeout_ms)
         if msg is not None:
             # set offset in OwnedPartition so the autocommit_worker can find it
             self._partitions_by_id[msg.partition_id].set_offset(msg.offset)
