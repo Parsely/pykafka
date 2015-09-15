@@ -48,6 +48,9 @@ class ProducerIntegrationTests(unittest2.TestCase):
         prod = self._get_producer(min_queued_messages=1)
         prod.produce(payload)
 
+        # Without this wait, pypy may be so quick that consume() yields None
+        prod._wait_all()
+
         message = self.consumer.consume()
         assert message.value == payload
 

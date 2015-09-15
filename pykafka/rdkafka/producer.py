@@ -1,7 +1,9 @@
+from concurrent import futures
 import logging
+import weakref
 
+from pykafka.exceptions import KafkaException
 from pykafka.producer import Producer, CompressionType
-from pykafka.handlers import ResponseFuture
 from pykafka.utils.compat import get_bytes
 from . import _rd_kafka
 
@@ -31,21 +33,33 @@ class RdKafkaProducer(Producer):
             self._rdk_producer.start(brokers, self._topic.name)
             self._running = True
 
-            # TODO spawn thread to regularly poll() for delivery reports (and
-            # break if not _running)
+            def poll(self):
+                try:
+                    while self._running or self._rdk_producer.outq_len > 0:
+                        self._rdk_producer.poll(timeout_ms=1000)
+                except ReferenceError:  # weakref'd self
+                    pass
+                log.debug("Exiting RdKafkaProducer poller thread cleanly.")
+
+            self._poller_thread = self._cluster.handler.spawn(
+                    poll, args=(weakref.proxy(self), ))
 
     def _produce(self, message_partition_tup):
-        # Delivery-reports will be available through this future
-        future = ResponseFuture(self._cluster.handler)
-
         (key, msg), part_id = message_partition_tup
-        self._rdk_producer.produce(msg, key, part_id, future)
-        return future
+        return self._rdk_producer.produce(msg, key, part_id)
 
     def _wait_all(self):
         # XXX should this have a timeout_ms param, or potentially wait forever?
-        while self._rdk_producer.outq_len() > 0:
-            self._rdk_producer.poll(timeout_ms=50)
+        # XXX should raise exceptions for delivery errors (esp. when sync=True)
+        not_done = True
+        while not_done:
+            done, not_done = futures.wait(self._rdk_producer._future_set,
+                                          timeout=1)
+            if not_done:
+                log.info("Waiting for incomplete Futures: {}".format(not_done))
+                if not self._poller_thread.is_alive():
+                    raise KafkaException("Poller thread dead, _wait_all would "
+                                         "never finish.")
 
     def _mk_rdkafka_config_lists(self):
         """Populate conf, topic_conf to configure the rdkafka producer"""
@@ -105,7 +119,7 @@ class RdKafkaProducer(Producer):
             "message.send.max.retries": self._max_retries,
             "retry.backoff.ms": self._retry_backoff_ms,
             "compression.codec": map_compression_types[self._compression],
-            ##"batch.num.messages": self._min_queued_messages,  # XXX
+            "batch.num.messages": self._min_queued_messages,
 
             ##"delivery.report.only.error"
             ##"dr_cb"

@@ -1,6 +1,7 @@
 #define PY_SSIZE_T_CLEAN
 
 #include <Python.h>
+#include <structmember.h>
 #include <structseq.h>
 
 #include <errno.h>
@@ -134,7 +135,21 @@ typedef struct {
     /* Consumer-specific fields */
     rd_kafka_queue_t *rdk_queue_handle;
     PyObject *partition_ids;
+
+    /* Producer-specific fields */
+    PyObject *future_set;
 } RdkHandle;
+
+
+/* Only for inspection; if you'd manipulate these from outside the module, we
+ * have no error checking in place to protect from ensuing mayhem */
+static PyMemberDef RdkHandle_members[] = {
+    {"_partition_ids", T_OBJECT_EX, offsetof(RdkHandle, partition_ids),
+                       READONLY, "Partitions fetched from by this consumer"},
+    {"_future_set", T_OBJECT_EX, offsetof(RdkHandle, future_set),
+                    READONLY, "Futures pending a delivery report"},
+    {NULL}
+};
 
 
 static PyObject *
@@ -154,6 +169,9 @@ RdkHandle_poll(RdkHandle *self, PyObject *args, PyObject *kwds)
     int timeout_ms = 0;
     if (! PyArg_ParseTupleAndKeywords(args, kwds, "i", keywords, &timeout_ms)) {
             return NULL;
+    }
+    if (! self->rdk_handle) {
+        return set_pykafka_error("ProducerStoppedException");
     }
     int n_events = 0;
     Py_BEGIN_ALLOW_THREADS  /* avoid callbacks deadlocking */
@@ -192,6 +210,7 @@ RdkHandle_stop(RdkHandle *self)
         }
     Py_END_ALLOW_THREADS
     Py_CLEAR(self->partition_ids);
+    Py_CLEAR(self->future_set);
 
     Py_INCREF(Py_None);
     return Py_None;
@@ -314,6 +333,9 @@ RdkHandle_start(RdkHandle *self,
                 const char *brokers,
                 const char *topic_name)
 {
+    /* Set opaque pointer so we can later reach self from callbacks */
+    if (self->rdk_conf) rd_kafka_conf_set_opaque(self->rdk_conf, self);
+
     /* Configure and start rdk_handle */
     char errstr[512];
     Py_BEGIN_ALLOW_THREADS  /* avoid callbacks deadlocking */
@@ -359,6 +381,10 @@ RdkHandle_start(RdkHandle *self,
  */
 
 
+/* Import from concurrent.futures */
+static PyObject *Future;
+
+
 /* NB this doesn't check if RdkHandle_outq_len is zero, and generally assumes
  * the wrapping python class will take care of ensuring any such preconditions
  * for a clean termination */
@@ -369,6 +395,84 @@ Producer_dealloc(PyObject *self)
 }
 
 
+/* Helper function for Producer_delivery_report_callback.  Because it is a
+ * non-python callback, it cannot raise exceptions.  We therefore try to log
+ * the traceback, then clear the exception */
+static void
+log_clear_exception(const char *msg)
+{
+    Py_XDECREF(PyObject_CallMethod(logger, "exception", "s", msg));
+    PyErr_Clear();
+}
+
+
+static void
+Producer_delivery_report_callback(rd_kafka_t *rk,
+                                  const rd_kafka_message_t *rkmessage,
+                                  void *opaque)
+{
+    PyObject *future = rkmessage->_private;  /* `_private` == `msg_opaque` */
+    if (! future) return;
+
+    PyGILState_STATE gstate = PyGILState_Ensure();
+
+    if (rkmessage->err == RD_KAFKA_RESP_ERR_NO_ERROR) {
+        PyObject *res = PyObject_CallMethod(future, "set_result", "z", NULL);
+        if (! res) log_clear_exception("Failure in Future.set_result");
+        else Py_DECREF(res);
+    } else {
+        PyObject *error_codes = NULL;
+        PyObject *errcode = NULL;
+        PyObject *Exc = NULL;
+        PyObject *err_args = NULL;
+        PyObject *exc = NULL;
+
+        /* See if there's a standard Kafka error for this */
+        error_codes = PyObject_GetAttrString(
+                pykafka_exceptions, "ERROR_CODES");
+        if (! error_codes) goto cleanup;
+        errcode = PyLong_FromLong(rkmessage->err);
+        if (! errcode) goto cleanup;
+        Exc = PyObject_GetItem(error_codes, errcode);
+
+        if (! Exc) {  /* raise a generic exception instead */
+            PyErr_Clear();
+            Exc = PyObject_GetAttrString(
+                    pykafka_exceptions, "ProduceFailureError");
+            if (! Exc) goto cleanup;
+        }
+        err_args = Py_BuildValue(
+            "ls", (long)rkmessage->err, rd_kafka_err2str(rkmessage->err));
+        if (! err_args) goto cleanup;
+        exc = PyObject_CallObject(Exc, err_args);
+        if (! exc) goto cleanup;
+
+        PyObject *res = PyObject_CallMethod(future, "set_exception", "O", exc);
+        if (! res) goto cleanup;
+        else Py_DECREF(res);
+    cleanup:
+        if (PyErr_Occurred()) {
+            log_clear_exception("Couldn't pass error to Future.set_exception");
+        }
+        Py_XDECREF(error_codes);
+        Py_XDECREF(errcode);
+        Py_XDECREF(Exc);
+        Py_XDECREF(err_args);
+        Py_XDECREF(exc);
+    }
+
+    /* Regardless if we've hit issues, try to remove future from future_set; a
+     * failure to do so means it may grow without bound. */
+    if (PySet_Discard(((RdkHandle *)opaque)->future_set, future) != 1) {
+        log_clear_exception("Couldn't de-register Future from RdkHandle.");
+    }
+    PyGILState_Release(gstate);
+}
+
+
+/* Starts the underlying rdkafka producer after configuring delivery-reporting.
+ * Note that following start, you _must_ ensure that Producer.poll() is called
+ * regularly, or delivery reports and unfulfilled Futures may pile up */
 static PyObject *
 Producer_start(RdkHandle *self, PyObject *args, PyObject *kwds)
 {
@@ -380,12 +484,18 @@ Producer_start(RdkHandle *self, PyObject *args, PyObject *kwds)
         return NULL;
     }
 
+    /* Configure delivery-reporting */
+    if (! self->rdk_conf) return set_pykafka_error("KafkaException");
+    rd_kafka_conf_set_dr_msg_cb(self->rdk_conf,
+                                Producer_delivery_report_callback);
+    self->future_set = PySet_New(NULL);
+    if (! self->future_set) return NULL;
+
     return RdkHandle_start(
             self,
             RD_KAFKA_PRODUCER,
             PyBytes_AS_STRING(brokers),
             PyBytes_AS_STRING(topic_name));
-    /* TODO configure delivery-report callback */
 }
 
 
@@ -397,20 +507,24 @@ Producer_produce(RdkHandle *self, PyObject *args)
     char *partition_key= NULL;
     Py_ssize_t partition_key_len = 0;
     int partition_id = -1;
-    PyObject *future = NULL;  /* will be passed to rdkafka as msg_opaque */
     if (! PyArg_ParseTuple(args,
-                           "z#z#iO",
+                           "z#z#i",
                            &message, &message_len,
                            &partition_key, &partition_key_len,
-                           &partition_id,
-                           &future)) {
+                           &partition_id)) {
         return NULL;
     }
 
     /* TODO assert that we correctly handle NULL payloads and keys */
 
-    int res = 0;
-    Py_INCREF(future);  /* Keep alive until delivery-report comes */
+    /* Add a new Future and keep it alive until the delivery-callback runs */
+    PyObject *future = PyObject_CallObject(Future, NULL);
+    if (! future) return NULL;
+    int res = PySet_Add(self->future_set, future);
+    Py_DECREF(future);
+    if (res == -1) return NULL;
+
+    res = 0;
     Py_BEGIN_ALLOW_THREADS
         res = rd_kafka_produce(self->rdk_topic_handle,
                                partition_id,
@@ -422,16 +536,34 @@ Producer_produce(RdkHandle *self, PyObject *args)
     if (res == -1) {
         rd_kafka_resp_err_t err = rd_kafka_errno2err(errno);
         if (err == RD_KAFKA_RESP_ERR__QUEUE_FULL) {
+            /* Remove `future` as we're not going to return it */
+            if (PySet_Discard(self->future_set, future) != 1) return NULL;
             return set_pykafka_error("ProducerQueueFullError");
         } else {
-            /* TODO any other errors should be returned through `future`,
-             * because that's where pykafka.Producer would put them */
-            set_PyRdKafkaError(rd_kafka_errno2err(errno), NULL);
-            return NULL;
+            /* Any other errors should be returned through `future`, because
+             * that's where pykafka.Producer would put them */
+            PyObject *exc = NULL;
+            if (err == RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE) {
+                exc = PyObject_GetAttrString(
+                        pykafka_exceptions, "MessageSizeTooLarge");
+            } else if (err == RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION ||
+                       err == RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC) {
+                /* XXX in librdkafka, these are defined in addition to the
+                 * protocol error RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART, so
+                 * we ought to consider treating them separately here too */
+                exc = PyObject_GetAttrString(
+                        pykafka_exceptions, "UnknownTopicOrPartition");
+            }
+            if (! exc) return NULL;
+            PyObject *res = PyObject_CallMethod(
+                    future, "set_exception", "O", exc);
+            Py_DECREF(exc);
+            if (! res) return NULL;
+            Py_DECREF(res);
         }
     }
-    Py_INCREF(Py_None);
-    return Py_None;
+    Py_INCREF(future);
+    return future;
 }
 
 
@@ -476,7 +608,7 @@ static PyTypeObject ProducerType = {
     0,                             /* tp_iter */
     0,                             /* tp_iternext */
     Producer_methods,              /* tp_methods */
-    0,                             /* tp_members */
+    RdkHandle_members,             /* tp_members */
     0,                             /* tp_getset */
     0,                             /* tp_base */
     0,                             /* tp_dict */
@@ -581,6 +713,7 @@ Consumer_start(RdkHandle *self, PyObject *args, PyObject *kwds)
             PyBytes_AS_STRING(brokers),
             PyBytes_AS_STRING(topic_name));
     if (! res) return NULL;
+    else Py_DECREF(res);
 
     /* We'll keep our own copy of partition_ids, because the one handed to us
        might be mutable, and weird things could happen if the list used on init
@@ -722,7 +855,7 @@ static PyTypeObject ConsumerType = {
     0,                             /* tp_iter */
     0,                             /* tp_iternext */
     Consumer_methods,              /* tp_methods */
-    0,                             /* tp_members */
+    RdkHandle_members,             /* tp_members */
     0,                             /* tp_getset */
     0,                             /* tp_base */
     0,                             /* tp_dict */
@@ -812,6 +945,13 @@ _rd_kafkamodule_init(void)
     logger = PyObject_CallMethod(logging, "getLogger", "s", module_name);
     Py_DECREF(logging);
     if (! logger) return NULL;
+
+    /* from concurrent.futures import Future */
+    PyObject *futures = PyImport_ImportModule("concurrent.futures");
+    if (! futures) return NULL;
+    Future = PyObject_GetAttrString(futures, "Future");
+    Py_DECREF(futures);
+    if (! Future) return NULL;
 
     pykafka_exceptions = PyImport_ImportModule("pykafka.exceptions");
     if (! pykafka_exceptions) return NULL;
