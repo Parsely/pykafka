@@ -136,6 +136,9 @@ class Producer(object):
         self._worker_trace_logged = False
         self._owned_brokers = None
         self._running = False
+        self._waiting_messages = []
+        self._waiting_messages_lock = self._cluster.handler.Lock()
+        self._update_lock = self._cluster.handler.Lock()
         self.start()
 
     def _raise_worker_exceptions(self):
@@ -174,8 +177,15 @@ class Producer(object):
         self._raise_worker_exceptions()
 
     def _update(self):
-        self._cluster.update()
-        self._setup_owned_brokers()
+        # only allow one thread to be updating the producer at a time
+        with self._update_lock:
+            self._cluster.update()
+            self._setup_owned_brokers()
+        # send all messages that were waiting in queues when broker threads were stopped
+        log.debug("Re-producing waiting messages")
+        with self._waiting_messages_lock:
+            for _ in range(len(self._waiting_messages)):
+                self._produce(self._waiting_messages.pop())
 
     def _setup_owned_brokers(self):
         if self._owned_brokers is not None:
@@ -222,7 +232,14 @@ class Producer(object):
         """
         kv, partition_id = message_partition_tup
         leader_id = self._topic.partitions[partition_id].leader.id
-        self._owned_brokers[leader_id].enqueue([(kv, partition_id)])
+        try:
+            self._owned_brokers[leader_id].enqueue([(kv, partition_id)])
+        except KeyError:
+            log.warning("KeyError encountered in _produce. This may mean a broker "
+                        "became unreachable since this message was produced. Updating.")
+            with self._waiting_messages_lock:
+                self._waiting_messages.append((kv, partition_id))
+            self._update()
 
     def _prepare_request(self, message_batch, owned_broker, attempt):
         """Prepare a request and send it to the broker
@@ -388,6 +405,15 @@ class OwnedBroker(object):
                     # surface all exceptions to the main thread
                     self.producer._worker_exception = sys.exc_info()
                     break
+            try:
+                batch = self.flush(self.producer._linger_ms)
+                if batch:
+                    with self.producer._waiting_messages_lock:
+                        # save all messages waiting in queue to be re-sent later
+                        self.producer._waiting_messages.extend(batch)
+            except Exception:
+                # surface all exceptions to the main thread
+                self.producer._worker_exception = sys.exc_info()
         log.info("Starting new produce worker for broker %s", broker.id)
         self.producer._cluster.handler.spawn(queue_reader)
 
