@@ -283,8 +283,7 @@ class Producer(object):
                     if presponse.err == 0:
                         # mark msg_count messages as successfully delivered
                         msg_count = len(req.msets[topic][partition].messages)
-                        with owned_broker.lock:
-                            owned_broker.messages_pending -= msg_count
+                        owned_broker.increment_messages_pending(-1 * msg_count)
                         continue  # All's well
                     if presponse.err == UnknownTopicOrPartition.ERROR_CODE:
                         log.warning('Unknown topic: %s or partition: %s. '
@@ -331,8 +330,7 @@ class Producer(object):
                 log.error("Failed to produce messages to broker %s:%s after %s attempts. "
                           "Re-enqueuing %s messages.", owned_broker.broker.host,
                           owned_broker.broker.port, attempt, len(to_retry))
-                with owned_broker.lock:
-                    owned_broker.messages_pending -= len(to_retry)
+                owned_broker.increment_messages_pending(-1 * len(to_retry))
                 for tup in to_retry:
                     self._produce(tup)
 
@@ -396,6 +394,11 @@ class OwnedBroker(object):
     def stop(self):
         self.running = False
 
+    def increment_messages_pending(self, amnt):
+        with self.lock:
+            self.messages_pending += amnt
+            self.messages_pending = max(0, self.messages_pending)
+
     def message_is_pending(self):
         """
         Indicates whether there are currently any messages that have been
@@ -413,7 +416,7 @@ class OwnedBroker(object):
         self._wait_for_slot_available()
         with self.lock:
             self.queue.extendleft(messages)
-            self.messages_pending += len(messages)
+            self.increment_messages_pending(len(messages))
             if len(self.queue) >= self.producer._min_queued_messages:
                 if not self.flush_ready.is_set():
                     self.flush_ready.set()
@@ -434,7 +437,7 @@ class OwnedBroker(object):
         with self.lock:
             batch = [self.queue.pop() for _ in range(len(self.queue))]
             if release_pending:
-                self.messages_pending -= len(batch)
+                self.increment_messages_pending(-1 * len(batch))
             if not self.slot_available.is_set():
                 self.slot_available.set()
         return batch
