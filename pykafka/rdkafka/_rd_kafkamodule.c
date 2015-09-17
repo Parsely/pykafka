@@ -405,11 +405,13 @@ log_clear_exception(const char *msg)
 
 
 /* Helper function for Producer_delivery_report_callback: find an exception
- * corresponding to `err`, and set that on `future` */
-static void
+ * corresponding to `err`, and set that on `future`.  Returns -1 on failure,
+ * or 0 on success */
+static int
 Producer_delivery_report_set_exception(PyObject *future,
                                        rd_kafka_resp_err_t err)
 {
+    int retval = 0;
     PyObject *error_codes = NULL;
     PyObject *errcode = NULL;
     PyObject *Exc = NULL;
@@ -441,12 +443,14 @@ Producer_delivery_report_set_exception(PyObject *future,
 cleanup:
     if (PyErr_Occurred()) {
         log_clear_exception("Couldn't pass error to Future.set_exception");
+        retval = -1;
     }
     Py_XDECREF(error_codes);
     Py_XDECREF(errcode);
     Py_XDECREF(Exc);
     Py_XDECREF(err_args);
     Py_XDECREF(exc);
+    return retval;
 }
 
 
@@ -535,14 +539,16 @@ Producer_produce(RdkHandle *self, PyObject *args)
 
     /* TODO assert that we correctly handle NULL payloads and keys */
 
-    /* Add a new Future and keep it alive until the delivery-callback runs */
+    /* Add a new Future and keep it alive until the delivery-callback runs;
+     * the keep-alive is saved in a dict indexed by `pending_futures_uid`, and
+     * it's the latter that we pass as a librdkafka msg_opaque pointer.  We'd
+     * be fine just passing refs to `future` instead, if it weren't for pypy,
+     * which may opt to invalidate the pointer in the mean time */
     PyObject *future = PyObject_CallObject(Future, NULL);
-    if (! future) return NULL;
+    if (! future) goto failed;
     PyObject *key = PyLong_FromSize_t(self->pending_futures_uid++);
-    if (! key) return NULL;
-    if (-1 == PyDict_SetItem(self->pending_futures, key, future)) return NULL;
-    Py_DECREF(key);
-    /* TODO fix leaking refs to future, key on errors */
+    if (! key) goto failed;
+    if (-1 == PyDict_SetItem(self->pending_futures, key, future)) goto failed;
 
     int res = 0;
     Py_BEGIN_ALLOW_THREADS
@@ -557,36 +563,27 @@ Producer_produce(RdkHandle *self, PyObject *args)
         rd_kafka_resp_err_t err = rd_kafka_errno2err(errno);
         if (err == RD_KAFKA_RESP_ERR__QUEUE_FULL) {
             /* Remove `future` as we're not going to return it */
-            PyObject *key = PyLong_FromSize_t(self->pending_futures_uid - 1);
-            if (! key) return NULL;
-            res = PyDict_DelItem(self->pending_futures, key);
-            Py_DECREF(key);
-            if (res == -1) return NULL;
-            return set_pykafka_error("ProducerQueueFullError");
+            if (-1 == PyDict_DelItem(self->pending_futures, key)) goto failed;
+            set_pykafka_error("ProducerQueueFullError");
+            goto failed;
         } else {
             /* Any other errors should be returned through `future`, because
              * that's where pykafka.Producer would put them */
-            PyObject *exc = NULL;
-            if (err == RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE) {
-                exc = PyObject_GetAttrString(
-                        pykafka_exceptions, "MessageSizeTooLarge");
-            } else if (err == RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION ||
-                       err == RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC) {
-                /* XXX in librdkafka, these are defined in addition to the
-                 * protocol error RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART, so
-                 * we ought to consider treating them separately here too */
-                exc = PyObject_GetAttrString(
-                        pykafka_exceptions, "UnknownTopicOrPartition");
+            if (-1 == Producer_delivery_report_set_exception(future, err)) {
+                set_PyRdKafkaError(RD_KAFKA_RESP_ERR__FAIL,
+                                   "see log for details");
+                goto failed;
             }
-            if (! exc) return NULL;
-            PyObject *res = PyObject_CallMethod(
-                    future, "set_exception", "O", exc);
-            Py_DECREF(exc);
-            if (! res) return NULL;
-            Py_DECREF(res);
         }
     }
+
+    Py_DECREF(key);
     return future;
+
+failed:
+    Py_XDECREF(future);
+    Py_XDECREF(key);
+    return NULL;
 }
 
 
