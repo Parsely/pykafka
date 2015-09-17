@@ -136,7 +136,7 @@ typedef struct {
     rd_kafka_queue_t *rdk_queue_handle;
     PyObject *partition_ids;
 
-    /* Producer-specific fields */
+    /* Producer-specific fields; see Producer_produce for details */
     PyObject *pending_futures;
     size_t  pending_futures_uid;
 } RdkHandle;
@@ -404,81 +404,85 @@ log_clear_exception(const char *msg)
 }
 
 
+/* Helper function for Producer_delivery_report_callback: find an exception
+ * corresponding to `err`, and set that on `future` */
+static void
+Producer_delivery_report_set_exception(PyObject *future,
+                                       rd_kafka_resp_err_t err)
+{
+    PyObject *error_codes = NULL;
+    PyObject *errcode = NULL;
+    PyObject *Exc = NULL;
+    PyObject *err_args = NULL;
+    PyObject *exc = NULL;
+
+    /* See if there's a standard Kafka error for this */
+    error_codes = PyObject_GetAttrString(pykafka_exceptions, "ERROR_CODES");
+    if (! error_codes) goto cleanup;
+    errcode = PyLong_FromLong(err);
+    if (! errcode) goto cleanup;
+    Exc = PyObject_GetItem(error_codes, errcode);
+
+    if (! Exc) {  /* raise a generic exception instead */
+        PyErr_Clear();
+        Exc = PyObject_GetAttrString(
+                pykafka_exceptions, "ProduceFailureError");
+        if (! Exc) goto cleanup;
+    }
+    err_args = Py_BuildValue("ls", (long)err, rd_kafka_err2str(err));
+    if (! err_args) goto cleanup;
+    exc = PyObject_CallObject(Exc, err_args);
+    if (! exc) goto cleanup;
+
+    PyObject *res = PyObject_CallMethod(future, "set_exception", "O", exc);
+    if (! res) goto cleanup;
+    else Py_DECREF(res);
+
+cleanup:
+    if (PyErr_Occurred()) {
+        log_clear_exception("Couldn't pass error to Future.set_exception");
+    }
+    Py_XDECREF(error_codes);
+    Py_XDECREF(errcode);
+    Py_XDECREF(Exc);
+    Py_XDECREF(err_args);
+    Py_XDECREF(exc);
+}
+
+
 static void
 Producer_delivery_report_callback(rd_kafka_t *rk,
                                   const rd_kafka_message_t *rkmessage,
                                   void *opaque)
 {
+    PyObject *key = NULL;
+    PyObject *future = NULL;
     PyGILState_STATE gstate = PyGILState_Ensure();
 
-    /* Look up the Future with the key stored in rkmessage->_private (which is
-     * carrying rd_kafka_produce's msg_opaque) */
-    PyObject *key = PyLong_FromSize_t((size_t)(rkmessage->_private));
-    if (! key) {
-        log_clear_exception("Couldn't get key to future in delivery callback");
-        PyGILState_Release(gstate);
-        return;
-    }
-    PyObject *future = PyObject_GetItem((PyObject *)opaque, key);
-    if (! future) {
-        /* TODO error handling */
-        log_clear_exception("Couldn't find future in delivery callback");
-        PyGILState_Release(gstate);
-        return;
-    }
-    if (-1 == PyDict_DelItem((PyObject *)opaque, key)) {
-        /* TODO error handling */
-        log_clear_exception("Couldn't delete future in delivery callback");
-        PyGILState_Release(gstate);
-        return;
-    }
+    /* Producer_produce stored dict key in msg_opaque == rkmessage->_private */
+    key = PyLong_FromSize_t((size_t)(rkmessage->_private));
+    if (! key) goto cleanup;
+    future = PyObject_GetItem((PyObject *)opaque, key);
+    if (! future) goto cleanup;
+
+    /* Drop future from pending_futures, which kept it alive till now */
+    if (-1 == PyDict_DelItem((PyObject *)opaque, key)) goto cleanup;
+    Py_DECREF(key);
 
     if (rkmessage->err == RD_KAFKA_RESP_ERR_NO_ERROR) {
         PyObject *res = PyObject_CallMethod(future, "set_result", "z", NULL);
         if (! res) log_clear_exception("Failure in Future.set_result");
         else Py_DECREF(res);
     } else {
-        PyObject *error_codes = NULL;
-        PyObject *errcode = NULL;
-        PyObject *Exc = NULL;
-        PyObject *err_args = NULL;
-        PyObject *exc = NULL;
-
-        /* See if there's a standard Kafka error for this */
-        error_codes = PyObject_GetAttrString(
-                pykafka_exceptions, "ERROR_CODES");
-        if (! error_codes) goto cleanup;
-        errcode = PyLong_FromLong(rkmessage->err);
-        if (! errcode) goto cleanup;
-        Exc = PyObject_GetItem(error_codes, errcode);
-
-        if (! Exc) {  /* raise a generic exception instead */
-            PyErr_Clear();
-            Exc = PyObject_GetAttrString(
-                    pykafka_exceptions, "ProduceFailureError");
-            if (! Exc) goto cleanup;
-        }
-        err_args = Py_BuildValue(
-            "ls", (long)rkmessage->err, rd_kafka_err2str(rkmessage->err));
-        if (! err_args) goto cleanup;
-        exc = PyObject_CallObject(Exc, err_args);
-        if (! exc) goto cleanup;
-
-        PyObject *res = PyObject_CallMethod(future, "set_exception", "O", exc);
-        if (! res) goto cleanup;
-        else Py_DECREF(res);
-    cleanup:
-        if (PyErr_Occurred()) {
-            log_clear_exception("Couldn't pass error to Future.set_exception");
-        }
-        Py_XDECREF(error_codes);
-        Py_XDECREF(errcode);
-        Py_XDECREF(Exc);
-        Py_XDECREF(err_args);
-        Py_XDECREF(exc);
+        Producer_delivery_report_set_exception(future, rkmessage->err);
     }
-
     Py_DECREF(future);
+cleanup:
+    if (PyErr_Occurred()) {
+        log_clear_exception("Problem retrieving future from pending_futures");
+        Py_XDECREF(key);
+        Py_XDECREF(future);
+    }
     PyGILState_Release(gstate);
 }
 
