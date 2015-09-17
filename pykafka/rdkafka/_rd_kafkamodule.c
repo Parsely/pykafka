@@ -137,7 +137,8 @@ typedef struct {
     PyObject *partition_ids;
 
     /* Producer-specific fields */
-    PyObject *future_set;
+    PyObject *pending_futures;
+    size_t  pending_futures_uid;
 } RdkHandle;
 
 
@@ -146,8 +147,8 @@ typedef struct {
 static PyMemberDef RdkHandle_members[] = {
     {"_partition_ids", T_OBJECT_EX, offsetof(RdkHandle, partition_ids),
                        READONLY, "Partitions fetched from by this consumer"},
-    {"_future_set", T_OBJECT_EX, offsetof(RdkHandle, future_set),
-                    READONLY, "Futures pending a delivery report"},
+    {"_pending_futures", T_OBJECT_EX, offsetof(RdkHandle, pending_futures),
+                         READONLY, "Futures pending a delivery report"},
     {NULL}
 };
 
@@ -210,7 +211,7 @@ RdkHandle_stop(RdkHandle *self)
         }
     Py_END_ALLOW_THREADS
     Py_CLEAR(self->partition_ids);
-    Py_CLEAR(self->future_set);
+    Py_CLEAR(self->pending_futures);
 
     Py_INCREF(Py_None);
     return Py_None;
@@ -333,9 +334,6 @@ RdkHandle_start(RdkHandle *self,
                 const char *brokers,
                 const char *topic_name)
 {
-    /* Set opaque pointer so we can later reach self from callbacks */
-    if (self->rdk_conf) rd_kafka_conf_set_opaque(self->rdk_conf, self);
-
     /* Configure and start rdk_handle */
     char errstr[512];
     Py_BEGIN_ALLOW_THREADS  /* avoid callbacks deadlocking */
@@ -411,10 +409,29 @@ Producer_delivery_report_callback(rd_kafka_t *rk,
                                   const rd_kafka_message_t *rkmessage,
                                   void *opaque)
 {
-    PyObject *future = rkmessage->_private;  /* `_private` == `msg_opaque` */
-    if (! future) return;
-
     PyGILState_STATE gstate = PyGILState_Ensure();
+
+    /* Look up the Future with the key stored in rkmessage->_private (which is
+     * carrying rd_kafka_produce's msg_opaque) */
+    PyObject *key = PyLong_FromSize_t((size_t)(rkmessage->_private));
+    if (! key) {
+        log_clear_exception("Couldn't get key to future in delivery callback");
+        PyGILState_Release(gstate);
+        return;
+    }
+    PyObject *future = PyObject_GetItem((PyObject *)opaque, key);
+    if (! future) {
+        /* TODO error handling */
+        log_clear_exception("Couldn't find future in delivery callback");
+        PyGILState_Release(gstate);
+        return;
+    }
+    if (-1 == PyDict_DelItem((PyObject *)opaque, key)) {
+        /* TODO error handling */
+        log_clear_exception("Couldn't delete future in delivery callback");
+        PyGILState_Release(gstate);
+        return;
+    }
 
     if (rkmessage->err == RD_KAFKA_RESP_ERR_NO_ERROR) {
         PyObject *res = PyObject_CallMethod(future, "set_result", "z", NULL);
@@ -461,11 +478,7 @@ Producer_delivery_report_callback(rd_kafka_t *rk,
         Py_XDECREF(exc);
     }
 
-    /* Regardless if we've hit issues, try to remove future from future_set; a
-     * failure to do so means it may grow without bound. */
-    if (PySet_Discard(((RdkHandle *)opaque)->future_set, future) != 1) {
-        log_clear_exception("Couldn't de-register Future from RdkHandle.");
-    }
+    Py_DECREF(future);
     PyGILState_Release(gstate);
 }
 
@@ -488,8 +501,9 @@ Producer_start(RdkHandle *self, PyObject *args, PyObject *kwds)
     if (! self->rdk_conf) return set_pykafka_error("KafkaException");
     rd_kafka_conf_set_dr_msg_cb(self->rdk_conf,
                                 Producer_delivery_report_callback);
-    self->future_set = PySet_New(NULL);
-    if (! self->future_set) return NULL;
+    self->pending_futures = PyDict_New();
+    if (! self->pending_futures) return NULL;
+    rd_kafka_conf_set_opaque(self->rdk_conf, self->pending_futures);
 
     return RdkHandle_start(
             self,
@@ -520,24 +534,30 @@ Producer_produce(RdkHandle *self, PyObject *args)
     /* Add a new Future and keep it alive until the delivery-callback runs */
     PyObject *future = PyObject_CallObject(Future, NULL);
     if (! future) return NULL;
-    int res = PySet_Add(self->future_set, future);
-    Py_DECREF(future);
-    if (res == -1) return NULL;
+    PyObject *key = PyLong_FromSize_t(self->pending_futures_uid++);
+    if (! key) return NULL;
+    if (-1 == PyDict_SetItem(self->pending_futures, key, future)) return NULL;
+    Py_DECREF(key);
+    /* TODO fix leaking refs to future, key on errors */
 
-    res = 0;
+    int res = 0;
     Py_BEGIN_ALLOW_THREADS
         res = rd_kafka_produce(self->rdk_topic_handle,
                                partition_id,
                                RD_KAFKA_MSG_F_COPY,
                                message, message_len,
                                partition_key, partition_key_len,
-                               future);
+                               (void *)(self->pending_futures_uid - 1));
     Py_END_ALLOW_THREADS
     if (res == -1) {
         rd_kafka_resp_err_t err = rd_kafka_errno2err(errno);
         if (err == RD_KAFKA_RESP_ERR__QUEUE_FULL) {
             /* Remove `future` as we're not going to return it */
-            if (PySet_Discard(self->future_set, future) != 1) return NULL;
+            PyObject *key = PyLong_FromSize_t(self->pending_futures_uid - 1);
+            if (! key) return NULL;
+            res = PyDict_DelItem(self->pending_futures, key);
+            Py_DECREF(key);
+            if (res == -1) return NULL;
             return set_pykafka_error("ProducerQueueFullError");
         } else {
             /* Any other errors should be returned through `future`, because
@@ -562,7 +582,6 @@ Producer_produce(RdkHandle *self, PyObject *args)
             Py_DECREF(res);
         }
     }
-    Py_INCREF(future);
     return future;
 }
 

@@ -53,8 +53,8 @@ class RdKafkaProducer(Producer):
         # XXX should raise exceptions for delivery errors (esp. when sync=True)
         not_done = True
         while not_done:
-            done, not_done = futures.wait(self._rdk_producer._future_set,
-                                          timeout=1)
+            done, not_done = futures.wait(
+                self._rdk_producer._pending_futures.values(), timeout=1)
             if not_done:
                 log.info("Waiting for incomplete Futures: {}".format(not_done))
                 if not self._poller_thread.is_alive():
