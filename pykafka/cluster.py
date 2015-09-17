@@ -277,19 +277,23 @@ class Cluster(object):
 
     def update(self):
         """Update known brokers and topics."""
-        metadata = self._get_metadata()
-        if len(metadata.brokers) == 0 and len(metadata.topics) == 0:
-            log.warning('No broker metadata found. If this is a fresh cluster, '
-                        'this may be due to a bug in Kafka. You can force '
-                        'broker metadata to be returned by manually creating '
-                        'a topic in the cluster. See '
-                        'https://issues.apache.org/jira/browse/KAFKA-2154 '
-                        'for information. Please note: topic auto-creation '
-                        'will NOT work. You need to create at least one topic '
-                        'manually using the Kafka CLI tools.')
-        self._update_brokers(metadata.brokers)
-        try:
-            self._update_topics(metadata.topics)
-        except LeaderNotAvailable:
-            log.warning("LeaderNotAvailable encountered. This is "
-                        "because one or more partitions have no available replicas.")
+        max_retries = 3
+        for i in xrange(max_retries):
+            metadata = self._get_metadata()
+            if len(metadata.brokers) == 0 and len(metadata.topics) == 0:
+                log.warning('No broker metadata found. If this is a fresh cluster, '
+                            'this may be due to a bug in Kafka. You can force '
+                            'broker metadata to be returned by manually creating '
+                            'a topic in the cluster. See '
+                            'https://issues.apache.org/jira/browse/KAFKA-2154 '
+                            'for information. Please note: topic auto-creation '
+                            'will NOT work. You need to create at least one topic '
+                            'manually using the Kafka CLI tools.')
+            self._update_brokers(metadata.brokers)
+            try:
+                self._update_topics(metadata.topics)
+            except LeaderNotAvailable:
+                log.warning("LeaderNotAvailable encountered. This is "
+                            "because one or more partitions have no available replicas.")
+            else:
+                break
