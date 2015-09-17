@@ -32,6 +32,7 @@ from .exceptions import (
     LeaderNotAvailable,
     MessageSizeTooLarge,
     NotLeaderForPartition,
+    ProduceFailureError,
     ProducerQueueFullError,
     ProducerStoppedException,
     RequestTimedOut,
@@ -67,7 +68,8 @@ class Producer(object):
                  min_queued_messages=70000,
                  linger_ms=5 * 1000,
                  block_on_queue_full=True,
-                 sync=False):
+                 sync=False,
+                 max_message_retries=3):
         """Instantiate a new AsyncProducer
 
         :param cluster: The cluster to which to connect
@@ -78,8 +80,8 @@ class Producer(object):
         :type partitioner: :class:`pykafka.partitioners.BasePartitioner`
         :param compression: The type of compression to use.
         :type compression: :class:`pykafka.common.CompressionType`
-        :param max_retries: How many times to attempt to produce messages
-            before raising an error.
+        :param max_retries: How many times to attempt to produce a given batch of
+            messages before raising an error.
         :type max_retries: int
         :param retry_backoff_ms: The amount of time (in milliseconds) to
             back off during produce request retries.
@@ -118,6 +120,9 @@ class Producer(object):
         :param sync: Whether calls to `produce` should wait for the
             message to send before returning
         :type sync: bool
+        :param max_message_retries: How many times to re-produce a failed message before
+            raising an error
+        :type max_message_retries: int
         """
         self._cluster = cluster
         self._topic = topic
@@ -132,6 +137,7 @@ class Producer(object):
         self._linger_ms = linger_ms
         self._block_on_queue_full = block_on_queue_full
         self._synchronous = sync
+        self._max_message_retries = max_message_retries
         self._worker_exception = None
         self._worker_trace_logged = False
         self._owned_brokers = None
@@ -218,7 +224,7 @@ class Producer(object):
             raise ProducerStoppedException()
         partitions = list(self._topic.partitions.values())
         partition_id = self._partitioner(partitions, partition_key).id
-        message_partition_tup = (partition_key, message), partition_id
+        message_partition_tup = (partition_key, message), partition_id, 0
         self._produce(message_partition_tup)
         if self._synchronous:
             self._wait_all()
@@ -230,15 +236,15 @@ class Producer(object):
         :param message_partition_tup: Message with partition assigned.
         :type message_partition_tup: ((bytes, bytes), int) tuple
         """
-        kv, partition_id = message_partition_tup
+        kv, partition_id, attempts = message_partition_tup
         leader_id = self._topic.partitions[partition_id].leader.id
         try:
-            self._owned_brokers[leader_id].enqueue([(kv, partition_id)])
+            self._owned_brokers[leader_id].enqueue([(kv, partition_id, attempts)])
         except KeyError:
             log.warning("KeyError encountered in _produce. This may mean a broker "
                         "became unreachable since this message was produced. Updating.")
             with self._waiting_messages_lock:
-                self._waiting_messages.append((kv, partition_id))
+                self._waiting_messages.append((kv, partition_id, attempts))
             self._update()
 
     def _prepare_request(self, message_batch, owned_broker, attempt):
@@ -256,9 +262,9 @@ class Producer(object):
             required_acks=self._required_acks,
             timeout=self._ack_timeout_ms
         )
-        for (key, value), partition_id in message_batch:
+        for (key, value), partition_id, msg_attempt in message_batch:
             request.add_message(
-                Message(value, partition_key=key),
+                Message(value, partition_key=key, produce_attempt=msg_attempt),
                 self._topic.name,
                 partition_id
             )
@@ -286,7 +292,7 @@ class Producer(object):
                 if p_id == partition_id
             )
             for message in messages:
-                yield (message.partition_key, message.value), partition_id
+                yield (message.partition_key, message.value), partition_id, message.produce_attempt
 
         to_retry = []
         try:
@@ -332,7 +338,7 @@ class Producer(object):
                         owned_broker.broker.port)
             self._update()
             to_retry = [
-                ((message.partition_key, message.value), p_id)
+                ((message.partition_key, message.value), p_id, message.produce_attempt)
                 for topic, partitions in iteritems(req.msets)
                 for p_id, mset in iteritems(partitions)
                 for message in mset.messages
@@ -348,8 +354,11 @@ class Producer(object):
                           "Re-enqueuing %s messages.", owned_broker.broker.host,
                           owned_broker.broker.port, attempt, len(to_retry))
                 owned_broker.increment_messages_pending(-1 * len(to_retry))
-                for tup in to_retry:
-                    self._produce(tup)
+                for kv, partition_id, msg_attempt in to_retry:
+                    if msg_attempt >= self._max_message_retries:
+                        raise ProduceFailureError("Message failed to send after %d "
+                                                  "retries.", self._max_message_retries)
+                    self._produce((kv, partition_id, msg_attempt + 1))
 
     def _wait_all(self):
         """Block until all pending messages are sent

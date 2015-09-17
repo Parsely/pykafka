@@ -152,7 +152,8 @@ class Message(Message, Serializable):
                  partition_key=None,
                  compression_type=CompressionType.NONE,
                  offset=-1,
-                 partition_id=-1):
+                 partition_id=-1,
+                 produce_attempt=0):
         self.compression_type = compression_type
         self.partition_key = partition_key
         self.value = value
@@ -162,6 +163,7 @@ class Message(Message, Serializable):
         self.partition_id = partition_id
         # self.partition is set by the consumer
         self.partition = None
+        self.produce_attempt = produce_attempt
 
     def __len__(self):
         size = 4 + 1 + 1 + 4 + 4 + len(self.value)
