@@ -137,7 +137,7 @@ class Producer(object):
         self._owned_brokers = None
         self._running = False
         self._waiting_messages = []
-        self._waiting_messages_lock = self._cluster.handler.Lock()
+        self._waiting_messages_lock = self._cluster.handler.RLock()
         self._update_lock = self._cluster.handler.Lock()
         self.start()
 
