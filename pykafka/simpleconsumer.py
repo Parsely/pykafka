@@ -509,10 +509,13 @@ class SimpleConsumer():
 
         log.info("Resetting offsets for %s partitions", len(list(owned_partition_offsets)))
 
+        # sort offsets to avoid deadlocks
+        sorted_offsets = sorted(iteritems(owned_partition_offsets), key=lambda k: k[0].partition.id)
+
         for i in range(self._offsets_reset_max_retries):
             # group partitions by leader
             by_leader = defaultdict(list)
-            for partition, offset in iteritems(owned_partition_offsets):
+            for partition, offset in sorted_offsets:
                 # acquire lock for each partition to stop fetching during offset
                 # reset
                 if partition.fetch_lock.acquire(True):
