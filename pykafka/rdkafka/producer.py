@@ -35,7 +35,7 @@ class RdKafkaProducer(Producer):
 
             def poll(self):
                 try:
-                    while self._running or self._rdk_producer.outq_len > 0:
+                    while self._running or self._rdk_producer.outq_len() > 0:
                         self._rdk_producer.poll(timeout_ms=1000)
                 except ReferenceError:  # weakref'd self
                     pass
