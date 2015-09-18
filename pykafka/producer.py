@@ -68,8 +68,7 @@ class Producer(object):
                  min_queued_messages=70000,
                  linger_ms=5 * 1000,
                  block_on_queue_full=True,
-                 sync=False,
-                 max_message_retries=3):
+                 sync=False):
         """Instantiate a new AsyncProducer
 
         :param cluster: The cluster to which to connect
@@ -120,9 +119,6 @@ class Producer(object):
         :param sync: Whether calls to `produce` should wait for the
             message to send before returning
         :type sync: bool
-        :param max_message_retries: How many times to re-produce a failed message before
-            raising an error
-        :type max_message_retries: int
         """
         self._cluster = cluster
         self._topic = topic
@@ -137,7 +133,6 @@ class Producer(object):
         self._linger_ms = linger_ms
         self._block_on_queue_full = block_on_queue_full
         self._synchronous = sync
-        self._max_message_retries = max_message_retries
         self._worker_exception = None
         self._worker_trace_logged = False
         self._owned_brokers = None
@@ -247,15 +242,13 @@ class Producer(object):
                 self._waiting_messages.append((kv, partition_id, attempts))
             self._update()
 
-    def _prepare_request(self, message_batch, owned_broker, attempt):
+    def _prepare_request(self, message_batch, owned_broker):
         """Prepare a request and send it to the broker
 
         :param message_batch: An iterable of messages to send
         :type message_batch: iterable of `((key, value), partition_id)` tuples
         :param owned_broker: The `OwnedBroker` to which to send the request
         :type owned_broker: :class:`pykafka.producer.OwnedBroker`
-        :param attempt: The current attempt count. Used for retry logic
-        :type attempt: int
         """
         request = ProduceRequest(
             compression_type=self._compression,
@@ -270,15 +263,13 @@ class Producer(object):
             )
         log.debug("Sending %d messages to broker %d",
                   len(message_batch), owned_broker.broker.id)
-        self._send_request(request, attempt, owned_broker)
+        self._send_request(request, owned_broker)
 
-    def _send_request(self, req, attempt, owned_broker):
+    def _send_request(self, req, owned_broker):
         """Send the produce request to the broker and handle the response.
 
         :param req: The produce request to send
         :type req: :class:`pykafka.protocol.ProduceRequest`
-        :param attempt: The current attempt count. Used for retry logic
-        :type attempt: int
         :param owned_broker: The broker to which to send the request
         :type owned_broker: :class:`pykafka.producer.OwnedBroker`
         """
@@ -345,20 +336,13 @@ class Producer(object):
             ]
 
         if to_retry:
-            attempt += 1
-            if attempt < self._max_retries:
-                time.sleep(self._retry_backoff_ms / 1000)
-                self._prepare_request(to_retry, owned_broker, attempt)
-            else:
-                log.error("Failed to produce messages to broker %s:%s after %s attempts. "
-                          "Re-enqueuing %s messages.", owned_broker.broker.host,
-                          owned_broker.broker.port, attempt, len(to_retry))
-                owned_broker.increment_messages_pending(-1 * len(to_retry))
-                for kv, partition_id, msg_attempt in to_retry:
-                    if msg_attempt >= self._max_message_retries:
-                        raise ProduceFailureError("Message failed to send after %d "
-                                                  "retries.", self._max_message_retries)
-                    self._produce((kv, partition_id, msg_attempt + 1))
+            time.sleep(self._retry_backoff_ms / 1000)
+            owned_broker.increment_messages_pending(-1 * len(to_retry))
+            for kv, partition_id, msg_attempt in to_retry:
+                if msg_attempt >= self._max_retries:
+                    raise ProduceFailureError("Message failed to send after %d "
+                                              "retries.", self._max_retries)
+                self._produce((kv, partition_id, msg_attempt + 1))
 
     def _wait_all(self):
         """Block until all pending messages are sent
@@ -409,7 +393,7 @@ class OwnedBroker(object):
                 try:
                     batch = self.flush(self.producer._linger_ms)
                     if batch:
-                        self.producer._prepare_request(batch, self, 0)
+                        self.producer._prepare_request(batch, self)
                 except Exception:
                     # surface all exceptions to the main thread
                     self.producer._worker_exception = sys.exc_info()
