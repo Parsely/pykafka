@@ -176,6 +176,11 @@ class Producer(object):
         self._raise_worker_exceptions()
 
     def _update(self):
+        """Update the producer and cluster after an ERROR_CODE
+
+        Also re-produces messages that were in queues at the time the update
+        was triggered
+        """
         # only allow one thread to be updating the producer at a time
         with self._update_lock:
             self._cluster.update()
@@ -187,6 +192,11 @@ class Producer(object):
                     self._produce(message)
 
     def _setup_owned_brokers(self):
+        """Instantiate one OwnedBroker per broker
+
+        If there are already OwnedBrokers instantiated, safely stop and flush them
+        before creating new ones.
+        """
         queued_messages = []
         if self._owned_brokers is not None:
             brokers = list(self._owned_brokers.keys())
@@ -246,37 +256,27 @@ class Producer(object):
             else:
                 success = False
 
-    def _prepare_request(self, message_batch, owned_broker):
-        """Prepare a request and send it to the broker
+    def _send_request(self, message_batch, owned_broker):
+        """Send the produce request to the broker and handle the response.
 
         :param message_batch: An iterable of messages to send
         :type message_batch: iterable of `((key, value), partition_id)` tuples
-        :param owned_broker: The `OwnedBroker` to which to send the request
+        :param owned_broker: The broker to which to send the request
         :type owned_broker: :class:`pykafka.producer.OwnedBroker`
         """
-        request = ProduceRequest(
+        req = ProduceRequest(
             compression_type=self._compression,
             required_acks=self._required_acks,
             timeout=self._ack_timeout_ms
         )
         for (key, value), partition_id, msg_attempt in message_batch:
-            request.add_message(
+            req.add_message(
                 Message(value, partition_key=key, produce_attempt=msg_attempt),
                 self._topic.name,
                 partition_id
             )
         log.debug("Sending %d messages to broker %d",
                   len(message_batch), owned_broker.broker.id)
-        self._send_request(request, owned_broker)
-
-    def _send_request(self, req, owned_broker):
-        """Send the produce request to the broker and handle the response.
-
-        :param req: The produce request to send
-        :type req: :class:`pykafka.protocol.ProduceRequest`
-        :param owned_broker: The broker to which to send the request
-        :type owned_broker: :class:`pykafka.producer.OwnedBroker`
-        """
 
         def _get_partition_msgs(partition_id, req):
             """Get all the messages for the partitions from the request."""
@@ -393,7 +393,7 @@ class OwnedBroker(object):
                 try:
                     batch = self.flush(self.producer._linger_ms)
                     if batch:
-                        self.producer._prepare_request(batch, self)
+                        self.producer._send_request(batch, self)
                 except Exception:
                     # surface all exceptions to the main thread
                     self.producer._worker_exception = sys.exc_info()
