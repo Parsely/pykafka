@@ -585,7 +585,7 @@ class SimpleConsumer():
 
         for broker, owned_partitions in iteritems(self._partitions_by_leader):
             partition_reqs = {}
-            sorted_offsets = sorted(owned_partitions, key=lambda k: k[0].partition.id)
+            sorted_offsets = sorted(owned_partitions, key=lambda k: k.partition.id)
             for owned_partition in sorted_offsets:
                 # attempt to acquire lock, just pass if we can't
                 if owned_partition.fetch_lock.acquire(False):
