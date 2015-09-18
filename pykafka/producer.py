@@ -504,15 +504,3 @@ class OwnedBroker(object):
             else:
                 raise ProducerQueueFullError("Queue full for broker %d",
                                              self.broker.id)
-
-    def resolve_event_state(self):
-        """Invariants for the Event variables used for thread synchronization
-        """
-        if len(self.queue) < self.producer._max_queued_messages:
-            self.slot_available.set()
-        else:
-            self.slot_available.clear()
-        if len(self.queue) >= self.producer._min_queued_messages:
-            self.flush_ready.set()
-        else:
-            self.flush_ready.clear()
