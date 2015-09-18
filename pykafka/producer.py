@@ -189,7 +189,9 @@ class Producer(object):
     def _setup_owned_brokers(self):
         queued_messages = []
         if self._owned_brokers is not None:
-            for owned_broker in self._owned_brokers.values():
+            brokers = list(self._owned_brokers.keys())
+            for broker in brokers:
+                owned_broker = self._owned_brokers.pop(broker)
                 owned_broker.stop()
                 batch = owned_broker.flush(self._linger_ms)
                 if batch:
