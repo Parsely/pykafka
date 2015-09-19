@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from pykafka import KafkaClient
 from pykafka.exceptions import ProducerQueueFullError
+from pykafka.protocol import Message
 from pykafka.test.utils import get_cluster, stop_cluster
 
 
@@ -84,12 +85,13 @@ class ProducerIntegrationTests(unittest2.TestCase):
     def test_async_produce_thread_exception(self):
         """Ensure that an exception on a worker thread is raised to the main thread"""
         topic = self.client.topics[self.topic_name]
-        with self.assertRaises(ValueError):
+        with self.assertRaises(AttributeError):
             with topic.get_producer(min_queued_messages=1) as producer:
-                # get some dummy data into the queue that will cause a crash when flushed
-                # specifically, this tuple causes a crash since its first element is
-                # not a two-tuple
-                producer._produce(("anything", 0))
+                # get some dummy data into the queue that will cause a crash
+                # when flushed:
+                msg = Message("stuff", partition_id=0)
+                del msg.value
+                producer._produce(msg)
         while self.consumer.consume() is not None:
             time.sleep(.05)
 
