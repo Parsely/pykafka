@@ -133,6 +133,7 @@ class RequestHandler(object):
     def _start_thread(self):
         """Run the request processor"""
         self = weakref.proxy(self)
+
         def worker():
             try:
                 while not self.ending.is_set():
@@ -152,6 +153,6 @@ class RequestHandler(object):
                     finally:
                         self._requests.task_done()
             except ReferenceError:  # dead weakref
-                pass
+                log.warning("ReferenceError in handler - dead weakref")
             log.info("RequestHandler worker: exiting cleanly")
         return self.handler.spawn(worker)
