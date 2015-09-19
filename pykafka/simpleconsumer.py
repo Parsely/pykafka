@@ -583,7 +583,8 @@ class SimpleConsumer():
                               owned_partition.partition.id,
                               owned_partition.message_count)
 
-        for broker, owned_partitions in iteritems(self._partitions_by_leader):
+        sorted_by_leader = sorted(iteritems(self._partitions_by_leader), key=lambda k: k[0].id)
+        for broker, owned_partitions in sorted_by_leader:
             partition_reqs = {}
             sorted_offsets = sorted(owned_partitions, key=lambda k: k.partition.id)
             for owned_partition in sorted_offsets:
