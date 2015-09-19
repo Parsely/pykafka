@@ -137,8 +137,9 @@ class Message(Message, Serializable):
           Value => bytes
 
     :class:`pykafka.protocol.Message` also contains `partition` and
-    `partition_id` fields. Both of these have meaningless default values when
-    :class:`pykafka.protocol.Message` is used by the producer.
+    `partition_id` fields. Both of these have meaningless default values. When
+    :class:`pykafka.protocol.Message` is used by the producer, `partition_id`
+    identifies the Message's destination partition.
     When used in a :class:`pykafka.protocol.FetchRequest`, `partition_id`
     is set to the id of the partition from which the message was sent on
     receipt of the message. In the :class:`pykafka.simpleconsumer.SimpleConsumer`,
