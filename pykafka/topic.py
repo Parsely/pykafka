@@ -22,6 +22,7 @@ from collections import defaultdict
 
 from .balancedconsumer import BalancedConsumer
 from .common import OffsetType
+from .exceptions import LeaderNotAvailable
 from .partition import Partition
 from .producer import Producer
 from .protocol import PartitionOffsetRequest
@@ -133,17 +134,20 @@ class Topic():
         brokers = self._cluster.brokers
         if len(p_metas) > 0:
             log.info("Adding %d partitions", len(p_metas))
-        for id_, meta in iteritems(p_metas):
-            if meta.id not in self._partitions:
-                log.debug('Adding partition %s/%s', self.name, meta.id)
-                self._partitions[meta.id] = Partition(
-                    self, meta.id,
-                    brokers[meta.leader],
-                    [brokers[b] for b in meta.replicas],
-                    [brokers[b] for b in meta.isr],
-                )
-            else:
-                self._partitions[id_].update(brokers, meta)
+        try:
+            for id_, meta in iteritems(p_metas):
+                if meta.id not in self._partitions:
+                    log.debug('Adding partition %s/%s', self.name, meta.id)
+                    self._partitions[meta.id] = Partition(
+                        self, meta.id,
+                        brokers[meta.leader],
+                        [brokers[b] for b in meta.replicas],
+                        [brokers[b] for b in meta.isr],
+                    )
+                else:
+                    self._partitions[id_].update(brokers, meta)
+        except KeyError:
+            raise LeaderNotAvailable()
 
     def get_simple_consumer(self, consumer_group=None, **kwargs):
         """Return a SimpleConsumer of this topic
