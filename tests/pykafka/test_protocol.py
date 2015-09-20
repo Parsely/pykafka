@@ -132,6 +132,7 @@ class TestFetchAPI(unittest2.TestCase):
             'value': b'this is a test message',
             'offset': 0,
             'partition_id': 0,
+            'produce_attempt': 0,
             'partition': None
         }
         self.assertDictEqual(
@@ -144,6 +145,7 @@ class TestFetchAPI(unittest2.TestCase):
             'value': b'this is also a test message',
             'offset': 1,
             'partition_id': 0,
+            'produce_attempt': 0,
             'partition': None
         }
         self.assertDictEqual(
@@ -156,6 +158,7 @@ class TestFetchAPI(unittest2.TestCase):
             'value': b"this doesn't have a partition key",
             'offset': 2,
             'partition_id': 0,
+            'produce_attempt': 0,
             'partition': None
         }
 
