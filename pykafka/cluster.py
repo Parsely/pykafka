@@ -24,7 +24,8 @@ import time
 import weakref
 
 from .broker import Broker
-from .exceptions import (ConsumerCoordinatorNotAvailable,
+from .exceptions import (ERROR_CODES,
+                         ConsumerCoordinatorNotAvailable,
                          UnknownTopicOrPartition,
                          LeaderNotAvailable)
 from .protocol import ConsumerMetadataRequest, ConsumerMetadataResponse
@@ -55,12 +56,11 @@ class TopicDict(dict):
 
     def __missing__(self, key):
         log.warning('Topic %s not found. Attempting to auto-create.', key)
-        if self._create_topic(key):
-            # Note that __missing__ is called from within dict.__getitem__, so
-            # that's what we should be returning (rather than self.__getitem__)
-            return super(TopicDict, self).__getitem__(key)
-        else:
-            raise UnknownTopicOrPartition('Unknown topic: {topic}'.format(topic=key))
+        self._create_topic(key)
+
+        # Note that __missing__ is called from within dict.__getitem__, so
+        # that's what we should be returning (rather than self.__getitem__)
+        return super(TopicDict, self).__getitem__(key)
 
     def _create_topic(self, topic_name):
         """Auto-create a topic.
@@ -70,20 +70,23 @@ class TopicDict(dict):
         with settings and everything, we'll implement that. To expose just
         this now would be disingenuous, since it's features would be hobbled.
         """
-        if len(self._cluster.brokers) == 0:
-            log.warning("No brokers found. This is probably because of "
-                        "KAFKA-2154, which will be fixed in Kafka 0.8.3")
-        # Auto-creating will take a moment, so we try 5 times.
-        for i in range(5):
+        while True:
             # Auto-creating is as simple as issuing a metadata request
-            # solely for that topic.  The update is just to be sure
-            # our `Cluster` knows about it.
-            self._cluster._get_metadata(topics=[topic_name])
-            self._cluster.update()
-            if topic_name in self:
+            # solely for that topic.  If topic auto-creation is enabled on the
+            # broker, the initial response will carry a LeaderNotAvailable
+            # error, otherwise it will be an UnknownTopicOrPartition or
+            # possibly a RequestTimedOut
+            res = self._cluster._get_metadata(topics=[topic_name])
+            err = res.topics[topic_name].err
+            if err == LeaderNotAvailable.ERROR_CODE:
+                time.sleep(.1)
+            elif err == 0:
                 log.info('Topic %s successfully auto-created.', topic_name)
-                return True
-            time.sleep(0.1)
+                self._cluster.update()
+                break
+            else:
+                raise ERROR_CODES[err](
+                    "Failed to auto-create topic '{}'".format(topic_name))
 
     def _update_topics(self, metadata):
         """Update topics with fresh metadata.
