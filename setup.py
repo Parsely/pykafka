@@ -28,6 +28,7 @@ def get_version():
                          version_file.read()).group('version')
 
 install_requires = [
+    'futures',
     'kazoo',
     'tabulate',
 ]
