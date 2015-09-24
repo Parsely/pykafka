@@ -26,7 +26,6 @@ import weakref
 from .broker import Broker
 from .exceptions import (ERROR_CODES,
                          ConsumerCoordinatorNotAvailable,
-                         UnknownTopicOrPartition,
                          LeaderNotAvailable)
 from .protocol import ConsumerMetadataRequest, ConsumerMetadataResponse
 from .topic import Topic
