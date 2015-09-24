@@ -1,15 +1,30 @@
 Changelog
 =========
 
-2.0.0 (2015-08-21)
+2.0.0 (2015-09-25)
 ------------------
+
+[Compare](https://github.com/Parsely/pykafka/compare/12f522870a32198f70a92ce543950c88b9f75565...794ed848c13dd29faf41102c6c11752a23ce300b)
 
 Features
 ********
 
-Rewrote the producer in an asynchronous style and made small breaking changes
+* Rewrote the producer in an asynchronous style and made small breaking changes
 to its interface. Specifically, it doesn't accept sequences of messages
 anymore - only one message at a time.
+* Made the entire library compatible with python 3.4, 2.7, and PyPy, and
+adopted Tox as the test runner of choice.
+* Allowed the socket source address to be specified when instantiating a client
+* Started a usage guide and contribution guide in the documentation
+
+Bug Fixes
+*********
+
+* Fixed unnecessarily long rebalance loops in the `BalancedConsumer`
+* Fixed hanging consumer integration tests
+* Fixed a bug causing the client's thread workers to become zombies under
+certain conditions
+* Many miscellaneous bugfixes
 
 1.0.0 (2015-05-31)
 ------------------
