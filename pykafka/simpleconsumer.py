@@ -157,6 +157,7 @@ class SimpleConsumer():
         self._last_auto_commit = time.time()
         self._worker_exception = None
         self._worker_trace_logged = False
+        self._update_lock = self._cluster.handler.Lock()
 
         self._discover_offset_manager()
 
@@ -170,9 +171,7 @@ class SimpleConsumer():
         self._partitions_by_id = {p.partition.id: p
                                   for p in itervalues(self._partitions)}
         # Organize partitions by leader for efficient queries
-        self._partitions_by_leader = defaultdict(list)
-        for p in itervalues(self._partitions):
-            self._partitions_by_leader[p.partition.leader].append(p)
+        self._setup_partitions_by_leader()
         self.partition_cycle = itertools.cycle(self._partitions.values())
 
         self._default_error_handlers = self._build_default_error_handlers()
@@ -202,6 +201,14 @@ class SimpleConsumer():
                           "".join(traceback.format_tb(tb)))
             raise ex
 
+    def _update(self):
+        """Update the consumer and cluster after an ERROR_CODE
+        """
+        # only allow one thread to be updating the producer at a time
+        with self._update_lock:
+            self._cluster.update()
+            self._setup_partitions_by_leader()
+
     def start(self):
         """Begin communicating with Kafka, including setting up worker threads
 
@@ -217,10 +224,15 @@ class SimpleConsumer():
             self.fetch_offsets()
 
         self._fetch_workers = self._setup_fetch_workers()
-
         if self._auto_commit_enable:
             self._autocommit_worker_thread = self._setup_autocommit_worker()
+
         self._raise_worker_exceptions()
+
+    def _setup_partitions_by_leader(self):
+        self._partitions_by_leader = defaultdict(list)
+        for p in itervalues(self._partitions):
+            self._partitions_by_leader[p.partition.leader].append(p)
 
     def _build_default_error_handlers(self):
         """Set up the error handlers to use for partition errors."""
@@ -628,10 +640,6 @@ class SimpleConsumer():
                         fetch_req = owned_partition.build_fetch_request(
                             self._fetch_message_max_bytes)
                         partition_reqs[owned_partition] = fetch_req
-                    else:
-                        log.debug("Partition %s above max queued count (queue has %d)",
-                                  owned_partition.partition.id,
-                                  owned_partition.message_count)
             if partition_reqs:
                 try:
                     response = broker.fetch_messages(
@@ -639,13 +647,13 @@ class SimpleConsumer():
                         timeout=self._fetch_wait_max_ms,
                         min_bytes=self._fetch_min_bytes
                     )
-                except SocketDisconnectedError:
+                except (IOError, SocketDisconnectedError):
                     # If the broker dies while we're supposed to stop,
                     # it's fine, and probably an integration test.
-                    if not self._running:
-                        return
-                    else:
-                        raise
+                    if self._running:
+                        log.debug("Updating cluster metadata in response to exception")
+                        self._update()
+                    return
 
                 parts_by_error = build_parts_by_error(response, self._partitions_by_id)
                 handle_partition_responses(
