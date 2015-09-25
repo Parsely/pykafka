@@ -39,7 +39,7 @@ class TopicDict(dict):
 
     def __init__(self, cluster, exclude_internal_topics, *args, **kwargs):
         super(TopicDict, self).__init__(*args, **kwargs)
-        self._cluster = weakref.proxy(cluster)
+        self._cluster = weakref.ref(cluster)
         self._exclude_internal_topics = exclude_internal_topics
 
     def __getitem__(self, key):
@@ -48,8 +48,8 @@ class TopicDict(dict):
             return topic_ref()
         else:
             # Topic exists, but needs to be instantiated locally
-            meta = self._cluster._get_metadata([key])
-            topic = Topic(self._cluster, meta.topics[key])
+            meta = self._cluster()._get_metadata([key])
+            topic = Topic(self._cluster(), meta.topics[key])
             self[key] = weakref.ref(topic)
             return topic
 
@@ -75,13 +75,13 @@ class TopicDict(dict):
             # broker, the initial response will carry a LeaderNotAvailable
             # error, otherwise it will be an UnknownTopicOrPartition or
             # possibly a RequestTimedOut
-            res = self._cluster._get_metadata(topics=[topic_name])
+            res = self._cluster()._get_metadata(topics=[topic_name])
             err = res.topics[topic_name].err
             if err == LeaderNotAvailable.ERROR_CODE:
                 time.sleep(.1)
             elif err == 0:
                 log.info('Topic %s successfully auto-created.', topic_name)
-                self._cluster.update()
+                self._cluster().update()
                 break
             else:
                 raise ERROR_CODES[err](
