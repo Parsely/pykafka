@@ -4,7 +4,7 @@ Changelog
 2.0.0 (2015-09-25)
 ------------------
 
-[Compare](https://github.com/Parsely/pykafka/compare/12f522870a32198f70a92ce543950c88b9f75565...794ed848c13dd29faf41102c6c11752a23ce300b)
+[Compare](https://github.com/Parsely/pykafka/compare/12f522870a32198f70a92ce543950c88b9f75565...ad0d06bd4acbe95cdfa8dfe858dfab5d162a4d09)
 
 Features
 ********
