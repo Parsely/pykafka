@@ -26,6 +26,8 @@ import weakref
 from .broker import Broker
 from .exceptions import (ERROR_CODES,
                          ConsumerCoordinatorNotAvailable,
+                         KafkaException,
+                         SocketDisconnectedError,
                          LeaderNotAvailable)
 from .protocol import ConsumerMetadataRequest, ConsumerMetadataResponse
 from .topic import Topic
@@ -288,6 +290,10 @@ class Cluster(object):
                 log.error('Error discovering offset manager.')
                 if i == MAX_RETRIES - 1:
                     raise
+            except SocketDisconnectedError:
+                raise KafkaException("Socket disconnected during offset manager "
+                                     "discovery. This can happen when using PyKafka "
+                                     "with a Kafka version lower than 0.8.2.")
             else:
                 coordinator = self.brokers.get(res.coordinator_id, None)
                 if coordinator is None:
