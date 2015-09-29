@@ -307,6 +307,8 @@ class SimpleConsumer():
             if self._messages_arrived.acquire(blocking=block, timeout=timeout):
                 # by passing through this semaphore, we know that at
                 # least one message is waiting in some queue.
+                if not self._running:
+                    raise ConsumerStoppedException()
                 message = None
                 while not message:
                     owned_partition = next(self.partition_cycle)
@@ -315,7 +317,7 @@ class SimpleConsumer():
             else:
                 if not self._running:
                     raise ConsumerStoppedException()
-                elif not block or self._consumer_timeout_ms > 0:
+                if not block or self._consumer_timeout_ms > 0:
                     return None
 
     def _auto_commit(self):
