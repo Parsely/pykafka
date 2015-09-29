@@ -317,7 +317,7 @@ class SimpleConsumer():
             else:
                 if not self._running:
                     raise ConsumerStoppedException()
-                if not block or self._consumer_timeout_ms > 0:
+                elif not block or self._consumer_timeout_ms > 0:
                     return None
 
     def _auto_commit(self):
