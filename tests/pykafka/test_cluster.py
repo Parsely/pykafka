@@ -20,6 +20,19 @@ class ClusterIntegrationTests(unittest.TestCase):
         topic = self.client.topics[topic_name]
         self.assertTrue(isinstance(topic, Topic))
 
+    def test_exclude_internal_topics(self):
+        """Test exclude_internal_topics setting
+
+        See also #277 for a related bug.
+        """
+        topic_name = b"__starts_with_underscores"
+        with self.assertRaises(KeyError):
+            topic = self.client.topics[topic_name]
+
+        client = KafkaClient(self.kafka.brokers, exclude_internal_topics=False)
+        topic = client.topics[topic_name]
+        self.assertTrue(isinstance(topic, Topic))
+
     def test_topic_updates(self):
         startlen = len(self.client.topics)
         name_a = uuid4().hex.encode()

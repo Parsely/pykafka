@@ -43,6 +43,9 @@ class TopicDict(dict):
         self._exclude_internal_topics = exclude_internal_topics
 
     def __getitem__(self, key):
+        if self._should_exclude_topic(key):
+            raise KeyError("You have configured KafkaClient/Cluster to hide "
+                           "double-underscored, internal topics")
         topic_ref = super(TopicDict, self).__getitem__(key)
         if topic_ref is not None and topic_ref() is not None:
             return topic_ref()
