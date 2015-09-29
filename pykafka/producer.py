@@ -294,6 +294,10 @@ class Producer(object):
 
         try:
             response = owned_broker.broker.produce_messages(req)
+            if self._required_acks == 0:  # and thus, `response` is None
+                owned_broker.increment_messages_pending(
+                    -1 * len(message_batch))
+                return
             to_retry = []
             for topic, partitions in iteritems(response.topics):
                 for partition, presponse in iteritems(partitions):
