@@ -300,13 +300,15 @@ class Producer(object):
                 if p_id == partition_id
             )
 
+        def mark_as_delivered(message_batch):
+            owned_broker.increment_messages_pending(-1 * len(message_batch))
+            for msg in message_batch:
+                msg.delivery_future.set_result(None)
+
         try:
             response = owned_broker.broker.produce_messages(req)
             if self._required_acks == 0:  # and thus, `response` is None
-                owned_broker.increment_messages_pending(
-                    -1 * len(message_batch))
-                for msg in message_batch:
-                    msg.delivery_future.set_result(None)
+                mark_as_delivered(message_batch)
                 return
 
             # Kafka either atomically appends or rejects whole MessageSets, so
@@ -316,12 +318,7 @@ class Producer(object):
             for topic, partitions in iteritems(response.topics):
                 for partition, presponse in iteritems(partitions):
                     if presponse.err == 0:
-                        # mark messages as successfully delivered
-                        delivered = req.msets[topic][partition].messages
-                        owned_broker.increment_messages_pending(
-                            -1 * len(delivered))
-                        for msg in delivered:
-                            msg.delivery_future.set_result(None)
+                        mark_as_delivered(req.msets[topic][partition].messages)
                         continue  # All's well
                     if presponse.err == UnknownTopicOrPartition.ERROR_CODE:
                         log.warning('Unknown topic: %s or partition: %s. '
