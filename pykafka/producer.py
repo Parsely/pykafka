@@ -305,6 +305,8 @@ class Producer(object):
             if self._required_acks == 0:  # and thus, `response` is None
                 owned_broker.increment_messages_pending(
                     -1 * len(message_batch))
+                for msg in message_batch:
+                    msg.delivery_future.set_result(None)
                 return
 
             # Kafka either atomically appends or rejects whole MessageSets, so
