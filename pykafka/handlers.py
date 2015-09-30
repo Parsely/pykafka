@@ -153,6 +153,6 @@ class RequestHandler(object):
                     finally:
                         self._requests.task_done()
             except ReferenceError:  # dead weakref
-                log.warning("ReferenceError in handler - dead weakref")
+                log.info("ReferenceError in handler - dead weakref")
             log.info("RequestHandler worker: exiting cleanly")
         return self.handler.spawn(worker)

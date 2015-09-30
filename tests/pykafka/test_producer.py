@@ -95,5 +95,20 @@ class ProducerIntegrationTests(unittest2.TestCase):
         while self.consumer.consume() is not None:
             time.sleep(.05)
 
+    def test_required_acks(self):
+        """Test with non-default values for `required_acks`
+
+        See #278 for a related bug.  Here, we only test that no exceptions
+        occur (hence `sync=True`, which would surface most exceptions)
+        """
+        kwargs = dict(linger_ms=1, sync=True, required_acks=0)
+        prod = self.client.topics[self.topic_name].get_producer(**kwargs)
+        prod.produce(uuid4().bytes)
+
+        kwargs["required_acks"] = -1
+        prod = self.client.topics[self.topic_name].get_producer(**kwargs)
+        prod.produce(uuid4().bytes)
+
+
 if __name__ == "__main__":
     unittest2.main()

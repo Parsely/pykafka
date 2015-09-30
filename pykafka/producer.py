@@ -236,6 +236,9 @@ class Producer(object):
             exceptions are also raised directly from `produce()`)
         :rtype: `concurrent.futures.Future`
         """
+        if not isinstance(message, bytes):
+            raise TypeError("Producer.produce accepts a bytes object, but it "
+                            "got '%s'", type(message))
         if not self._running:
             raise ProducerStoppedException()
         partitions = list(self._topic.partitions.values())
@@ -294,6 +297,10 @@ class Producer(object):
 
         try:
             response = owned_broker.broker.produce_messages(req)
+            if self._required_acks == 0:  # and thus, `response` is None
+                owned_broker.increment_messages_pending(
+                    -1 * len(message_batch))
+                return
 
             # Kafka either atomically appends or rejects whole MessageSets, so
             # we define a list of potential retries thus:

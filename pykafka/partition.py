@@ -18,6 +18,7 @@ limitations under the License.
 """
 __all__ = ["Partition"]
 import logging
+import weakref
 
 from .common import OffsetType
 from .exceptions import LeaderNotAvailable
@@ -51,7 +52,7 @@ class Partition():
         self._leader = leader
         self._replicas = replicas
         self._isr = isr
-        self._topic = topic
+        self._topic = weakref.ref(topic)
 
     def __repr__(self):
         return "<{module}.{name} at {id_} (id={my_id})>".format(
@@ -84,7 +85,7 @@ class Partition():
     @property
     def topic(self):
         """The topic to which this partition belongs"""
-        return self._topic
+        return self._topic()
 
     def fetch_offset_limit(self, offsets_before, max_offsets=1):
         """Use the Offset API to find a limit of valid offsets
