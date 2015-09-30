@@ -8,7 +8,7 @@ PyKafka
 
 .. image:: http://i.imgur.com/ztYl4lG.jpg
 
-PyKafka is a cluster-aware Kafka protocol client for python. It includes python
+PyKafka is a cluster-aware Kafka 0.8.2 protocol client for python. It includes python
 implementations of Kafka producers and consumers, and runs under python 2.7.
 
 PyKafka's primary goal is to provide a similar level of abstraction to the
