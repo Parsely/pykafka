@@ -45,7 +45,7 @@ class RdKafkaProducer(Producer):
                     poll, args=(weakref.proxy(self), ))
 
     def _produce(self, message_partition_tup):
-        (key, msg), part_id = message_partition_tup
+        (key, msg), part_id, attempt = message_partition_tup
         return self._rdk_producer.produce(msg, key, part_id)
 
     def _wait_all(self):
