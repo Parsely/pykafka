@@ -83,6 +83,10 @@ this, you can use the `BalancedConsumer`.
         auto_commit_enable=True,
         zookeeper_connect='myZkClusterNode1.com:2181,myZkClusterNode2.com:2181/myZkChroot'
     )
+    >>> while True:
+    ...     message = balanced_consumer.consume()
+    ...     if message is not None:
+    ...         print message.offset, message.value
 
 You can have as many `BalancedConsumer` instances consuming a topic as that
 topic has partitions. If they are all connected to the same zookeeper instance,
