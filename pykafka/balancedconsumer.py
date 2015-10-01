@@ -563,6 +563,14 @@ class BalancedConsumer():
                 return message
         return message
 
+    def __iter__(self):
+        """Yield an infinite stream of messages until the consumer times out"""
+        while True:
+            message = self.consume(block=True)
+            if not message:
+                raise StopIteration
+            yield message
+
     def commit_offsets(self):
         """Commit offsets for this consumer's partitions
 
