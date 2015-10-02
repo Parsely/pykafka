@@ -44,6 +44,15 @@ class RdKafkaProducer(Producer):
             self._poller_thread = self._cluster.handler.spawn(
                     poll, args=(weakref.proxy(self), ))
 
+    def stop(self):
+        super(RdKafkaProducer, self).stop()
+
+        # We must wait for the poller thread to join because stop() will wipe
+        # the handle that reads from, risking segfaults.  As super's stop()
+        # already called _wait_all(), join() should always succeed:
+        self._poller_thread.join()
+        self._rdk_producer.stop()
+
     def _produce(self, message_partition_tup):
         (key, msg), part_id, attempt = message_partition_tup
         return self._rdk_producer.produce(msg, key, part_id)

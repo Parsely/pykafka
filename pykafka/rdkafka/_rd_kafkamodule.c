@@ -155,6 +155,9 @@ static PyMemberDef RdkHandle_members[] = {
 
 static PyObject *
 RdkHandle_outq_len(RdkHandle *self) {
+    if (! self->rdk_handle) {
+        return set_pykafka_error("ProducerStoppedException");
+    }
     int outq_len = -1;
     Py_BEGIN_ALLOW_THREADS  /* avoid callbacks deadlocking */
         outq_len = rd_kafka_outq_len(self->rdk_handle);
@@ -590,6 +593,7 @@ failed:
 static PyMethodDef Producer_methods[] = {
     {"produce", (PyCFunction)Producer_produce,
         METH_VARARGS, "Produce to kafka."},
+    {"stop", (PyCFunction)RdkHandle_stop, METH_NOARGS, "Destroy producer."},
     {"configure", (PyCFunction)RdkHandle_configure,
         METH_VARARGS | METH_KEYWORDS, RdkHandle_configure__doc__},
     {"start", (PyCFunction)Producer_start, METH_VARARGS | METH_KEYWORDS, NULL},
