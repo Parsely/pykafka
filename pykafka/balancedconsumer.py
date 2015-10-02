@@ -73,7 +73,7 @@ class BalancedConsumer():
                  zookeeper=None,
                  auto_start=True,
                  reset_offset_on_start=False,
-                 use_rdkafka=True):
+                 use_rdkafka=False):
         """Create a BalancedConsumer instance
 
         :param topic: The topic this consumer should consume

@@ -155,7 +155,7 @@ class Topic():
 
     def get_simple_consumer(self,
                             consumer_group=None,
-                            use_rdkafka=True,
+                            use_rdkafka=False,
                             **kwargs):
         """Return a SimpleConsumer of this topic
 
