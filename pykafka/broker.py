@@ -21,7 +21,7 @@ import logging
 import time
 
 from .connection import BrokerConnection
-from .exceptions import LeaderNotAvailable
+from .exceptions import LeaderNotAvailable, SocketDisconnectedError
 from .handlers import RequestHandler
 from .protocol import (
     FetchRequest, FetchResponse, OffsetRequest,
@@ -270,8 +270,8 @@ class Broker():
     def request_metadata(self, topics=None):
         """Request cluster metadata
 
-        :param topics: The topic ids for which to request metadata
-        :type topics: Iterable of int
+        :param topics: The topic names for which to request metadata
+        :type topics: Iterable of `bytes`
         """
         max_retries = 3
         for i in range(max_retries):
@@ -279,8 +279,14 @@ class Broker():
                 log.debug("Retrying")
             time.sleep(i)
 
-            future = self._req_handler.request(MetadataRequest(topics=topics))
-            response = future.get(MetadataResponse)
+            try:
+                future = self._req_handler.request(MetadataRequest(topics=topics))
+                response = future.get(MetadataResponse)
+            except SocketDisconnectedError:
+                log.warning("Encountered SocketDisconnectedError while requesting "
+                            "metadata from broker %s:%s. Continuing.",
+                            self.host, self.port)
+                continue
 
             for name, topic_metadata in iteritems(response.topics):
                 if topic_metadata.err == LeaderNotAvailable.ERROR_CODE:

@@ -29,7 +29,7 @@ class TestPartitionInfo(unittest2.TestCase):
     def test_can_get_latest_offset(self):
         partitions = self.client.topics[self.topic_name].partitions
         for partition in partitions.values():
-            self.assertTrue(partition.latest_available_offset())
+            self.assertTrue(partition.latest_available_offset() >= 0)
 
 if __name__ == "__main__":
     unittest2.main()

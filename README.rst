@@ -8,7 +8,7 @@ PyKafka
 
 .. image:: http://i.imgur.com/ztYl4lG.jpg
 
-PyKafka is a cluster-aware Kafka protocol client for python. It includes python
+PyKafka is a cluster-aware Kafka 0.8.2 protocol client for python. It includes python
 implementations of Kafka producers and consumers, and runs under python 2.7.
 
 PyKafka's primary goal is to provide a similar level of abstraction to the
@@ -65,8 +65,8 @@ You can also consume messages from this topic using a `Consumer` instance.
 
     >>> consumer = topic.get_simple_consumer()
     >>> for message in consumer:
-        if message is not None:
-            print message.offset, message.value
+    ...     if message is not None:
+    ...         print message.offset, message.value
     0 test message 0
     1 test message 1
     2 test message 4
@@ -79,10 +79,10 @@ this, you can use the `BalancedConsumer`.
 .. sourcecode:: python
 
     >>> balanced_consumer = topic.get_balanced_consumer(
-        consumer_group='testgroup',
-        auto_commit_enable=True,
-        zookeeper_connect='myZkClusterNode1.com:2181,myZkClusterNode2.com:2181/myZkChroot'
-    )
+    ...     consumer_group='testgroup',
+    ...     auto_commit_enable=True,
+    ...     zookeeper_connect='myZkClusterNode1.com:2181,myZkClusterNode2.com:2181/myZkChroot'
+    ... )
 
 You can have as many `BalancedConsumer` instances consuming a topic as that
 topic has partitions. If they are all connected to the same zookeeper instance,
