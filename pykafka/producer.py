@@ -28,17 +28,12 @@ import traceback
 from .common import CompressionType
 from .exceptions import (
     ERROR_CODES,
-    InvalidMessageError,
     InvalidMessageSize,
-    LeaderNotAvailable,
     MessageSizeTooLarge,
     NotLeaderForPartition,
-    ProduceFailureError,
     ProducerQueueFullError,
     ProducerStoppedException,
-    RequestTimedOut,
     SocketDisconnectedError,
-    UnknownTopicOrPartition
 )
 from .partitioners import random_partitioner
 from .protocol import Message, ProduceRequest
