@@ -320,28 +320,16 @@ class Producer(object):
                     if presponse.err == 0:
                         mark_as_delivered(req.msets[topic][partition].messages)
                         continue  # All's well
-                    if presponse.err == UnknownTopicOrPartition.ERROR_CODE:
-                        log.warning('Unknown topic: %s or partition: %s. '
-                                    'Retrying.', topic, partition)
-                    elif presponse.err == NotLeaderForPartition.ERROR_CODE:
-                        log.warning('Partition leader for %s/%s changed. '
-                                    'Retrying.', topic, partition)
+                    if presponse.err == NotLeaderForPartition.ERROR_CODE:
                         # Update cluster metadata to get new leader
                         self._update()
-                    elif presponse.err == RequestTimedOut.ERROR_CODE:
-                        log.warning('Produce request to %s:%s timed out. '
-                                    'Retrying.', owned_broker.broker.host,
-                                    owned_broker.broker.port)
-                    elif presponse.err == LeaderNotAvailable.ERROR_CODE:
-                        log.warning('Leader not available for partition %s.'
-                                    'Retrying.', partition)
-                    elif presponse.err == InvalidMessageError.ERROR_CODE:
-                        log.warning('Encountered InvalidMessageError')
-                    elif presponse.err == InvalidMessageSize.ERROR_CODE:
-                        log.warning('Encountered InvalidMessageSize')
-                    elif presponse.err == MessageSizeTooLarge.ERROR_CODE:
-                        log.warning('Encountered MessageSizeTooLarge')
-                    exc = ERROR_CODES[presponse.err]
+                    info = "Produce request for {}/{} to {}:{} failed.".format(
+                        topic,
+                        partition,
+                        owned_broker.broker.host,
+                        owned_broker.broker.port)
+                    log.warning(info)
+                    exc = ERROR_CODES[presponse.err](info)
                     to_retry.extend(
                         (mset, exc)
                         for mset in _get_partition_msgs(partition, req))
@@ -363,8 +351,8 @@ class Producer(object):
                 # XXX arguably, we should try to check these non_recoverables
                 # for individual messages in _produce and raise errors there
                 # right away, rather than failing a whole batch here?
-                non_recoverable = exc in (InvalidMessageSize,
-                                          MessageSizeTooLarge)
+                non_recoverable = type(exc) in (InvalidMessageSize,
+                                                MessageSizeTooLarge)
                 for msg in mset.messages:
                     if (non_recoverable
                             or msg.produce_attempt >= self._max_retries):

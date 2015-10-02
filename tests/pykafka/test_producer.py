@@ -5,7 +5,7 @@ import unittest2
 from uuid import uuid4
 
 from pykafka import KafkaClient
-from pykafka.exceptions import ProducerQueueFullError
+from pykafka.exceptions import MessageSizeTooLarge, ProducerQueueFullError
 from pykafka.protocol import Message
 from pykafka.test.utils import get_cluster, stop_cluster
 
@@ -39,11 +39,19 @@ class ProducerIntegrationTests(unittest2.TestCase):
         message = self.consumer.consume()
         assert message.value == payload
 
+    def test_sync_produce_raises(self):
+        """Ensure response errors are raised in produce() if sync=True"""
+        topic = self.client.topics[self.topic_name]
+        with topic.get_sync_producer(min_queued_messages=1) as prod:
+            with self.assertRaises(MessageSizeTooLarge):
+                prod.produce(10**7 * b" ")
+
     def test_async_produce(self):
         payload = uuid4().bytes
 
         prod = self.client.topics[self.topic_name].get_producer(min_queued_messages=1)
-        prod.produce(payload)
+        future = prod.produce(payload)
+        self.assertIsNone(future.result())
 
         message = self.consumer.consume()
         assert message.value == payload
