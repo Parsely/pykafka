@@ -181,6 +181,7 @@ class BalancedConsumer():
             group=self._consumer_group)
 
         self._zookeeper = None
+        self._owns_zookeeper = zookeeper is None
         if zookeeper is not None:
             self._zookeeper = zookeeper
         if auto_start is True:
@@ -235,7 +236,8 @@ class BalancedConsumer():
 
         This method should be called as part of a graceful shutdown process.
         """
-        self._zookeeper.stop()
+        if self._owns_zookeeper:
+            self._zookeeper.stop()
         self._consumer.stop()
         self._running = False
 
@@ -562,6 +564,14 @@ class BalancedConsumer():
             if not block:
                 return message
         return message
+
+    def __iter__(self):
+        """Yield an infinite stream of messages until the consumer times out"""
+        while True:
+            message = self.consume(block=True)
+            if not message:
+                raise StopIteration
+            yield message
 
     def commit_offsets(self):
         """Commit offsets for this consumer's partitions

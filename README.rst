@@ -65,8 +65,8 @@ You can also consume messages from this topic using a `Consumer` instance.
 
     >>> consumer = topic.get_simple_consumer()
     >>> for message in consumer:
-        if message is not None:
-            print message.offset, message.value
+    ...     if message is not None:
+    ...         print message.offset, message.value
     0 test message 0
     1 test message 1
     2 test message 4
@@ -79,10 +79,10 @@ this, you can use the `BalancedConsumer`.
 .. sourcecode:: python
 
     >>> balanced_consumer = topic.get_balanced_consumer(
-        consumer_group='testgroup',
-        auto_commit_enable=True,
-        zookeeper_connect='myZkClusterNode1.com:2181,myZkClusterNode2.com:2181/myZkChroot'
-    )
+    ...     consumer_group='testgroup',
+    ...     auto_commit_enable=True,
+    ...     zookeeper_connect='myZkClusterNode1.com:2181,myZkClusterNode2.com:2181/myZkChroot'
+    ... )
 
 You can have as many `BalancedConsumer` instances consuming a topic as that
 topic has partitions. If they are all connected to the same zookeeper instance,
