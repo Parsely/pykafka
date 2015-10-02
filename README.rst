@@ -64,6 +64,10 @@ evaluate it to assure yourself that the message made it to disk on the cluster.
 This works as with any `concurrent.futures.Future` (`docs`_), by checking
 `future.result()` (which should be `None`) or `future.exception()`.
 
+(If you would prefer your exceptions straight from the `produce()` call, you
+can create the producer with `sync=True`, but this is of course a lot slower,
+with network round-trips for every message produced.)
+
 .. _docs: https://pythonhosted.org/futures/#future-objects
 
 You can also consume messages from this topic using a `Consumer` instance.
