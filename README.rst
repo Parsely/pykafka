@@ -57,7 +57,14 @@ producing messages.
 
     >>> with topic.get_producer() as producer:
     ...     for i in range(4):
-    ...         producer.produce('test message ' + i ** 2)
+    ...         future = producer.produce('test message ' + i ** 2)
+
+You're free to ignore the future returned from `produce()`, or you can later
+evaluate it to assure yourself that the message made it to disk on the cluster.
+This works as with any `concurrent.futures.Future` (`docs`_), by checking
+`future.result()` (which should be `None`) or `future.exception()`.
+
+.. _docs: https://pythonhosted.org/futures/#future-objects
 
 You can also consume messages from this topic using a `Consumer` instance.
 
