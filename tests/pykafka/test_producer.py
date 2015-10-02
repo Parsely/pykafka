@@ -104,11 +104,11 @@ class ProducerIntegrationTests(unittest2.TestCase):
         occur (hence `sync=True`, which would surface most exceptions)
         """
         kwargs = dict(linger_ms=1, sync=True, required_acks=0)
-        prod = self.client.topics[self.topic_name].get_producer(**kwargs)
+        prod = self._get_producer(**kwargs)
         prod.produce(uuid4().bytes)
 
         kwargs["required_acks"] = -1
-        prod = self.client.topics[self.topic_name].get_producer(**kwargs)
+        prod = self._get_producer(**kwargs)
         prod.produce(uuid4().bytes)
 
 
