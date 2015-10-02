@@ -236,9 +236,9 @@ class Producer(object):
             message to
         :type partition_key: bytes
 
-        :returns: a Future, carrying any errors that occurred, or `None` if
-            the producer was created with `sync=True` (in that case, any
-            exceptions are also raised directly from `produce()`)
+        :returns: a `Future` if the producer was created with `sync=False`,
+            or `None` for `sync=True` (and in that case, any exceptions that
+            the future would have carried are raised here directly)
         :rtype: `concurrent.futures.Future`
         """
         if not (isinstance(message, bytes) or message is None):
