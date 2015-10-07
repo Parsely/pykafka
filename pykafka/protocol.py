@@ -30,6 +30,8 @@ https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol
 
 Each message is encoded as either a Request or Response:
 
+::
+
 RequestOrResponse => Size (RequestMessage | ResponseMessage)
   Size => int32
 
@@ -125,9 +127,9 @@ class Response(object):
 class Message(Message, Serializable):
     """Representation of a Kafka Message
 
-    NOTE: Compression is handled in the protocol because
-          of the way Kafka embeds compressed MessageSets within
-          Messages
+    NOTE: Compression is handled in the protocol because of the way Kafka embeds compressed MessageSets within Messages
+
+    ::
 
     Message => Crc MagicByte Attributes Key Value
       Crc => int32
@@ -213,8 +215,9 @@ class MessageSet(Serializable):
     This isn't useful outside of direct communications with Kafka, so we
     keep it hidden away here.
 
-    N.B.: MessageSets are not preceded by an int32 like other
-          array elements in the protocol.
+    N.B.: MessageSets are not preceded by an int32 like other array elements in the protocol.
+
+    ::
 
     MessageSet => [Offset MessageSize Message]
       Offset => int64
@@ -330,6 +333,8 @@ class MessageSet(Serializable):
 class MetadataRequest(Request):
     """Metadata Request
 
+    ::
+
     MetadataRequest => [TopicName]
       TopicName => string
     """
@@ -375,6 +380,8 @@ PartitionMetadata = namedtuple('PartitionMetadata',
 class MetadataResponse(Response):
     """Response from MetadataRequest
 
+    ::
+
     MetadataResponse => [Broker][TopicMetadata]
       Broker => NodeId Host Port
       NodeId => int32
@@ -418,6 +425,8 @@ class MetadataResponse(Response):
 
 class ProduceRequest(Request):
     """Produce Request
+
+    ::
 
     ProduceRequest => RequiredAcks Timeout [TopicName [Partition MessageSetSize MessageSet]]
       RequiredAcks => int16
@@ -528,6 +537,8 @@ ProducePartitionResponse = namedtuple(
 class ProduceResponse(Response):
     """Produce Response. Checks to make sure everything went okay.
 
+    ::
+
     ProduceResponse => [TopicName [Partition ErrorCode Offset]]
       TopicName => string
       Partition => int32
@@ -576,6 +587,8 @@ class PartitionFetchRequest(_PartitionFetchRequest):
 
 class FetchRequest(Request):
     """A Fetch request sent to Kafka
+
+    ::
 
     FetchRequest => ReplicaId MaxWaitTime MinBytes [TopicName [Partition FetchOffset MaxBytes]]
       ReplicaId => int32
@@ -669,6 +682,8 @@ FetchPartitionResponse = namedtuple(
 class FetchResponse(Response):
     """Unpack a fetch response from the server
 
+    ::
+
     FetchResponse => [TopicName [Partition ErrorCode HighwaterMarkOffset MessageSetSize MessageSet]]
       TopicName => string
       Partition => int32
@@ -739,6 +754,8 @@ class PartitionOffsetRequest(_PartitionOffsetRequest):
 class OffsetRequest(Request):
     """An offset request
 
+    ::
+
     OffsetRequest => ReplicaId [TopicName [Partition Time MaxNumberOfOffsets]]
       ReplicaId => int32
       TopicName => string
@@ -801,6 +818,8 @@ OffsetPartitionResponse = namedtuple(
 class OffsetResponse(Response):
     """An offset response
 
+    ::
+
     OffsetResponse => [TopicName [PartitionOffsets]]
       PartitionOffsets => Partition ErrorCode [Offset]
       Partition => int32
@@ -826,6 +845,8 @@ class OffsetResponse(Response):
 
 class ConsumerMetadataRequest(Request):
     """A consumer metadata request
+
+    ::
 
     ConsumerMetadataRequest => ConsumerGroup
       ConsumerGroup => string
@@ -860,6 +881,8 @@ class ConsumerMetadataRequest(Request):
 
 class ConsumerMetadataResponse(Response):
     """A consumer metadata response
+
+    ::
 
     ConsumerMetadataResponse => ErrorCode CoordinatorId CoordinatorHost CoordinatorPort
       ErrorCode => int16
@@ -904,6 +927,8 @@ class PartitionOffsetCommitRequest(_PartitionOffsetCommitRequest):
 
 class OffsetCommitRequest(Request):
     """An offset commit request
+
+    ::
 
     OffsetCommitRequest => ConsumerGroupId ConsumerGroupGenerationId ConsumerId [TopicName [Partition Offset TimeStamp Metadata]]
       ConsumerGroupId => string
@@ -1003,6 +1028,8 @@ OffsetCommitPartitionResponse = namedtuple(
 class OffsetCommitResponse(Response):
     """An offset commit response
 
+    ::
+
     OffsetCommitResponse => [TopicName [Partition ErrorCode]]]
       TopicName => string
       Partition => int32
@@ -1041,6 +1068,8 @@ class PartitionOffsetFetchRequest(_PartitionOffsetFetchRequest):
 
 class OffsetFetchRequest(Request):
     """An offset fetch request
+
+    ::
 
     OffsetFetchRequest => ConsumerGroup [TopicName [Partition]]
       ConsumerGroup => string
@@ -1109,6 +1138,8 @@ OffsetFetchPartitionResponse = namedtuple(
 
 class OffsetFetchResponse(Response):
     """An offset fetch response
+
+    ::
 
     OffsetFetchResponse => [TopicName [Partition Offset Metadata ErrorCode]]
       TopicName => string
