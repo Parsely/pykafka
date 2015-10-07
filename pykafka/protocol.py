@@ -144,6 +144,12 @@ class Message(Message, Serializable):
     receipt of the message. In the :class:`pykafka.simpleconsumer.SimpleConsumer`,
     `partition` is set to the :class:`pykafka.partition.Partition` instance
     from which the message was sent.
+
+    :ivar compression_type: Type of compression to use for the message
+    :ivar partition_key: Value used to assign this message to a particular partition.
+    :ivar value: The payload associated with this message
+    :ivar offset: The offset of the message
+    :ivar partition_id: The id of the partition to which this message belongs
     """
     MAGIC = 0
 
@@ -337,7 +343,7 @@ class MetadataRequest(Request):
             TopicName => string
     """
     def __init__(self, topics=None):
-        """Create a new MetadatRequest
+        """Create a new MetadataRequest
 
         :param topics: Topics to query. Leave empty for all available topics.
         """
@@ -440,7 +446,7 @@ class ProduceRequest(Request):
 
         ``required_acks`` determines how many acknowledgement the server waits
         for before returning. This is useful for ensuring the replication factor
-        of published messages. The behavior is:
+        of published messages. The behavior is::
 
             -1: Block until all servers acknowledge
             0: No waiting -- server doesn't even respond to the Produce request
