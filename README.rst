@@ -97,11 +97,14 @@ Using the librdkafka extension
 
 To use the librdkafka extension, you need to make sure the header files and
 shared library are somewhere where python can find them, both when you build
-the extension (which is taken care of by `setup.py develop`) and at run time.
+the extension (which is taken care of by ``setup.py develop``) and at run time.
+Typically, this means that you need to either install librdkafka in a place
+conventional for your system, or declare ``C_INCLUDE_PATH``, ``LIBRARY_PATH``,
+and ``LD_LIBRARY_PATH`` in your shell environment.
 
 After that, all that's needed is that you pass an extra parameter
-`use_rdkafka=True` to `topic.get_simple_consumer()` (or
-`topic.get_balanced_consumer()`.
+``use_rdkafka=True`` to ``topic.get_simple_consumer()`` (or
+``topic.get_balanced_consumer()``.
 
 We currently test against librdkafka `0.8.6`_ only.
 
