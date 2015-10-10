@@ -238,10 +238,11 @@ class Producer(object):
         partitions = list(self._topic.partitions.values())
         partition_id = self._partitioner(partitions, partition_key).id
         message_partition_tup = (partition_key, message), partition_id, 0
-        self._produce(message_partition_tup)
+        res = self._produce(message_partition_tup)
         if self._synchronous:
             self._wait_all()
         self._raise_worker_exceptions()
+        return res
 
     def _produce(self, message_partition_tup):
         """Enqueue a message for the relevant broker
