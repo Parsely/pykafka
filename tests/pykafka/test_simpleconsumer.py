@@ -6,7 +6,7 @@ from uuid import uuid4
 from pykafka import KafkaClient
 from pykafka.simpleconsumer import OwnedPartition, OffsetType
 from pykafka.test.utils import get_cluster, stop_cluster
-from pykafka.utils.compat import range
+from pykafka.utils.compat import range, iteritems
 
 
 class TestSimpleConsumer(unittest2.TestCase):
@@ -57,7 +57,7 @@ class TestSimpleConsumer(unittest2.TestCase):
             offsets_committed = consumer.held_offsets
             consumer.commit_offsets()
 
-            offsets_fetched = dict((r[0], r[1].offset)
+            offsets_fetched = dict((r[0], r[1].offset - 1)
                                    for r in consumer.fetch_offsets())
             self.assertEquals(offsets_fetched, offsets_committed)
 
@@ -136,6 +136,21 @@ class TestSimpleConsumer(unittest2.TestCase):
             self.assertEqual(msg.offset, expected_offset)
             self.assertEqual(consumer.held_offsets[part_id], expected_offset)
 
+    def test_consumer_lag(self):
+        """Ensure that after consuming the entire topic, lag is 0"""
+        with self._get_simple_consumer(consumer_group=b"test_lag_group",
+                                       consumer_timeout_ms=1000) as consumer:
+            while True:
+                message = consumer.consume()
+                if message is None:
+                    break
+            consumer.commit_offsets()
+            latest_offsets = {p_id: res.offset[0]
+                              for p_id, res
+                              in iteritems(consumer.topic.latest_available_offsets())}
+            current_offsets = {p_id: res.offset for p_id, res in consumer.fetch_offsets()}
+            self.assertEqual(current_offsets, latest_offsets)
+
 
 class TestOwnedPartition(unittest2.TestCase):
     def test_partition_saves_offset(self):
@@ -189,7 +204,7 @@ class TestOwnedPartition(unittest2.TestCase):
 
         self.assertEqual(request.topic_name, topic.name)
         self.assertEqual(request.partition_id, partition.id)
-        self.assertEqual(request.offset, op.last_offset_consumed)
+        self.assertEqual(request.offset, op.last_offset_consumed + 1)
         self.assertEqual(request.metadata, b'pykafka')
 
     def test_partition_offset_fetch_request(self):
