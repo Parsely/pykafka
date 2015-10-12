@@ -9,7 +9,7 @@ Get the `source code`_:
 ::
 
     git clone https://github.com/Parsely/pykafka.git
-    
+
 .. _source code: https://github.com/Parsely/pykafka
 
 Set up the project for development and run the tests:
@@ -17,9 +17,9 @@ Set up the project for development and run the tests:
 ::
 
     python setup.py develop
-    ./nosetests -v
-    
-Now any changes made in the ``pykafka/`` folder will immediately be reflected in the 
+    tox
+
+Now any changes made in the ``pykafka/`` folder will immediately be reflected in the
 pykafka in your environment.
 
 Testing
@@ -54,7 +54,7 @@ It can be helpful to set up a git hook to run the tests before pushing to master
 Pull Request Guidelines
 -----------------------
 
-Everything going into the master branch, except the most trivial fixes, should take
+Everything going into the master branch, except the most trivial fixes, should
 first start on a feature branch. Feature branches should be named in the format of
 ``feature/<description>`` where ``<description>`` is some descriptive name for what's
 being added.
