@@ -1,6 +1,27 @@
 PyKafka Contribution Guidelines
 ===============================
 
+Quick Start
+-----------
+
+Get the `source code`_:
+
+::
+
+    git clone https://github.com/Parsely/pykafka.git
+
+.. _source code: https://github.com/Parsely/pykafka
+
+Set up the project for development and run the tests:
+
+::
+
+    python setup.py develop
+    tox
+
+Now any changes made in the ``pykafka/`` folder will immediately be reflected in the
+pykafka in your environment.
+
 Testing
 -------
 
@@ -33,7 +54,14 @@ It can be helpful to set up a git hook to run the tests before pushing to master
 Pull Request Guidelines
 -----------------------
 
-TODO
+Everything going into the master branch, except the most trivial fixes, should
+first start on a feature branch. Feature branches should be named in the format of
+``feature/<description>`` where ``<description>`` is some descriptive name for what's
+being added.
+
+The Pull Request can be made via the normal GitHub interface and should include
+some meaningful description as well as a link to a related Issue, if that exists. The
+branch should also include tests when possible.
 
 Versioning
 ----------
