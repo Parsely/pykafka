@@ -615,20 +615,6 @@ class SimpleConsumer():
                         raise
 
                 parts_by_error = build_parts_by_error(response, self._partitions_by_id)
-                # release the lock in these cases, since resolving the error
-                # requires an offset reset and not releasing the lock would
-                # lead to a deadlock in reset_offsets. For successful requests
-                # or requests with different errors, we still assume that
-                # it's ok to retain the lock since no offset_reset can happen
-                # before this function returns
-                out_of_range = parts_by_error.get(OffsetOutOfRangeError.ERROR_CODE, [])
-                for owned_partition, res in out_of_range:
-                    owned_partition.fetch_lock.release()
-                    # remove them from the dict of partitions to unlock to avoid
-                    # double-unlocking
-                    partition_reqs.pop(owned_partition)
-                # handle the rest of the errors that don't require deadlock
-                # management
                 handle_partition_responses(
                     self._default_error_handlers,
                     parts_by_error=parts_by_error,
@@ -659,7 +645,7 @@ class OwnedPartition(object):
         self._messages_arrived = semaphore
         self.last_offset_consumed = 0
         self.next_offset = 0
-        self.fetch_lock = threading.Lock()
+        self.fetch_lock = threading.RLock()
 
     @property
     def message_count(self):
