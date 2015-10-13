@@ -1,7 +1,7 @@
 from contextlib import contextmanager
 import unittest2
 
-from pykafka.exceptions import ConsumerStoppedException
+from pykafka.exceptions import ConsumerStoppedException, RdKafkaException
 from pykafka.rdkafka import _rd_kafka
 from pykafka.test.utils import get_cluster, stop_cluster
 from pykafka.utils.compat import get_bytes
@@ -45,11 +45,11 @@ class TestRdKafkaConsumer(unittest2.TestCase):
         """See if Consumer_start cleans up upon failure"""
         with self.assert_thread_cnt_non_increasing():
             consumer = _rd_kafka.Consumer()
-            with self.assertRaises(_rd_kafka.Error):
-                consumer.start(brokers=b"",
-                           topic_name=self.topic_name,
-                           partition_ids=self.partition_ids,
-                           start_offsets=self.start_offsets)
+            with self.assertRaises(RdKafkaException):
+                consumer.start(brokers=b"",  # this causes the exception
+                               topic_name=self.topic_name,
+                               partition_ids=self.partition_ids,
+                               start_offsets=self.start_offsets)
 
     def test_stop(self):
         """Check Consumer_stop really shuts down the librdkafka consumer

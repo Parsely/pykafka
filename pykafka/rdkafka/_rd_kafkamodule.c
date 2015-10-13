@@ -54,17 +54,16 @@ logging_callback(const rd_kafka_t *rk,
  */
 
 static PyObject *pykafka_exceptions;
-static PyObject *PyRdKafkaError;
 
 
 /* Raise an exception from pykafka.exceptions (always returns NULL, to allow
- * shorthand `return set_pykafka_error("Exception")`) */
+ * shorthand `return set_pykafka_error("Exception", "error message")`) */
 static PyObject *
-set_pykafka_error(const char *err_name)
+set_pykafka_error(const char *err_name, const char *err_msg)
 {
     PyObject *error = PyObject_GetAttrString(pykafka_exceptions, err_name);
     if (! error) return NULL;
-    PyErr_SetNone(error);
+    PyErr_SetString(error, err_msg);
     Py_DECREF(error);
     return NULL;
 }
@@ -74,10 +73,17 @@ static void
 set_PyRdKafkaError(rd_kafka_resp_err_t err, const char *extra_msg)
 {
     /* Raise an exception, carrying the error code at Exception.args[0] */
+
+    PyObject *error = PyObject_GetAttrString(
+            pykafka_exceptions, "RdKafkaException");
+    if (! error) return;
+
     PyObject *err_obj = Py_BuildValue("lss", (long)err,
                                              rd_kafka_err2str(err),
                                              extra_msg);
-    PyErr_SetObject(PyRdKafkaError, err_obj);
+    PyErr_SetObject(error, err_obj);
+
+    Py_DECREF(error);
     Py_DECREF(err_obj);
 }
 
@@ -156,7 +162,7 @@ static PyMemberDef RdkHandle_members[] = {
 static PyObject *
 RdkHandle_outq_len(RdkHandle *self) {
     if (! self->rdk_handle) {
-        return set_pykafka_error("ProducerStoppedException");
+        return set_pykafka_error("ProducerStoppedException", "");
     }
     int outq_len = -1;
     Py_BEGIN_ALLOW_THREADS  /* avoid callbacks deadlocking */
@@ -175,7 +181,7 @@ RdkHandle_poll(RdkHandle *self, PyObject *args, PyObject *kwds)
             return NULL;
     }
     if (! self->rdk_handle) {
-        return set_pykafka_error("ProducerStoppedException");
+        return set_pykafka_error("ProducerStoppedException", "");
     }
     int n_events = 0;
     Py_BEGIN_ALLOW_THREADS  /* avoid callbacks deadlocking */
@@ -264,16 +270,14 @@ RdkHandle_configure(RdkHandle *self, PyObject *args, PyObject *kwds)
     }
 
     if ((conf && topic_conf) || (!conf && !topic_conf)) {
-        set_PyRdKafkaError(
-            RD_KAFKA_RESP_ERR__FAIL,
+        return set_pykafka_error(
+            "RdKafkaException",
             "You need to specify *either* `conf` *or* `topic_conf`.");
-        return NULL;
     }
     if (self->rdk_handle) {
-        set_PyRdKafkaError(
-            RD_KAFKA_RESP_ERR__FAIL,
+        return set_pykafka_error(
+            "RdKafkaException",
             "Cannot configure: seems instance was started already?");
-        return NULL;
     }
 
     Py_BEGIN_ALLOW_THREADS  /* avoid callbacks deadlocking */
@@ -303,8 +307,7 @@ RdkHandle_configure(RdkHandle *self, PyObject *args, PyObject *kwds)
             }
         Py_END_ALLOW_THREADS
         if (res != RD_KAFKA_CONF_OK) {
-            set_PyRdKafkaError(RD_KAFKA_RESP_ERR__FAIL, errstr);
-            return NULL;
+            return set_pykafka_error("RdKafkaException", errstr);
         }
     }
     Py_INCREF(Py_None);
@@ -345,8 +348,7 @@ RdkHandle_start(RdkHandle *self,
         self->rdk_conf = NULL;  /* deallocated by rd_kafka_new() */
     Py_END_ALLOW_THREADS
     if (! self->rdk_handle) {
-        set_PyRdKafkaError(RD_KAFKA_RESP_ERR__FAIL, errstr);
-        return NULL;
+        return set_pykafka_error("RdKafkaException", errstr);
     }
 
     /* Set logger and brokers */
@@ -356,7 +358,7 @@ RdkHandle_start(RdkHandle *self,
         brokers_added = rd_kafka_brokers_add(self->rdk_handle, brokers);
     Py_END_ALLOW_THREADS
     if (brokers_added == 0) {
-        set_PyRdKafkaError(RD_KAFKA_RESP_ERR__FAIL, "adding brokers failed");
+        set_pykafka_error("RdKafkaException", "adding brokers failed");
         return RdkHandle_start_fail(self, RdkHandle_stop);
     }
 
@@ -509,7 +511,10 @@ Producer_start(RdkHandle *self, PyObject *args, PyObject *kwds)
     }
 
     /* Configure delivery-reporting */
-    if (! self->rdk_conf) return set_pykafka_error("KafkaException");
+    if (! self->rdk_conf) {
+        return set_pykafka_error("RdKafkaException",
+                                 "Please run configure() before starting.");
+    }
     rd_kafka_conf_set_dr_msg_cb(self->rdk_conf,
                                 Producer_delivery_report_callback);
     self->pending_futures = PyDict_New();
@@ -567,14 +572,13 @@ Producer_produce(RdkHandle *self, PyObject *args)
         if (err == RD_KAFKA_RESP_ERR__QUEUE_FULL) {
             /* Remove `future` as we're not going to return it */
             if (-1 == PyDict_DelItem(self->pending_futures, key)) goto failed;
-            set_pykafka_error("ProducerQueueFullError");
+            set_pykafka_error("ProducerQueueFullError", "");
             goto failed;
         } else {
             /* Any other errors should be returned through `future`, because
              * that's where pykafka.Producer would put them */
             if (-1 == Producer_delivery_report_set_exception(future, err)) {
-                set_PyRdKafkaError(RD_KAFKA_RESP_ERR__FAIL,
-                                   "see log for details");
+                set_pykafka_error("RdKafkaException", "see log for details");
                 goto failed;
             }
         }
@@ -743,7 +747,7 @@ Consumer_start(RdkHandle *self, PyObject *args, PyObject *kwds)
        might be mutable, and weird things could happen if the list used on init
        is different than that on dealloc */
     if (self->partition_ids) {
-        set_PyRdKafkaError(RD_KAFKA_RESP_ERR__FAIL, "Already started.");
+        set_pykafka_error("RdKafkaException", "Already started.");
         return Consumer_start_fail(self);
     }
     self->partition_ids = PySequence_List(partition_ids);
@@ -754,7 +758,7 @@ Consumer_start(RdkHandle *self, PyObject *args, PyObject *kwds)
         self->rdk_queue_handle = rd_kafka_queue_new(self->rdk_handle);
     Py_END_ALLOW_THREADS
     if (! self->rdk_queue_handle) {
-        set_PyRdKafkaError(RD_KAFKA_RESP_ERR__FAIL, "could not get queue");
+        set_pykafka_error("RdKafkaException", "could not get queue");
         return Consumer_start_fail(self);
     }
     Py_ssize_t i, len = PyList_Size(self->partition_ids);
@@ -795,7 +799,7 @@ Consumer_consume(RdkHandle *self, PyObject *args)
     int timeout_ms = 0;
     if (! PyArg_ParseTuple(args, "i", &timeout_ms)) return NULL;
     if (! self->rdk_queue_handle) {
-        return set_pykafka_error("ConsumerStoppedException");
+        return set_pykafka_error("ConsumerStoppedException", "");
     }
 
     rd_kafka_message_t *rkmessage;
@@ -913,9 +917,8 @@ debug_wait_destroyed(PyObject *self, PyObject *arg)
     Py_END_ALLOW_THREADS
 
     if (res == -1) {
-        set_PyRdKafkaError(RD_KAFKA_RESP_ERR__FAIL,
-                           "rd_kafka_wait_destroyed timed out");
-        return NULL;
+        return set_pykafka_error("RdKafkaException",
+                                 "rd_kafka_wait_destroyed timed out");
     }
     Py_INCREF(Py_None);
     return Py_None;
@@ -979,11 +982,6 @@ _rd_kafkamodule_init(void)
 
     pykafka_exceptions = PyImport_ImportModule("pykafka.exceptions");
     if (! pykafka_exceptions) return NULL;
-
-    PyRdKafkaError = PyErr_NewException("pykafka.rdkafka.Error", NULL, NULL);
-    if (!PyRdKafkaError) return NULL;
-    Py_INCREF(PyRdKafkaError);
-    if (PyModule_AddObject(mod, "Error", PyRdKafkaError)) return NULL;
 
     if (MessageType.tp_name == NULL) {
         PyStructSequence_InitType(&MessageType, &Message_desc);
