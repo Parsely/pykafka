@@ -57,7 +57,8 @@ Pull Request Guidelines
 Everything going into the master branch, except the most trivial fixes, should
 first start on a feature branch. Feature branches should be named in the format of
 ``feature/<description>`` where ``<description>`` is some descriptive name for what's
-being added.
+being added. ``bugfix`` and ``enhancement`` prefixes can be used in place of ``feature``
+when appropriate.
 
 The Pull Request can be made via the normal GitHub interface and should include
 some meaningful description as well as a link to a related Issue, if that exists. The
