@@ -226,9 +226,9 @@ class BalancedConsumer():
                                   self._zookeeper_connection_timeout_ms)
         self._zookeeper.ensure_path(self._topic_path)
         self._add_self()
+        self._running = True
         self._set_watches()
         self._rebalance()
-        self._running = True
         self._setup_checker_worker()
 
     def stop(self):
@@ -236,10 +236,18 @@ class BalancedConsumer():
 
         This method should be called as part of a graceful shutdown process.
         """
-        if self._owns_zookeeper:
-            self._zookeeper.stop()
-        self._consumer.stop()
         self._running = False
+        self._consumer.stop()
+        if self._owns_zookeeper:
+            # NB this should always come last, so we do not hand over control
+            # of our partitions until consumption has really been halted
+            self._zookeeper.stop()
+        else:
+            self._remove_partitions(self._partitions)
+            self._zookeeper.delete(self._path_self)
+            # additionally we'd want to remove watches here, but there are no
+            # facilities for that in ChildrenWatch - as a workaround we check
+            # self._running in the watcher callbacks (see further down)
 
     def _setup_zookeeper(self, zookeeper_connect, timeout):
         """Open a connection to a ZooKeeper host.
@@ -392,12 +400,16 @@ class BalancedConsumer():
         if len(self._topic.partitions) <= len(participants):
             raise KafkaException("Cannot add consumer: more consumers than partitions")
 
-        path = '{path}/{id_}'.format(
+        self._zookeeper.create(
+            self._path_self, self._topic.name, ephemeral=True, makepath=True)
+
+    @property
+    def _path_self(self):
+        """Path where this consumer should be registered in zookeeper"""
+        return '{path}/{id_}'.format(
             path=self._consumer_id_path,
             id_=self._consumer_id
         )
-        self._zookeeper.create(
-            path, self._topic.name, ephemeral=True, makepath=True)
 
     def _rebalance(self):
         """Claim partitions for this consumer.
@@ -504,18 +516,24 @@ class BalancedConsumer():
             self._rebalance()
 
     def _brokers_changed(self, brokers):
+        if not self._running:
+            return False  # `False` tells ChildrenWatch to disable this watch
         if self._setting_watches:
             return
         log.debug("Rebalance triggered by broker change")
         self._rebalance()
 
     def _consumers_changed(self, consumers):
+        if not self._running:
+            return False  # `False` tells ChildrenWatch to disable this watch
         if self._setting_watches:
             return
         log.debug("Rebalance triggered by consumer change")
         self._rebalance()
 
     def _topics_changed(self, topics):
+        if not self._running:
+            return False  # `False` tells ChildrenWatch to disable this watch
         if self._setting_watches:
             return
         log.debug("Rebalance triggered by topic change")

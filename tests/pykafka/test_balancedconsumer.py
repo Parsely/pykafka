@@ -3,6 +3,8 @@ import mock
 import time
 import unittest2
 
+from kazoo.client import KazooClient
+
 from pykafka import KafkaClient
 from pykafka.balancedconsumer import BalancedConsumer, OffsetType
 from pykafka.test.utils import get_cluster, stop_cluster
@@ -176,6 +178,22 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
         finally:
             consumer_a.stop()
             consumer_b.stop()
+
+    def test_external_kazoo_client(self):
+        """Run with pre-existing KazooClient instance
+
+        This currently doesn't assert anything, it just rules out any trivial
+        exceptions in the code path that uses an external KazooClient
+        """
+        zk = KazooClient(self.kafka.zookeeper)
+        zk.start()
+
+        consumer = self.client.topics[self.topic_name].get_balanced_consumer(
+                b'test_external_kazoo_client',
+                zookeeper=zk,
+                consumer_timeout_ms=10)
+        messages = [msg for msg in consumer]
+        consumer.stop()
 
 
 if __name__ == "__main__":
