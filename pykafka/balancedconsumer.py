@@ -242,6 +242,12 @@ class BalancedConsumer():
             # NB this should always come last, so we do not hand over control
             # of our partitions until consumption has really been halted
             self._zookeeper.stop()
+        else:
+            self._remove_partitions(self._partitions)
+            self._zookeeper.delete(self._path_self())
+            # additionally we'd want to remove watches here, but there are no
+            # facilities for that in ChildrenWatch - as a workaround we check
+            # self._running in the watcher callbacks (see further down)
 
     def _setup_zookeeper(self, zookeeper_connect, timeout):
         """Open a connection to a ZooKeeper host.
@@ -394,12 +400,15 @@ class BalancedConsumer():
         if len(self._topic.partitions) <= len(participants):
             raise KafkaException("Cannot add consumer: more consumers than partitions")
 
-        path = '{path}/{id_}'.format(
+        self._zookeeper.create(
+            self._path_self(), self._topic.name, ephemeral=True, makepath=True)
+
+    def _path_self(self):
+        """Path where this consumer should be registered in zookeeper"""
+        return '{path}/{id_}'.format(
             path=self._consumer_id_path,
             id_=self._consumer_id
         )
-        self._zookeeper.create(
-            path, self._topic.name, ephemeral=True, makepath=True)
 
     def _rebalance(self):
         """Claim partitions for this consumer.
