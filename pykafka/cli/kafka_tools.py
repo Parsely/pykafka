@@ -1,3 +1,4 @@
+from __future__ import print_function
 import argparse
 import calendar
 import datetime as dt
@@ -72,15 +73,15 @@ def desc_topic(client, args):
     if args.topic not in client.topics:
         raise ValueError('Topic {} does not exist.'.format(args.topic))
     topic = client.topics[args.topic]
-    print 'Topic: {}'.format(topic.name)
-    print 'Partitions: {}'.format(len(topic.partitions))
-    print 'Replicas: {}'.format(len(topic.partitions.values()[0].replicas))
-    print tabulate.tabulate(
+    print('Topic: {}'.format(topic.name))
+    print('Partitions: {}'.format(len(topic.partitions)))
+    print('Replicas: {}'.format(len(topic.partitions.values()[0].replicas)))
+    print(tabulate.tabulate(
         [(p.id, p.leader.id, [r.id for r in p.replicas], [r.id for r in p.isr])
          for p in topic.partitions.values()],
         headers=['Partition', 'Leader', 'Replicas', 'ISR'],
         numalign='center',
-    )
+    ))
 
 
 def print_consumer_lag(client, args):
@@ -101,14 +102,14 @@ def print_consumer_lag(client, args):
     lag_info = fetch_consumer_lag(client, topic, args.consumer_group)
     lag_info = [(k, '{:,}'.format(v[0] - v[1]), v[0], v[1])
                 for k, v in lag_info.iteritems()]
-    print tabulate.tabulate(
+    print(tabulate.tabulate(
         lag_info,
         headers=['Partition', 'Lag', 'Latest Offset', 'Current Offset'],
         numalign='center',
-    )
+    ))
 
     total = sum(int(i[1].replace(',', '')) for i in lag_info)
-    print '\n Total lag: {:,} messages.'.format(total)
+    print('\n Total lag: {:,} messages.'.format(total))
 
 
 def print_offsets(client, args):
@@ -134,11 +135,11 @@ def print_offsets(client, args):
     topic = client.topics[args.topic]
 
     offsets = fetch_offsets(client, topic, args.offset)
-    print tabulate.tabulate(
+    print(tabulate.tabulate(
         [(k, v.offset[0]) for k, v in offsets.iteritems()],
         headers=['Partition', 'Offset'],
         numalign='center',
-    )
+    ))
 
 
 def print_topics(client, args):
@@ -147,14 +148,14 @@ def print_topics(client, args):
     :param client: KafkaClient connected to the cluster.
     :type client:  :class:`pykafka.KafkaClient`
     """
-    print tabulate.tabulate(
+    print(tabulate.tabulate(
         [(t.name,
           len(t.partitions),
           len(t.partitions.values()[0].replicas) - 1)
          for t in client.topics.values()],
         headers=['Topic', 'Partitions', 'Replication'],
         numalign='center',
-    )
+    ))
 
 
 def reset_offsets(client, args):
