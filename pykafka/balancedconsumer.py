@@ -226,9 +226,9 @@ class BalancedConsumer():
                                   self._zookeeper_connection_timeout_ms)
         self._zookeeper.ensure_path(self._topic_path)
         self._add_self()
+        self._running = True
         self._set_watches()
         self._rebalance()
-        self._running = True
         self._setup_checker_worker()
 
     def stop(self):
@@ -506,18 +506,24 @@ class BalancedConsumer():
             self._rebalance()
 
     def _brokers_changed(self, brokers):
+        if not self._running:
+            return False  # disables the watcher
         if self._setting_watches:
             return
         log.debug("Rebalance triggered by broker change")
         self._rebalance()
 
     def _consumers_changed(self, consumers):
+        if not self._running:
+            return False  # disables the watcher
         if self._setting_watches:
             return
         log.debug("Rebalance triggered by consumer change")
         self._rebalance()
 
     def _topics_changed(self, topics):
+        if not self._running:
+            return False  # disables the watcher
         if self._setting_watches:
             return
         log.debug("Rebalance triggered by topic change")

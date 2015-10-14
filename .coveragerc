@@ -1,5 +1,6 @@
 [run]
 source = pykafka
+branch = True
 omit =
     */python?.?/*
     */lib-python/?.?/*.py
