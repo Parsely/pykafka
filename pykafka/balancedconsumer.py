@@ -244,7 +244,7 @@ class BalancedConsumer():
             self._zookeeper.stop()
         else:
             self._remove_partitions(self._partitions)
-            self._zookeeper.delete(self._path_self())
+            self._zookeeper.delete(self._path_self)
             # additionally we'd want to remove watches here, but there are no
             # facilities for that in ChildrenWatch - as a workaround we check
             # self._running in the watcher callbacks (see further down)
@@ -401,8 +401,9 @@ class BalancedConsumer():
             raise KafkaException("Cannot add consumer: more consumers than partitions")
 
         self._zookeeper.create(
-            self._path_self(), self._topic.name, ephemeral=True, makepath=True)
+            self._path_self, self._topic.name, ephemeral=True, makepath=True)
 
+    @property
     def _path_self(self):
         """Path where this consumer should be registered in zookeeper"""
         return '{path}/{id_}'.format(
