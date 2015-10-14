@@ -651,8 +651,7 @@ class SimpleConsumer():
                     # If the broker dies while we're supposed to stop,
                     # it's fine, and probably an integration test.
                     if self._running:
-                        log.debug("Updating cluster metadata in response to exception")
-                        self._update()
+                        raise
                     return
 
                 parts_by_error = build_parts_by_error(response, self._partitions_by_id)
