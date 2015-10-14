@@ -236,10 +236,12 @@ class BalancedConsumer():
 
         This method should be called as part of a graceful shutdown process.
         """
-        if self._owns_zookeeper:
-            self._zookeeper.stop()
-        self._consumer.stop()
         self._running = False
+        self._consumer.stop()
+        if self._owns_zookeeper:
+            # NB this should always come last, so we do not hand over control
+            # of our partitions until consumption has really been halted
+            self._zookeeper.stop()
 
     def _setup_zookeeper(self, zookeeper_connect, timeout):
         """Open a connection to a ZooKeeper host.
