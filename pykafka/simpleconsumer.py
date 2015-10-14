@@ -192,9 +192,6 @@ class SimpleConsumer():
         """Raises exceptions encountered on worker threads"""
         if self._worker_exception is not None:
             _, ex, tb = self._worker_exception
-            # avoid logging worker exceptions more than once, which can
-            # happen when this function's `raise` triggers `__exit__`
-            # which calls `stop`
             if not self._worker_trace_logged:
                 self._worker_trace_logged = True
                 log.error("Exception encountered in worker thread:\n%s",
