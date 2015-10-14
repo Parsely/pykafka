@@ -315,7 +315,6 @@ class SimpleConsumer():
                     time.sleep(.0001)
                 except Exception:
                     # surface all exceptions to the main thread
-                    print sys.exc_info()[0]
                     self._worker_exception = sys.exc_info()
                     break
             log.debug("Fetcher thread exiting")
