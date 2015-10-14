@@ -224,13 +224,13 @@ class Producer(object):
     def produce(self, message, partition_key=None):
         """Produce a message.
 
-        :param message: The message to produce
+        :param message: The message to produce (use None to send null)
         :type message: bytes
         :param partition_key: The key to use when deciding which partition to send this
             message to
         :type partition_key: bytes
         """
-        if not isinstance(message, bytes):
+        if not (isinstance(message, bytes) or message is None):
             raise TypeError("Producer.produce accepts a bytes object, but it "
                             "got '%s'", type(message))
         if not self._running:
