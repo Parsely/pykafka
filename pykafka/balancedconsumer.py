@@ -517,7 +517,7 @@ class BalancedConsumer():
 
     def _brokers_changed(self, brokers):
         if not self._running:
-            return False  # disables the watcher
+            return False  # `False` tells ChildrenWatch to disable this watch
         if self._setting_watches:
             return
         log.debug("Rebalance triggered by broker change")
@@ -525,7 +525,7 @@ class BalancedConsumer():
 
     def _consumers_changed(self, consumers):
         if not self._running:
-            return False  # disables the watcher
+            return False  # `False` tells ChildrenWatch to disable this watch
         if self._setting_watches:
             return
         log.debug("Rebalance triggered by consumer change")
@@ -533,7 +533,7 @@ class BalancedConsumer():
 
     def _topics_changed(self, topics):
         if not self._running:
-            return False  # disables the watcher
+            return False  # `False` tells ChildrenWatch to disable this watch
         if self._setting_watches:
             return
         log.debug("Rebalance triggered by topic change")
