@@ -505,7 +505,7 @@ class BalancedConsumer():
             owner_id, stat = self._zookeeper.get(
                 '{path}/{slug}'.format(
                     path=self._topic_path, slug=partition_slug))
-            if owner_id == self._consumer_id:
+            if owner_id == get_bytes(self._consumer_id):
                 zk_partition_ids.add(int(partition_slug.split('-')[1]))
         # build a set of partition ids we think we own
         internal_partition_ids = set([p.id for p in self._partitions])
