@@ -202,7 +202,8 @@ class BalancedConsumer():
                 time.sleep(120)
                 if not self._running:
                     break
-                self._check_held_partitions()
+                if not self._check_held_partitions():
+                    self._rebalance()
             log.debug("Checker thread exiting")
         log.debug("Starting checker thread")
         return self._cluster.handler.spawn(checker)
@@ -493,8 +494,8 @@ class BalancedConsumer():
     def _check_held_partitions(self):
         """Double-check held partitions against zookeeper
 
-        Ensure that the partitions held by this consumer are the ones that
-        zookeeper thinks it's holding. If not, rebalance.
+        True if the partitions held by this consumer are the ones that
+        zookeeper thinks it's holding, else False.
         """
         log.info("Checking held partitions against ZooKeeper")
         # build a set of partition ids zookeeper says we own
@@ -513,7 +514,8 @@ class BalancedConsumer():
             log.warning("Internal partition registry doesn't match ZooKeeper!")
             log.debug("Internal partition ids: %s\nZooKeeper partition ids: %s",
                       internal_partition_ids, zk_partition_ids)
-            self._rebalance()
+            return False
+        return True
 
     def _brokers_changed(self, brokers):
         if not self._running:

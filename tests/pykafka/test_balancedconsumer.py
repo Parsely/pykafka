@@ -195,6 +195,26 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
         messages = [msg for msg in consumer]
         consumer.stop()
 
+    def test_zk_conn_lost(self):
+        """Check we restore zookeeper nodes correctly after connection loss
+
+        See also github issue #204.
+        """
+        zk = KazooClient(self.kafka.zookeeper)
+        zk.start()
+        try:
+            topic = self.client.topics[self.topic_name]
+            consumer = topic.get_balanced_consumer(b'test_zk_conn_lost',
+                                                   zookeeper=zk)
+            self.assertTrue(consumer._check_held_partitions())
+            zk.restart()  # expires session, dropping all our nodes
+
+            time.sleep(.3)  # allow consumer time to begin rebalancing
+            with consumer._rebalancing_lock:  # wait until rebalancing finishes
+                self.assertTrue(consumer._check_held_partitions())
+        finally:
+            consumer.stop()
+
 
 if __name__ == "__main__":
     unittest2.main()
