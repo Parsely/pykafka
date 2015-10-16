@@ -139,8 +139,11 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
                 set(self.client.topics[self.topic_name].partitions.values())
             )
         finally:
-            consumer_a.stop()
-            consumer_b.stop()
+            try:
+                consumer_a.stop()
+                consumer_b.stop()
+            except:
+                pass
 
     def test_consume_latest(self):
         try:
@@ -176,8 +179,11 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
                 set(self.client.topics[self.topic_name].partitions.values())
             )
         finally:
-            consumer_a.stop()
-            consumer_b.stop()
+            try:
+                consumer_a.stop()
+                consumer_b.stop()
+            except:
+                pass
 
     def test_external_kazoo_client(self):
         """Run with pre-existing KazooClient instance
@@ -207,13 +213,23 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
             consumer = topic.get_balanced_consumer(b'test_zk_conn_lost',
                                                    zookeeper=zk)
             self.assertTrue(consumer._check_held_partitions())
-            zk.restart()  # expires session, dropping all our nodes
+            zk.stop()  # expires session, dropping all our nodes
 
-            time.sleep(.3)  # allow consumer time to begin rebalancing
+            # Start a second consumer on a different zk connection
+            other_consumer = topic.get_balanced_consumer(b'test_zk_conn_lost')
+
+            zk.start()
+            time.sleep(.3)  # allow consumers time to begin rebalancing
             with consumer._rebalancing_lock:  # wait until rebalancing finishes
                 self.assertTrue(consumer._check_held_partitions())
+            with other_consumer._rebalancing_lock:
+                self.assertTrue(other_consumer._check_held_partitions())
         finally:
-            consumer.stop()
+            try:
+                consumer.stop()
+                other_consumer.stop()
+            except:
+                pass
 
 
 if __name__ == "__main__":
