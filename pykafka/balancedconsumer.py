@@ -32,7 +32,7 @@ from .common import OffsetType
 from .exceptions import (KafkaException, PartitionOwnedError,
                          ConsumerStoppedException)
 from .simpleconsumer import SimpleConsumer
-from .utils.compat import range, get_bytes
+from .utils.compat import range, get_bytes, itervalues
 
 
 log = logging.getLogger(__name__)
@@ -171,7 +171,6 @@ class BalancedConsumer():
             hostname=socket.gethostname(),
             uuid=uuid4()
         )
-        self._partitions = set()
         self._setting_watches = True
 
         self._topic_path = '/consumers/{group}/owners/{topic}'.format(
@@ -213,6 +212,12 @@ class BalancedConsumer():
         return self._consumer.partitions if self._consumer else None
 
     @property
+    def _partitions(self):
+        """Convenient shorthand for set of partitions internally held"""
+        return set(
+            [] if self.partitions is None else itervalues(self.partitions))
+
+    @property
     def held_offsets(self):
         """Return a map from partition id to held offset for each partition"""
         if not self._consumer:
@@ -244,7 +249,7 @@ class BalancedConsumer():
             # of our partitions until consumption has really been halted
             self._zookeeper.stop()
         else:
-            self._remove_partitions(self._partitions)
+            self._remove_partitions(self._get_held_partitions())
             self._zookeeper.delete(self._path_self)
             # additionally we'd want to remove watches here, but there are no
             # facilities for that in ChildrenWatch - as a workaround we check
@@ -262,7 +267,7 @@ class BalancedConsumer():
         self._zookeeper = KazooClient(zookeeper_connect, timeout=timeout / 1000)
         self._zookeeper.start()
 
-    def _setup_internal_consumer(self, start=True):
+    def _setup_internal_consumer(self, partitions, start=True):
         """Instantiate an internal SimpleConsumer.
 
         If there is already a SimpleConsumer instance held by this object,
@@ -280,7 +285,7 @@ class BalancedConsumer():
             self._topic,
             self._cluster,
             consumer_group=self._consumer_group,
-            partitions=list(self._partitions),
+            partitions=partitions,
             auto_commit_enable=self._auto_commit_enable,
             auto_commit_interval_ms=self._auto_commit_interval_ms,
             fetch_message_max_bytes=self._fetch_message_max_bytes,
@@ -429,17 +434,24 @@ class BalancedConsumer():
                     # If retrying, be sure to make sure the
                     # partition allocation is correct.
                     participants = self._get_participants()
-                    partitions = self._decide_partitions(participants)
+                    if self._consumer_id not in participants:
+                        # situation that only occurs if our zk session expired
+                        self._add_self()
+                        participants.append(self._consumer_id)
 
-                    old_partitions = self._partitions - partitions
-                    self._remove_partitions(old_partitions)
+                    new_partitions = self._decide_partitions(participants)
 
-                    new_partitions = partitions - self._partitions
-                    self._add_partitions(new_partitions)
+                    # Update zk with any changes:
+                    old_partitions = self._get_held_partitions()
+                    self._remove_partitions(old_partitions - new_partitions)
+                    self._add_partitions(new_partitions - old_partitions)
 
                     # Only re-create internal consumer if something changed.
-                    if old_partitions or new_partitions:
-                        self._setup_internal_consumer()
+                    # Note that `old_partitions` may be different from
+                    # `self._partitions` if our zk session expired (in which
+                    # case the former may be empty while the latter isn't)
+                    if new_partitions != self._partitions:
+                        self._setup_internal_consumer(list(new_partitions))
 
                     log.info('Rebalancing Complete.')
                     break
@@ -461,21 +473,15 @@ class BalancedConsumer():
     def _remove_partitions(self, partitions):
         """Remove partitions from the zookeeper registry for this consumer.
 
-        Also remove these partitions from the consumer's internal
-        partition registry.
-
         :param partitions: The partitions to remove.
         :type partitions: Iterable of :class:`pykafka.partition.Partition`
         """
         for p in partitions:
-            assert p in self._partitions
+            # TODO pass zk node version to make sure we still own this node
             self._zookeeper.delete(self._path_from_partition(p))
-        self._partitions -= partitions
 
     def _add_partitions(self, partitions):
         """Add partitions to the zookeeper registry for this consumer.
-
-        Also add these partitions to the consumer's internal partition registry.
 
         :param partitions: The partitions to add.
         :type partitions: Iterable of :class:`pykafka.partition.Partition`
@@ -487,18 +493,11 @@ class BalancedConsumer():
                     value=get_bytes(self._consumer_id),
                     ephemeral=True
                 )
-                self._partitions.add(p)
             except NodeExistsError:
                 raise PartitionOwnedError(p)
 
-    def _check_held_partitions(self):
-        """Double-check held partitions against zookeeper
-
-        True if the partitions held by this consumer are the ones that
-        zookeeper thinks it's holding, else False.
-        """
-        log.info("Checking held partitions against ZooKeeper")
-        # build a set of partition ids zookeeper says we own
+    def _get_held_partitions(self):
+        """Build a set of partitions zookeeper says we own"""
         zk_partition_ids = set()
         all_partitions = self._zookeeper.get_children(self._topic_path)
         for partition_slug in all_partitions:
@@ -507,10 +506,17 @@ class BalancedConsumer():
                     path=self._topic_path, slug=partition_slug))
             if owner_id == get_bytes(self._consumer_id):
                 zk_partition_ids.add(int(partition_slug.split('-')[1]))
-        # build a set of partition ids we think we own
-        internal_partition_ids = set([p.id for p in self._partitions])
-        # compare the two sets, rebalance if necessary
-        if internal_partition_ids != zk_partition_ids:
+        return set(self._topic.partitions[_id] for _id in zk_partition_ids)
+
+    def _check_held_partitions(self):
+        """Double-check held partitions against zookeeper
+
+        True if the partitions held by this consumer are the ones that
+        zookeeper thinks it's holding, else False.
+        """
+        log.info("Checking held partitions against ZooKeeper")
+        zk_partitions = self._get_held_partitions()
+        if zk_partitions != self._partitions:
             log.warning("Internal partition registry doesn't match ZooKeeper!")
             log.debug("Internal partition ids: %s\nZooKeeper partition ids: %s",
                       internal_partition_ids, zk_partition_ids)
@@ -522,7 +528,8 @@ class BalancedConsumer():
             return False  # `False` tells ChildrenWatch to disable this watch
         if self._setting_watches:
             return
-        log.debug("Rebalance triggered by broker change")
+        log.debug("Rebalance triggered by broker change ({})".format(
+            self._consumer_id))
         self._rebalance()
 
     def _consumers_changed(self, consumers):
@@ -530,7 +537,8 @@ class BalancedConsumer():
             return False  # `False` tells ChildrenWatch to disable this watch
         if self._setting_watches:
             return
-        log.debug("Rebalance triggered by consumer change")
+        log.debug("Rebalance triggered by consumer change ({})".format(
+            self._consumer_id))
         self._rebalance()
 
     def _topics_changed(self, topics):
@@ -538,7 +546,8 @@ class BalancedConsumer():
             return False  # `False` tells ChildrenWatch to disable this watch
         if self._setting_watches:
             return
-        log.debug("Rebalance triggered by topic change")
+        log.debug("Rebalance triggered by topic change ({})".format(
+            self._consumer_id))
         self._rebalance()
 
     def reset_offsets(self, partition_offsets=None):
