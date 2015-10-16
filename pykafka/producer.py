@@ -100,7 +100,7 @@ class Producer(object):
         :type max_queued_messages: int
         :param min_queued_messages: The minimum number of messages the producer
             can have waiting in a queue before it flushes that queue to its
-            broker.
+            broker (must be greater than 0).
         :type min_queued_messages: int
         :param linger_ms: This setting gives the upper bound on the delay for
             batching: once the producer gets min_queued_messages worth of
@@ -129,7 +129,7 @@ class Producer(object):
         self._required_acks = required_acks
         self._ack_timeout_ms = ack_timeout_ms
         self._max_queued_messages = max_queued_messages
-        self._min_queued_messages = min_queued_messages
+        self._min_queued_messages = max(1, min_queued_messages)
         self._linger_ms = linger_ms
         self._block_on_queue_full = block_on_queue_full
         self._synchronous = sync
