@@ -501,11 +501,14 @@ class BalancedConsumer():
         zk_partition_ids = set()
         all_partitions = self._zookeeper.get_children(self._topic_path)
         for partition_slug in all_partitions:
-            owner_id, stat = self._zookeeper.get(
-                '{path}/{slug}'.format(
-                    path=self._topic_path, slug=partition_slug))
-            if owner_id == get_bytes(self._consumer_id):
-                zk_partition_ids.add(int(partition_slug.split('-')[1]))
+            try:
+                owner_id, stat = self._zookeeper.get(
+                    '{path}/{slug}'.format(
+                        path=self._topic_path, slug=partition_slug))
+                if owner_id == get_bytes(self._consumer_id):
+                    zk_partition_ids.add(int(partition_slug.split('-')[1]))
+            except NoNodeException:
+                pass  # disappeared between ``get_children`` and ``get``
         return set(self._topic.partitions[_id] for _id in zk_partition_ids)
 
     def _check_held_partitions(self):
