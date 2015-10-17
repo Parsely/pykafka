@@ -525,7 +525,7 @@ class BalancedConsumer():
         if zk_partitions != self._partitions:
             log.warning("Internal partition registry doesn't match ZooKeeper!")
             log.debug("Internal partition ids: %s\nZooKeeper partition ids: %s",
-                      internal_partition_ids, zk_partition_ids)
+                      self._partitions, zk_partitions)
             return False
         return True
 

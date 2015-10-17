@@ -219,7 +219,16 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
             # Start a second consumer on a different zk connection
             other_consumer = topic.get_balanced_consumer(consumer_group)
 
-            zk.start()
+            # Slightly contrived: we'll grab a lock to keep _rebalance() from
+            # starting when we restart the zk connection (restart triggers a
+            # rebalance), so we can confirm the expected discrepancy between
+            # the (empty) set of partitions on zk and the set in the internal
+            # consumer:
+            with consumer._rebalancing_lock:
+                zk.start()
+                self.assertFalse(consumer._check_held_partitions())
+
+            # Finally, confirm that _rebalance() resolves the discrepancy:
             time.sleep(.3)  # allow consumers time to begin rebalancing
             with consumer._rebalancing_lock:  # wait until rebalancing finishes
                 self.assertTrue(consumer._check_held_partitions())
