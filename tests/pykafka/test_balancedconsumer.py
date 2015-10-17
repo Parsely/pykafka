@@ -210,13 +210,14 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
         zk.start()
         try:
             topic = self.client.topics[self.topic_name]
-            consumer = topic.get_balanced_consumer(b'test_zk_conn_lost',
-                                                   zookeeper=zk)
+            consumer_group = b'test_zk_conn_lost'
+
+            consumer = topic.get_balanced_consumer(consumer_group, zookeeper=zk)
             self.assertTrue(consumer._check_held_partitions())
             zk.stop()  # expires session, dropping all our nodes
 
             # Start a second consumer on a different zk connection
-            other_consumer = topic.get_balanced_consumer(b'test_zk_conn_lost')
+            other_consumer = topic.get_balanced_consumer(consumer_group)
 
             zk.start()
             time.sleep(.3)  # allow consumers time to begin rebalancing
