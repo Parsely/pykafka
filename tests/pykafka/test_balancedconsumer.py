@@ -238,6 +238,7 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
             try:
                 consumer.stop()
                 other_consumer.stop()
+                zk.stop()
             except:
                 pass
 
