@@ -442,14 +442,17 @@ class BalancedConsumer():
                     new_partitions = self._decide_partitions(participants)
 
                     # Update zk with any changes:
-                    old_partitions = self._get_held_partitions()
-                    self._remove_partitions(old_partitions - new_partitions)
-                    self._add_partitions(new_partitions - old_partitions)
+                    # Note that we explicitly fetch our set of held partitions
+                    # from zk, rather than assuming it will be identical to
+                    # `self.partitions`.  This covers the (rare) situation
+                    # where due to an interrupted connection our zk session
+                    # has expired, in which case we'd hold zero partitions on
+                    # zk, but `self._partitions` may be outdated and non-empty
+                    current_zk_parts = self._get_held_partitions()
+                    self._remove_partitions(current_zk_parts - new_partitions)
+                    self._add_partitions(new_partitions - current_zk_parts)
 
                     # Only re-create internal consumer if something changed.
-                    # Note that `old_partitions` may be different from
-                    # `self._partitions` if our zk session expired (in which
-                    # case the former may be empty while the latter isn't)
                     if new_partitions != self._partitions:
                         self._setup_internal_consumer(list(new_partitions))
 
