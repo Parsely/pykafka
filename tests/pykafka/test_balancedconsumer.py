@@ -39,7 +39,7 @@ class TestBalancedConsumer(unittest2.TestCase):
     def test_consume_returns(self):
         """Ensure that consume() returns in the amount of time it's supposed to
         """
-        self._mock_consumer._setup_internal_consumer([], start=False)
+        self._mock_consumer._setup_internal_consumer(start=False)
         start = time.time()
         self._mock_consumer.consume()
         self.assertEqual(int(time.time() - start), int(self._consumer_timeout / 1000))
@@ -49,7 +49,7 @@ class TestBalancedConsumer(unittest2.TestCase):
         end in an infinite loop when timeout is not used.
         """
         consumer, _ = buildMockConsumer(timeout=-1)
-        consumer._setup_internal_consumer([], start=False)
+        consumer._setup_internal_consumer(start=False)
 
         consumer.stop()
         self.assertIsNone(consumer.consume())
