@@ -1,6 +1,41 @@
 Changelog
 =========
 
+2.0.1 (2015-10-19)
+------------------
+
+`Compare 2.0.1`_
+
+.. _Compare 2.0.1: https://github.com/Parsely/pykafka/compare/2.0.0...b01c62b7b512776dcb9822a8f3b785f5e65da3ab
+
+Features
+********
+
+* Added support for python 3.5
+* Added iteration to the `BalancedConsumer`
+* Disallowed `min_queued_messages<1` in `Producer`
+* Made `SimpleConsumer` commit offsets on `stop()`
+* Supported `None` in message values
+
+Bug Fixes
+*********
+
+* Improved `BalancedConsumer`'s handling of an external `KazooClient` instance
+* Fixed `kafka_tools.py` for Python 3
+* Removed the unused `use_greenlets` kwarg from `KafkaClient`
+* Improved `Cluster`'s ability to reconnect to brokers during metadata updates
+* Fixed an interpreter error in `conncection.py`
+* Fixed failure case in `Producer` when `required_acks==0`
+* Fixed a bug causing `SimpleConsumer` to leave zombie threads after disconnected brokers
+* Improved `SimpleConsumer`'s worker thread exception reporting
+* Simplified `SimpleConsumer`'s partition locking logic during `fetch` by using `RLock`
+* Fixed `SimpleConsumer` off-by-one error causing lag to never reach 0
+
+Miscellaneous
+*************
+
+* Switched from Coveralls to Codecov for converage tracking
+
 2.0.0 (2015-09-25)
 ------------------
 
