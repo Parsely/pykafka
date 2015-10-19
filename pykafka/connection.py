@@ -98,7 +98,7 @@ class BrokerConnection(object):
     def reconnect(self):
         """Disconnect from the broker, then reconnect"""
         self.disconnect()
-        self.connect()
+        self.connect(10 * 1000)
 
     def request(self, request):
         """Send a request over the socket connection"""

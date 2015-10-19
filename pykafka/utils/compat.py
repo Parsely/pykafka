@@ -11,7 +11,7 @@ def get_bytes(value):
     if hasattr(value, 'encode'):
         try:
             value = value.encode('utf-8')
-        except:
+        except UnicodeError:
             # if we can't encode the value just pass it along
             pass
     return value
@@ -21,7 +21,7 @@ def get_string(value):
     if hasattr(value, 'decode'):
         try:
             value = value.decode('utf-8')
-        except:
+        except UnicodeError:
             # if we can't decode the value just pass it along
             pass
     else:

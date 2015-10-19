@@ -172,7 +172,9 @@ class Message(Message, Serializable):
         self.produce_attempt = produce_attempt
 
     def __len__(self):
-        size = 4 + 1 + 1 + 4 + 4 + len(self.value)
+        size = 4 + 1 + 1 + 4 + 4
+        if self.value is not None:
+            size += len(self.value)
         if self.partition_key is not None:
             size += len(self.partition_key)
         return size
@@ -197,15 +199,16 @@ class Message(Message, Serializable):
         :param buff: The buffer to write into
         :param offset: The offset to start the write at
         """
-        if self.partition_key is None:
-            fmt = '!BBii%ds' % len(self.value)
-            args = (self.MAGIC, self.compression_type, -1,
-                    len(self.value), self.value)
-        else:
-            fmt = '!BBi%dsi%ds' % (len(self.partition_key), len(self.value))
-            args = (self.MAGIC, self.compression_type,
-                    len(self.partition_key), self.partition_key,
-                    len(self.value), self.value)
+        # NB a length of 0 means an empty string, whereas -1 means null
+        len_key = -1 if self.partition_key is None else len(self.partition_key)
+        len_value = -1 if self.value is None else len(self.value)
+        fmt = '!BBi%dsi%ds' % (max(len_key, 0), max(len_value, 0))
+        args = (self.MAGIC,
+                self.compression_type,
+                len_key,
+                self.partition_key or b"",
+                len_value,
+                self.value or b"")
         struct.pack_into(fmt, buff, offset + 4, *args)
         fmt_size = struct.calcsize(fmt)
         data = buffer(buff[(offset + 4):(offset + 4 + fmt_size)])

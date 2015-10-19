@@ -282,6 +282,8 @@ class SimpleConsumer():
     def stop(self):
         """Flag all running workers for deletion."""
         self._running = False
+        if self._auto_commit_enable and self._consumer_group is not None:
+            self.commit_offsets()
 
     def _setup_autocommit_worker(self):
         """Start the autocommitter thread"""
