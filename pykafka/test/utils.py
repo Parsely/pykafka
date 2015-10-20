@@ -12,7 +12,7 @@ def get_cluster():
     """
     if os.environ.get('BROKERS', None) and \
        os.environ.get('ZOOKEEPER', None) and \
-       os.environ.get('KAKFA_BIN', None):
+       os.environ.get('KAFKA_BIN', None):
         # Broker is already running. Use that.
         return KafkaConnection(os.environ['KAFKA_BIN'],
                                os.environ['BROKERS'],
