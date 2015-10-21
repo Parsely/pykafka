@@ -103,7 +103,7 @@ class RequestHandler(object):
         # _start_thread(), so be careful not to rebind it
         self.shared = self.Shared(connection=connection,
                                   requests=handler.Queue(),
-                                  ending=False)
+                                  ending=handler.Event())
 
     def __del__(self):
         self.stop()
@@ -133,7 +133,7 @@ class RequestHandler(object):
         self.shared = None
         log.info("RequestHandler.stop: about to flush requests queue")
         shared.requests.join()
-        shared.ending = True
+        shared.ending.set()
 
     def _start_thread(self):
         """Run the request processor"""
@@ -144,7 +144,7 @@ class RequestHandler(object):
         shared = self.shared
 
         def worker():
-            while not shared.ending:
+            while not shared.ending.is_set():
                 try:
                     # set a timeout so we check `ending` every so often
                     task = shared.requests.get(timeout=1)
