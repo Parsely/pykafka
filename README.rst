@@ -89,13 +89,31 @@ topic has partitions. If they are all connected to the same zookeeper instance,
 they will communicate with it to automatically balance the partitions between
 themselves.
 
+Operational Tools
+-----------------
+
+PyKafka includes a small collection of `CLI tools`_ that can help with common tasks
+related to the administration of a Kafka cluster, including offset and lag monitoring and
+topic inspection. The full, up-to-date interface for these tools can be fould by running
+
+.. sourcecode::
+
+    $ python cli/kafka_tools.py --help
+
+or after installing PyKafka via setuptools or pip:
+
+.. sourcecode::
+
+    $ kafka-tools --help
+
+.. _CLI tools: https://github.com/Parsely/pykafka/blob/master/pykafka/cli/kafka_tools.py
+
 What happened to Samsa?
 -----------------------
 
 This project used to be called samsa. It has been renamed PyKafka and has been
-fully overhauled to support Kafka 0.8.2. We chose to target 0.8.2 because it's
-currently the latest stable version, and the Offset Commit/Fetch API is
-stabilized.
+fully overhauled to support Kafka 0.8.2. We chose to target 0.8.2 because the offset
+Commit/Fetch API is stabilized.
 
 The Samsa `PyPI package`_  will stay up for the foreseeable future and tags for
 previous versions will always be available in this repo.
