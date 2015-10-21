@@ -28,6 +28,10 @@ from .producer import Producer
 from .protocol import PartitionOffsetRequest
 from .simpleconsumer import SimpleConsumer
 from .utils.compat import iteritems, itervalues
+try:
+    from . import rdkafka
+except ImportError:
+    rdkafka = False
 
 
 log = logging.getLogger(__name__)
@@ -149,14 +153,23 @@ class Topic():
         except KeyError:
             raise LeaderNotAvailable()
 
-    def get_simple_consumer(self, consumer_group=None, **kwargs):
+    def get_simple_consumer(self,
+                            consumer_group=None,
+                            use_rdkafka=False,
+                            **kwargs):
         """Return a SimpleConsumer of this topic
 
         :param consumer_group: The name of the consumer group to join
         :type consumer_group: str
+        :param use_rdkafka: Use librdkafka-backed consumer if available
+        :type use_rdkafka: bool
         """
-        return SimpleConsumer(self, self._cluster,
-                              consumer_group=consumer_group, **kwargs)
+        Cls = (rdkafka.RdKafkaSimpleConsumer
+               if rdkafka and use_rdkafka else SimpleConsumer)
+        return Cls(self,
+                   self._cluster,
+                   consumer_group=consumer_group,
+                   **kwargs)
 
     def get_balanced_consumer(self, consumer_group, **kwargs):
         """Return a BalancedConsumer of this topic

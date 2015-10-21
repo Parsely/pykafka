@@ -18,14 +18,11 @@ limitations under the License.
 """
 
 __all__ = ["KafkaClient"]
-from .handlers import ThreadingHandler
-import logging
-from .cluster import Cluster
 
-try:
-    import rd_kafka
-except ImportError:
-    rd_kafka = None
+import logging
+
+from .cluster import Cluster
+from .handlers import ThreadingHandler
 
 
 log = logging.getLogger(__name__)
@@ -40,7 +37,6 @@ class KafkaClient(object):
                  use_greenlets=False,
                  socket_timeout_ms=30 * 1000,
                  offsets_channel_socket_timeout_ms=10 * 1000,
-                 ignore_rdkafka=False,
                  exclude_internal_topics=True,
                  source_address=''):
         """Create a connection to a Kafka cluster.
@@ -59,8 +55,6 @@ class KafkaClient(object):
             milliseconds) when reading responses for offset commit and
             offset fetch requests.
         :type offsets_channel_socket_timeout_ms: int
-        :param ignore_rdkafka: Don't use rdkafka, even if installed.
-        :type ignore_rdkafka: bool
         :param exclude_internal_topics: Whether messages from internal topics
             (specifically, the offsets topic) should be exposed to the consumer.
         :type exclude_internal_topics: bool
@@ -72,19 +66,14 @@ class KafkaClient(object):
         self._socket_timeout_ms = socket_timeout_ms
         self._offsets_channel_socket_timeout_ms = offsets_channel_socket_timeout_ms
         self._handler = None if use_greenlets else ThreadingHandler()
-        self._use_rdkafka = rd_kafka and not ignore_rdkafka
-        if self._use_rdkafka:
-            log.info('Using rd_kafka extensions.')
-            raise NotImplementedError('Not yet.')
-        else:
-            self.cluster = Cluster(
-                self._seed_hosts,
-                self._handler,
-                socket_timeout_ms=self._socket_timeout_ms,
-                offsets_channel_socket_timeout_ms=self._offsets_channel_socket_timeout_ms,
-                exclude_internal_topics=exclude_internal_topics,
-                source_address=self._source_address
-            )
+        self.cluster = Cluster(
+            self._seed_hosts,
+            self._handler,
+            socket_timeout_ms=self._socket_timeout_ms,
+            offsets_channel_socket_timeout_ms=self._offsets_channel_socket_timeout_ms,
+            exclude_internal_topics=exclude_internal_topics,
+            source_address=self._source_address
+        )
         self.brokers = self.cluster.brokers
         self.topics = self.cluster.topics
 
