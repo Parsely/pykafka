@@ -242,7 +242,11 @@ class BalancedConsumer():
 
         This method should be called as part of a graceful shutdown process.
         """
-        self._running = False
+        with self._rebalancing_lock:
+            # We acquire the lock in order to prevent a race condition where a
+            # rebalance that is already underway might re-register the zk
+            # nodes that we remove here
+            self._running = False
         self._consumer.stop()
         if self._owns_zookeeper:
             # NB this should always come last, so we do not hand over control
@@ -425,6 +429,8 @@ class BalancedConsumer():
         if self._consumer is not None:
             self.commit_offsets()
         with self._rebalancing_lock:
+            if not self._running:
+                raise ConsumerStoppedException
             log.info('Rebalancing consumer %s for topic %s.' % (
                 self._consumer_id, self._topic.name)
             )
