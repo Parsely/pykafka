@@ -161,7 +161,7 @@ class SimpleConsumer():
 
         self._discover_offset_manager()
 
-        if partitions:
+        if partitions is not None:
             self._partitions = {p: OwnedPartition(p, self._messages_arrived)
                                 for p in partitions}
         else:

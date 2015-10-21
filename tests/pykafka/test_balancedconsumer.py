@@ -139,8 +139,11 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
                 set(self.client.topics[self.topic_name].partitions.values())
             )
         finally:
-            consumer_a.stop()
-            consumer_b.stop()
+            try:
+                consumer_a.stop()
+                consumer_b.stop()
+            except:
+                pass
 
     def test_consume_latest(self):
         try:
@@ -176,8 +179,11 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
                 set(self.client.topics[self.topic_name].partitions.values())
             )
         finally:
-            consumer_a.stop()
-            consumer_b.stop()
+            try:
+                consumer_a.stop()
+                consumer_b.stop()
+            except:
+                pass
 
     def test_external_kazoo_client(self):
         """Run with pre-existing KazooClient instance
@@ -194,6 +200,47 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
                 consumer_timeout_ms=10)
         messages = [msg for msg in consumer]
         consumer.stop()
+
+    def test_zk_conn_lost(self):
+        """Check we restore zookeeper nodes correctly after connection loss
+
+        See also github issue #204.
+        """
+        zk = KazooClient(self.kafka.zookeeper)
+        zk.start()
+        try:
+            topic = self.client.topics[self.topic_name]
+            consumer_group = b'test_zk_conn_lost'
+
+            consumer = topic.get_balanced_consumer(consumer_group, zookeeper=zk)
+            self.assertTrue(consumer._check_held_partitions())
+            zk.stop()  # expires session, dropping all our nodes
+
+            # Start a second consumer on a different zk connection
+            other_consumer = topic.get_balanced_consumer(consumer_group)
+
+            # Slightly contrived: we'll grab a lock to keep _rebalance() from
+            # starting when we restart the zk connection (restart triggers a
+            # rebalance), so we can confirm the expected discrepancy between
+            # the (empty) set of partitions on zk and the set in the internal
+            # consumer:
+            with consumer._rebalancing_lock:
+                zk.start()
+                self.assertFalse(consumer._check_held_partitions())
+
+            # Finally, confirm that _rebalance() resolves the discrepancy:
+            time.sleep(.3)  # allow consumers time to begin rebalancing
+            with consumer._rebalancing_lock:  # wait until rebalancing finishes
+                self.assertTrue(consumer._check_held_partitions())
+            with other_consumer._rebalancing_lock:
+                self.assertTrue(other_consumer._check_held_partitions())
+        finally:
+            try:
+                consumer.stop()
+                other_consumer.stop()
+                zk.stop()
+            except:
+                pass
 
 
 if __name__ == "__main__":
