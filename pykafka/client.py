@@ -20,7 +20,6 @@ limitations under the License.
 __all__ = ["KafkaClient"]
 
 import logging
-import warnings
 
 from .cluster import Cluster
 from .handlers import ThreadingHandler
@@ -38,7 +37,6 @@ class KafkaClient(object):
                  use_greenlets=False,
                  socket_timeout_ms=30 * 1000,
                  offsets_channel_socket_timeout_ms=10 * 1000,
-                 ignore_rdkafka=None,
                  exclude_internal_topics=True,
                  source_address=''):
         """Create a connection to a Kafka cluster.
@@ -57,8 +55,6 @@ class KafkaClient(object):
             milliseconds) when reading responses for offset commit and
             offset fetch requests.
         :type offsets_channel_socket_timeout_ms: int
-        :param ignore_rdkafka: Deprecated, and in fact ignored. Instead, you
-            can set this on `Topic.get_simple_consumer` et al directly
         :param exclude_internal_topics: Whether messages from internal topics
             (specifically, the offsets topic) should be exposed to the consumer.
         :type exclude_internal_topics: bool
@@ -70,9 +66,6 @@ class KafkaClient(object):
         self._socket_timeout_ms = socket_timeout_ms
         self._offsets_channel_socket_timeout_ms = offsets_channel_socket_timeout_ms
         self._handler = None if use_greenlets else ThreadingHandler()
-        if ignore_rdkafka is not None:
-            warnings.warn("Unused setting: ignore_rdkafka", DeprecationWarning)
-
         self.cluster = Cluster(
             self._seed_hosts,
             self._handler,
