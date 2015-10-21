@@ -271,13 +271,15 @@ class BalancedConsumer():
         self._zookeeper = KazooClient(zookeeper_connect, timeout=timeout / 1000)
         self._zookeeper.start()
 
-    def _setup_internal_consumer(self, partitions=[], start=True):
+    def _setup_internal_consumer(self, partitions=None, start=True):
         """Instantiate an internal SimpleConsumer.
 
         If there is already a SimpleConsumer instance held by this object,
         disable its workers and mark it for garbage collection before
         creating a new one.
         """
+        if partitions is None:
+            partitions = []
         reset_offset_on_start = self._reset_offset_on_start
         if self._consumer is not None:
             self._consumer.stop()
