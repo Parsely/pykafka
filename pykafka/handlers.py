@@ -99,8 +99,8 @@ class RequestHandler(object):
         """
         self.handler = handler
 
-        # NB self.shared is referenced directly by the worker spawned in
-        # _start_thread(), so be careful not to rebind it
+        # NB self.shared is referenced directly by _start_thread(), so be careful not to
+        # rebind it
         self.shared = self.Shared(connection=connection,
                                   requests=handler.Queue(),
                                   ending=handler.Event())
