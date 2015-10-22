@@ -46,6 +46,18 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
         log.debug("Starting _rdk_consumer with {}".format(start_kwargs))
         self._rdk_consumer.start(**start_kwargs)
 
+        # Poll: for a consumer, the main reason to poll the handle is that
+        # this de-queues log messages at error level that might otherwise be
+        # held up in librdkafka
+        def poll(rdk_handle, stop_event):
+            while not stop_event.is_set():
+                rdk_handle.poll(timeout_ms=1000)
+            log.debug("Exiting RdKafkaSimpleConsumer poller thread.")
+
+        self._stop_poller_thread = self._cluster.handler.Event()
+        self._poller_thread = self._cluster.handler.spawn(
+            poll, args=(self._rdk_consumer, self._stop_poller_thread))
+
     def consume(self, block=True):
         timeout_ms = self._consumer_timeout_ms if block else 1
         msg = self._rdk_consumer.consume(timeout_ms)
@@ -55,12 +67,15 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
         return msg
 
     def stop(self):
+        ret = super(RdKafkaSimpleConsumer, self).stop()
         if hasattr(self, "_rdk_consumer") and self._rdk_consumer is not None:
+            self._stop_poller_thread.set()
+            self._poller_thread.join()
             # Call _rd_kafka.Consumer.stop explicitly, so we may catch errors:
             self._rdk_consumer.stop()
             log.debug("Issued stop to _rdk_consumer.")
             self._rdk_consumer = None
-        return super(RdKafkaSimpleConsumer, self).stop()
+        return ret
 
     def fetch_offsets(self):
         # Restart, because _rdk_consumer needs its internal offsets resynced

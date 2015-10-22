@@ -850,6 +850,7 @@ static PyMethodDef Consumer_methods[] = {
     {"configure", (PyCFunction)RdkHandle_configure,
         METH_VARARGS | METH_KEYWORDS, RdkHandle_configure__doc__},
     {"start", (PyCFunction)Consumer_start, METH_VARARGS | METH_KEYWORDS, NULL},
+    {"poll", (PyCFunction)RdkHandle_poll, METH_VARARGS | METH_KEYWORDS, NULL},
     {NULL, NULL, 0, NULL}
 };
 
