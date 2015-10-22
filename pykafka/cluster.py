@@ -253,6 +253,13 @@ class Cluster(object):
                     source_host=self._source_host,
                     source_port=self._source_port
                 )
+            elif not self._brokers[id_].connected:
+                log.info('Reconnecting to broker id %s: %s:%s', id_, meta.host, meta.port)
+                import socket
+                try:
+                    self._brokers[id_].connect()
+                except socket.error:
+                    log.info('Failed to re-establish connection with broker id %s: %s:%s', id_, meta.host, meta.port)
             else:
                 broker = self._brokers[id_]
                 if meta.host == broker.host and meta.port == broker.port:

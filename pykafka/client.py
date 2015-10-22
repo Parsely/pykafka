@@ -34,7 +34,6 @@ class KafkaClient(object):
     """
     def __init__(self,
                  hosts='127.0.0.1:9092',
-                 use_greenlets=False,
                  socket_timeout_ms=30 * 1000,
                  offsets_channel_socket_timeout_ms=10 * 1000,
                  exclude_internal_topics=True,
@@ -46,8 +45,6 @@ class KafkaClient(object):
 
         :param hosts: Comma-separated list of kafka hosts to used to connect.
         :type hosts: bytes
-        :param use_greenlets: If True, use gevent instead of threading.
-        :type use_greenlets: bool
         :param socket_timeout_ms: The socket timeout (in milliseconds) for
             network requests
         :type socket_timeout_ms: int
@@ -65,7 +62,7 @@ class KafkaClient(object):
         self._source_address = source_address
         self._socket_timeout_ms = socket_timeout_ms
         self._offsets_channel_socket_timeout_ms = offsets_channel_socket_timeout_ms
-        self._handler = None if use_greenlets else ThreadingHandler()
+        self._handler = ThreadingHandler()
         self.cluster = Cluster(
             self._seed_hosts,
             self._handler,

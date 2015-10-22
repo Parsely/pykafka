@@ -1,7 +1,7 @@
 .. image:: https://travis-ci.org/Parsely/pykafka.svg?branch=master
     :target: https://travis-ci.org/Parsely/pykafka
-.. image:: https://coveralls.io/repos/Parsely/pykafka/badge.svg?branch=master
-    :target: https://coveralls.io/r/Parsely/pykafka?branch=master
+.. image:: https://codecov.io/github/Parsely/pykafka/coverage.svg?branch=master
+    :target: https://codecov.io/github/Parsely/pykafka?branch=master
 
 PyKafka
 =======
@@ -110,13 +110,31 @@ We currently test against librdkafka `0.8.6`_ only.
 
 .. _0.8.6: https://github.com/edenhill/librdkafka/releases/tag/0.8.6
 
+Operational Tools
+-----------------
+
+PyKafka includes a small collection of `CLI tools`_ that can help with common tasks
+related to the administration of a Kafka cluster, including offset and lag monitoring and
+topic inspection. The full, up-to-date interface for these tools can be fould by running
+
+.. sourcecode::
+
+    $ python cli/kafka_tools.py --help
+
+or after installing PyKafka via setuptools or pip:
+
+.. sourcecode::
+
+    $ kafka-tools --help
+
+.. _CLI tools: https://github.com/Parsely/pykafka/blob/master/pykafka/cli/kafka_tools.py
+
 What happened to Samsa?
 -----------------------
 
 This project used to be called samsa. It has been renamed PyKafka and has been
-fully overhauled to support Kafka 0.8.2. We chose to target 0.8.2 because it's
-currently the latest stable version, and the Offset Commit/Fetch API is
-stabilized.
+fully overhauled to support Kafka 0.8.2. We chose to target 0.8.2 because the offset
+Commit/Fetch API is stabilized.
 
 The Samsa `PyPI package`_  will stay up for the foreseeable future and tags for
 previous versions will always be available in this repo.

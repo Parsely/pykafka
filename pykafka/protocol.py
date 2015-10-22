@@ -125,25 +125,31 @@ class Response(object):
 class Message(Message, Serializable):
     """Representation of a Kafka Message
 
-    NOTE: Compression is handled in the protocol because
-          of the way Kafka embeds compressed MessageSets within
-          Messages
+    NOTE: Compression is handled in the protocol because of the way Kafka embeds compressed MessageSets within Messages
 
-    Message => Crc MagicByte Attributes Key Value
-      Crc => int32
-      MagicByte => int8
-      Attributes => int8
-      Key => bytes
-      Value => bytes
+    Specification::
+
+        Message => Crc MagicByte Attributes Key Value
+          Crc => int32
+          MagicByte => int8
+          Attributes => int8
+          Key => bytes
+          Value => bytes
 
     :class:`pykafka.protocol.Message` also contains `partition` and
-    `partition_id` fields. Both of these have meaningless default values. When
+    `partition_id` fields. Both of these have meaningless default values when
     :class:`pykafka.protocol.Message` is used by the producer.
     When used in a :class:`pykafka.protocol.FetchRequest`, `partition_id`
     is set to the id of the partition from which the message was sent on
     receipt of the message. In the :class:`pykafka.simpleconsumer.SimpleConsumer`,
     `partition` is set to the :class:`pykafka.partition.Partition` instance
     from which the message was sent.
+
+    :ivar compression_type: Type of compression to use for the message
+    :ivar partition_key: Value used to assign this message to a particular partition.
+    :ivar value: The payload associated with this message
+    :ivar offset: The offset of the message
+    :ivar partition_id: The id of the partition to which this message belongs
     """
     MAGIC = 0
 
@@ -166,7 +172,9 @@ class Message(Message, Serializable):
         self.produce_attempt = produce_attempt
 
     def __len__(self):
-        size = 4 + 1 + 1 + 4 + 4 + len(self.value)
+        size = 4 + 1 + 1 + 4 + 4
+        if self.value is not None:
+            size += len(self.value)
         if self.partition_key is not None:
             size += len(self.partition_key)
         return size
@@ -191,15 +199,16 @@ class Message(Message, Serializable):
         :param buff: The buffer to write into
         :param offset: The offset to start the write at
         """
-        if self.partition_key is None:
-            fmt = '!BBii%ds' % len(self.value)
-            args = (self.MAGIC, self.compression_type, -1,
-                    len(self.value), self.value)
-        else:
-            fmt = '!BBi%dsi%ds' % (len(self.partition_key), len(self.value))
-            args = (self.MAGIC, self.compression_type,
-                    len(self.partition_key), self.partition_key,
-                    len(self.value), self.value)
+        # NB a length of 0 means an empty string, whereas -1 means null
+        len_key = -1 if self.partition_key is None else len(self.partition_key)
+        len_value = -1 if self.value is None else len(self.value)
+        fmt = '!BBi%dsi%ds' % (max(len_key, 0), max(len_value, 0))
+        args = (self.MAGIC,
+                self.compression_type,
+                len_key,
+                self.partition_key or b"",
+                len_value,
+                self.value or b"")
         struct.pack_into(fmt, buff, offset + 4, *args)
         fmt_size = struct.calcsize(fmt)
         data = buffer(buff[(offset + 4):(offset + 4 + fmt_size)])
@@ -213,12 +222,13 @@ class MessageSet(Serializable):
     This isn't useful outside of direct communications with Kafka, so we
     keep it hidden away here.
 
-    N.B.: MessageSets are not preceded by an int32 like other
-          array elements in the protocol.
+    N.B.: MessageSets are not preceded by an int32 like other array elements in the protocol.
 
-    MessageSet => [Offset MessageSize Message]
-      Offset => int64
-      MessageSize => int32
+    Specification::
+
+        MessageSet => [Offset MessageSize Message]
+          Offset => int64
+          MessageSize => int32
 
     :ivar messages: The list of messages currently in the MessageSet
     :ivar compression_type: compression to use for the messages
@@ -330,11 +340,13 @@ class MessageSet(Serializable):
 class MetadataRequest(Request):
     """Metadata Request
 
-    MetadataRequest => [TopicName]
-      TopicName => string
+    Specification::
+
+        MetadataRequest => [TopicName]
+            TopicName => string
     """
     def __init__(self, topics=None):
-        """Create a new MetadatRequest
+        """Create a new MetadataRequest
 
         :param topics: Topics to query. Leave empty for all available topics.
         """
@@ -375,19 +387,21 @@ PartitionMetadata = namedtuple('PartitionMetadata',
 class MetadataResponse(Response):
     """Response from MetadataRequest
 
-    MetadataResponse => [Broker][TopicMetadata]
-      Broker => NodeId Host Port
-      NodeId => int32
-      Host => string
-      Port => int32
-      TopicMetadata => TopicErrorCode TopicName [PartitionMetadata]
-      TopicErrorCode => int16
-      PartitionMetadata => PartitionErrorCode PartitionId Leader Replicas Isr
-      PartitionErrorCode => int16
-      PartitionId => int32
-      Leader => int32
-      Replicas => [int32]
-      Isr => [int32]
+    Specification::
+
+        MetadataResponse => [Broker][TopicMetadata]
+          Broker => NodeId Host Port
+          NodeId => int32
+          Host => string
+          Port => int32
+          TopicMetadata => TopicErrorCode TopicName [PartitionMetadata]
+          TopicErrorCode => int16
+          PartitionMetadata => PartitionErrorCode PartitionId Leader Replicas Isr
+          PartitionErrorCode => int16
+          PartitionId => int32
+          Leader => int32
+          Replicas => [int32]
+          Isr => [int32]
     """
     def __init__(self, buff):
         """Deserialize into a new Response
@@ -419,11 +433,13 @@ class MetadataResponse(Response):
 class ProduceRequest(Request):
     """Produce Request
 
-    ProduceRequest => RequiredAcks Timeout [TopicName [Partition MessageSetSize MessageSet]]
-      RequiredAcks => int16
-      Timeout => int32
-      Partition => int32
-      MessageSetSize => int32
+    Specification::
+
+        ProduceRequest => RequiredAcks Timeout [TopicName [Partition MessageSetSize MessageSet]]
+          RequiredAcks => int16
+          Timeout => int32
+          Partition => int32
+          MessageSetSize => int32
     """
     def __init__(self,
                  compression_type=CompressionType.NONE,
@@ -433,7 +449,7 @@ class ProduceRequest(Request):
 
         ``required_acks`` determines how many acknowledgement the server waits
         for before returning. This is useful for ensuring the replication factor
-        of published messages. The behavior is:
+        of published messages. The behavior is::
 
             -1: Block until all servers acknowledge
             0: No waiting -- server doesn't even respond to the Produce request
@@ -528,11 +544,13 @@ ProducePartitionResponse = namedtuple(
 class ProduceResponse(Response):
     """Produce Response. Checks to make sure everything went okay.
 
-    ProduceResponse => [TopicName [Partition ErrorCode Offset]]
-      TopicName => string
-      Partition => int32
-      ErrorCode => int16
-      Offset => int64
+    Specification::
+
+        ProduceResponse => [TopicName [Partition ErrorCode Offset]]
+          TopicName => string
+          Partition => int32
+          ErrorCode => int16
+          Offset => int64
     """
     def __init__(self, buff):
         """Deserialize into a new Response
@@ -577,14 +595,16 @@ class PartitionFetchRequest(_PartitionFetchRequest):
 class FetchRequest(Request):
     """A Fetch request sent to Kafka
 
-    FetchRequest => ReplicaId MaxWaitTime MinBytes [TopicName [Partition FetchOffset MaxBytes]]
-      ReplicaId => int32
-      MaxWaitTime => int32
-      MinBytes => int32
-      TopicName => string
-      Partition => int32
-      FetchOffset => int64
-      MaxBytes => int32
+    Specification::
+
+        FetchRequest => ReplicaId MaxWaitTime MinBytes [TopicName [Partition FetchOffset MaxBytes]]
+          ReplicaId => int32
+          MaxWaitTime => int32
+          MinBytes => int32
+          TopicName => string
+          Partition => int32
+          FetchOffset => int64
+          MaxBytes => int32
     """
     def __init__(self, partition_requests=[], timeout=1000, min_bytes=1024):
         """Create a new fetch request
@@ -669,12 +689,14 @@ FetchPartitionResponse = namedtuple(
 class FetchResponse(Response):
     """Unpack a fetch response from the server
 
-    FetchResponse => [TopicName [Partition ErrorCode HighwaterMarkOffset MessageSetSize MessageSet]]
-      TopicName => string
-      Partition => int32
-      ErrorCode => int16
-      HighwaterMarkOffset => int64
-      MessageSetSize => int32
+    Specification::
+
+        FetchResponse => [TopicName [Partition ErrorCode HighwaterMarkOffset MessageSetSize MessageSet]]
+          TopicName => string
+          Partition => int32
+          ErrorCode => int16
+          HighwaterMarkOffset => int64
+          MessageSetSize => int32
     """
     def __init__(self, buff):
         """Deserialize into a new Response
@@ -739,12 +761,14 @@ class PartitionOffsetRequest(_PartitionOffsetRequest):
 class OffsetRequest(Request):
     """An offset request
 
-    OffsetRequest => ReplicaId [TopicName [Partition Time MaxNumberOfOffsets]]
-      ReplicaId => int32
-      TopicName => string
-      Partition => int32
-      Time => int64
-      MaxNumberOfOffsets => int32
+    Specification::
+
+        OffsetRequest => ReplicaId [TopicName [Partition Time MaxNumberOfOffsets]]
+          ReplicaId => int32
+          TopicName => string
+          Partition => int32
+          Time => int64
+          MaxNumberOfOffsets => int32
     """
     def __init__(self, partition_requests):
         """Create a new offset request"""
@@ -801,11 +825,13 @@ OffsetPartitionResponse = namedtuple(
 class OffsetResponse(Response):
     """An offset response
 
-    OffsetResponse => [TopicName [PartitionOffsets]]
-      PartitionOffsets => Partition ErrorCode [Offset]
-      Partition => int32
-      ErrorCode => int16
-      Offset => int64
+    Specification::
+
+        OffsetResponse => [TopicName [PartitionOffsets]]
+          PartitionOffsets => Partition ErrorCode [Offset]
+          Partition => int32
+          ErrorCode => int16
+          Offset => int64
     """
     def __init__(self, buff):
         """Deserialize into a new Response
@@ -827,8 +853,10 @@ class OffsetResponse(Response):
 class ConsumerMetadataRequest(Request):
     """A consumer metadata request
 
-    ConsumerMetadataRequest => ConsumerGroup
-      ConsumerGroup => string
+    Specification::
+
+        ConsumerMetadataRequest => ConsumerGroup
+            ConsumerGroup => string
     """
     def __init__(self, consumer_group):
         """Create a new consumer metadata request"""
@@ -861,11 +889,13 @@ class ConsumerMetadataRequest(Request):
 class ConsumerMetadataResponse(Response):
     """A consumer metadata response
 
-    ConsumerMetadataResponse => ErrorCode CoordinatorId CoordinatorHost CoordinatorPort
-      ErrorCode => int16
-      CoordinatorId => int32
-      CoordinatorHost => string
-      CoordinatorPort => int32
+    Specification::
+
+        ConsumerMetadataResponse => ErrorCode CoordinatorId CoordinatorHost CoordinatorPort
+            ErrorCode => int16
+            CoordinatorId => int32
+            CoordinatorHost => string
+            CoordinatorPort => int32
     """
     def __init__(self, buff):
         """Deserialize into a new Response
@@ -905,15 +935,17 @@ class PartitionOffsetCommitRequest(_PartitionOffsetCommitRequest):
 class OffsetCommitRequest(Request):
     """An offset commit request
 
-    OffsetCommitRequest => ConsumerGroupId ConsumerGroupGenerationId ConsumerId [TopicName [Partition Offset TimeStamp Metadata]]
-      ConsumerGroupId => string
-      ConsumerGroupGenerationId => int32
-      ConsumerId => string
-      TopicName => string
-      Partition => int32
-      Offset => int64
-      TimeStamp => int64
-      Metadata => string
+    Specification::
+
+        OffsetCommitRequest => ConsumerGroupId ConsumerGroupGenerationId ConsumerId [TopicName [Partition Offset TimeStamp Metadata]]
+            ConsumerGroupId => string
+            ConsumerGroupGenerationId => int32
+            ConsumerId => string
+            TopicName => string
+            Partition => int32
+            Offset => int64
+            TimeStamp => int64
+            Metadata => string
     """
     def __init__(self,
                  consumer_group,
@@ -1003,10 +1035,12 @@ OffsetCommitPartitionResponse = namedtuple(
 class OffsetCommitResponse(Response):
     """An offset commit response
 
-    OffsetCommitResponse => [TopicName [Partition ErrorCode]]]
-      TopicName => string
-      Partition => int32
-      ErrorCode => int16
+    Specification::
+
+        OffsetCommitResponse => [TopicName [Partition ErrorCode]]]
+            TopicName => string
+            Partition => int32
+            ErrorCode => int16
     """
     def __init__(self, buff):
         """Deserialize into a new Response
@@ -1042,10 +1076,12 @@ class PartitionOffsetFetchRequest(_PartitionOffsetFetchRequest):
 class OffsetFetchRequest(Request):
     """An offset fetch request
 
-    OffsetFetchRequest => ConsumerGroup [TopicName [Partition]]
-      ConsumerGroup => string
-      TopicName => string
-      Partition => int32
+    Specification::
+
+        OffsetFetchRequest => ConsumerGroup [TopicName [Partition]]
+            ConsumerGroup => string
+            TopicName => string
+            Partition => int32
     """
     def __init__(self, consumer_group, partition_requests=[]):
         """Create a new offset fetch request
@@ -1110,12 +1146,14 @@ OffsetFetchPartitionResponse = namedtuple(
 class OffsetFetchResponse(Response):
     """An offset fetch response
 
-    OffsetFetchResponse => [TopicName [Partition Offset Metadata ErrorCode]]
-      TopicName => string
-      Partition => int32
-      Offset => int64
-      Metadata => string
-      ErrorCode => int16
+    Specification::
+
+        OffsetFetchResponse => [TopicName [Partition Offset Metadata ErrorCode]]
+            TopicName => string
+            Partition => int32
+            Offset => int64
+            Metadata => string
+            ErrorCode => int16
     """
     def __init__(self, buff):
         """Deserialize into a new Response

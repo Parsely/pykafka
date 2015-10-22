@@ -111,6 +111,17 @@ class ProducerIntegrationTests(unittest2.TestCase):
         prod = self._get_producer(**kwargs)
         prod.produce(uuid4().bytes)
 
+    def test_null_payloads(self):
+        """Test that None is accepted as a null payload"""
+        prod = self.client.topics[self.topic_name].get_sync_producer(
+                min_queued_messages=1)
+        prod.produce(None)
+        self.assertIsNone(self.consumer.consume().value)
+        prod.produce(None, partition_key=b"whatever")
+        self.assertIsNone(self.consumer.consume().value)
+        prod.produce(b"")  # empty string should be distinguished from None
+        self.assertEqual(b"", self.consumer.consume().value)
+
 
 if __name__ == "__main__":
     unittest2.main()

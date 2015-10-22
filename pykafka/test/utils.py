@@ -10,9 +10,9 @@ def get_cluster():
     BROKERS, ZOOKEEPER, KAFKA_BIN.  This is used primarily to speed up tests
     in our Travis-CI environment.
     """
-    if 'BROKERS' in os.environ and \
-       'ZOOKEEPER' in os.environ and \
-       'KAFKA_BIN' in os.environ:
+    if os.environ.get('BROKERS', None) and \
+       os.environ.get('ZOOKEEPER', None) and \
+       os.environ.get('KAFKA_BIN', None):
         # Broker is already running. Use that.
         return KafkaConnection(os.environ['KAFKA_BIN'],
                                os.environ['BROKERS'],
