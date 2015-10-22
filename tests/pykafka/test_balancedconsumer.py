@@ -204,7 +204,8 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
         consumer = self.client.topics[self.topic_name].get_balanced_consumer(
                 b'test_external_kazoo_client',
                 zookeeper=zk,
-                consumer_timeout_ms=10)
+                consumer_timeout_ms=10,
+                use_rdkafka=self.USE_RDKAFKA)
         messages = [msg for msg in consumer]
         consumer.stop()
 
@@ -219,12 +220,15 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
             topic = self.client.topics[self.topic_name]
             consumer_group = b'test_zk_conn_lost'
 
-            consumer = topic.get_balanced_consumer(consumer_group, zookeeper=zk)
+            consumer = topic.get_balanced_consumer(consumer_group,
+                                                   zookeeper=zk,
+                                                   use_rdkafka=self.USE_RDKAFKA)
             self.assertTrue(consumer._check_held_partitions())
             zk.stop()  # expires session, dropping all our nodes
 
             # Start a second consumer on a different zk connection
-            other_consumer = topic.get_balanced_consumer(consumer_group)
+            other_consumer = topic.get_balanced_consumer(
+                consumer_group, use_rdkafka=self.USE_RDKAFKA)
 
             # Slightly contrived: we'll grab a lock to keep _rebalance() from
             # starting when we restart the zk connection (restart triggers a
