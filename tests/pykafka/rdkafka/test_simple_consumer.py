@@ -30,10 +30,9 @@ class TestRdKafkaSimpleConsumer(TestSimpleConsumer):
                 consumer_group=b'test_offset_commit_agrees') as consumer:
             latest_offs = _latest_partition_offsets_by_reading(consumer, 100)
             consumer.commit_offsets()
-            consumer.stop()
 
             # We can only compare partitions we've consumed from, so filter:
-            retrieved_offs = {r[0]: r[1].offset
+            retrieved_offs = {r[0]: r[1].offset - 1
                               for r in consumer.fetch_offsets()
                               if r[0] in latest_offs}
             self.assertEquals(retrieved_offs, latest_offs)

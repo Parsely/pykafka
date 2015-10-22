@@ -57,7 +57,6 @@ class TestSimpleConsumer(unittest2.TestCase):
             offsets_committed = consumer.held_offsets
             consumer.commit_offsets()
 
-            consumer.stop()  # RdKafkaSimpleConsumer.fetch_offsets() needs this
             offsets_fetched = dict((r[0], r[1].offset - 1)
                                    for r in consumer.fetch_offsets())
             self.assertEquals(offsets_fetched, offsets_committed)
