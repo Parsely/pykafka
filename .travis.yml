@@ -33,6 +33,7 @@ before_script:
     - export C_INCLUDE_PATH=$HOME/include:$C_INCLUDE_PATH
     - export LIBRARY_PATH=$HOME/lib:$LIBRARY_PATH
     - export LD_LIBRARY_PATH=$HOME/lib:$LD_LIBRARY_PATH
+    - export CFLAGS="-coverage"
     - "python -m pykafka.test.kafka_instance 3 --download-dir /home/travis/kafka-bin &"
     - "sleep 10"
 
@@ -41,7 +42,8 @@ script:
 
 # Calculate coverage on success
 after_success:
-    - codecov
+    # in the next release of codecov, these --gcov-args are probably automatic
+    - codecov --gcov-args="-b -c -o $(find . -type f -name '*.gcno' -exec dirname {} \;)"
 
 branches:
   only:
