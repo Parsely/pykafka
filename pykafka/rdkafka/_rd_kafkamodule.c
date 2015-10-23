@@ -69,22 +69,50 @@ set_pykafka_error(const char *err_name, const char *err_msg)
 }
 
 
-static void
-set_PyRdKafkaError(rd_kafka_resp_err_t err, const char *extra_msg)
+/* Given an error code, find the most fitting class from pykafka.exceptions */
+static PyObject *
+find_pykafka_error(rd_kafka_resp_err_t err)
 {
-    /* Raise an exception, carrying the error code at Exception.args[0] */
+    PyObject *error_codes = NULL;
+    PyObject *errcode = NULL;
+    PyObject *Exc = NULL;
 
-    PyObject *error = PyObject_GetAttrString(
-            pykafka_exceptions, "RdKafkaException");
-    if (! error) return;
+    /* See if there's a standard Kafka error for this */
+    error_codes = PyObject_GetAttrString(pykafka_exceptions, "ERROR_CODES");
+    if (! error_codes) goto cleanup;
+    errcode = PyLong_FromLong(err);
+    if (! errcode) goto cleanup;
+    Exc = PyObject_GetItem(error_codes, errcode);
 
-    PyObject *err_obj = Py_BuildValue("lss", (long)err,
-                                             rd_kafka_err2str(err),
-                                             extra_msg);
-    PyErr_SetObject(error, err_obj);
+    if (! Exc) {  /* raise a generic exception instead */
+        PyErr_Clear();
+        Exc = PyObject_GetAttrString(pykafka_exceptions, "RdKafkaException");
+    }
+cleanup:
+    Py_XDECREF(error_codes);
+    Py_XDECREF(errcode);
+    return Exc;
+}
 
-    Py_DECREF(error);
-    Py_DECREF(err_obj);
+
+/* Given an error code, set a suitable exception; or, if return_error is not
+ * NULL, pass the exception instance back through return_error instead */
+static void
+set_pykafka_error_from_code(rd_kafka_resp_err_t err, PyObject **return_error)
+{
+    PyObject *error = NULL;
+    PyObject *err_args = NULL;
+
+    error = find_pykafka_error(err);
+    if (! error) goto cleanup;
+    err_args = Py_BuildValue("ls", (long)err, rd_kafka_err2str(err));
+    if (! err_args) goto cleanup;
+
+    if (! return_error) PyErr_SetObject(error, err_args);
+    else (*return_error) = PyObject_CallObject(error, err_args);
+cleanup:
+    Py_XDECREF(error);
+    Py_XDECREF(err_args);
 }
 
 
@@ -370,7 +398,7 @@ RdkHandle_start(RdkHandle *self,
         self->rdk_topic_conf = NULL;  /* deallocated by rd_kafka_topic_new() */
     Py_END_ALLOW_THREADS
     if (! self->rdk_topic_handle) {
-        set_PyRdKafkaError(rd_kafka_errno2err(errno), NULL);
+        set_pykafka_error_from_code(rd_kafka_errno2err(errno), NULL);
         return RdkHandle_start_fail(self, RdkHandle_stop);
     }
 
@@ -417,30 +445,10 @@ Producer_delivery_report_set_exception(PyObject *future,
                                        rd_kafka_resp_err_t err)
 {
     int retval = 0;
-    PyObject *error_codes = NULL;
-    PyObject *errcode = NULL;
-    PyObject *Exc = NULL;
-    PyObject *err_args = NULL;
     PyObject *exc = NULL;
 
-    /* See if there's a standard Kafka error for this */
-    error_codes = PyObject_GetAttrString(pykafka_exceptions, "ERROR_CODES");
-    if (! error_codes) goto cleanup;
-    errcode = PyLong_FromLong(err);
-    if (! errcode) goto cleanup;
-    Exc = PyObject_GetItem(error_codes, errcode);
-
-    if (! Exc) {  /* raise a generic exception instead */
-        PyErr_Clear();
-        Exc = PyObject_GetAttrString(
-                pykafka_exceptions, "ProduceFailureError");
-        if (! Exc) goto cleanup;
-    }
-    err_args = Py_BuildValue("ls", (long)err, rd_kafka_err2str(err));
-    if (! err_args) goto cleanup;
-    exc = PyObject_CallObject(Exc, err_args);
+    set_pykafka_error_from_code(err, &exc);
     if (! exc) goto cleanup;
-
     PyObject *res = PyObject_CallMethod(future, "set_exception", "O", exc);
     if (! res) goto cleanup;
     else Py_DECREF(res);
@@ -450,10 +458,6 @@ cleanup:
         log_clear_exception("Couldn't pass error to Future.set_exception");
         retval = -1;
     }
-    Py_XDECREF(error_codes);
-    Py_XDECREF(errcode);
-    Py_XDECREF(Exc);
-    Py_XDECREF(err_args);
     Py_XDECREF(exc);
     return retval;
 }
@@ -545,11 +549,9 @@ Producer_produce(RdkHandle *self, PyObject *args)
         return NULL;
     }
 
-    /* TODO assert that we correctly handle NULL payloads and keys */
-
     /* Add a new Future and keep it alive until the delivery-callback runs;
      * the keep-alive is saved in a dict indexed by `pending_futures_uid`, and
-     * it's the latter that we pass as a librdkafka msg_opaque pointer.  We'd
+     * it's the latter that we pass as a librdkafka msg_opaque value.  We'd
      * be fine just passing refs to `future` instead, if it weren't for pypy,
      * which may opt to invalidate the pointer in the mean time */
     PyObject *future = PyObject_CallObject(Future, NULL);
@@ -677,7 +679,7 @@ Consumer_stop(RdkHandle *self)
                 res = rd_kafka_consume_stop(self->rdk_topic_handle, part_id);
             Py_END_ALLOW_THREADS
             if (res == -1) {
-                set_PyRdKafkaError(rd_kafka_errno2err(errno), NULL);
+                set_pykafka_error_from_code(rd_kafka_errno2err(errno), NULL);
                 retval = NULL;
                 PyObject *log_res = PyObject_CallMethod(
                         logger, "exception", "sl",
@@ -784,7 +786,7 @@ Consumer_start(RdkHandle *self, PyObject *args, PyObject *kwds)
                                                self->rdk_queue_handle);
         Py_END_ALLOW_THREADS
         if (res == -1) {
-            set_PyRdKafkaError(rd_kafka_errno2err(errno), NULL);
+            set_pykafka_error_from_code(rd_kafka_errno2err(errno), NULL);
             return Consumer_start_fail(self);
         }
     }
@@ -833,7 +835,7 @@ Consumer_consume(RdkHandle *self, PyObject *args)
            iteration loops, and simply skip over this one altogether: */
         retval = Consumer_consume(self, args);
     } else {
-        set_PyRdKafkaError(rkmessage->err, NULL);
+        set_pykafka_error_from_code(rkmessage->err, NULL);
     }
 
     Py_BEGIN_ALLOW_THREADS  /* avoid callbacks deadlocking */

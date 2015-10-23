@@ -1,6 +1,7 @@
 import unittest
 
 from tests.pykafka import test_producer
+from pykafka.exceptions import MessageSizeTooLarge
 from pykafka.rdkafka import RdKafkaProducer
 
 
@@ -23,3 +24,10 @@ class TestRdKafkaProducer(test_producer.ProducerIntegrationTests):
         particular test, but nor do I see practical problems with that.
         """
         pass
+
+    def test_msg_too_large(self):
+        """Temporarily here until we merge #269 """
+        with self._get_producer() as prod:
+            with self.assertRaises(MessageSizeTooLarge):
+                fut = prod.produce(10**7 * b" ")
+                fut.result()
