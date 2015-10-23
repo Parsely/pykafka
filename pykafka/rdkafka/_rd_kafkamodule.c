@@ -536,11 +536,15 @@ Producer_start(RdkHandle *self, PyObject *args, PyObject *kwds)
 static PyObject *
 Producer_produce(RdkHandle *self, PyObject *args)
 {
+    PyObject *future = NULL;
+    PyObject *key = NULL;
+
     char *message = NULL;
     Py_ssize_t message_len = 0;
     char *partition_key= NULL;
     Py_ssize_t partition_key_len = 0;
     int partition_id = -1;
+
     if (! PyArg_ParseTuple(args,
                            "z#z#i",
                            &message, &message_len,
@@ -554,9 +558,9 @@ Producer_produce(RdkHandle *self, PyObject *args)
      * it's the latter that we pass as a librdkafka msg_opaque value.  We'd
      * be fine just passing refs to `future` instead, if it weren't for pypy,
      * which may opt to invalidate the pointer in the mean time */
-    PyObject *future = PyObject_CallObject(Future, NULL);
+    future = PyObject_CallObject(Future, NULL);
     if (! future) goto failed;
-    PyObject *key = PyLong_FromSize_t(self->pending_futures_uid++);
+    key = PyLong_FromSize_t(self->pending_futures_uid++);
     if (! key) goto failed;
     if (-1 == PyDict_SetItem(self->pending_futures, key, future)) goto failed;
 
