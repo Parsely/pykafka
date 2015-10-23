@@ -28,13 +28,17 @@ from .producer import Producer
 from .protocol import PartitionOffsetRequest
 from .simpleconsumer import SimpleConsumer
 from .utils.compat import iteritems, itervalues
-try:
-    from . import rdkafka
-except ImportError:
-    rdkafka = False
 
 
 log = logging.getLogger(__name__)
+
+
+try:
+    from . import rdkafka
+    log.info("Successfully loaded pykafka.rdkafka extension.")
+except ImportError:
+    rdkafka = False
+    log.info("Could not load pykafka.rdkafka extension.", exc_info=True)
 
 
 class Topic():
