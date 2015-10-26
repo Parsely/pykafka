@@ -201,6 +201,19 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
         messages = [msg for msg in consumer]
         consumer.stop()
 
+
+    def test_no_partitions(self):
+        """Ensure a consumer assigned no partitions immediately exits"""
+        consumer = self.client.topics[self.topic_name].get_balanced_consumer(
+                b'test_no_partitions',
+                zookeeper_connect=self.kafka.zookeeper,
+                auto_start=False)
+        consumer._decide_partitions = lambda p: set()
+        consumer.start()
+        time.sleep(1)
+        self.assertFalse(consumer._running)
+
+
     def test_zk_conn_lost(self):
         """Check we restore zookeeper nodes correctly after connection loss
 
