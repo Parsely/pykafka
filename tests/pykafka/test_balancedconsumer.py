@@ -7,8 +7,7 @@ from kazoo.client import KazooClient
 
 from pykafka import KafkaClient
 from pykafka.balancedconsumer import BalancedConsumer, OffsetType
-from pykafka.exceptions import (ZookeeperConnectionLost,
-                                NoPartitionsForConsumerException)
+from pykafka.exceptions import ZookeeperConnectionLost, ConsumerStoppedException
 from pykafka.test.utils import get_cluster, stop_cluster
 from pykafka.utils.compat import range
 
@@ -215,7 +214,7 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
         consumer._decide_partitions = lambda p: set()
         consumer.start()
         self.assertFalse(consumer._running)
-        with self.assertRaises(NoPartitionsForConsumerException):
+        with self.assertRaises(ConsumerStoppedException):
             consumer.consume()
 
 
