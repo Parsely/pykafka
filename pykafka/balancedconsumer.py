@@ -26,6 +26,7 @@ from uuid import uuid4
 
 from kazoo.client import KazooClient
 from kazoo.exceptions import NoNodeException, NodeExistsError
+from kazoo.protocol.states import KazooState
 from kazoo.recipe.watchers import ChildrenWatch
 
 from .common import OffsetType
@@ -232,6 +233,7 @@ class BalancedConsumer():
             self._setup_zookeeper(self._zookeeper_connect,
                                   self._zookeeper_connection_timeout_ms)
         self._zookeeper.ensure_path(self._topic_path)
+        self._zookeeper.add_listener(self._zk_conn_state_changed)  # TODO weakref
         self._add_self()
         self._running = True
         self._set_watches()
@@ -249,6 +251,7 @@ class BalancedConsumer():
             # nodes that we remove here
             self._running = False
         self._consumer.stop()
+        self._zookeeper.remove_listener(self._zk_conn_state_changed)
         if self._owns_zookeeper:
             # NB this should always come last, so we do not hand over control
             # of our partitions until consumption has really been halted
@@ -541,6 +544,21 @@ class BalancedConsumer():
                       self._partitions, zk_partitions)
             return False
         return True
+
+    def _zk_conn_state_changed(self, zk_state):
+        """Act on zookeeper connection state changes
+
+        This suspends the internal consumer whenever the zookeeper connection
+        is suspended or lost (because in that situation we cannot assert
+        ownership of our topic partitions)
+        """
+        if zk_state != KazooState.CONNECTED:
+            # We don't handle the transition where the connection comes back,
+            # because that's covered by the ChildrenWatch watches already
+            def try_stop():
+                if self._consumer is not None:
+                    self._consumer.stop()
+            self._zookeeper.handler.spawn(try_stop)
 
     def _brokers_changed(self, brokers):
         if not self._running:

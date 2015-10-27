@@ -202,9 +202,9 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
         consumer.stop()
 
     def test_zk_conn_lost(self):
-        """Check we restore zookeeper nodes correctly after connection loss
+        """Check we remove/restore zk nodes correctly upon connection loss
 
-        See also github issue #204.
+        See also github issues #204 and #273.
         """
         zk = KazooClient(self.kafka.zookeeper)
         zk.start()
@@ -221,16 +221,16 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
 
             # Slightly contrived: we'll grab a lock to keep _rebalance() from
             # starting when we restart the zk connection (restart triggers a
-            # rebalance), so we can confirm the expected discrepancy between
-            # the (empty) set of partitions on zk and the set in the internal
-            # consumer:
+            # rebalance), to check we indeed no longer hold any partitions:
             with consumer._rebalancing_lock:
                 zk.start()
-                self.assertFalse(consumer._check_held_partitions())
+                self.assertSetEqual(consumer._get_held_partitions(), set())
+                self.assertSetEqual(consumer._partitions, set())
 
-            # Finally, confirm that _rebalance() resolves the discrepancy:
+            # Finally, confirm that _rebalance() sorts things out:
             time.sleep(.3)  # allow consumers time to begin rebalancing
             with consumer._rebalancing_lock:  # wait until rebalancing finishes
+                self.assertNotEqual(consumer._partitions, set())
                 self.assertTrue(consumer._check_held_partitions())
             with other_consumer._rebalancing_lock:
                 self.assertTrue(other_consumer._check_held_partitions())
