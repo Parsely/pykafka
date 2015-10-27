@@ -41,6 +41,7 @@ class TestBalancedConsumer(unittest2.TestCase):
         """Ensure that consume() returns in the amount of time it's supposed to
         """
         self._mock_consumer._setup_internal_consumer(start=False)
+        self._mock_consumer._consumer._partitions_by_id = {1: "dummy"}
         start = time.time()
         self._mock_consumer.consume()
         self.assertEqual(int(time.time() - start), int(self._consumer_timeout / 1000))
@@ -51,6 +52,7 @@ class TestBalancedConsumer(unittest2.TestCase):
         """
         consumer, _ = buildMockConsumer(timeout=-1)
         consumer._setup_internal_consumer(start=False)
+        consumer._consumer._partitions_by_id = {1: "dummy"}
 
         consumer.stop()
         self.assertIsNone(consumer.consume())
