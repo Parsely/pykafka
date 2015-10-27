@@ -45,6 +45,11 @@ class ZookeeperConnectionLost(ConsumerStoppedException):
     pass
 
 
+class NoPartitionsForConsumerException(ConsumerStoppedException):
+    """Indicates that this consumer is stopped because it assigned itself zero partitions"""
+    pass
+
+
 class NoMessagesConsumedError(KafkaException):
     """Indicates that no messages were returned from a MessageSet"""
     pass

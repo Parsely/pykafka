@@ -32,7 +32,8 @@ from kazoo.recipe.watchers import ChildrenWatch
 
 from .common import OffsetType
 from .exceptions import (KafkaException, PartitionOwnedError,
-                         ConsumerStoppedException, ZookeeperConnectionLost)
+                         ConsumerStoppedException, ZookeeperConnectionLost,
+                         NoPartitionsForConsumerException)
 from .simpleconsumer import SimpleConsumer
 from .utils.compat import range, get_bytes, itervalues
 
@@ -201,9 +202,9 @@ class BalancedConsumer():
         """Start the zookeeper partition checker thread"""
         def checker():
             while True:
-                time.sleep(120)
                 if not self._running:
                     break
+                time.sleep(120)
                 if not self._check_held_partitions():
                     self._rebalance()
             log.debug("Checker thread exiting")
@@ -253,7 +254,8 @@ class BalancedConsumer():
             # rebalance that is already underway might re-register the zk
             # nodes that we remove here
             self._running = False
-        self._consumer.stop()
+        if self._consumer is not None:
+            self._consumer.stop()
         self._zookeeper.remove_listener(self._zk_state_listener)
         if self._owns_zookeeper:
             # NB this should always come last, so we do not hand over control
@@ -449,6 +451,11 @@ class BalancedConsumer():
 
         This method is called whenever a zookeeper watch is triggered.
         """
+        if self._consumer is not None:
+            self.commit_offsets()
+        # this is necessary because we can't stop() while the lock is held
+        # (it's not an RLock)
+        should_stop = False
         with self._rebalancing_lock:
             if not self._running:
                 raise ConsumerStoppedException
@@ -466,6 +473,13 @@ class BalancedConsumer():
                         participants.append(self._consumer_id)
 
                     new_partitions = self._decide_partitions(participants)
+
+                    if not new_partitions:
+                        should_stop = True
+                        log.warning("No partitions assigned to consumer %s - stopping",
+                                    self._consumer_id)
+                        break
+
                     if new_partitions != self._partitions:
                         self._suspend_internal_consumer()
 
@@ -494,6 +508,8 @@ class BalancedConsumer():
                         raise
                     log.info('Unable to acquire partition %s. Retrying', ex.partition)
                     time.sleep(i * (self._rebalance_backoff_ms / 1000))
+        if should_stop:
+            self.stop()
 
     def _path_from_partition(self, p):
         """Given a partition, return its path in zookeeper.
@@ -630,6 +646,8 @@ class BalancedConsumer():
                 return False
             disp = (time.time() - self._last_message_time) * 1000.0
             return disp > self._consumer_timeout_ms
+        if not self._partitions:
+            raise NoPartitionsForConsumerException()
         message = None
         self._last_message_time = time.time()
         while message is None and not consumer_timed_out():
