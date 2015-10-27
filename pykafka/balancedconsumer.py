@@ -324,6 +324,8 @@ class BalancedConsumer():
         something more sophisticated here.
         """
         if self._consumer is not None:
+            log.debug(
+                "Suspending internal consumer ({})".format(self._consumer_id))
             self._consumer.stop()
 
     def _decide_partitions(self, participants):
@@ -557,9 +559,11 @@ class BalancedConsumer():
         return True
 
     def _get_zk_state_listener(self):
+        """Callback to suspend internal consumer when zk connection drops"""
         ref = weakref.ref(self)
 
         def listener(zk_state):
+            log.info("zk_state_listener: {}".format(zk_state))
             self = ref()
             if self is None:
                 return
