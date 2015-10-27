@@ -209,7 +209,8 @@ class BalancedConsumer():
 
     @property
     def partitions(self):
-        return self._consumer.partitions if self._consumer else None
+        return self._consumer.partitions if (
+            self._consumer and self._consumer._running) else None
 
     @property
     def _partitions(self):
@@ -428,15 +429,12 @@ class BalancedConsumer():
 
         This method is called whenever a zookeeper watch is triggered.
         """
-        if self._consumer is not None:
-            self.commit_offsets()
         with self._rebalancing_lock:
             if not self._running:
                 raise ConsumerStoppedException
             log.info('Rebalancing consumer %s for topic %s.' % (
                 self._consumer_id, self._topic.name)
             )
-
             for i in range(self._rebalance_max_retries):
                 try:
                     # If retrying, be sure to make sure the
@@ -448,6 +446,11 @@ class BalancedConsumer():
                         participants.append(self._consumer_id)
 
                     new_partitions = self._decide_partitions(participants)
+                    if new_partitions != self._partitions:
+                        # prevent consume() until we're certain we have
+                        # ownership of all new_partitions
+                        if self._consumer is not None:
+                            self._consumer.stop()
 
                     # Update zk with any changes:
                     # Note that we explicitly fetch our set of held partitions
@@ -467,6 +470,8 @@ class BalancedConsumer():
                     log.info('Rebalancing Complete.')
                     break
                 except PartitionOwnedError as ex:
+                    if self._consumer is not None:
+                        self._consumer.stop()
                     if i == self._rebalance_max_retries - 1:
                         log.warning('Failed to acquire partition %s after %d retries.',
                                     ex.partition, i)
