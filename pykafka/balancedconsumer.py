@@ -431,6 +431,8 @@ class BalancedConsumer():
         """
         if self._consumer is not None:
             self.commit_offsets()
+        # this is necessary because we can't stop() while the lock is held
+        # (it's not an RLock)
         should_stop = False
         with self._rebalancing_lock:
             if not self._running:
