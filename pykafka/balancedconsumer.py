@@ -23,14 +23,16 @@ import logging
 import socket
 import time
 from uuid import uuid4
+import weakref
 
 from kazoo.client import KazooClient
 from kazoo.exceptions import NoNodeException, NodeExistsError
+from kazoo.protocol.states import KazooState
 from kazoo.recipe.watchers import ChildrenWatch
 
 from .common import OffsetType
 from .exceptions import (KafkaException, PartitionOwnedError,
-                         ConsumerStoppedException, NoPartitionsForConsumerException)
+                         ConsumerStoppedException, ZookeeperConnectionLost)
 from .simpleconsumer import SimpleConsumer
 from .utils.compat import range, get_bytes, itervalues
 
@@ -183,6 +185,7 @@ class BalancedConsumer():
         self._owns_zookeeper = zookeeper is None
         if zookeeper is not None:
             self._zookeeper = zookeeper
+        self._zk_state_listener = None
         if auto_start is True:
             self.start()
 
@@ -209,7 +212,8 @@ class BalancedConsumer():
 
     @property
     def partitions(self):
-        return self._consumer.partitions if self._consumer else None
+        return self._consumer.partitions if (
+            self._consumer and self._consumer._running) else None
 
     @property
     def _partitions(self):
@@ -231,6 +235,8 @@ class BalancedConsumer():
             self._setup_zookeeper(self._zookeeper_connect,
                                   self._zookeeper_connection_timeout_ms)
         self._zookeeper.ensure_path(self._topic_path)
+        self._zk_state_listener = self._get_zk_state_listener()
+        self._zookeeper.add_listener(self._zk_state_listener)
         self._add_self()
         self._running = True
         self._set_watches()
@@ -249,6 +255,7 @@ class BalancedConsumer():
             self._running = False
         if self._consumer is not None:
             self._consumer.stop()
+        self._zookeeper.remove_listener(self._zk_state_listener)
         if self._owns_zookeeper:
             # NB this should always come last, so we do not hand over control
             # of our partitions until consumption has really been halted
@@ -307,6 +314,20 @@ class BalancedConsumer():
             reset_offset_on_start=reset_offset_on_start,
             auto_start=start
         )
+
+    def _suspend_internal_consumer(self):
+        """Suspend (ahem, stop) internal SimpleConsumer
+
+        This lets us temporarily suspend the internal consumer in situations
+        where we cannot assert ownership of our topic partitions.  Currently,
+        it actually just crudely stops it, because SimpleConsumer doesn't have
+        a suspend facility.  If this turns out a performance issue we could do
+        something more sophisticated here.
+        """
+        if self._consumer is not None:
+            log.debug(
+                "Suspending internal consumer ({})".format(self._consumer_id))
+            self._consumer.stop()
 
     def _decide_partitions(self, participants):
         """Decide which partitions belong to this consumer.
@@ -440,7 +461,6 @@ class BalancedConsumer():
             log.info('Rebalancing consumer %s for topic %s.' % (
                 self._consumer_id, self._topic.name)
             )
-
             for i in range(self._rebalance_max_retries):
                 try:
                     # If retrying, be sure to make sure the
@@ -452,11 +472,15 @@ class BalancedConsumer():
                         participants.append(self._consumer_id)
 
                     new_partitions = self._decide_partitions(participants)
+
                     if not new_partitions:
                         should_stop = True
                         log.warning("No partitions assigned to consumer %s - stopping",
                                     self._consumer_id)
                         break
+
+                    if new_partitions != self._partitions:
+                        self._suspend_internal_consumer()
 
                     # Update zk with any changes:
                     # Note that we explicitly fetch our set of held partitions
@@ -469,13 +493,14 @@ class BalancedConsumer():
                     self._remove_partitions(current_zk_parts - new_partitions)
                     self._add_partitions(new_partitions - current_zk_parts)
 
-                    # Only re-create internal consumer if something changed.
-                    if new_partitions != self._partitions:
+                    # If suspended previously, restart:
+                    if self._consumer is None or not self._consumer._running:
                         self._setup_internal_consumer(list(new_partitions))
 
                     log.info('Rebalancing Complete.')
                     break
                 except PartitionOwnedError as ex:
+                    self._suspend_internal_consumer()
                     if i == self._rebalance_max_retries - 1:
                         log.warning('Failed to acquire partition %s after %d retries.',
                                     ex.partition, i)
@@ -548,6 +573,22 @@ class BalancedConsumer():
             return False
         return True
 
+    def _get_zk_state_listener(self):
+        """Callback to suspend internal consumer when zk connection drops"""
+        ref = weakref.ref(self)
+
+        def listener(zk_state):
+            log.info("zk_state_listener: {}".format(zk_state))
+            self = ref()
+            if self is None:  # should never happen as we use remove_listener()
+                return
+            if zk_state != KazooState.CONNECTED:
+                # We don't handle the transition where the connection comes
+                # back: that's covered by the ChildrenWatch watches already
+                self._zookeeper.handler.spawn(self._suspend_internal_consumer)
+
+        return listener
+
     def _brokers_changed(self, brokers):
         if not self._running:
             return False  # `False` tells ChildrenWatch to disable this watch
@@ -604,8 +645,8 @@ class BalancedConsumer():
                 return False
             disp = (time.time() - self._last_message_time) * 1000.0
             return disp > self._consumer_timeout_ms
-        if not self._partitions:
-            raise NoPartitionsForConsumerException()
+        if self._consumer is None:
+            raise ConsumerStoppedException
         message = None
         self._last_message_time = time.time()
         while message is None and not consumer_timed_out():
@@ -614,6 +655,8 @@ class BalancedConsumer():
             except ConsumerStoppedException:
                 if not self._running:
                     return
+                elif not self._zookeeper.connected:
+                    raise ZookeeperConnectionLost
                 continue
             if message:
                 self._last_message_time = time.time()

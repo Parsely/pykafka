@@ -40,8 +40,8 @@ class ConsumerStoppedException(KafkaException):
     pass
 
 
-class NoPartitionsForConsumerException(ConsumerStoppedException):
-    """Indicates that this consumer is stopped because it assigned itself zero partitions"""
+class ZookeeperConnectionLost(ConsumerStoppedException):
+    """Indicates consumer is waiting for its zk connection to recover"""
     pass
 
 
