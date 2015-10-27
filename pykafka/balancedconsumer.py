@@ -23,6 +23,7 @@ import logging
 import socket
 import time
 from uuid import uuid4
+import weakref
 
 from kazoo.client import KazooClient
 from kazoo.exceptions import NoNodeException, NodeExistsError
@@ -184,6 +185,7 @@ class BalancedConsumer():
         self._owns_zookeeper = zookeeper is None
         if zookeeper is not None:
             self._zookeeper = zookeeper
+        self._zk_state_listener = None
         if auto_start is True:
             self.start()
 
@@ -233,7 +235,8 @@ class BalancedConsumer():
             self._setup_zookeeper(self._zookeeper_connect,
                                   self._zookeeper_connection_timeout_ms)
         self._zookeeper.ensure_path(self._topic_path)
-        self._zookeeper.add_listener(self._zk_conn_state_changed)  # TODO weakref
+        self._zk_state_listener = self._get_zk_state_listener()
+        self._zookeeper.add_listener(self._zk_state_listener)
         self._add_self()
         self._running = True
         self._set_watches()
@@ -251,7 +254,7 @@ class BalancedConsumer():
             # nodes that we remove here
             self._running = False
         self._consumer.stop()
-        self._zookeeper.remove_listener(self._zk_conn_state_changed)
+        self._zookeeper.remove_listener(self._zk_state_listener)
         if self._owns_zookeeper:
             # NB this should always come last, so we do not hand over control
             # of our partitions until consumption has really been halted
@@ -310,6 +313,18 @@ class BalancedConsumer():
             reset_offset_on_start=reset_offset_on_start,
             auto_start=start
         )
+
+    def _suspend_internal_consumer(self):
+        """Suspend (ahem, stop) internal SimpleConsumer
+
+        This lets us temporarily suspend the internal consumer in situations
+        where we cannot assert ownership of our topic partitions.  Currently,
+        it actually just crudely stops it, because SimpleConsumer doesn't have
+        a suspend facility.  If this turns out a performance issue we could do
+        something more sophisticated here.
+        """
+        if self._consumer is not None:
+            self._consumer.stop()
 
     def _decide_partitions(self, participants):
         """Decide which partitions belong to this consumer.
@@ -450,10 +465,7 @@ class BalancedConsumer():
 
                     new_partitions = self._decide_partitions(participants)
                     if new_partitions != self._partitions:
-                        # prevent consume() until we're certain we have
-                        # ownership of all new_partitions
-                        if self._consumer is not None:
-                            self._consumer.stop()
+                        self._suspend_internal_consumer()
 
                     # Update zk with any changes:
                     # Note that we explicitly fetch our set of held partitions
@@ -466,15 +478,14 @@ class BalancedConsumer():
                     self._remove_partitions(current_zk_parts - new_partitions)
                     self._add_partitions(new_partitions - current_zk_parts)
 
-                    # Only re-create internal consumer if something changed.
-                    if new_partitions != self._partitions:
+                    # If suspended previously, restart:
+                    if self._consumer is None or not self._consumer._running:
                         self._setup_internal_consumer(list(new_partitions))
 
                     log.info('Rebalancing Complete.')
                     break
                 except PartitionOwnedError as ex:
-                    if self._consumer is not None:
-                        self._consumer.stop()
+                    self._suspend_internal_consumer()
                     if i == self._rebalance_max_retries - 1:
                         log.warning('Failed to acquire partition %s after %d retries.',
                                     ex.partition, i)
@@ -545,20 +556,19 @@ class BalancedConsumer():
             return False
         return True
 
-    def _zk_conn_state_changed(self, zk_state):
-        """Act on zookeeper connection state changes
+    def _get_zk_state_listener(self):
+        ref = weakref.ref(self)
 
-        This suspends the internal consumer whenever the zookeeper connection
-        is suspended or lost (because in that situation we cannot assert
-        ownership of our topic partitions)
-        """
-        if zk_state != KazooState.CONNECTED:
-            # We don't handle the transition where the connection comes back,
-            # because that's covered by the ChildrenWatch watches already
-            def try_stop():
-                if self._consumer is not None:
-                    self._consumer.stop()
-            self._zookeeper.handler.spawn(try_stop)
+        def listener(zk_state):
+            self = ref()
+            if self is None:
+                return
+            if zk_state != KazooState.CONNECTED:
+                # We don't handle the transition where the connection comes
+                # back: that's covered by the ChildrenWatch watches already
+                self._zookeeper.handler.spawn(self._suspend_internal_consumer)
+
+        return listener
 
     def _brokers_changed(self, brokers):
         if not self._running:
