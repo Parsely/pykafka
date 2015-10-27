@@ -32,7 +32,7 @@ from kazoo.recipe.watchers import ChildrenWatch
 
 from .common import OffsetType
 from .exceptions import (KafkaException, PartitionOwnedError,
-                         ConsumerStoppedException)
+                         ConsumerStoppedException, ZookeeperConnectionLost)
 from .simpleconsumer import SimpleConsumer
 from .utils.compat import range, get_bytes, itervalues
 
@@ -565,7 +565,7 @@ class BalancedConsumer():
         def listener(zk_state):
             log.info("zk_state_listener: {}".format(zk_state))
             self = ref()
-            if self is None:
+            if self is None:  # should never happen as we use remove_listener()
                 return
             if zk_state != KazooState.CONNECTED:
                 # We don't handle the transition where the connection comes
@@ -638,6 +638,8 @@ class BalancedConsumer():
             except ConsumerStoppedException:
                 if not self._running:
                     return
+                elif not self._zookeeper.connected:
+                    raise ZookeeperConnectionLost
                 continue
             if message:
                 self._last_message_time = time.time()

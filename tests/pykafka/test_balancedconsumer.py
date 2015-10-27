@@ -7,6 +7,7 @@ from kazoo.client import KazooClient
 
 from pykafka import KafkaClient
 from pykafka.balancedconsumer import BalancedConsumer, OffsetType
+from pykafka.exceptions import ZookeeperConnectionLost
 from pykafka.test.utils import get_cluster, stop_cluster
 from pykafka.utils.compat import range
 
@@ -214,7 +215,11 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
 
             consumer = topic.get_balanced_consumer(consumer_group, zookeeper=zk)
             self.assertTrue(consumer._check_held_partitions())
+
             zk.stop()  # expires session, dropping all our nodes
+            time.sleep(.3)  # connection change signal needs time to propagate
+            with self.assertRaises(ZookeeperConnectionLost):
+                consumer.consume(block=False)
 
             # Start a second consumer on a different zk connection
             other_consumer = topic.get_balanced_consumer(consumer_group)
