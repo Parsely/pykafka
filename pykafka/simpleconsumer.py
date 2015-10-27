@@ -25,6 +25,7 @@ import time
 import threading
 import traceback
 from collections import defaultdict
+import weakref
 
 from .common import OffsetType
 from .utils.compat import (Semaphore, Queue, Empty, iteritems, itervalues,
@@ -233,6 +234,8 @@ class SimpleConsumer():
 
     def _build_default_error_handlers(self):
         """Set up the error handlers to use for partition errors."""
+        self = weakref.proxy(self)
+
         def _handle_OffsetOutOfRangeError(parts):
             log.info("Resetting offsets in response to OffsetOutOfRangeError")
             self.reset_offsets(
@@ -277,6 +280,7 @@ class SimpleConsumer():
 
     def __del__(self):
         """Stop consumption and workers when object is deleted"""
+        log.debug("Finalising {}".format(self))
         self.stop()
 
     def stop(self):
@@ -287,6 +291,8 @@ class SimpleConsumer():
 
     def _setup_autocommit_worker(self):
         """Start the autocommitter thread"""
+        self = weakref.proxy(self)
+
         def autocommitter():
             while True:
                 try:
@@ -295,6 +301,8 @@ class SimpleConsumer():
                     if self._auto_commit_enable:
                         self._auto_commit()
                     time.sleep(self._auto_commit_interval_ms / 1000)
+                except ReferenceError:
+                    break
                 except Exception:
                     # surface all exceptions to the main thread
                     self._worker_exception = sys.exc_info()
@@ -305,6 +313,8 @@ class SimpleConsumer():
 
     def _setup_fetch_workers(self):
         """Start the fetcher threads"""
+        self = weakref.proxy(self)
+
         def fetcher():
             while True:
                 try:
@@ -312,6 +322,8 @@ class SimpleConsumer():
                         break
                     self.fetch()
                     time.sleep(.0001)
+                except ReferenceError:
+                    break
                 except Exception:
                     # surface all exceptions to the main thread
                     self._worker_exception = sys.exc_info()
