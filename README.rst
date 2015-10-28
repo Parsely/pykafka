@@ -1,7 +1,7 @@
 .. image:: https://travis-ci.org/Parsely/pykafka.svg?branch=master
     :target: https://travis-ci.org/Parsely/pykafka
-.. image:: https://coveralls.io/repos/Parsely/pykafka/badge.svg?branch=master
-    :target: https://coveralls.io/r/Parsely/pykafka?branch=master
+.. image:: https://codecov.io/github/Parsely/pykafka/coverage.svg?branch=master
+    :target: https://codecov.io/github/Parsely/pykafka?branch=master
 
 PyKafka
 =======
@@ -76,8 +76,8 @@ You can also consume messages from this topic using a `Consumer` instance.
 
     >>> consumer = topic.get_simple_consumer()
     >>> for message in consumer:
-        if message is not None:
-            print message.offset, message.value
+    ...     if message is not None:
+    ...         print message.offset, message.value
     0 test message 0
     1 test message 1
     2 test message 4
@@ -90,23 +90,41 @@ this, you can use the `BalancedConsumer`.
 .. sourcecode:: python
 
     >>> balanced_consumer = topic.get_balanced_consumer(
-        consumer_group='testgroup',
-        auto_commit_enable=True,
-        zookeeper_connect='myZkClusterNode1.com:2181,myZkClusterNode2.com:2181/myZkChroot'
-    )
+    ...     consumer_group='testgroup',
+    ...     auto_commit_enable=True,
+    ...     zookeeper_connect='myZkClusterNode1.com:2181,myZkClusterNode2.com:2181/myZkChroot'
+    ... )
 
 You can have as many `BalancedConsumer` instances consuming a topic as that
 topic has partitions. If they are all connected to the same zookeeper instance,
 they will communicate with it to automatically balance the partitions between
 themselves.
 
+Operational Tools
+-----------------
+
+PyKafka includes a small collection of `CLI tools`_ that can help with common tasks
+related to the administration of a Kafka cluster, including offset and lag monitoring and
+topic inspection. The full, up-to-date interface for these tools can be fould by running
+
+.. sourcecode::
+
+    $ python cli/kafka_tools.py --help
+
+or after installing PyKafka via setuptools or pip:
+
+.. sourcecode::
+
+    $ kafka-tools --help
+
+.. _CLI tools: https://github.com/Parsely/pykafka/blob/master/pykafka/cli/kafka_tools.py
+
 What happened to Samsa?
 -----------------------
 
 This project used to be called samsa. It has been renamed PyKafka and has been
-fully overhauled to support Kafka 0.8.2. We chose to target 0.8.2 because it's
-currently the latest stable version, and the Offset Commit/Fetch API is
-stabilized.
+fully overhauled to support Kafka 0.8.2. We chose to target 0.8.2 because the offset
+Commit/Fetch API is stabilized.
 
 The Samsa `PyPI package`_  will stay up for the foreseeable future and tags for
 previous versions will always be available in this repo.

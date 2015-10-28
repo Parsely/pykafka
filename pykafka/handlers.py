@@ -22,7 +22,6 @@ from collections import namedtuple
 import functools
 import logging
 import threading
-import weakref
 
 from .utils.compat import Queue, Empty
 
@@ -91,6 +90,7 @@ class RequestHandler(object):
     """Uses a Handler instance to dispatch requests."""
 
     Task = namedtuple('Task', ['request', 'future'])
+    Shared = namedtuple('Shared', ['connection', 'requests', 'ending'])
 
     def __init__(self, handler, connection):
         """
@@ -98,9 +98,12 @@ class RequestHandler(object):
         :type connection: :class:`pykafka.connection.BrokerConnection`
         """
         self.handler = handler
-        self.connection = connection
-        self._requests = handler.Queue()
-        self.ending = handler.Event()
+
+        # NB self.shared is referenced directly by _start_thread(), so be careful not to
+        # rebind it
+        self.shared = self.Shared(connection=connection,
+                                  requests=handler.Queue(),
+                                  ending=handler.Event())
 
     def __del__(self):
         self.stop()
@@ -117,7 +120,7 @@ class RequestHandler(object):
             future = ResponseFuture(self.handler)
 
         task = self.Task(request, future)
-        self._requests.put(task)
+        self.shared.requests.put(task)
         return future
 
     def start(self):
@@ -126,33 +129,37 @@ class RequestHandler(object):
 
     def stop(self):
         """Stop the request processor."""
+        shared = self.shared
+        self.shared = None
         log.info("RequestHandler.stop: about to flush requests queue")
-        self._requests.join()
-        self.ending.set()
+        shared.requests.join()
+        shared.ending.set()
 
     def _start_thread(self):
         """Run the request processor"""
-        self = weakref.proxy(self)
+        # We pass a direct reference to `shared` into the worker, to avoid
+        # that thread holding a ref to `self`, which would prevent GC.  A
+        # previous version of this used a weakref to `self`, but would
+        # potentially abort the thread before the requests queue was empty
+        shared = self.shared
 
         def worker():
-            try:
-                while not self.ending.is_set():
-                    try:
-                        # set a timeout so we check self.ending every so often
-                        task = self._requests.get(timeout=1)
-                    except Empty:
-                        continue
-                    try:
-                        self.connection.request(task.request)
-                        if task.future:
-                            res = self.connection.response()
-                            task.future.set_response(res)
-                    except Exception as e:
-                        if task.future:
-                            task.future.set_error(e)
-                    finally:
-                        self._requests.task_done()
-            except ReferenceError:  # dead weakref
-                log.info("ReferenceError in handler - dead weakref")
+            while not shared.ending.is_set():
+                try:
+                    # set a timeout so we check `ending` every so often
+                    task = shared.requests.get(timeout=1)
+                except Empty:
+                    continue
+                try:
+                    shared.connection.request(task.request)
+                    if task.future:
+                        res = shared.connection.response()
+                        task.future.set_response(res)
+                except Exception as e:
+                    if task.future:
+                        task.future.set_error(e)
+                finally:
+                    shared.requests.task_done()
             log.info("RequestHandler worker: exiting cleanly")
+
         return self.handler.spawn(worker)

@@ -1,16 +1,20 @@
 language: python
 sudo: false
-python:
-  - "2.7"
 addons:
   apt:
     packages:
     - libev-dev
     - libsnappy-dev
-env:
-  - TOXENV=py27 BROKERS=localhost:9092,localhost:9093,localhost:9094 ZOOKEEPER=localhost:2181 KAFKA_BIN=/home/travis/kafka-bin
-  - TOXENV=py34 BROKERS=localhost:9092,localhost:9093,localhost:9094 ZOOKEEPER=localhost:2181 KAFKA_BIN=/home/travis/kafka-bin
-  - TOXENV=pypy BROKERS=localhost:9092,localhost:9093,localhost:9094 ZOOKEEPER=localhost:2181 KAFKA_BIN=/home/travis/kafka-bin
+matrix:
+  include:
+    - python: 2.7
+      env: TOXENV=py27 BROKERS=localhost:9092,localhost:9093,localhost:9094 ZOOKEEPER=localhost:2181 KAFKA_BIN=/home/travis/kafka-bin
+    - python: 3.4
+      env: TOXENV=py34 BROKERS=localhost:9092,localhost:9093,localhost:9094 ZOOKEEPER=localhost:2181 KAFKA_BIN=/home/travis/kafka-bin
+    - python: 3.5
+      env: TOXENV=py35 BROKERS=localhost:9092,localhost:9093,localhost:9094 ZOOKEEPER=localhost:2181 KAFKA_BIN=/home/travis/kafka-bin
+    - python: pypy
+      env: TOXENV=pypy BROKERS=localhost:9092,localhost:9093,localhost:9094 ZOOKEEPER=localhost:2181 KAFKA_BIN=/home/travis/kafka-bin
 
 notifications:
   email:
@@ -19,7 +23,7 @@ notifications:
 
 
 install:
-    - pip install python-coveralls kazoo tox testinstances futures
+    - pip install codecov kazoo tox testinstances futures
 
 before_script:
     - "python -m pykafka.test.kafka_instance 3 --download-dir /home/travis/kafka-bin &"
@@ -30,7 +34,7 @@ script:
 
 # Calculate coverage on success
 after_success:
-    - coveralls --config_file .coveragerc
+    - codecov
 
 branches:
   only:
