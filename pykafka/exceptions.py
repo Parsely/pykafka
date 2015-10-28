@@ -40,6 +40,11 @@ class ConsumerStoppedException(KafkaException):
     pass
 
 
+class ZookeeperConnectionLost(ConsumerStoppedException):
+    """Indicates consumer is waiting for its zk connection to recover"""
+    pass
+
+
 class NoMessagesConsumedError(KafkaException):
     """Indicates that no messages were returned from a MessageSet"""
     pass
