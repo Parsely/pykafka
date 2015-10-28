@@ -34,7 +34,8 @@ from .exceptions import (OffsetOutOfRangeError, UnknownTopicOrPartition,
                          OffsetMetadataTooLarge, OffsetsLoadInProgress,
                          NotCoordinatorForConsumer, SocketDisconnectedError,
                          ConsumerStoppedException, KafkaException,
-                         OffsetRequestFailedError, ERROR_CODES)
+                         NotLeaderForPartition, OffsetRequestFailedError,
+                         ERROR_CODES)
 from .protocol import (PartitionFetchRequest, PartitionOffsetCommitRequest,
                        PartitionOffsetFetchRequest, PartitionOffsetRequest)
 from .utils.error_handlers import (handle_partition_responses, raise_error,
@@ -246,9 +247,13 @@ class SimpleConsumer():
         def _handle_NotCoordinatorForConsumer(parts):
             self._discover_offset_manager()
 
+        def _handle_NotLeaderForPartition(parts):
+            self._update()
+
         return {
             UnknownTopicOrPartition.ERROR_CODE: lambda p: raise_error(UnknownTopicOrPartition),
             OffsetOutOfRangeError.ERROR_CODE: _handle_OffsetOutOfRangeError,
+            NotLeaderForPartition.ERROR_CODE: _handle_NotLeaderForPartition,
             OffsetMetadataTooLarge.ERROR_CODE: lambda p: raise_error(OffsetMetadataTooLarge),
             NotCoordinatorForConsumer.ERROR_CODE: _handle_NotCoordinatorForConsumer
         }
