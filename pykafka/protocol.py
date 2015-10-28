@@ -154,6 +154,17 @@ class Message(Message, Serializable):
     """
     MAGIC = 0
 
+    __slots__ = [
+        "compression_type",
+        "partition_key",
+        "value",
+        "offset",
+        "partition_id",
+        "partition",
+        "produce_attempt",
+        "delivery_future",
+        ]
+
     def __init__(self,
                  value,
                  partition_key=None,
@@ -171,6 +182,8 @@ class Message(Message, Serializable):
         # self.partition is set by the consumer
         self.partition = None
         self.produce_attempt = produce_attempt
+        # delivery_future is used by the producer
+        self.delivery_future = None
 
     def __len__(self):
         size = 4 + 1 + 1 + 4 + 4
