@@ -109,9 +109,10 @@ class BrokerConnection(object):
 
     def response(self):
         """Wait for a response from the broker"""
-        size = b""  # Size => int32
-        while len(size) != 4:
-            r = self._socket.recv(4 - len(size))
+        size = bytes()
+        expected_len = 4  # Size => int32
+        while len(size) != expected_len:
+            r = self._socket.recv(expected_len - len(size))
             if len(r) == 0:
                 # Happens when broker has shut down
                 self.disconnect()
