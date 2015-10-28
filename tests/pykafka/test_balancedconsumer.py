@@ -218,7 +218,8 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
         consumer = self.client.topics[self.topic_name].get_balanced_consumer(
                 b'test_no_partitions',
                 zookeeper_connect=self.kafka.zookeeper,
-                auto_start=False)
+                auto_start=False,
+                use_rdkafka=self.USE_RDKAFKA)
         consumer._decide_partitions = lambda p: set()
         consumer.start()
         self.assertFalse(consumer._running)
