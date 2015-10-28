@@ -342,9 +342,8 @@ class SimpleConsumer():
             else:
                 timeout = 1.0
 
-        self._raise_worker_exceptions()
-
         while True:
+            self._raise_worker_exceptions()
             if self._messages_arrived.acquire(blocking=block, timeout=timeout):
                 # by passing through this semaphore, we know that at
                 # least one message is waiting in some queue.
@@ -626,7 +625,12 @@ class SimpleConsumer():
                               owned_partition.partition.id,
                               owned_partition.message_count)
 
-        sorted_by_leader = sorted(iteritems(self._partitions_by_leader), key=lambda k: k[0].id)
+        def unlock_partitions(parts):
+            for owned_partition in parts:
+                owned_partition.fetch_lock.release()
+
+        sorted_by_leader = sorted(iteritems(self._partitions_by_leader),
+                                  key=lambda k: k[0].id)
         for broker, owned_partitions in sorted_by_leader:
             partition_reqs = {}
             sorted_offsets = sorted(owned_partitions, key=lambda k: k.partition.id)
@@ -646,20 +650,18 @@ class SimpleConsumer():
                         min_bytes=self._fetch_min_bytes
                     )
                 except (IOError, SocketDisconnectedError):
+                    if self._running:
+                        unlock_partitions(iterkeys(partition_reqs))
+                        self._update()
                     # If the broker dies while we're supposed to stop,
                     # it's fine, and probably an integration test.
-                    if self._running:
-                        raise
                     return
-
                 parts_by_error = build_parts_by_error(response, self._partitions_by_id)
                 handle_partition_responses(
                     self._default_error_handlers,
                     parts_by_error=parts_by_error,
                     success_handler=_handle_success)
-                # unlock the rest of the partitions
-                for owned_partition in iterkeys(partition_reqs):
-                    owned_partition.fetch_lock.release()
+                unlock_partitions(iterkeys(partition_reqs))
 
 
 class OwnedPartition(object):
