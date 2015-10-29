@@ -233,7 +233,9 @@ class Producer(object):
 
         :returns: a `Future` if the producer was created with `sync=False`,
             or `None` for `sync=True` (and in that case, any exceptions that
-            the future would have carried are raised here directly)
+            the future would have carried are raised here directly).  The
+            `Future` carries the (successfully or unsuccessfully) produced
+            :class:`pykafka.protocol.Message` in an extra field, `kafka_msg`.
         :rtype: `concurrent.futures.Future`
         """
         if not (isinstance(message, bytes) or message is None):
@@ -243,15 +245,21 @@ class Producer(object):
             raise ProducerStoppedException()
         partitions = list(self._topic.partitions.values())
         partition_id = self._partitioner(partitions, partition_key).id
+
+        future = futures.Future()
         msg = Message(value=message,
                       partition_key=partition_key,
                       partition_id=partition_id,
-                      delivery_future=futures.Future())
+                      # prevent circular ref; see future.kafka_msg below
+                      delivery_future=weakref.ref(future))
         self._produce(msg)
+
         self._raise_worker_exceptions()
         if self._synchronous:
-            return msg.delivery_future.result()
-        return msg.delivery_future
+            return future.result()
+
+        future.kafka_msg = msg
+        return future
 
     def _produce(self, message):
         """Enqueue a message for the relevant broker
@@ -298,7 +306,9 @@ class Producer(object):
         def mark_as_delivered(message_batch):
             owned_broker.increment_messages_pending(-1 * len(message_batch))
             for msg in message_batch:
-                msg.delivery_future.set_result(None)
+                f = msg.delivery_future()
+                if f is not None:  # else user discarded future already
+                    f.set_result(None)
 
         try:
             response = owned_broker.broker.produce_messages(req)
@@ -349,9 +359,10 @@ class Producer(object):
                 non_recoverable = type(exc) in (InvalidMessageSize,
                                                 MessageSizeTooLarge)
                 for msg in mset.messages:
-                    if (non_recoverable
-                            or msg.produce_attempt >= self._max_retries):
-                        msg.delivery_future.set_exception(exc)
+                    if (non_recoverable or msg.produce_attempt >= self._max_retries):
+                        f = msg.delivery_future()
+                        if f is not None:  # else user discarded future already
+                            f.set_exception(exc)
                     else:
                         msg.produce_attempt += 1
                         self._produce(msg)
