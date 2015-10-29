@@ -245,8 +245,8 @@ class Producer(object):
         partition_id = self._partitioner(partitions, partition_key).id
         msg = Message(value=message,
                       partition_key=partition_key,
-                      partition_id=partition_id)
-        msg.delivery_future = futures.Future()
+                      partition_id=partition_id,
+                      delivery_future=futures.Future())
         self._produce(msg)
         self._raise_worker_exceptions()
         if self._synchronous:
@@ -256,7 +256,7 @@ class Producer(object):
     def _produce(self, message):
         """Enqueue a message for the relevant broker
 
-        :param message: Message with partition assigned.
+        :param message: Message with valid `partition_id`, ready to be sent
         :type message: `pykafka.protocol.Message`
         """
         success = False
