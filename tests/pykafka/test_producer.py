@@ -77,8 +77,10 @@ class ProducerIntegrationTests(unittest2.TestCase):
         self.assertIsNone(future.result())
 
         self.consumer.start()
-        self.consumer.reset_offsets([(self.consumer.partitions[pid], offset)
-                                     for pid, offset in part_offsets.items()])
+        self.consumer.reset_offsets(
+            # This is just a reset_offsets, but works around issue #216:
+            [(self.consumer.partitions[pid], offset if offset != -1 else -2)
+             for pid, offset in part_offsets.items()])
         message = self.consumer.consume()
         self.assertEqual(message.value, payload)
 
