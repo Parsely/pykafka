@@ -151,6 +151,7 @@ class Message(Message, Serializable):
     :ivar value: The payload associated with this message
     :ivar offset: The offset of the message
     :ivar partition_id: The id of the partition to which this message belongs
+    :ivar delivery_future: For use by :class:`pykafka.producer.Producer`
     """
     MAGIC = 0
 
@@ -171,7 +172,8 @@ class Message(Message, Serializable):
                  compression_type=CompressionType.NONE,
                  offset=-1,
                  partition_id=-1,
-                 produce_attempt=0):
+                 produce_attempt=0,
+                 delivery_future=None):
         self.compression_type = compression_type
         self.partition_key = partition_key
         self.value = value
@@ -183,7 +185,7 @@ class Message(Message, Serializable):
         self.partition = None
         self.produce_attempt = produce_attempt
         # delivery_future is used by the producer
-        self.delivery_future = None
+        self.delivery_future = delivery_future
 
     def __len__(self):
         size = 4 + 1 + 1 + 4 + 4
