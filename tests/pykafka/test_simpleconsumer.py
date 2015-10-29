@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 import mock
+import time
 import unittest2
 from uuid import uuid4
 
@@ -135,6 +136,26 @@ class TestSimpleConsumer(unittest2.TestCase):
             expected_offset = target_part.earliest_available_offset()
             self.assertEqual(msg.offset, expected_offset)
             self.assertEqual(consumer.held_offsets[part_id], expected_offset)
+
+    def test_update_cluster(self):
+        """Check that the consumer can initiate cluster updates"""
+        with self._get_simple_consumer() as consumer:
+            self.assertIsNotNone(consumer.consume())
+
+            for broker in self.client.brokers.values():
+                broker._connection.disconnect()
+
+            # The consumer fetcher thread should prompt broker reconnection
+            t_start = time.time()
+            timeout = 10.
+            for broker in self.client.brokers.values():
+                while not broker._connection.connected:
+                    time.sleep(.1)
+                    self.assertTrue(time.time() - t_start < timeout,
+                                    msg="Broker reconnect failed.")
+            # If the fetcher thread fell over during the cluster update
+            # process, we'd get an exception here:
+            self.assertIsNotNone(consumer.consume())
 
     def test_consumer_lag(self):
         """Ensure that after consuming the entire topic, lag is 0"""
