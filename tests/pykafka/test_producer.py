@@ -56,6 +56,32 @@ class ProducerIntegrationTests(unittest2.TestCase):
         message = self.consumer.consume()
         assert message.value == payload
 
+    def test_recover_disconnected(self):
+        """Test our retry-loop with a recoverable error"""
+        payload = uuid4().bytes
+        topic = self.client.topics[self.topic_name]
+        prod = topic.get_producer(min_queued_messages=1)
+
+        # We must stop the consumer for this test, to ensure that it is the
+        # producer that will encounter the disconnected brokers and initiate
+        # a cluster update
+        self.consumer.stop()
+        for t in self.consumer._fetch_workers:
+            t.join()
+        part_offsets = self.consumer.held_offsets
+
+        for broker in self.client.brokers.values():
+            broker._connection.disconnect()
+
+        future = prod.produce(payload)
+        self.assertIsNone(future.result())
+
+        self.consumer.start()
+        self.consumer.reset_offsets([(self.consumer.partitions[pid], offset)
+                                     for pid, offset in part_offsets.items()])
+        message = self.consumer.consume()
+        self.assertEqual(message.value, payload)
+
     def test_async_produce_context(self):
         """Ensure that the producer works as a context manager"""
         payload = uuid4().bytes
