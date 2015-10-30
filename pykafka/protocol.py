@@ -137,8 +137,9 @@ class Message(Message, Serializable):
           Value => bytes
 
     :class:`pykafka.protocol.Message` also contains `partition` and
-    `partition_id` fields. Both of these have meaningless default values when
-    :class:`pykafka.protocol.Message` is used by the producer.
+    `partition_id` fields. Both of these have meaningless default values. When
+    :class:`pykafka.protocol.Message` is used by the producer, `partition_id`
+    identifies the Message's destination partition.
     When used in a :class:`pykafka.protocol.FetchRequest`, `partition_id`
     is set to the id of the partition from which the message was sent on
     receipt of the message. In the :class:`pykafka.simpleconsumer.SimpleConsumer`,
@@ -150,8 +151,20 @@ class Message(Message, Serializable):
     :ivar value: The payload associated with this message
     :ivar offset: The offset of the message
     :ivar partition_id: The id of the partition to which this message belongs
+    :ivar delivery_future: For use by :class:`pykafka.producer.Producer`
     """
     MAGIC = 0
+
+    __slots__ = [
+        "compression_type",
+        "partition_key",
+        "value",
+        "offset",
+        "partition_id",
+        "partition",
+        "produce_attempt",
+        "delivery_future",
+        ]
 
     def __init__(self,
                  value,
@@ -159,7 +172,8 @@ class Message(Message, Serializable):
                  compression_type=CompressionType.NONE,
                  offset=-1,
                  partition_id=-1,
-                 produce_attempt=0):
+                 produce_attempt=0,
+                 delivery_future=None):
         self.compression_type = compression_type
         self.partition_key = partition_key
         self.value = value
@@ -170,6 +184,8 @@ class Message(Message, Serializable):
         # self.partition is set by the consumer
         self.partition = None
         self.produce_attempt = produce_attempt
+        # delivery_future is used by the producer
+        self.delivery_future = delivery_future
 
     def __len__(self):
         size = 4 + 1 + 1 + 4 + 4

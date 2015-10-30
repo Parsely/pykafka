@@ -5,7 +5,8 @@ import unittest2
 from uuid import uuid4
 
 from pykafka import KafkaClient
-from pykafka.exceptions import ProducerQueueFullError
+from pykafka.exceptions import MessageSizeTooLarge, ProducerQueueFullError
+from pykafka.protocol import Message
 from pykafka.test.utils import get_cluster, stop_cluster
 
 
@@ -38,14 +39,50 @@ class ProducerIntegrationTests(unittest2.TestCase):
         message = self.consumer.consume()
         assert message.value == payload
 
+    def test_sync_produce_raises(self):
+        """Ensure response errors are raised in produce() if sync=True"""
+        topic = self.client.topics[self.topic_name]
+        with topic.get_sync_producer(min_queued_messages=1) as prod:
+            with self.assertRaises(MessageSizeTooLarge):
+                prod.produce(10**7 * b" ")
+
     def test_async_produce(self):
         payload = uuid4().bytes
 
         prod = self.client.topics[self.topic_name].get_producer(min_queued_messages=1)
-        prod.produce(payload)
+        future = prod.produce(payload)
+        self.assertIsNone(future.result())
 
         message = self.consumer.consume()
         assert message.value == payload
+
+    def test_recover_disconnected(self):
+        """Test our retry-loop with a recoverable error"""
+        payload = uuid4().bytes
+        topic = self.client.topics[self.topic_name]
+        prod = topic.get_producer(min_queued_messages=1)
+
+        # We must stop the consumer for this test, to ensure that it is the
+        # producer that will encounter the disconnected brokers and initiate
+        # a cluster update
+        self.consumer.stop()
+        for t in self.consumer._fetch_workers:
+            t.join()
+        part_offsets = self.consumer.held_offsets
+
+        for broker in self.client.brokers.values():
+            broker._connection.disconnect()
+
+        future = prod.produce(payload)
+        self.assertIsNone(future.result())
+
+        self.consumer.start()
+        self.consumer.reset_offsets(
+            # This is just a reset_offsets, but works around issue #216:
+            [(self.consumer.partitions[pid], offset if offset != -1 else -2)
+             for pid, offset in part_offsets.items()])
+        message = self.consumer.consume()
+        self.assertEqual(message.value, payload)
 
     def test_async_produce_context(self):
         """Ensure that the producer works as a context manager"""
@@ -84,12 +121,13 @@ class ProducerIntegrationTests(unittest2.TestCase):
     def test_async_produce_thread_exception(self):
         """Ensure that an exception on a worker thread is raised to the main thread"""
         topic = self.client.topics[self.topic_name]
-        with self.assertRaises(ValueError):
+        with self.assertRaises(AttributeError):
             with topic.get_producer(min_queued_messages=1) as producer:
-                # get some dummy data into the queue that will cause a crash when flushed
-                # specifically, this tuple causes a crash since its first element is
-                # not a two-tuple
-                producer._produce(("anything", 0))
+                # get some dummy data into the queue that will cause a crash
+                # when flushed:
+                msg = Message("stuff", partition_id=0)
+                del msg.value
+                producer._produce(msg)
         while self.consumer.consume() is not None:
             time.sleep(.05)
 
