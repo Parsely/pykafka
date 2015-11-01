@@ -1,12 +1,11 @@
 from contextlib import contextmanager
 
-from tests.pykafka.test_balancedconsumer import BalancedConsumerIntegrationTests
-from tests.pykafka.test_simpleconsumer import TestSimpleConsumer
+from tests.pykafka import test_simpleconsumer, test_balancedconsumer
 from pykafka.rdkafka import RdKafkaSimpleConsumer
 from pykafka.utils.compat import range
 
 
-class TestRdKafkaSimpleConsumer(TestSimpleConsumer):
+class TestRdKafkaSimpleConsumer(test_simpleconsumer.TestSimpleConsumer):
 
     @contextmanager
     def _get_simple_consumer(self, **kwargs):
@@ -70,5 +69,6 @@ def _latest_partition_offsets_by_reading(consumer, n_reads):
     return latest_offs
 
 
-class RdkBalancedConsumerIntegrationTests(BalancedConsumerIntegrationTests):
+class RdkBalancedConsumerIntegrationTests(
+        test_balancedconsumer.BalancedConsumerIntegrationTests):
     USE_RDKAFKA = True
