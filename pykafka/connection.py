@@ -109,11 +109,16 @@ class BrokerConnection(object):
 
     def response(self):
         """Wait for a response from the broker"""
-        size = self._socket.recv(4)
-        if len(size) == 0:
-            # Happens when broker has shut down
-            self.disconnect()
-            raise SocketDisconnectedError
+        size = bytes()
+        expected_len = 4  # Size => int32
+        while len(size) != expected_len:
+            r = self._socket.recv(expected_len - len(size))
+            if len(r) == 0:
+                # Happens when broker has shut down
+                self.disconnect()
+                raise SocketDisconnectedError
+            size += r
         size = struct.unpack('!i', size)[0]
         recvall_into(self._socket, self._buff, size)
+        # Drop CorrelationId => int32
         return buffer(self._buff[4:4 + size])
