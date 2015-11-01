@@ -1,7 +1,7 @@
 from contextlib import contextmanager
 import unittest2
 
-from pykafka.exceptions import ConsumerStoppedException, RdKafkaException
+from pykafka.exceptions import RdKafkaStoppedException, RdKafkaException
 from pykafka.rdkafka import _rd_kafka
 from pykafka.test.utils import get_cluster, stop_cluster
 from pykafka.utils.compat import get_bytes
@@ -71,11 +71,11 @@ class TestRdKafkaConsumer(unittest2.TestCase):
             consumer.stop()
 
     def test_stopped_exception(self):
-        """Check Consumer_consume raises ConsumerStoppedException"""
+        """Check Consumer_consume raises exception if handle was stopped"""
         consumer = _rd_kafka.Consumer(brokers=get_bytes(self.kafka.brokers),
                                       topic_name=self.topic_name,
                                       partition_ids=self.partition_ids,
                                       start_offsets=self.start_offsets)
         consumer.stop()
-        with self.assertRaises(ConsumerStoppedException):
+        with self.assertRaises(RdKafkaStoppedException):
             consumer.consume(1)

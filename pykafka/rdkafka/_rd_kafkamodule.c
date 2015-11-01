@@ -5,6 +5,7 @@
 #include <structseq.h>
 
 #include <errno.h>
+#include <pthread.h>
 #include <syslog.h>
 
 #include <librdkafka/rdkafka.h>
@@ -31,12 +32,13 @@ logging_callback(const rd_kafka_t *rk,
     else if (level == LOG_ERR) lvl = "error";
     else lvl = "critical";
 
-    /* NB librdkafka docs say that rk may be NULL, so check that */
-    const char *rk_name = rk ? rd_kafka_name(rk) : "rk_handle null";
-    const char *format = "%s [%s] %s";  /* format rk_name + fac + buf */
-
     /* Grab the GIL, as rdkafka callbacks may come from non-python threads */
     PyGILState_STATE gstate = PyGILState_Ensure();
+
+    /* NB librdkafka docs say that rk may be NULL, so check that */
+    /* NB2 because we hold the GIL we don't need the handle's rwlock */
+    const char *rk_name = rk ? rd_kafka_name(rk) : "rk_handle null";
+    const char *format = "%s [%s] %s";  /* format rk_name + fac + buf */
 
     PyObject *res = PyObject_CallMethod(
             logger, lvl, "ssss", format, rk_name, fac, buf);
@@ -158,9 +160,19 @@ static PyStructSequence_Desc Message_desc = {
  * handle between many topic handles, which would be far more efficient.  The
  * problem with that is that it would require the same rd_kafka_conf_t settings
  * across all class instances sharing a handle, which is somewhat incompatible
- * with the current pykafka API. */
+ * with the current pykafka API.
+ *
+ * We need a pthread rwlock here, because in many methods we release the GIL
+ * (this for various reasons - one key reason is that it prevents us
+ * deadlocking if we do blocking calls into librdkafka and then get callbacks
+ * out of librdkafka, and the callbacks would try to grab the GIL).  Once we
+ * release the GIL however, there may be other threads calling RdkHandle_stop
+ * (which in pykafka can happen on any thread).  The rule here then is that
+ * RdkHandle_stop needs to take out an exclusive lock (wrlock), whereas most
+ * other calls are safe when taking out a shared lock (rdlock). */
 typedef struct {
     PyObject_HEAD
+    pthread_rwlock_t rwlock;
     rd_kafka_t *rdk_handle;
     rd_kafka_conf_t *rdk_conf;
     rd_kafka_topic_t *rdk_topic_handle;
@@ -188,14 +200,80 @@ static PyMemberDef RdkHandle_members[] = {
 
 
 static PyObject *
-RdkHandle_outq_len(RdkHandle *self) {
-    if (! self->rdk_handle) {
-        return set_pykafka_error("ProducerStoppedException", "");
+RdkHandle_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
+{
+    PyObject *self = PyType_GenericNew(type, args, kwds);
+    if (self) {
+        int res = pthread_rwlock_init(&((RdkHandle *)self)->rwlock, NULL);
+        if (res) {
+            Py_DECREF(self);
+            return set_pykafka_error("RdKafkaException", "Failed rwlock init");
+        }
     }
+    return self;
+}
+
+
+static int
+RdkHandle_unlock(RdkHandle *self)
+{
+    if (pthread_rwlock_unlock(&self->rwlock)) {
+        set_pykafka_error("RdKafkaException", "Failed to release rwlock");
+        return -1;
+    }
+    return 0;
+}
+
+
+/* Get shared lock and optionally check handle is running.  Returns non-zero
+ * if error has been set */
+static int
+RdkHandle_safe_lock(RdkHandle *self, int check_running)
+{
+    int res;
+    Py_BEGIN_ALLOW_THREADS
+        res = pthread_rwlock_rdlock(&self->rwlock);
+    Py_END_ALLOW_THREADS
+    if (res) {
+        set_pykafka_error("RdKafkaException", "Failed to get shared lock");
+        return -1;
+    }
+    if (check_running && !self->rdk_handle) {
+        set_pykafka_error("RdKafkaStoppedException", "");
+        RdkHandle_unlock(self);
+        return -1;
+    }
+    return 0;
+}
+
+
+/* Get exclusive lock on handle.  Returns non-zero if error has been set */
+static int
+RdkHandle_excl_lock(RdkHandle *self)
+{
+    int res;
+    Py_BEGIN_ALLOW_THREADS
+        res = pthread_rwlock_wrlock(&self->rwlock);
+    Py_END_ALLOW_THREADS
+    if (res) {
+        set_pykafka_error("RdKafkaException", "Failed to get exclusive lock");
+        return -1;
+    }
+    return 0;
+}
+
+
+static PyObject *
+RdkHandle_outq_len(RdkHandle *self)
+{
+    if (RdkHandle_safe_lock(self, /* check_running= */ 1)) return NULL;
+
     int outq_len = -1;
     Py_BEGIN_ALLOW_THREADS  /* avoid callbacks deadlocking */
         outq_len = rd_kafka_outq_len(self->rdk_handle);
     Py_END_ALLOW_THREADS
+
+    if (RdkHandle_unlock(self)) return NULL;
     return Py_BuildValue("i", outq_len);
 }
 
@@ -208,13 +286,15 @@ RdkHandle_poll(RdkHandle *self, PyObject *args, PyObject *kwds)
     if (! PyArg_ParseTupleAndKeywords(args, kwds, "i", keywords, &timeout_ms)) {
             return NULL;
     }
-    if (! self->rdk_handle) {
-        return set_pykafka_error("ProducerStoppedException", "");
-    }
+
+    if (RdkHandle_safe_lock(self, /* check_running= */ 1)) return NULL;
+
     int n_events = 0;
     Py_BEGIN_ALLOW_THREADS  /* avoid callbacks deadlocking */
         n_events = rd_kafka_poll(self->rdk_handle, timeout_ms);
     Py_END_ALLOW_THREADS
+
+    if (RdkHandle_unlock(self)) return NULL;
     return Py_BuildValue("i", n_events);
 }
 
@@ -222,8 +302,9 @@ RdkHandle_poll(RdkHandle *self, PyObject *args, PyObject *kwds)
 static PyObject *
 RdkHandle_stop(RdkHandle *self)
 {
-    /* NB Consumer_stop assumes this never raises exceptions, ie always returns
-     * Py_None */
+    /* We'll only ever get a locking error if we programmed ourselves into a
+     * deadlock.  We'd have to admit defeat, abort, and leak this RdkHandle */
+    if (RdkHandle_excl_lock(self)) return NULL;
 
     Py_BEGIN_ALLOW_THREADS  /* avoid callbacks deadlocking */
         if (self->rdk_queue_handle) {
@@ -247,9 +328,11 @@ RdkHandle_stop(RdkHandle *self)
             self->rdk_topic_conf = NULL;
         }
     Py_END_ALLOW_THREADS
+
     Py_CLEAR(self->partition_ids);
     Py_CLEAR(self->pending_futures);
 
+    if (RdkHandle_unlock(self)) return NULL;
     Py_INCREF(Py_None);
     return Py_None;
 }
@@ -268,6 +351,7 @@ RdkHandle_dealloc(PyObject *self, PyObject *(*stop_func) (RdkHandle *))
     } else {
         Py_DECREF(stop_result);
     }
+    pthread_rwlock_destroy(&((RdkHandle *)self)->rwlock);
     self->ob_type->tp_free(self);
 }
 
@@ -297,6 +381,7 @@ RdkHandle_configure(RdkHandle *self, PyObject *args, PyObject *kwds)
         return NULL;
     }
 
+    if (RdkHandle_safe_lock(self, /* check_running= */ 0)) return NULL;
     if ((conf && topic_conf) || (!conf && !topic_conf)) {
         return set_pykafka_error(
             "RdKafkaException",
@@ -315,14 +400,17 @@ RdkHandle_configure(RdkHandle *self, PyObject *args, PyObject *kwds)
         }
     Py_END_ALLOW_THREADS
 
+    PyObject *retval = Py_None;
     PyObject *conf_or_topic_conf = topic_conf ? topic_conf : conf;
     Py_ssize_t i, len = PyList_Size(conf_or_topic_conf);
     for (i = 0; i != len; ++i) {
         PyObject *conf_pair = PyList_GetItem(conf_or_topic_conf, i);
         const char *name = NULL;
         const char *value =  NULL;
-        if (! PyArg_ParseTuple(conf_pair, "ss", &name, &value)) return NULL;
-
+        if (! PyArg_ParseTuple(conf_pair, "ss", &name, &value)) {
+            retval = NULL;
+            break;
+        }
         char errstr[512];
         rd_kafka_conf_res_t res;
         Py_BEGIN_ALLOW_THREADS  /* avoid callbacks deadlocking */
@@ -335,15 +423,19 @@ RdkHandle_configure(RdkHandle *self, PyObject *args, PyObject *kwds)
             }
         Py_END_ALLOW_THREADS
         if (res != RD_KAFKA_CONF_OK) {
-            return set_pykafka_error("RdKafkaException", errstr);
+            retval = set_pykafka_error("RdKafkaException", errstr);
+            break;
         }
     }
-    Py_INCREF(Py_None);
-    return Py_None;
+
+    if (RdkHandle_unlock(self)) return NULL;
+    Py_XINCREF(retval);
+    return retval;
 }
 
 
-/* Cleanup helper for *_start(), returns NULL to allow shorthand in use */
+/* Cleanup helper for *_start(), returns NULL to allow shorthand in use.
+ * NB: assumes self->rwlock is held and releases it. */
 static PyObject *
 RdkHandle_start_fail(RdkHandle *self, PyObject *(*stop_func) (RdkHandle *))
 {
@@ -351,6 +443,7 @@ RdkHandle_start_fail(RdkHandle *self, PyObject *(*stop_func) (RdkHandle *))
     PyObject *err_type, *err_value, *err_traceback;
     PyErr_Fetch(&err_type, &err_value, &err_traceback);
 
+    RdkHandle_unlock(self);
     PyObject *stop_result = stop_func(self);
 
     /* stop_func is likely to raise exceptions, as start was incomplete */
@@ -368,6 +461,12 @@ RdkHandle_start(RdkHandle *self,
                 const char *brokers,
                 const char *topic_name)
 {
+    if (RdkHandle_excl_lock(self)) return NULL;
+    if (self->rdk_handle) {
+        set_pykafka_error("RdKafkaException", "Already started!");
+        return RdkHandle_start_fail(self, RdkHandle_stop);
+    }
+
     /* Configure and start rdk_handle */
     char errstr[512];
     Py_BEGIN_ALLOW_THREADS  /* avoid callbacks deadlocking */
@@ -376,7 +475,8 @@ RdkHandle_start(RdkHandle *self,
         self->rdk_conf = NULL;  /* deallocated by rd_kafka_new() */
     Py_END_ALLOW_THREADS
     if (! self->rdk_handle) {
-        return set_pykafka_error("RdKafkaException", errstr);
+        set_pykafka_error("RdKafkaException", errstr);
+        return RdkHandle_start_fail(self, RdkHandle_stop);
     }
 
     /* Set logger and brokers */
@@ -402,6 +502,7 @@ RdkHandle_start(RdkHandle *self,
         return RdkHandle_start_fail(self, RdkHandle_stop);
     }
 
+    if (RdkHandle_unlock(self)) return NULL;
     Py_INCREF(Py_None);
     return Py_None;
 }
@@ -468,6 +569,7 @@ Producer_delivery_report_callback(rd_kafka_t *rk,
                                   const rd_kafka_message_t *rkmessage,
                                   void *opaque)
 {
+    /* TODO must change opaque to a full RdkHandle* so we can lock it */
     PyObject *key = NULL;
     PyObject *future = NULL;
     PyGILState_STATE gstate = PyGILState_Ensure();
@@ -506,30 +608,37 @@ cleanup:
 static PyObject *
 Producer_start(RdkHandle *self, PyObject *args, PyObject *kwds)
 {
+    if (RdkHandle_excl_lock(self)) return NULL;
+
     char *keywords[] = {"brokers", "topic_name", NULL};
     PyObject *brokers = NULL;
     PyObject *topic_name = NULL;
     if (! PyArg_ParseTupleAndKeywords(
             args, kwds, "SS", keywords, &brokers, &topic_name)) {
-        return NULL;
+        goto failed;
     }
 
     /* Configure delivery-reporting */
     if (! self->rdk_conf) {
-        return set_pykafka_error("RdKafkaException",
-                                 "Please run configure() before starting.");
+        set_pykafka_error("RdKafkaException",
+                          "Please run configure() before starting.");
+        goto failed;
     }
     rd_kafka_conf_set_dr_msg_cb(self->rdk_conf,
                                 Producer_delivery_report_callback);
     self->pending_futures = PyDict_New();
-    if (! self->pending_futures) return NULL;
+    if (! self->pending_futures) goto failed;
     rd_kafka_conf_set_opaque(self->rdk_conf, self->pending_futures);
 
+    if (RdkHandle_unlock(self)) return NULL;
     return RdkHandle_start(
             self,
             RD_KAFKA_PRODUCER,
             PyBytes_AS_STRING(brokers),
             PyBytes_AS_STRING(topic_name));
+failed:
+    RdkHandle_unlock(self);
+    return NULL;
 }
 
 
@@ -552,6 +661,7 @@ Producer_produce(RdkHandle *self, PyObject *args)
                            &partition_id)) {
         return NULL;
     }
+    if (RdkHandle_safe_lock(self, /* check_running= */ 1)) return NULL;
 
     /* Add a new Future and keep it alive until the delivery-callback runs;
      * the keep-alive is saved in a dict indexed by `pending_futures_uid`, and
@@ -591,11 +701,13 @@ Producer_produce(RdkHandle *self, PyObject *args)
     }
 
     Py_DECREF(key);
+    if (RdkHandle_unlock(self)) return NULL;
     return future;
 
 failed:
     Py_XDECREF(future);
     Py_XDECREF(key);
+    RdkHandle_unlock(self);
     return NULL;
 }
 
@@ -650,6 +762,8 @@ static PyTypeObject ProducerType = {
     0,                             /* tp_descr_set */
     0,                             /* tp_dictoffset */
     0,                             /* tp_init */
+    0,                             /* tp_alloc */
+    RdkHandle_new,                 /* tp_new */
 };
 
 
@@ -658,12 +772,13 @@ static PyTypeObject ProducerType = {
  */
 
 
+/* Destroy all internal state of the consumer */
 static PyObject *
 Consumer_stop(RdkHandle *self)
 {
-    /* Call stop on all partitions, then destroy all handles */
+    if (RdkHandle_safe_lock(self, /* check_running= */ 0)) return NULL;
 
-    PyObject *retval = Py_None;
+    int errored = 0;
     if (self->rdk_topic_handle && self->partition_ids) {
         Py_ssize_t i, len = PyList_Size(self->partition_ids);
         for (i = 0; i != len; ++i) {
@@ -672,7 +787,7 @@ Consumer_stop(RdkHandle *self)
             long part_id = PyLong_AsLong(
                     PyList_GetItem(self->partition_ids, i));
             if (part_id == -1) {
-                retval = NULL;
+                errored += 1;
                 PyObject *log_res = PyObject_CallMethod(
                         logger, "exception", "s", "In Consumer_stop:");
                 Py_XDECREF(log_res);
@@ -684,7 +799,7 @@ Consumer_stop(RdkHandle *self)
             Py_END_ALLOW_THREADS
             if (res == -1) {
                 set_pykafka_error_from_code(rd_kafka_errno2err(errno), NULL);
-                retval = NULL;
+                errored += 1;
                 PyObject *log_res = PyObject_CallMethod(
                         logger, "exception", "sl",
                         "Error in rd_kafka_consume_stop, part_id=%s",
@@ -694,11 +809,14 @@ Consumer_stop(RdkHandle *self)
             }
         }
     }
-    PyObject *res = RdkHandle_stop(self);
-    Py_XDECREF(res);  /* res should always be Py_None, the X is a formality */
 
-    Py_XINCREF(retval);
-    return retval;
+    RdkHandle_unlock(self);
+    PyObject *res = RdkHandle_stop(self);
+    if (errored) {
+        Py_XDECREF(res);
+        return NULL;
+    }
+    return res;
 }
 
 
@@ -709,6 +827,7 @@ Consumer_dealloc(PyObject *self)
 }
 
 
+/* NB: assumes self->rwlock is held and releases it. */
 static PyObject *
 Consumer_start_fail(RdkHandle *self)
 {
@@ -749,13 +868,16 @@ Consumer_start(RdkHandle *self, PyObject *args, PyObject *kwds)
     if (! res) return NULL;
     else Py_DECREF(res);
 
+    if (RdkHandle_excl_lock(self)) return NULL;
+    if (! self->rdk_handle) {
+        set_pykafka_error("RdKafkaStoppedException",
+                          "Stopped in the middle of starting.");
+        return Consumer_start_fail(self);
+    }
+
     /* We'll keep our own copy of partition_ids, because the one handed to us
        might be mutable, and weird things could happen if the list used on init
        is different than that on dealloc */
-    if (self->partition_ids) {
-        set_pykafka_error("RdKafkaException", "Already started.");
-        return Consumer_start_fail(self);
-    }
     self->partition_ids = PySequence_List(partition_ids);
     if (! self->partition_ids) return Consumer_start_fail(self);
 
@@ -794,6 +916,7 @@ Consumer_start(RdkHandle *self, PyObject *args, PyObject *kwds)
             return Consumer_start_fail(self);
         }
     }
+    if (RdkHandle_unlock(self)) return NULL;
     Py_INCREF(Py_None);
     return Py_None;
 }
@@ -804,15 +927,13 @@ Consumer_consume(RdkHandle *self, PyObject *args)
 {
     int timeout_ms = 0;
     if (! PyArg_ParseTuple(args, "i", &timeout_ms)) return NULL;
-    if (! self->rdk_queue_handle) {
-        return set_pykafka_error("ConsumerStoppedException", "");
-    }
-
     rd_kafka_message_t *rkmessage;
 
+    if (RdkHandle_safe_lock(self, /* check_running= */ 1)) return NULL;
     Py_BEGIN_ALLOW_THREADS  /* avoid callbacks deadlocking */
         rkmessage = rd_kafka_consume_queue(self->rdk_queue_handle, timeout_ms);
     Py_END_ALLOW_THREADS
+    if (RdkHandle_unlock(self)) return NULL;
 
     if (!rkmessage) {
         /* Either ETIMEDOUT or ENOENT occurred, but the latter would imply we
@@ -898,6 +1019,8 @@ static PyTypeObject ConsumerType = {
     0,                             /* tp_descr_set */
     0,                             /* tp_dictoffset */
     0,                             /* tp_init */
+    0,                             /* tp_alloc */
+    RdkHandle_new,                 /* tp_new */
 };
 
 
@@ -998,14 +1121,12 @@ _rd_kafkamodule_init(void)
         return NULL;
     }
 
-    ProducerType.tp_new = PyType_GenericNew;
     if (PyType_Ready(&ProducerType)) return NULL;
     Py_INCREF(&ProducerType);
     if (PyModule_AddObject(mod, "Producer", (PyObject *)&ProducerType)) {
         return NULL;
     }
 
-    ConsumerType.tp_new = PyType_GenericNew;
     if (PyType_Ready(&ConsumerType)) return NULL;
     Py_INCREF(&ConsumerType);
     if (PyModule_AddObject(mod, "Consumer", (PyObject *)&ConsumerType)) {

@@ -2,7 +2,8 @@ from concurrent import futures
 import logging
 import weakref
 
-from pykafka.exceptions import KafkaException
+from pykafka.exceptions import (
+        KafkaException, RdKafkaStoppedException, ProducerStoppedException)
 from pykafka.producer import Producer, CompressionType
 from pykafka.utils.compat import get_bytes
 from . import _rd_kafka
@@ -55,7 +56,10 @@ class RdKafkaProducer(Producer):
 
     def _produce(self, message_partition_tup):
         (key, msg), part_id, attempt = message_partition_tup
-        return self._rdk_producer.produce(msg, key, part_id)
+        try:
+            return self._rdk_producer.produce(msg, key, part_id)
+        except RdKafkaStoppedException:
+            raise ProducerStoppedException
 
     def _wait_all(self):
         # XXX should this have a timeout_ms param, or potentially wait forever?

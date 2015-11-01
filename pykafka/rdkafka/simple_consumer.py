@@ -1,6 +1,7 @@
 from contextlib import contextmanager
 import logging
 
+from pykafka.exceptions import RdKafkaStoppedException, ConsumerStoppedException
 from pykafka.simpleconsumer import SimpleConsumer, OffsetType
 from pykafka.utils.compat import get_bytes
 from . import _rd_kafka
@@ -60,13 +61,27 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
 
     def consume(self, block=True):
         timeout_ms = self._consumer_timeout_ms if block else 1
-        msg = self._rdk_consumer.consume(timeout_ms)
+        try:
+            msg = self._rdk_consumer.consume(timeout_ms)
+        # if _rdk_consumer is None we'll catch an AttributeError here
+        except (RdKafkaStoppedException, AttributeError) as e:
+            if not self._running:
+                raise ConsumerStoppedException
+            else:  # unexpected other reason
+                raise
+        else:
+            if not self._running:
+                # Even if we did get a msg back, we'll still want to abort
+                # here, because the new offset wouldn't get committed anymore
+                raise ConsumerStoppedException
         if msg is not None:
             # set offset in OwnedPartition so the autocommit_worker can find it
             self._partitions_by_id[msg.partition_id].set_offset(msg.offset)
         return msg
 
     def stop(self):
+        # NB we should always call super() first, because it takes care of
+        # shipping all important state (ie stored offsets) out
         ret = super(RdKafkaSimpleConsumer, self).stop()
         if hasattr(self, "_rdk_consumer") and self._rdk_consumer is not None:
             self._stop_poller_thread.set()

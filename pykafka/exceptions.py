@@ -197,3 +197,12 @@ class RdKafkaException(KafkaException):
     where we can't find a suitable exception
     """
     pass
+
+
+class RdKafkaStoppedException(RdKafkaException):
+    """Consumer or producer handle was stopped
+
+    Raised by the C extension, to be translated to ConsumerStoppedException or
+    ProducerStoppedException by the caller
+    """
+    pass
