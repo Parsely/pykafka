@@ -122,23 +122,13 @@ class ProducerIntegrationTests(unittest2.TestCase):
 
     def test_async_produce_thread_exception(self):
         """Ensure that an exception on a worker thread is raised to the main thread"""
-<<<<<<< HEAD
-        with self.assertRaises(ValueError):
-            with self._get_producer(min_queued_messages=1) as producer:
-                # get some dummy data into the queue that will cause a crash when flushed
-                # specifically, this tuple causes a crash since its first element is
-                # not a two-tuple
-                producer._produce(("anything", 0))
-=======
-        topic = self.client.topics[self.topic_name]
         with self.assertRaises(AttributeError):
-            with topic.get_producer(min_queued_messages=1) as producer:
+            with self._get_producer(min_queued_messages=1) as producer:
                 # get some dummy data into the queue that will cause a crash
                 # when flushed:
                 msg = Message("stuff", partition_id=0)
                 del msg.value
                 producer._produce(msg)
->>>>>>> parsely/master
         while self.consumer.consume() is not None:
             time.sleep(.05)
 
