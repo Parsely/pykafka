@@ -47,32 +47,17 @@ class RdKafkaProducer(Producer):
 
     def stop(self):
         super(RdKafkaProducer, self).stop()
-
-        # We must wait for the poller thread to join because stop() will wipe
-        # the handle that reads from, risking segfaults.  As super's stop()
-        # already called _wait_all(), join() should always succeed:
-        self._poller_thread.join()
         self._rdk_producer.stop()
 
-    def _produce(self, message_partition_tup):
-        (key, msg), part_id, attempt = message_partition_tup
+    def _produce(self, message):
         try:
-            return self._rdk_producer.produce(msg, key, part_id)
+            self._rdk_producer.produce(message)
         except RdKafkaStoppedException:
             raise ProducerStoppedException
 
     def _wait_all(self):
-        # XXX should this have a timeout_ms param, or potentially wait forever?
-        # XXX should raise exceptions for delivery errors (esp. when sync=True)
-        not_done = True
-        while not_done:
-            done, not_done = futures.wait(
-                self._rdk_producer._pending_futures.values(), timeout=1)
-            if not_done:
-                log.info("Waiting for incomplete Futures: {}".format(not_done))
-                if not self._poller_thread.is_alive():
-                    raise KafkaException("Poller thread dead, _wait_all would "
-                                         "never finish.")
+        """Helper for stop().  Will block forever if used elsewhere"""
+        self._poller_thread.join()
 
     def _mk_rdkafka_config_lists(self):
         """Populate conf, topic_conf to configure the rdkafka producer"""
