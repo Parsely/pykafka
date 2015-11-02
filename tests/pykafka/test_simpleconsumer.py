@@ -148,11 +148,15 @@ class TestSimpleConsumer(unittest2.TestCase):
             # The consumer fetcher thread should prompt broker reconnection
             t_start = time.time()
             timeout = 10.
-            for broker in self.client.brokers.values():
-                while not broker._connection.connected:
-                    time.sleep(.1)
-                    self.assertTrue(time.time() - t_start < timeout,
-                                    msg="Broker reconnect failed.")
+            try:
+                for broker in self.client.brokers.values():
+                    while not broker._connection.connected:
+                        time.sleep(.1)
+                        self.assertTrue(time.time() - t_start < timeout,
+                                        msg="Broker reconnect failed.")
+            finally:
+                # Make sure further tests don't get confused
+                consumer._update()
             # If the fetcher thread fell over during the cluster update
             # process, we'd get an exception here:
             self.assertIsNotNone(consumer.consume())

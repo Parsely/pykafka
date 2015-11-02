@@ -1,5 +1,7 @@
 from contextlib import contextmanager
 
+import pytest
+
 from tests.pykafka import test_simpleconsumer, test_balancedconsumer
 from pykafka.rdkafka import RdKafkaSimpleConsumer
 from pykafka.utils.compat import range
@@ -15,8 +17,15 @@ class TestRdKafkaSimpleConsumer(test_simpleconsumer.TestSimpleConsumer):
             topic=topic,
             cluster=topic._cluster,
             **kwargs)
-        yield consumer
-        consumer.stop()
+        try:
+            yield consumer
+        finally:
+            consumer.stop()
+
+    @pytest.mark.xfail
+    def test_update_cluster(self):
+        """Won't work because we don't run SimpleConsumer.fetch"""
+        super(TestRdKafkaSimpleConsumer, self).test_update_cluster()
 
     def test_offset_commit_agrees(self):
         """Check rdkafka-obtained offsets arrive correctly
