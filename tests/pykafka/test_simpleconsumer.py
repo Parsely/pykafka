@@ -12,6 +12,7 @@ from pykafka.utils.compat import range, iteritems
 
 class TestSimpleConsumer(unittest2.TestCase):
     maxDiff = None
+    USE_RDKAFKA = False
 
     @classmethod
     def setUpClass(cls):
@@ -38,11 +39,13 @@ class TestSimpleConsumer(unittest2.TestCase):
 
     @contextmanager
     def _get_simple_consumer(self, **kwargs):
-        # Mostly spun out so we can override it in TestRdKafkaSimpleConsumer
         topic = self.client.topics[self.topic_name]
-        consumer = topic.get_simple_consumer(**kwargs)
-        yield consumer
-        consumer.stop()
+        consumer = topic.get_simple_consumer(
+            use_rdkafka=self.USE_RDKAFKA, **kwargs)
+        try:
+            yield consumer
+        finally:
+            consumer.stop()
 
     def test_consume(self):
         with self._get_simple_consumer() as consumer:

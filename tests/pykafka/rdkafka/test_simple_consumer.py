@@ -8,19 +8,7 @@ from pykafka.utils.compat import range
 
 
 class TestRdKafkaSimpleConsumer(test_simpleconsumer.TestSimpleConsumer):
-
-    @contextmanager
-    def _get_simple_consumer(self, **kwargs):
-        # This enables automatic reuse of all tests from test_simpleconsumer
-        topic = self.client.topics[self.topic_name]
-        consumer = RdKafkaSimpleConsumer(
-            topic=topic,
-            cluster=topic._cluster,
-            **kwargs)
-        try:
-            yield consumer
-        finally:
-            consumer.stop()
+    USE_RDKAFKA = True
 
     @pytest.mark.xfail
     def test_update_cluster(self):
