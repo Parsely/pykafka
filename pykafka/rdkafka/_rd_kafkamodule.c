@@ -122,32 +122,8 @@ cleanup:
  * Message type
  */
 
-PyDoc_STRVAR(MessageType__doc__,
-"A kafka message with field names compatible with pykafka.protocol.Message\n"
-"\n"
-"In addition to value, partition_key, offset, this offers partition_id.");
 
-
-/* The PyStructSequence we use here is the C-API equivalent of namedtuple; it
-   is available in python 2.7 even though undocumented until python 3.3 */
-static PyTypeObject MessageType;
-
-
-static PyStructSequence_Field Message_fields[] = {
-    {"value", "message payload"},
-    {"partition_key", "message key (used for partitioning)"},
-    {"partition_id", "partition that message originates from"},
-    {"offset", "message offset within partition"},
-    {NULL}
-};
-
-
-static PyStructSequence_Desc Message_desc = {
-    "pykafka.rdkafka.Message",
-    MessageType__doc__,
-    Message_fields,
-    4
-};
+PyObject *Message;  /* pykafka.protocol.Message */
 
 
 /**
@@ -970,13 +946,17 @@ Consumer_consume(RdkHandle *self, PyObject *args)
 {
     int timeout_ms = 0;
     if (! PyArg_ParseTuple(args, "i", &timeout_ms)) return NULL;
+
+    PyObject *retval = NULL;
+    PyObject *empty_args = NULL;
+    PyObject *kwargs = NULL;
     rd_kafka_message_t *rkmessage;
 
     if (RdkHandle_safe_lock(self, /* check_running= */ 1)) return NULL;
     Py_BEGIN_ALLOW_THREADS  /* avoid callbacks deadlocking */
         rkmessage = rd_kafka_consume_queue(self->rdk_queue_handle, timeout_ms);
     Py_END_ALLOW_THREADS
-    if (RdkHandle_unlock(self)) return NULL;
+    if (RdkHandle_unlock(self)) goto cleanup;
 
     if (!rkmessage) {
         /* Either ETIMEDOUT or ENOENT occurred, but the latter would imply we
@@ -985,30 +965,39 @@ Consumer_consume(RdkHandle *self, PyObject *args)
         Py_INCREF(Py_None);
         return Py_None;
     }
-    PyObject *retval = NULL;
+
     if (rkmessage->err == RD_KAFKA_RESP_ERR_NO_ERROR) {
-        retval = PyStructSequence_New(&MessageType);
-        PyStructSequence_SET_ITEM(retval, 0, PyBytes_FromStringAndSize(
-                                  rkmessage->payload, rkmessage->len));
-        PyStructSequence_SET_ITEM(retval, 1, PyBytes_FromStringAndSize(
-                                  rkmessage->key, rkmessage->key_len));
-        PyStructSequence_SET_ITEM(retval, 2, PyLong_FromLong(
-                                  rkmessage->partition));
-        PyStructSequence_SET_ITEM(retval, 3, PyLong_FromLongLong(
-                                  rkmessage->offset));
+        /* Build a pykafka.protocol.Message */
+#if PY_MAJOR_VERSION >= 3
+        const char *format = "{s:y#,s:y#,s:l,s:L}";
+#else
+        const char *format = "{s:s#,s:s#,s:l,s:L}";
+#endif
+        PyObject *kwargs = Py_BuildValue(
+            format,
+            "value", rkmessage->payload, rkmessage->len,
+            "partition_key", rkmessage->key, rkmessage->key_len,
+            "partition_id", (long)rkmessage->partition,
+            "offset", (PY_LONG_LONG)rkmessage->offset);
+        if (! kwargs) goto cleanup;
+        empty_args = PyTuple_New(0);
+        if (! empty_args) goto cleanup;
+        retval = PyObject_Call(Message, empty_args, kwargs);
     } else if (rkmessage->err == RD_KAFKA_RESP_ERR__PARTITION_EOF) {
-        /* Whenever we get to the head of a partition, we get this.  There may
-           be messages available in other partitions, so if we want to match
-           pykafka.SimpleConsumer behaviour, we ought to avoid breaking any
-           iteration loops, and simply skip over this one altogether: */
+        /* Whenever we get to the head of a partition, we get this.  There
+         * may be messages available in other partitions, so if we want to
+         * match pykafka.SimpleConsumer behaviour, we ought to avoid breaking
+         * any iteration loops, and simply skip over this one altogether: */
         retval = Consumer_consume(self, args);
     } else {
         set_pykafka_error_from_code(rkmessage->err, NULL);
     }
-
+cleanup:
     Py_BEGIN_ALLOW_THREADS  /* avoid callbacks deadlocking */
         rd_kafka_message_destroy(rkmessage);
     Py_END_ALLOW_THREADS
+    Py_XDECREF(empty_args);
+    Py_XDECREF(kwargs);
     return retval;
 }
 
@@ -1149,13 +1138,11 @@ _rd_kafkamodule_init(void)
     pykafka_exceptions = PyImport_ImportModule("pykafka.exceptions");
     if (! pykafka_exceptions) return NULL;
 
-    if (MessageType.tp_name == NULL) {
-        PyStructSequence_InitType(&MessageType, &Message_desc);
-    }
-    Py_INCREF(&MessageType);
-    if (PyModule_AddObject(mod, "Message", (PyObject *)&MessageType)) {
-        return NULL;
-    }
+    PyObject *pykafka_protocol = PyImport_ImportModule("pykafka.protocol");
+    if (! pykafka_protocol) return NULL;
+    Message = PyObject_GetAttrString(pykafka_protocol, "Message");
+    Py_DECREF(pykafka_protocol);
+    if (! Message) return NULL;
 
     if (PyType_Ready(&ProducerType)) return NULL;
     Py_INCREF(&ProducerType);
