@@ -4,7 +4,7 @@ import weakref
 
 from pykafka.exceptions import (
         KafkaException, RdKafkaStoppedException, ProducerStoppedException)
-from pykafka.producer import Producer, CompressionType
+from pykafka.producer import Producer, CompressionType, random_partitioner
 from pykafka.utils.compat import get_bytes
 from . import _rd_kafka
 
@@ -15,13 +15,30 @@ log = logging.getLogger(__name__)
 class RdKafkaProducer(Producer):
     """A librdkafka-backed version of pykafka.Producer
 
-    This aims to conform to the Producer interface as closely as possible.  One
-    notable difference is that it returns a future from produce(), through
-    which the user can later check if produced messages have made it to kafka.
-
+    This aims to conform to the Producer interface as closely as possible.
     For an overview of how configuration keys are mapped to librdkafka's, see
     _mk_rdkafka_config_lists.
     """
+    def __init__(self,
+                 cluster,
+                 topic,
+                 partitioner=random_partitioner,
+                 compression=CompressionType.NONE,
+                 max_retries=3,
+                 retry_backoff_ms=100,
+                 required_acks=1,
+                 ack_timeout_ms=10 * 1000,
+                 max_queued_messages=100000,
+                 min_queued_messages=2000,  # NB differs from pykafka.Producer
+                 linger_ms=5 * 1000,
+                 block_on_queue_full=True,
+                 sync=False):
+        callargs = {k: v for k, v in vars().items()
+                         if k not in ("self", "__class__")}
+        self._rdk_producer = None
+        # super() must come last because it calls start()
+        super(RdKafkaProducer, self).__init__(**callargs)
+
     def start(self):
         if not self._running:
             brokers = b','.join(b.host + b":" + get_bytes(str(b.port))

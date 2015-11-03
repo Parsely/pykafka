@@ -26,6 +26,31 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
     For an overview of how configuration keys are mapped to librdkafka's, see
     _mk_rdkafka_config_lists.
     """
+    def __init__(self,
+                 topic,
+                 cluster,
+                 consumer_group=None,
+                 partitions=None,
+                 fetch_message_max_bytes=1024 * 1024,
+                 num_consumer_fetchers=1,
+                 auto_commit_enable=False,
+                 auto_commit_interval_ms=60 * 1000,
+                 queued_max_messages=10**5,  # NB differs from SimpleConsumer
+                 fetch_min_bytes=1,
+                 fetch_wait_max_ms=100,
+                 offsets_channel_backoff_ms=1000,
+                 offsets_commit_max_retries=5,
+                 auto_offset_reset=OffsetType.EARLIEST,
+                 consumer_timeout_ms=-1,
+                 auto_start=True,
+                 reset_offset_on_start=False):
+        callargs = {k: v for k, v in vars().items()
+                         if k not in ("self", "__class__")}
+        self._rdk_consumer = None
+        self._poller_thread = None
+        self._stop_poller_thread = cluster.handler.Event()
+        # super() must come last for the case where auto_start=True
+        super(RdKafkaSimpleConsumer, self).__init__(**callargs)
 
     def _setup_fetch_workers(self):
         brokers = b','.join(b.host + b":" + get_bytes(str(b.port))
@@ -55,7 +80,7 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
                 rdk_handle.poll(timeout_ms=1000)
             log.debug("Exiting RdKafkaSimpleConsumer poller thread.")
 
-        self._stop_poller_thread = self._cluster.handler.Event()
+        self._stop_poller_thread.clear()
         self._poller_thread = self._cluster.handler.spawn(
             poll, args=(self._rdk_consumer, self._stop_poller_thread))
 
@@ -83,7 +108,7 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
         # NB we should always call super() first, because it takes care of
         # shipping all important state (ie stored offsets) out
         ret = super(RdKafkaSimpleConsumer, self).stop()
-        if hasattr(self, "_rdk_consumer") and self._rdk_consumer is not None:
+        if self._rdk_consumer is not None:
             self._stop_poller_thread.set()
             self._poller_thread.join()
             # Call _rd_kafka.Consumer.stop explicitly, so we may catch errors:
@@ -112,8 +137,7 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
         ultimate source of truth.  So whenever offsets are to be changed (other
         than through consume() that is), we need to clobber _rdk_consumer.
         """
-        restart_required = (self._running and hasattr(self, "_rdk_consumer")
-                            and self._rdk_consumer is not None)
+        restart_required = self._running and self._rdk_consumer is not None
         if restart_required:
             # Note we must not call a full self.stop() as that would stop
             # SimpleConsumer threads too, and if we'd have to start() again

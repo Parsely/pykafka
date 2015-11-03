@@ -138,12 +138,15 @@ and ``LD_LIBRARY_PATH`` in your shell environment.
 
 After that, all that's needed is that you pass an extra parameter
 ``use_rdkafka=True`` to ``topic.get_producer()``,
-``topic.get_simple_consumer()``, or ``topic.get_balanced_consumer()``.
+``topic.get_simple_consumer()``, or ``topic.get_balanced_consumer()``.  Note
+that some configuration options may have different optimal values; it may be
+worthwhile to consult librdkafka's `configuration notes`_ for this.
 
 We currently test against librdkafka `0.8.6`_ only.  Note that use on pypy is
 not recommended at this time; the producer is certainly expected to crash.
 
 .. _0.8.6: https://github.com/edenhill/librdkafka/releases/tag/0.8.6
+.. _configuration notes: https://github.com/edenhill/librdkafka/blob/0.8.6/CONFIGURATION.md
 
 Operational Tools
 -----------------
