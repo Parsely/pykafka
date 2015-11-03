@@ -77,12 +77,13 @@ class Topic():
         """A dictionary containing all known partitions for this topic"""
         return self._partitions
 
-    def get_producer(self, **kwargs):
+    def get_producer(self, use_rdkafka=False, **kwargs):
         """Create a :class:`pykafka.producer.Producer` for this topic.
 
         For a description of all available `kwargs`, see the Producer docstring.
         """
-        return Producer(self._cluster, self, **kwargs)
+        Cls = rdkafka.RdKafkaProducer if rdkafka and use_rdkafka else Producer
+        return Cls(self._cluster, self, **kwargs)
 
     def get_sync_producer(self, **kwargs):
         """Create a :class:`pykafka.producer.Producer` for this topic.

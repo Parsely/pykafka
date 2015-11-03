@@ -261,7 +261,7 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
                 self.assertSetEqual(consumer._partitions, set())
 
             # Finally, confirm that _rebalance() sorts things out:
-            time.sleep(.3)  # allow consumers time to begin rebalancing
+            time.sleep(.5)  # allow consumers time to begin rebalancing
             with consumer._rebalancing_lock:  # wait until rebalancing finishes
                 self.assertNotEqual(consumer._partitions, set())
                 self.assertTrue(consumer._check_held_partitions())

@@ -5,13 +5,15 @@ import unittest2
 from uuid import uuid4
 
 from pykafka import KafkaClient
-from pykafka.exceptions import MessageSizeTooLarge, ProducerQueueFullError
+from pykafka.exceptions import (
+    MessageSizeTooLarge, ProducerQueueFullError, SocketDisconnectedError)
 from pykafka.protocol import Message
 from pykafka.test.utils import get_cluster, stop_cluster
 
 
 class ProducerIntegrationTests(unittest2.TestCase):
     maxDiff = None
+    USE_RDKAFKA = False
 
     @classmethod
     def setUpClass(cls):
@@ -28,8 +30,8 @@ class ProducerIntegrationTests(unittest2.TestCase):
         stop_cluster(cls.kafka)
 
     def _get_producer(self, **kwargs):
-        # Mostly spun out so we can override it in corresponding rdkafka tests
-        return self.client.topics[self.topic_name].get_producer(**kwargs)
+        topic = self.client.topics[self.topic_name]
+        return topic.get_producer(use_rdkafka=self.USE_RDKAFKA, **kwargs)
 
     def test_produce(self):
         # unique bytes, just to be absolutely sure we're not fetching data
@@ -45,8 +47,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
 
     def test_sync_produce_raises(self):
         """Ensure response errors are raised in produce() if sync=True"""
-        topic = self.client.topics[self.topic_name]
-        with topic.get_sync_producer(min_queued_messages=1) as prod:
+        with self._get_producer(sync=True, min_queued_messages=1) as prod:
             with self.assertRaises(MessageSizeTooLarge):
                 prod.produce(10**7 * b" ")
 
@@ -63,8 +64,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
     def test_recover_disconnected(self):
         """Test our retry-loop with a recoverable error"""
         payload = uuid4().bytes
-        topic = self.client.topics[self.topic_name]
-        prod = topic.get_producer(min_queued_messages=1)
+        prod = self._get_producer(min_queued_messages=1)
 
         # We must stop the consumer for this test, to ensure that it is the
         # producer that will encounter the disconnected brokers and initiate
@@ -80,11 +80,16 @@ class ProducerIntegrationTests(unittest2.TestCase):
         future = prod.produce(payload)
         self.assertIsNone(future.result())
 
-        self.consumer.start()
-        self.consumer.reset_offsets(
-            # This is just a reset_offsets, but works around issue #216:
-            [(self.consumer.partitions[pid], offset if offset != -1 else -2)
-             for pid, offset in part_offsets.items()])
+        try:
+            self.consumer.start()
+            self.consumer.reset_offsets(
+                # This is just a reset_offsets, but works around issue #216:
+                [(self.consumer.partitions[pid], offset if offset != -1 else -2)
+                 for pid, offset in part_offsets.items()])
+        except SocketDisconnectedError:
+            # resolve this to not confuse any following tests
+            self.client.update_cluster()
+            raise
         message = self.consumer.consume()
         self.assertEqual(message.value, payload)
 
@@ -148,8 +153,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
 
     def test_null_payloads(self):
         """Test that None is accepted as a null payload"""
-        prod = self.client.topics[self.topic_name].get_sync_producer(
-                min_queued_messages=1)
+        prod = self._get_producer(sync=True, min_queued_messages=1)
         prod.produce(None)
         self.assertIsNone(self.consumer.consume().value)
         prod.produce(None, partition_key=b"whatever")
