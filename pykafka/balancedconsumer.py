@@ -248,6 +248,9 @@ class BalancedConsumer():
 
         This method should be called as part of a graceful shutdown process.
         """
+        if not self._running:
+            log.warning("stop(): NOOP: Consumer not running")
+            return
         with self._rebalancing_lock:
             # We acquire the lock in order to prevent a race condition where a
             # rebalance that is already underway might re-register the zk
