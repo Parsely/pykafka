@@ -26,7 +26,7 @@ from uuid import uuid4
 import weakref
 
 from kazoo.client import KazooClient
-from kazoo.exceptions import NoNodeException, NodeExistsError
+from kazoo.exceptions import NoNodeException, NoNodeError, NodeExistsError
 from kazoo.protocol.states import KazooState
 from kazoo.recipe.watchers import ChildrenWatch
 
@@ -231,26 +231,27 @@ class BalancedConsumer():
 
     def start(self):
         """Open connections and join a cluster."""
-        if self._zookeeper is None:
-            self._setup_zookeeper(self._zookeeper_connect,
-                                  self._zookeeper_connection_timeout_ms)
-        self._zookeeper.ensure_path(self._topic_path)
-        self._zk_state_listener = self._get_zk_state_listener()
-        self._zookeeper.add_listener(self._zk_state_listener)
-        self._add_self()
-        self._running = True
-        self._set_watches()
-        self._rebalance()
-        self._setup_checker_worker()
+        try:
+            if self._zookeeper is None:
+                self._setup_zookeeper(self._zookeeper_connect,
+                                      self._zookeeper_connection_timeout_ms)
+            self._zookeeper.ensure_path(self._topic_path)
+            self._zk_state_listener = self._get_zk_state_listener()
+            self._zookeeper.add_listener(self._zk_state_listener)
+            self._add_self()
+            self._running = True
+            self._set_watches()
+            self._rebalance()
+            self._setup_checker_worker()
+        except Exception:
+            log.error("Stopping consumer in response to error")
+            self.stop()
 
     def stop(self):
         """Close the zookeeper connection and stop consuming.
 
         This method should be called as part of a graceful shutdown process.
         """
-        if not self._running:
-            log.warning("stop(): NOOP: Consumer not running")
-            return
         with self._rebalancing_lock:
             # We acquire the lock in order to prevent a race condition where a
             # rebalance that is already underway might re-register the zk
@@ -259,16 +260,19 @@ class BalancedConsumer():
         if self._consumer is not None:
             self._consumer.stop()
         self._zookeeper.remove_listener(self._zk_state_listener)
-        if self._owns_zookeeper:
-            # NB this should always come last, so we do not hand over control
-            # of our partitions until consumption has really been halted
-            self._zookeeper.stop()
-        else:
-            self._remove_partitions(self._get_held_partitions())
-            self._zookeeper.delete(self._path_self)
-            # additionally we'd want to remove watches here, but there are no
-            # facilities for that in ChildrenWatch - as a workaround we check
-            # self._running in the watcher callbacks (see further down)
+        try:
+            if self._owns_zookeeper:
+                # NB this should always come last, so we do not hand over control
+                # of our partitions until consumption has really been halted
+                self._zookeeper.stop()
+            else:
+                self._remove_partitions(self._get_held_partitions())
+                self._zookeeper.delete(self._path_self)
+                # additionally we'd want to remove watches here, but there are no
+                # facilities for that in ChildrenWatch - as a workaround we check
+                # self._running in the watcher callbacks (see further down)
+        except NoNodeError:
+            log.warning("Error encountered while closing ZooKeeper connection")
 
     def _setup_zookeeper(self, zookeeper_connect, timeout):
         """Open a connection to a ZooKeeper host.
