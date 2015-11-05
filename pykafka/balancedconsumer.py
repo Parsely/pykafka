@@ -21,7 +21,9 @@ __all__ = ["BalancedConsumer"]
 import itertools
 import logging
 import socket
+import sys
 import time
+import traceback
 from uuid import uuid4
 import weakref
 
@@ -38,6 +40,18 @@ from .utils.compat import range, get_bytes, itervalues
 
 
 log = logging.getLogger(__name__)
+
+
+def _catch_thread_exception(fn):
+    """Sets self._worker_exception when fn raises an exception"""
+    def wrapped(self, *args, **kwargs):
+        try:
+            ret = fn(self, *args, **kwargs)
+        except Exception:
+            self._worker_exception = sys.exc_info()
+        else:
+            return ret
+    return wrapped
 
 
 class BalancedConsumer():
@@ -166,6 +180,8 @@ class BalancedConsumer():
         self._zookeeper_connection_timeout_ms = zookeeper_connection_timeout_ms
         self._reset_offset_on_start = reset_offset_on_start
         self._running = False
+        self._worker_exception = None
+        self._worker_trace_logged = False
 
         self._rebalancing_lock = cluster.handler.Lock()
         self._consumer = None
@@ -197,15 +213,30 @@ class BalancedConsumer():
             group=self._consumer_group
         )
 
+    def _raise_worker_exceptions(self):
+        """Raises exceptions encountered on worker threads"""
+        if self._worker_exception is not None:
+            _, ex, tb = self._worker_exception
+            if not self._worker_trace_logged:
+                self._worker_trace_logged = True
+                log.error("Exception encountered in worker thread:\n%s",
+                          "".join(traceback.format_tb(tb)))
+            raise ex
+
     def _setup_checker_worker(self):
         """Start the zookeeper partition checker thread"""
         def checker():
             while True:
-                if not self._running:
+                try:
+                    if not self._running:
+                        break
+                    time.sleep(120)
+                    if not self._check_held_partitions():
+                        self._rebalance()
+                except Exception:
+                    # surface all exceptions to the main thread
+                    self._worker_exception = sys.exc_info()
                     break
-                time.sleep(120)
-                if not self._check_held_partitions():
-                    self._rebalance()
             log.debug("Checker thread exiting")
         log.debug("Starting checker thread")
         return self._cluster.handler.spawn(checker)
@@ -592,6 +623,7 @@ class BalancedConsumer():
 
         return listener
 
+    @_catch_thread_exception
     def _brokers_changed(self, brokers):
         if not self._running:
             return False  # `False` tells ChildrenWatch to disable this watch
@@ -601,6 +633,7 @@ class BalancedConsumer():
             self._consumer_id))
         self._rebalance()
 
+    @_catch_thread_exception
     def _consumers_changed(self, consumers):
         if not self._running:
             return False  # `False` tells ChildrenWatch to disable this watch
@@ -610,6 +643,7 @@ class BalancedConsumer():
             self._consumer_id))
         self._rebalance()
 
+    @_catch_thread_exception
     def _topics_changed(self, topics):
         if not self._running:
             return False  # `False` tells ChildrenWatch to disable this watch
@@ -631,6 +665,7 @@ class BalancedConsumer():
         :type partition_offsets: Iterable of
             (:class:`pykafka.partition.Partition`, int)
         """
+        self._raise_worker_exceptions()
         if not self._consumer:
             raise ConsumerStoppedException("Internal consumer is stopped")
         self._consumer.reset_offsets(partition_offsets=partition_offsets)
@@ -653,6 +688,7 @@ class BalancedConsumer():
         message = None
         self._last_message_time = time.time()
         while message is None and not consumer_timed_out():
+            self._raise_worker_exceptions()
             try:
                 message = self._consumer.consume(block=block)
             except ConsumerStoppedException:
@@ -680,4 +716,5 @@ class BalancedConsumer():
 
         Uses the offset commit/fetch API
         """
+        self._raise_worker_exceptions()
         return self._consumer.commit_offsets()
