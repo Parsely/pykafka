@@ -260,19 +260,19 @@ class BalancedConsumer():
         if self._consumer is not None:
             self._consumer.stop()
         self._zookeeper.remove_listener(self._zk_state_listener)
+        if self._owns_zookeeper:
+            # NB this should always come last, so we do not hand over control
+            # of our partitions until consumption has really been halted
+            self._zookeeper.stop()
+        else:
+            self._remove_partitions(self._get_held_partitions())
         try:
-            if self._owns_zookeeper:
-                # NB this should always come last, so we do not hand over control
-                # of our partitions until consumption has really been halted
-                self._zookeeper.stop()
-            else:
-                self._remove_partitions(self._get_held_partitions())
-                self._zookeeper.delete(self._path_self)
-                # additionally we'd want to remove watches here, but there are no
-                # facilities for that in ChildrenWatch - as a workaround we check
-                # self._running in the watcher callbacks (see further down)
+            self._zookeeper.delete(self._path_self)
         except NoNodeError:
-            log.warning("Error encountered while closing ZooKeeper connection")
+            pass
+        # additionally we'd want to remove watches here, but there are no
+        # facilities for that in ChildrenWatch - as a workaround we check
+        # self._running in the watcher callbacks (see further down)
 
     def _setup_zookeeper(self, zookeeper_connect, timeout):
         """Open a connection to a ZooKeeper host.
