@@ -18,6 +18,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 __all__ = ["BalancedConsumer"]
+import functools
 import itertools
 import logging
 import socket
@@ -205,6 +206,10 @@ class BalancedConsumer():
         if auto_start is True:
             self.start()
 
+    def __del__(self):
+        log.debug("Finalising {}".format(self))
+        self.stop()
+
     def __repr__(self):
         return "<{module}.{name} at {id_} (consumer_group={group})>".format(
             module=self.__class__.__module__,
@@ -225,6 +230,8 @@ class BalancedConsumer():
 
     def _setup_checker_worker(self):
         """Start the zookeeper partition checker thread"""
+        self = weakref.proxy(self)
+
         def checker():
             while True:
                 try:
@@ -233,9 +240,10 @@ class BalancedConsumer():
                     time.sleep(120)
                     if not self._check_held_partitions():
                         self._rebalance()
-                except Exception:
-                    # surface all exceptions to the main thread
-                    self._worker_exception = sys.exc_info()
+                except Exception as e:
+                    if not isinstance(e, ReferenceError):
+                        # surface all exceptions to the main thread
+                        self._worker_exception = sys.exc_info()
                     break
             log.debug("Checker thread exiting")
         log.debug("Starting checker thread")
@@ -436,13 +444,18 @@ class BalancedConsumer():
         consumer group remains up-to-date with the current state of the
         cluster.
         """
+        proxy = weakref.proxy(self)
+        _brokers_changed = functools.partial(BalancedConsumer._brokers_changed, proxy)
+        _topics_changed = functools.partial(BalancedConsumer._topics_changed, proxy)
+        _consumers_changed = functools.partial(BalancedConsumer._consumers_changed, proxy)
+
         self._setting_watches = True
         # Set all our watches and then rebalance
         broker_path = '/brokers/ids'
         try:
             self._broker_watcher = ChildrenWatch(
                 self._zookeeper, broker_path,
-                self._brokers_changed
+                _brokers_changed
             )
         except NoNodeException:
             raise Exception(
@@ -453,12 +466,12 @@ class BalancedConsumer():
         self._topics_watcher = ChildrenWatch(
             self._zookeeper,
             '/brokers/topics',
-            self._topics_changed
+            _topics_changed
         )
 
         self._consumer_watcher = ChildrenWatch(
             self._zookeeper, self._consumer_id_path,
-            self._consumers_changed
+            _consumers_changed
         )
         self._setting_watches = False
 

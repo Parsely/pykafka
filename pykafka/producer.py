@@ -137,6 +137,10 @@ class Producer(object):
         self._update_lock = self._cluster.handler.Lock()
         self.start()
 
+    def __del__(self):
+        log.debug("Finalising {}".format(self))
+        self.stop()
+
     def _raise_worker_exceptions(self):
         """Raises exceptions encountered on worker threads"""
         if self._worker_exception is not None:
@@ -398,7 +402,7 @@ class OwnedBroker(object):
     :type producer: :class:`pykafka.producer.AsyncProducer`
     """
     def __init__(self, producer, broker):
-        self.producer = producer
+        self.producer = weakref.proxy(producer)
         self.broker = broker
         self.lock = self.producer._cluster.handler.RLock()
         self.flush_ready = self.producer._cluster.handler.Event()
