@@ -1,6 +1,31 @@
 Changelog
 =========
 
+2.0.2 (2015-10-29)
+------------------
+
+`Compare 2.0.2`_
+
+.. _Compare 2.0.2: https://github.com/Parsely/pykafka/compare/2.0.1...75276e361ec546777f2fad6dae72f2e1125c0ec9
+
+Features
+********
+
+* Switched the `BalancedConsumer` to using ZooKeeper as the single source of truth
+  about which partitions are held
+* Made `BalancedConsumer` resilient to ZooKeeper failure
+* Made the consumer resilient to broker failure
+
+Bug Fixes
+*********
+
+* Fixed a bug in `BrokerConnection` causing the message length field to
+  occasionally be corrupted
+* Fixed a bug causing `RequestHandler` worker threads to sometimes abort
+  before the request was completed
+* Fixed a bug causing `SimpleConsumer` to hang when the number of brokers in
+  the cluster goes below the replication factor
+
 2.0.1 (2015-10-19)
 ------------------
 

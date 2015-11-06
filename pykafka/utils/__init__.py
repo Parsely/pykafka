@@ -16,6 +16,8 @@ limitations under the License.
 
 
 class Serializable(object):
+    __slots__ = []
+
     def __len__(self):
         """Length of the bytes that will be sent to the Kafka server."""
         raise NotImplementedError()

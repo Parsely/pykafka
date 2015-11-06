@@ -71,7 +71,7 @@ def build_parts_by_error(response, partitions_by_id):
     for topic_name in response.topics.keys():
         for partition_id, pres in iteritems(response.topics[topic_name]):
             owned_partition = None
-            if partitions_by_id is not None:
+            if partitions_by_id is not None and partition_id in partitions_by_id:
                 owned_partition = partitions_by_id[partition_id]
             parts_by_error[pres.err].append((owned_partition, pres))
     return parts_by_error

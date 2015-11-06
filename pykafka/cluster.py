@@ -319,9 +319,7 @@ class Cluster(object):
                             'broker metadata to be returned by manually creating '
                             'a topic in the cluster. See '
                             'https://issues.apache.org/jira/browse/KAFKA-2154 '
-                            'for information. Please note: topic auto-creation '
-                            'will NOT work. You need to create at least one topic '
-                            'manually using the Kafka CLI tools.')
+                            'for information.')
             self._update_brokers(metadata.brokers)
             try:
                 self._topics._update_topics(metadata.topics)
