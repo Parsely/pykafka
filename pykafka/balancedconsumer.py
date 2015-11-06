@@ -18,7 +18,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 __all__ = ["BalancedConsumer"]
-from functools import partial
+import functools
 import itertools
 import logging
 import socket
@@ -412,9 +412,9 @@ class BalancedConsumer():
         cluster.
         """
         proxy = weakref.proxy(self)
-        _brokers_changed = partial(BalancedConsumer._brokers_changed, proxy)
-        _topics_changed = partial(BalancedConsumer._topics_changed, proxy)
-        _consumers_changed = partial(BalancedConsumer._consumers_changed, proxy)
+        _brokers_changed = functools.partial(BalancedConsumer._brokers_changed, proxy)
+        _topics_changed = functools.partial(BalancedConsumer._topics_changed, proxy)
+        _consumers_changed = functools.partial(BalancedConsumer._consumers_changed, proxy)
 
         self._setting_watches = True
         # Set all our watches and then rebalance
