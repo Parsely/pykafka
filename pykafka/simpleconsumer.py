@@ -207,6 +207,7 @@ class SimpleConsumer():
         with self._update_lock:
             self._cluster.update()
             self._setup_partitions_by_leader()
+            self._discover_offset_manager()
 
     def start(self):
         """Begin communicating with Kafka, including setting up worker threads
@@ -415,6 +416,7 @@ class SimpleConsumer():
                           self._topic.name)
                 if i >= self._offsets_commit_max_retries - 1:
                     raise
+                self._update()
                 continue
 
             parts_by_error = handle_partition_responses(
@@ -677,8 +679,8 @@ class SimpleConsumer():
                         min_bytes=self._fetch_min_bytes
                     )
                 except (IOError, SocketDisconnectedError):
+                    unlock_partitions(iterkeys(partition_reqs))
                     if self._running:
-                        unlock_partitions(iterkeys(partition_reqs))
                         log.info("Updating cluster in response to error in fetch()")
                         self._update()
                     # If the broker dies while we're supposed to stop,

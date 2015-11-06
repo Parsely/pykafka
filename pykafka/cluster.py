@@ -259,10 +259,13 @@ class Cluster(object):
                 try:
                     self._brokers[id_].connect()
                 except socket.error:
-                    log.info('Failed to re-establish connection with broker id %s: %s:%s', id_, meta.host, meta.port)
+                    log.info('Failed to re-establish connection with broker id %s: %s:%s',
+                             id_, meta.host, meta.port)
             else:
                 broker = self._brokers[id_]
                 if meta.host == broker.host and meta.port == broker.port:
+                    log.info('Broker %s:%s metadata unchanged. Continuing.',
+                             broker.host, broker.port)
                     continue  # no changes
                 # TODO: Can brokers update? Seems like a problem if so.
                 #       Figure out and implement update/disconnect/reconnect if
@@ -298,9 +301,9 @@ class Cluster(object):
                 if i == MAX_RETRIES - 1:
                     raise
             except SocketDisconnectedError:
-                raise KafkaException("Socket disconnected during offset manager "
-                                     "discovery. This can happen when using PyKafka "
-                                     "with a Kafka version lower than 0.8.2.")
+                log.error("Socket disconnected during offset manager "
+                          "discovery. This can happen when using PyKafka "
+                          "with a Kafka version lower than 0.8.2.")
             else:
                 coordinator = self.brokers.get(res.coordinator_id, None)
                 if coordinator is None:
