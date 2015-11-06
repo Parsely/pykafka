@@ -28,7 +28,7 @@ from uuid import uuid4
 import weakref
 
 from kazoo.client import KazooClient
-from kazoo.exceptions import NoNodeException, NoNodeError, NodeExistsError
+from kazoo.exceptions import NoNodeException, NodeExistsError
 from kazoo.protocol.states import KazooState
 from kazoo.recipe.watchers import ChildrenWatch
 
@@ -299,7 +299,7 @@ class BalancedConsumer():
             self._remove_partitions(self._get_held_partitions())
         try:
             self._zookeeper.delete(self._path_self)
-        except NoNodeError:
+        except:
             pass
         # additionally we'd want to remove watches here, but there are no
         # facilities for that in ChildrenWatch - as a workaround we check
