@@ -305,10 +305,10 @@ class BalancedConsumer():
             self._zookeeper.stop()
         else:
             self._remove_partitions(self._get_held_partitions())
-        try:
-            self._zookeeper.delete(self._path_self)
-        except:
-            pass
+            try:
+                self._zookeeper.delete(self._path_self)
+            except:
+                pass
         # additionally we'd want to remove watches here, but there are no
         # facilities for that in ChildrenWatch - as a workaround we check
         # self._running in the watcher callbacks (see further down)
