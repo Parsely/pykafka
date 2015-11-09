@@ -611,7 +611,7 @@ class SimpleConsumer():
 
                 for errcode, owned_partitions in iteritems(parts_by_error):
                     if errcode != 0:
-                        for owned_partition in owned_partitions:
+                        for owned_partition, _ in owned_partitions:
                             owned_partition.fetch_lock.release()
 
             if not owned_partition_offsets:
