@@ -36,8 +36,11 @@ def recvall_into(socket, bytea, size):
     offset = 0
     while offset < size:
         remaining = size - offset
-        chunk = socket.recv(remaining)
-        if not len(chunk):
+        try:
+            chunk = socket.recv(remaining)
+        except IOError:
+            chunk = None
+        if chunk is None or len(chunk) == 0:
             raise SocketDisconnectedError
         bytea[offset:(offset + len(chunk))] = chunk
         offset += len(chunk)
