@@ -304,6 +304,7 @@ class Cluster(object):
                 log.error("Socket disconnected during offset manager "
                           "discovery. This can happen when using PyKafka "
                           "with a Kafka version lower than 0.8.2.")
+                self.update()
             else:
                 coordinator = self.brokers.get(res.coordinator_id, None)
                 if coordinator is None:
