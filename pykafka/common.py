@@ -33,7 +33,7 @@ class Message(object):
     :ivar key: (optional) Message key
     :ivar offset: Message offset
     """
-    __slots__ = []
+    pass
 
 
 class CompressionType(object):
