@@ -130,10 +130,10 @@ class Partition():
         """
         try:
             # Check leader
-            if metadata.leader != self._leader.id:
+            if metadata.leader != self._leader.id or not self._leader.connected:
                 log.info('Updating leader for %s from broker %s to broker %s', self,
                          self._leader.id, metadata.leader)
-                self._leader = brokers[metadata.leader]
+            self._leader = brokers[metadata.leader]
             # Check Replicas
             if sorted(r.id for r in self.replicas) != sorted(metadata.replicas):
                 log.info('Updating replicas list for %s', self)

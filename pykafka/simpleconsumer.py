@@ -681,7 +681,8 @@ class SimpleConsumer():
                 except (IOError, SocketDisconnectedError):
                     unlock_partitions(iterkeys(partition_reqs))
                     if self._running:
-                        log.info("Updating cluster in response to error in fetch()")
+                        log.info("Updating cluster in response to error in fetch() "
+                                 "for broker id %s", broker.id)
                         self._update()
                     # If the broker dies while we're supposed to stop,
                     # it's fine, and probably an integration test.
