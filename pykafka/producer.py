@@ -24,6 +24,7 @@ import logging
 import sys
 import time
 import traceback
+import weakref
 
 from .common import CompressionType
 from .exceptions import (
