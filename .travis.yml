@@ -23,7 +23,7 @@ notifications:
 
 
 install:
-    - pip install codecov kazoo tox testinstances futures
+    - pip install codecov kazoo tox testinstances
 
 before_script:
     - "python -m pykafka.test.kafka_instance 3 --download-dir /home/travis/kafka-bin &"
