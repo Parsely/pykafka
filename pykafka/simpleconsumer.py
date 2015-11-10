@@ -385,8 +385,8 @@ class SimpleConsumer():
             return
 
         if (time.time() - self._last_auto_commit) * 1000.0 >= self._auto_commit_interval_ms:
-            log.info("Autocommitting consumer offset for consumer group %s and topic %s",
-                     self._consumer_group, self._topic.name)
+            log.debug("Autocommitting consumer offset for consumer group %s and topic %s",
+                      self._consumer_group, self._topic.name)
             if self._consumer_group is not None:
                 self.commit_offsets()
             self._last_auto_commit = time.time()
