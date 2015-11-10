@@ -44,6 +44,9 @@ class TopicDict(dict):
         self._cluster = weakref.ref(cluster)
         self._exclude_internal_topics = exclude_internal_topics
 
+    def values(self):
+        return [self[key] for key in self]
+
     def __getitem__(self, key):
         if self._should_exclude_topic(key):
             raise KeyError("You have configured KafkaClient/Cluster to hide "
