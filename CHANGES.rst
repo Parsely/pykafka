@@ -1,6 +1,32 @@
 Changelog
 =========
 
+2.0.3 (2015-11-10)
+------------------
+
+`Compare 2.0.3`_
+
+.. _Compare 2.0.3: https://github.com/Parsely/pykafka/compare/2.0.2...bd844cd66e79b3e0a56dd92a2aae4579a9046e8e
+
+Features
+********
+
+* Raise exceptions from worker threads to the main thread in `BalancedConsumer`
+* Call `stop()` when `BalancedConsumer` is finalized to minimize zombie threads
+
+Bug Fixes
+*********
+
+* Use weak references in `BalancedConsumer` workers to avoid zombie threads creating
+  memory leaks
+* Stabilize `BalancedConsumer.start()`
+* Fix a bug in `TopicDict.values()` causing topics to be listed as `None`
+* Handle `IOError` in `BrokerConnection` and `socket.recvall_into`
+* Unconditionally update partitions' leaders after metadata requests
+* Fix thread-related memory leaks in `Producer`
+* Handle connection errors during offset commits
+* Fix an interpreter error in `SimpleConsumer`
+
 2.0.2 (2015-10-29)
 ------------------
 
