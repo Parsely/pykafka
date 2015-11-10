@@ -130,7 +130,7 @@ class Partition():
         """
         try:
             # Check leader
-            if metadata.leader != self._leader.id or not self._leader.connected:
+            if metadata.leader != self._leader.id:
                 log.info('Updating leader for %s from broker %s to broker %s', self,
                          self._leader.id, metadata.leader)
             self._leader = brokers[metadata.leader]
