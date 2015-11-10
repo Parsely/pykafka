@@ -120,6 +120,12 @@ previous versions will always be available in this repo.
 
 .. _PyPI package: https://pypi.python.org/pypi/samsa/0.3.11
 
+pykafka or kafka-python?
+------------------------
+
+These are two different projects.
+See `the discussion here <https://github.com/Parsely/pykafka/issues/334>`_.
+
 Support
 -------
 
