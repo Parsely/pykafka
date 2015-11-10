@@ -112,8 +112,11 @@ class BrokerConnection(object):
         size = bytes()
         expected_len = 4  # Size => int32
         while len(size) != expected_len:
-            r = self._socket.recv(expected_len - len(size))
-            if len(r) == 0:
+            try:
+                r = self._socket.recv(expected_len - len(size))
+            except IOError:
+                r = None
+            if r is None or len(r) == 0:
                 # Happens when broker has shut down
                 self.disconnect()
                 raise SocketDisconnectedError
