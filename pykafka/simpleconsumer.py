@@ -207,6 +207,7 @@ class SimpleConsumer():
         with self._update_lock:
             self._cluster.update()
             self._setup_partitions_by_leader()
+            self._discover_offset_manager()
 
     def start(self):
         """Begin communicating with Kafka, including setting up worker threads
@@ -248,6 +249,7 @@ class SimpleConsumer():
             self._discover_offset_manager()
 
         def _handle_NotLeaderForPartition(parts):
+            log.info("Updating cluster in response to NotLeaderForPartition")
             self._update()
 
         return {
@@ -405,8 +407,18 @@ class SimpleConsumer():
                 log.debug("Retrying")
             time.sleep(i * (self._offsets_channel_backoff_ms / 1000))
 
-            response = self._offset_manager.commit_consumer_group_offsets(
-                self._consumer_group, 1, b'pykafka', reqs)
+            try:
+                response = self._offset_manager.commit_consumer_group_offsets(
+                    self._consumer_group, 1, b'pykafka', reqs)
+            except (SocketDisconnectedError, IOError):
+                log.error("Error committing offsets for topic %s "
+                          "(SocketDisconnectedError)",
+                          self._topic.name)
+                if i >= self._offsets_commit_max_retries - 1:
+                    raise
+                self._update()
+                continue
+
             parts_by_error = handle_partition_responses(
                 self._default_error_handlers,
                 response=response,
@@ -667,8 +679,10 @@ class SimpleConsumer():
                         min_bytes=self._fetch_min_bytes
                     )
                 except (IOError, SocketDisconnectedError):
+                    unlock_partitions(iterkeys(partition_reqs))
                     if self._running:
-                        unlock_partitions(iterkeys(partition_reqs))
+                        log.info("Updating cluster in response to error in fetch() "
+                                 "for broker id %s", broker.id)
                         self._update()
                     # If the broker dies while we're supposed to stop,
                     # it's fine, and probably an integration test.
