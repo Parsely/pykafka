@@ -52,11 +52,9 @@ class RdKafkaProducer(Producer):
             self._running = True
 
             def poll(self):
-                try:
-                    while self._running or self._rdk_producer.outq_len() > 0:
-                        self._rdk_producer.poll(timeout_ms=1000)
-                except ReferenceError:  # weakref'd self
-                    pass
+                while self._running or self._rdk_producer.outq_len() > 0:
+                    self._rdk_producer.poll(timeout_ms=1000)
+                assert(not self._rdk_producer._pending_messages)
                 log.debug("Exiting RdKafkaProducer poller thread cleanly.")
 
             self._poller_thread = self._cluster.handler.spawn(
