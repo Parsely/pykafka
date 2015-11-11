@@ -1,3 +1,4 @@
+import operator
 import unittest2
 
 from pykafka import protocol
@@ -95,6 +96,42 @@ class TestProduceAPI(unittest2.TestCase):
 class TestFetchAPI(unittest2.TestCase):
     maxDiff = None
 
+    expected_data = [
+        {
+            'partition_key': b'asdf',
+            'compression_type': 0,
+            'value': b'this is a test message',
+            'offset': 0,
+            'partition_id': 0,
+            'produce_attempt': 0,
+            'delivery_future': None,
+            'partition': None
+        }, {
+            'partition_key': b'test_key',
+            'compression_type': 0,
+            'value': b'this is also a test message',
+            'offset': 1,
+            'partition_id': 0,
+            'produce_attempt': 0,
+            'delivery_future': None,
+            'partition': None
+        }, {
+            'partition_key': None,
+            'compression_type': 0,
+            'value': b"this doesn't have a partition key",
+            'offset': 2,
+            'partition_id': 0,
+            'produce_attempt': 0,
+            'delivery_future': None,
+            'partition': None
+        }]
+
+    def msg_to_dict(self, msg):
+        """Helper to extract data from Message slots"""
+        attr_names = protocol.Message.__slots__
+        f = operator.attrgetter(*attr_names)
+        return dict(zip(attr_names, f(msg)))
+
     def test_request(self):
         preq = protocol.PartitionFetchRequest(b'test', 0, 1)
         req = protocol.FetchRequest(partition_requests=[preq, ])
@@ -126,63 +163,18 @@ class TestFetchAPI(unittest2.TestCase):
     def test_gzip_decompression(self):
         msg = b'\x00\x00\x00\x01\x00\ttest_gzip\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x9b\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x8f\xbb\xe7\x1f\xb8\x00\x01\xff\xff\xff\xff\x00\x00\x00\x81\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x00c`\x80\x03\r\xbe.I\x7f0\x8b%\xb18%\rH\x8b\x95dd\x16+\x00Q\xa2BIjq\x89Bnjqqbz*T=#\x10\x1b\xb2\xf3\xcb\xf4\x81y\x1c \x15\xf1\xd9\xa9\x95@\xb64\\_Nq>v\xcdL@\xac\x7f\xb5(\xd9\x98\x81\xe1?\x10\x00y\x8a`M)\xf9\xa9\xc5y\xea%\n\x19\x89e\xa9@\x9d\x05\x89E%\x99%\x99\xf9y\n@\x93\x01N1\x9f[\xac\x00\x00\x00'
         response = protocol.FetchResponse(msg)
-        expected1 = {
-            'partition_key': b'asdf',
-            'compression_type': 0,
-            'value': b'this is a test message',
-            'offset': 0,
-            'partition_id': 0,
-            'produce_attempt': 0,
-            'partition': None
-        }
-        self.assertDictEqual(
-            response.topics[b'test_gzip'][0].messages[0].__dict__,
-            expected1
-        )
-        expected2 = {
-            'partition_key': b'test_key',
-            'compression_type': 0,
-            'value': b'this is also a test message',
-            'offset': 1,
-            'partition_id': 0,
-            'produce_attempt': 0,
-            'partition': None
-        }
-        self.assertDictEqual(
-            response.topics[b'test_gzip'][0].messages[1].__dict__,
-            expected2
-        )
-        expected3 = {
-            'partition_key': None,
-            'compression_type': 0,
-            'value': b"this doesn't have a partition key",
-            'offset': 2,
-            'partition_id': 0,
-            'produce_attempt': 0,
-            'partition': None
-        }
+        for i in range(len(self.expected_data)):
+            self.assertDictEqual(
+                self.msg_to_dict(response.topics[b'test_gzip'][0].messages[i]),
+                self.expected_data[i])
 
-        self.assertDictEqual(
-            response.topics[b'test_gzip'][0].messages[2].__dict__,
-            expected3
-        )
-        return
-
-    def snappy_decompression(self):
-        msg = '\x00\x00\x00\x01\x00\x0btest_snappy\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\xb5\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\xa9\xc1\xf2\xa3\xe1\x00\x02\xff\xff\xff\xff\x00\x00\x00\x9b\x82SNAPPY\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x87\xac\x01\x00\x00\x19\x01\x10(\x0e\x8a\x19O\x05\x0fx\x04asdf\x00\x00\x00\x16this is a test message\x05$(\x00\x00\x01\x00\x00\x001\x07\x0f\x1c\x8e\x05\x10\x00\x08\x01"\x1c_key\x00\x00\x00\x1b\x158\x08lsoV=\x00H\x02\x00\x00\x00/\xd5rc3\x00\x00\xff\xff\xff\xff\x00\x00\x00!\x055ldoesn\'t have a partition key'
+    def test_snappy_decompression(self):
+        msg = b'\x00\x00\x00\x01\x00\x0btest_snappy\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\xb5\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\xa9\xc1\xf2\xa3\xe1\x00\x02\xff\xff\xff\xff\x00\x00\x00\x9b\x82SNAPPY\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x87\xac\x01\x00\x00\x19\x01\x10(\x0e\x8a\x19O\x05\x0fx\x04asdf\x00\x00\x00\x16this is a test message\x05$(\x00\x00\x01\x00\x00\x001\x07\x0f\x1c\x8e\x05\x10\x00\x08\x01"\x1c_key\x00\x00\x00\x1b\x158\x08lsoV=\x00H\x02\x00\x00\x00/\xd5rc3\x00\x00\xff\xff\xff\xff\x00\x00\x00!\x055ldoesn\'t have a partition key'
         response = protocol.FetchResponse(msg)
-        self.assertDictEqual(
-            response.topics['test_snappy'][0].messages[0].__dict__,
-            {'partition_key': 'asdf', 'compression_type': 0, 'value': 'this is a test message', 'offset': 0},
-        )
-        self.assertDictEqual(
-            response.topics['test_snappy'][0].messages[1].__dict__,
-            {'partition_key': 'test_key', 'compression_type': 0, 'value': 'this is also a test message', 'offset': 1},
-        )
-        self.assertDictEqual(
-            response.topics['test_snappy'][0].messages[2].__dict__,
-            {'partition_key': None, 'compression_type': 0, 'value': "this doesn't have a partition key", 'offset': 2}
-        )
+        for i in range(len(self.expected_data)):
+            self.assertDictEqual(
+                self.msg_to_dict(response.topics[b'test_snappy'][0].messages[i]),
+                self.expected_data[i])
 
 
 class TestOffsetAPI(unittest2.TestCase):

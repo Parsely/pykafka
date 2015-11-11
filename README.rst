@@ -55,9 +55,43 @@ producing messages.
 
 .. sourcecode:: python
 
-    >>> with topic.get_producer() as producer:
+    >>> with topic.get_sync_producer() as producer:
     ...     for i in range(4):
     ...         producer.produce('test message ' + i ** 2)
+
+The example above would produce to kafka synchronously, that is, the call only
+returns after we have confirmation that the message made it to the cluster.
+
+To achieve higher throughput however, we recommend using the ``Producer`` in
+asynchronous mode.  In that configuration, ``produce()`` calls will return a
+``concurrent.futures.Future`` (`docs`_), which you may evaluate later (or, if
+reliable delivery is not a concern, you're free to discard it unevaluated).
+Here's a rough usage example:
+
+.. sourcecode:: python
+
+    >>> with topic.get_producer() as producer:
+    ...     count = 0
+    ...     pending = []
+    ...     while True:
+    ...         count += 1
+    ...         future = producer.produce('test message',
+    ...                                   partition_key='{}'.format(count))
+    ...         pending.append(future)
+    ...         if count % 10**5 == 0:  # adjust this or bring lots of RAM ;)
+    ...             done, not_done = concurrent.futures.wait(pending,
+                                                             timeout=.001)
+    ...             for future in done:
+    ...                 message_key = future.kafka_msg.partition_key
+    ...                 if future.exception() is not None:
+    ...                     print 'Failed to deliver message {}: {}'.format(
+    ...                         message_key, repr(future.exception()))
+    ...                 else:
+    ...                     print 'Successfully delivered message {}'.format(
+    ...                         message_key)
+    ...             pending = list(not_done)
+
+.. _docs: https://pythonhosted.org/futures/#future-objects
 
 You can also consume messages from this topic using a `Consumer` instance.
 

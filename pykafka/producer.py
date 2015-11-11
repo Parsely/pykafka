@@ -19,7 +19,7 @@ limitations under the License.
 """
 __all__ = ["Producer"]
 from collections import deque
-import itertools
+from concurrent import futures
 import logging
 import sys
 import time
@@ -28,17 +28,13 @@ import weakref
 
 from .common import CompressionType
 from .exceptions import (
-    InvalidMessageError,
+    ERROR_CODES,
     InvalidMessageSize,
-    LeaderNotAvailable,
     MessageSizeTooLarge,
     NotLeaderForPartition,
-    ProduceFailureError,
     ProducerQueueFullError,
     ProducerStoppedException,
-    RequestTimedOut,
     SocketDisconnectedError,
-    UnknownTopicOrPartition
 )
 from .partitioners import random_partitioner
 from .protocol import Message, ProduceRequest
@@ -234,6 +230,13 @@ class Producer(object):
         :param partition_key: The key to use when deciding which partition to send this
             message to
         :type partition_key: bytes
+
+        :returns: a `Future` if the producer was created with `sync=False`,
+            or `None` for `sync=True` (and in that case, any exceptions that
+            the future would have carried are raised here directly).  The
+            `Future` carries the (successfully or unsuccessfully) produced
+            :class:`pykafka.protocol.Message` in an extra field, `kafka_msg`.
+        :rtype: `concurrent.futures.Future`
         """
         if not (isinstance(message, bytes) or message is None):
             raise TypeError("Producer.produce accepts a bytes object, but it "
@@ -242,24 +245,33 @@ class Producer(object):
             raise ProducerStoppedException()
         partitions = list(self._topic.partitions.values())
         partition_id = self._partitioner(partitions, partition_key).id
-        message_partition_tup = (partition_key, message), partition_id, 0
-        self._produce(message_partition_tup)
-        if self._synchronous:
-            self._wait_all()
-        self._raise_worker_exceptions()
 
-    def _produce(self, message_partition_tup):
+        future = futures.Future()
+        msg = Message(value=message,
+                      partition_key=partition_key,
+                      partition_id=partition_id,
+                      # prevent circular ref; see future.kafka_msg below
+                      delivery_future=weakref.ref(future))
+        self._produce(msg)
+
+        self._raise_worker_exceptions()
+        if self._synchronous:
+            return future.result()
+
+        future.kafka_msg = msg
+        return future
+
+    def _produce(self, message):
         """Enqueue a message for the relevant broker
 
-        :param message_partition_tup: Message with partition assigned.
-        :type message_partition_tup: ((bytes, bytes), int) tuple
+        :param message: Message with valid `partition_id`, ready to be sent
+        :type message: `pykafka.protocol.Message`
         """
-        kv, partition_id, attempts = message_partition_tup
         success = False
         while not success:
-            leader_id = self._topic.partitions[partition_id].leader.id
+            leader_id = self._topic.partitions[message.partition_id].leader.id
             if leader_id in self._owned_brokers:
-                self._owned_brokers[leader_id].enqueue([(kv, partition_id, attempts)])
+                self._owned_brokers[leader_id].enqueue(message)
                 success = True
             else:
                 success = False
@@ -268,7 +280,7 @@ class Producer(object):
         """Send the produce request to the broker and handle the response.
 
         :param message_batch: An iterable of messages to send
-        :type message_batch: iterable of `((key, value), partition_id)` tuples
+        :type message_batch: iterable of `pykafka.protocol.Message`
         :param owned_broker: The broker to which to send the request
         :type owned_broker: :class:`pykafka.producer.OwnedBroker`
         """
@@ -277,84 +289,83 @@ class Producer(object):
             required_acks=self._required_acks,
             timeout=self._ack_timeout_ms
         )
-        for (key, value), partition_id, msg_attempt in message_batch:
-            req.add_message(
-                Message(value, partition_key=key, produce_attempt=msg_attempt),
-                self._topic.name,
-                partition_id
-            )
+        for msg in message_batch:
+            req.add_message(msg, self._topic.name, msg.partition_id)
         log.debug("Sending %d messages to broker %d",
                   len(message_batch), owned_broker.broker.id)
 
         def _get_partition_msgs(partition_id, req):
             """Get all the messages for the partitions from the request."""
-            messages = itertools.chain.from_iterable(
-                mset.messages
+            return (
+                mset
                 for topic, partitions in iteritems(req.msets)
                 for p_id, mset in iteritems(partitions)
                 if p_id == partition_id
             )
-            for message in messages:
-                yield (message.partition_key, message.value), partition_id, message.produce_attempt
+
+        def mark_as_delivered(message_batch):
+            owned_broker.increment_messages_pending(-1 * len(message_batch))
+            for msg in message_batch:
+                f = msg.delivery_future()
+                if f is not None:  # else user discarded future already
+                    f.set_result(None)
 
         try:
             response = owned_broker.broker.produce_messages(req)
             if self._required_acks == 0:  # and thus, `response` is None
-                owned_broker.increment_messages_pending(
-                    -1 * len(message_batch))
+                mark_as_delivered(message_batch)
                 return
-            to_retry = []
+
+            # Kafka either atomically appends or rejects whole MessageSets, so
+            # we define a list of potential retries thus:
+            to_retry = []  # (MessageSet, Exception) tuples
+
             for topic, partitions in iteritems(response.topics):
                 for partition, presponse in iteritems(partitions):
                     if presponse.err == 0:
-                        # mark msg_count messages as successfully delivered
-                        msg_count = len(req.msets[topic][partition].messages)
-                        owned_broker.increment_messages_pending(-1 * msg_count)
+                        mark_as_delivered(req.msets[topic][partition].messages)
                         continue  # All's well
-                    if presponse.err == UnknownTopicOrPartition.ERROR_CODE:
-                        log.warning('Unknown topic: %s or partition: %s. '
-                                    'Retrying.', topic, partition)
-                    elif presponse.err == NotLeaderForPartition.ERROR_CODE:
-                        log.warning('Partition leader for %s/%s changed. '
-                                    'Retrying.', topic, partition)
+                    if presponse.err == NotLeaderForPartition.ERROR_CODE:
                         # Update cluster metadata to get new leader
                         self._update()
-                    elif presponse.err == RequestTimedOut.ERROR_CODE:
-                        log.warning('Produce request to %s:%s timed out. '
-                                    'Retrying.', owned_broker.broker.host,
-                                    owned_broker.broker.port)
-                    elif presponse.err == LeaderNotAvailable.ERROR_CODE:
-                        log.warning('Leader not available for partition %s.'
-                                    'Retrying.', partition)
-                    elif presponse.err == InvalidMessageError.ERROR_CODE:
-                        log.warning('Encountered InvalidMessageError')
-                    elif presponse.err == InvalidMessageSize.ERROR_CODE:
-                        log.warning('Encountered InvalidMessageSize')
-                        continue
-                    elif presponse.err == MessageSizeTooLarge.ERROR_CODE:
-                        log.warning('Encountered MessageSizeTooLarge')
-                        continue
-                    to_retry.extend(_get_partition_msgs(partition, req))
-        except SocketDisconnectedError:
+                    info = "Produce request for {}/{} to {}:{} failed.".format(
+                        topic,
+                        partition,
+                        owned_broker.broker.host,
+                        owned_broker.broker.port)
+                    log.warning(info)
+                    exc = ERROR_CODES[presponse.err](info)
+                    to_retry.extend(
+                        (mset, exc)
+                        for mset in _get_partition_msgs(partition, req))
+        except SocketDisconnectedError as exc:
             log.warning('Broker %s:%s disconnected. Retrying.',
                         owned_broker.broker.host,
                         owned_broker.broker.port)
             self._update()
             to_retry = [
-                ((message.partition_key, message.value), p_id, message.produce_attempt)
+                (mset, exc)
                 for topic, partitions in iteritems(req.msets)
                 for p_id, mset in iteritems(partitions)
-                for message in mset.messages
             ]
 
         if to_retry:
             time.sleep(self._retry_backoff_ms / 1000)
             owned_broker.increment_messages_pending(-1 * len(to_retry))
-            for kv, partition_id, msg_attempt in to_retry:
-                if msg_attempt >= self._max_retries:
-                    raise ProduceFailureError("Message failed to send after %d "
-                                              "retries.", self._max_retries)
-                self._produce((kv, partition_id, msg_attempt + 1))
+            for mset, exc in to_retry:
+                # XXX arguably, we should try to check these non_recoverables
+                # for individual messages in _produce and raise errors there
+                # right away, rather than failing a whole batch here?
+                non_recoverable = type(exc) in (InvalidMessageSize,
+                                                MessageSizeTooLarge)
+                for msg in mset.messages:
+                    if (non_recoverable or msg.produce_attempt >= self._max_retries):
+                        f = msg.delivery_future()
+                        if f is not None:  # else user discarded future already
+                            f.set_exception(exc)
+                    else:
+                        msg.produce_attempt += 1
+                        self._produce(msg)
 
     def _wait_all(self):
         """Block until all pending messages are sent
@@ -430,17 +441,16 @@ class OwnedBroker(object):
         """
         return self.messages_pending > 0
 
-    def enqueue(self, messages):
-        """Push messages onto the queue
+    def enqueue(self, message):
+        """Push message onto the queue
 
-        :param messages: The messages to push onto the queue
-        :type messages: iterable of tuples of the form
-            `((key, value), partition_id)`
+        :param message: The message to push onto the queue
+        :type message: `pykafka.protocol.Message`
         """
         self._wait_for_slot_available()
         with self.lock:
-            self.queue.extendleft(messages)
-            self.increment_messages_pending(len(messages))
+            self.queue.appendleft(message)
+            self.increment_messages_pending(1)
             if len(self.queue) >= self.producer._min_queued_messages:
                 if not self.flush_ready.is_set():
                     self.flush_ready.set()
