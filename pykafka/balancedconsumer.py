@@ -711,8 +711,6 @@ class BalancedConsumer():
             except ConsumerStoppedException:
                 if not self._running:
                     return
-                elif not self._zookeeper.connected:
-                    raise ZookeeperConnectionLost
                 continue
             if message:
                 self._last_message_time = time.time()

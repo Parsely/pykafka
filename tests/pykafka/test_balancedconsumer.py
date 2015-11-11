@@ -233,9 +233,6 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
             self.assertTrue(consumer._check_held_partitions())
 
             zk.stop()  # expires session, dropping all our nodes
-            time.sleep(.3)  # connection change signal needs time to propagate
-            with self.assertRaises(ZookeeperConnectionLost):
-                consumer.consume(block=False)
 
             # Start a second consumer on a different zk connection
             other_consumer = topic.get_balanced_consumer(consumer_group)
