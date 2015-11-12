@@ -82,6 +82,8 @@ class Topic():
 
         For a description of all available `kwargs`, see the Producer docstring.
         """
+        if not rdkafka and use_rdkafka:
+            raise ImportError("use_rdkafka requires rdkafka to be installed")
         Cls = rdkafka.RdKafkaProducer if rdkafka and use_rdkafka else Producer
         return Cls(self._cluster, self, **kwargs)
 
@@ -169,6 +171,8 @@ class Topic():
         :param use_rdkafka: Use librdkafka-backed consumer if available
         :type use_rdkafka: bool
         """
+        if not rdkafka and use_rdkafka:
+            raise ImportError("use_rdkafka requires rdkafka to be installed")
         Cls = (rdkafka.RdKafkaSimpleConsumer
                if rdkafka and use_rdkafka else SimpleConsumer)
         return Cls(self,

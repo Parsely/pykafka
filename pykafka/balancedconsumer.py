@@ -172,8 +172,11 @@ class BalancedConsumer():
         self._zookeeper_connect = zookeeper_connect
         self._zookeeper_connection_timeout_ms = zookeeper_connection_timeout_ms
         self._reset_offset_on_start = reset_offset_on_start
-        self._use_rdkafka = rdkafka and use_rdkafka
         self._running = False
+
+        if not rdkafka and use_rdkafka:
+            raise ImportError("use_rdkafka requires rdkafka to be installed")
+        self._use_rdkafka = rdkafka and use_rdkafka
 
         self._rebalancing_lock = cluster.handler.Lock()
         self._consumer = None
