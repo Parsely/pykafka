@@ -12,3 +12,4 @@ dist/
 coverage.xml
 *#*#*
 .cache
+*.so
