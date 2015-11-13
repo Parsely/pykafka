@@ -39,7 +39,6 @@ class ProducerIntegrationTests(unittest2.TestCase):
         prod = self._get_producer(sync=True, min_queued_messages=1)
         prod.produce(payload)
 
-        # set a timeout so we don't wait forever if we break producer code
         message = self.consumer.consume()
         assert message.value == payload
 
@@ -48,6 +47,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
 
         prod = self._get_producer(min_queued_messages=1)
         prod.produce(payload)
+        del prod  # force a flush so consume() won't time-out
 
         message = self.consumer.consume()
         assert message.value == payload
