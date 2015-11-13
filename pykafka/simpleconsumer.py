@@ -25,6 +25,7 @@ import time
 import threading
 import traceback
 from collections import defaultdict
+import weakref
 
 from .common import OffsetType
 from .utils.compat import (Semaphore, Queue, Empty, iteritems, itervalues,
@@ -206,6 +207,7 @@ class SimpleConsumer(object):
         with self._update_lock:
             self._cluster.update()
             self._setup_partitions_by_leader()
+            self._discover_offset_manager()
 
     def start(self):
         """Begin communicating with Kafka, including setting up worker threads
@@ -234,6 +236,8 @@ class SimpleConsumer(object):
 
     def _build_default_error_handlers(self):
         """Set up the error handlers to use for partition errors."""
+        self = weakref.proxy(self)
+
         def _handle_OffsetOutOfRangeError(parts):
             log.info("Resetting offsets in response to OffsetOutOfRangeError")
             self.reset_offsets(
@@ -245,6 +249,7 @@ class SimpleConsumer(object):
             self._discover_offset_manager()
 
         def _handle_NotLeaderForPartition(parts):
+            log.info("Updating cluster in response to NotLeaderForPartition")
             self._update()
 
         return {
@@ -282,6 +287,7 @@ class SimpleConsumer(object):
 
     def __del__(self):
         """Stop consumption and workers when object is deleted"""
+        log.debug("Finalising {}".format(self))
         self.stop()
 
     def stop(self):
@@ -292,6 +298,8 @@ class SimpleConsumer(object):
 
     def _setup_autocommit_worker(self):
         """Start the autocommitter thread"""
+        self = weakref.proxy(self)
+
         def autocommitter():
             while True:
                 try:
@@ -300,6 +308,8 @@ class SimpleConsumer(object):
                     if self._auto_commit_enable:
                         self._auto_commit()
                     time.sleep(self._auto_commit_interval_ms / 1000)
+                except ReferenceError:
+                    break
                 except Exception:
                     # surface all exceptions to the main thread
                     self._worker_exception = sys.exc_info()
@@ -311,6 +321,8 @@ class SimpleConsumer(object):
     def _setup_fetch_workers(self):
         """Start the fetcher threads"""
         # NB this gets overridden in rdkafka.RdKafkaSimpleConsumer
+
+        self = weakref.proxy(self)
         def fetcher():
             while True:
                 try:
@@ -318,6 +330,8 @@ class SimpleConsumer(object):
                         break
                     self.fetch()
                     time.sleep(.0001)
+                except ReferenceError:
+                    break
                 except Exception:
                     # surface all exceptions to the main thread
                     self._worker_exception = sys.exc_info()
@@ -372,8 +386,8 @@ class SimpleConsumer(object):
             return
 
         if (time.time() - self._last_auto_commit) * 1000.0 >= self._auto_commit_interval_ms:
-            log.info("Autocommitting consumer offset for consumer group %s and topic %s",
-                     self._consumer_group, self._topic.name)
+            log.debug("Autocommitting consumer offset for consumer group %s and topic %s",
+                      self._consumer_group, self._topic.name)
             if self._consumer_group is not None:
                 self.commit_offsets()
             self._last_auto_commit = time.time()
@@ -394,8 +408,18 @@ class SimpleConsumer(object):
                 log.debug("Retrying")
             time.sleep(i * (self._offsets_channel_backoff_ms / 1000))
 
-            response = self._offset_manager.commit_consumer_group_offsets(
-                self._consumer_group, 1, b'pykafka', reqs)
+            try:
+                response = self._offset_manager.commit_consumer_group_offsets(
+                    self._consumer_group, 1, b'pykafka', reqs)
+            except (SocketDisconnectedError, IOError):
+                log.error("Error committing offsets for topic %s "
+                          "(SocketDisconnectedError)",
+                          self._topic.name)
+                if i >= self._offsets_commit_max_retries - 1:
+                    raise
+                self._update()
+                continue
+
             parts_by_error = handle_partition_responses(
                 self._default_error_handlers,
                 response=response,
@@ -600,7 +624,7 @@ class SimpleConsumer(object):
 
                 for errcode, owned_partitions in iteritems(parts_by_error):
                     if errcode != 0:
-                        for owned_partition in owned_partitions:
+                        for owned_partition, _ in owned_partitions:
                             owned_partition.fetch_lock.release()
 
             if not owned_partition_offsets:
@@ -656,8 +680,10 @@ class SimpleConsumer(object):
                         min_bytes=self._fetch_min_bytes
                     )
                 except (IOError, SocketDisconnectedError):
+                    unlock_partitions(iterkeys(partition_reqs))
                     if self._running:
-                        unlock_partitions(iterkeys(partition_reqs))
+                        log.info("Updating cluster in response to error in fetch() "
+                                 "for broker id %s", broker.id)
                         self._update()
                     # If the broker dies while we're supposed to stop,
                     # it's fine, and probably an integration test.
