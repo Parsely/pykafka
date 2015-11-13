@@ -103,7 +103,7 @@ class RdKafkaProducer(Producer):
             # Handled via rd_kafka_brokers_add instead:
             ##"metadata.broker.list"
 
-            # NB these refer not to kafka messages, but to protocol messages.
+            # NB these refer not to payloads, but to wire messages
             # We've no real equivalents for these, but defaults should be fine:
             ##"message.max.bytes"
             ##"receive.message.max.bytes"
@@ -125,9 +125,9 @@ class RdKafkaProducer(Producer):
             ##"broker.address.ttl"
             ##"broker.address.family"
 
-            # None of these are hooked up (yet):
+            # None of these need to be hooked up
             ##"statistics.interval.ms"
-            ##"error_cb"
+            ##"error_cb"  # we let errors be reported via log_cb
             ##"stats_cb"
 
             ##"log_cb"  # gets set in _rd_kafka module
@@ -145,9 +145,10 @@ class RdKafkaProducer(Producer):
             "compression.codec": map_compression_types[self._compression],
             "batch.num.messages": self._min_queued_messages,
 
-            ##"delivery.report.only.error"
+            # Report successful and failed messages so we know to dealloc them
+            "delivery.report.only.error": "false",
             ##"dr_cb"
-            ##"dr_msg_cb"
+            ##"dr_msg_cb"  # gets set in _rd_kafka module
             }
         topic_conf = {
             # see https://github.com/edenhill/librdkafka/issues/208

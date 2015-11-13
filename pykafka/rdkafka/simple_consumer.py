@@ -161,10 +161,10 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
             # Handled via rd_kafka_brokers_add instead:
             ##"metadata.broker.list"
 
-            # NB these refer not to kafka messages, but to protocol messages.
-            # We've no real equivalents for these, but defaults should be fine:
-            ##"message.max.bytes"
-            ##"receive.message.max.bytes"
+            # NB these refer not to payloads, but to wire messages
+            ##"message.max.bytes"  # leave at default
+            "receive.message.max.bytes": (  # ~ sum of PartitionFetchRequests
+                self._fetch_message_max_bytes * (len(self.partitions) + 1)),
 
             # No direct equivalents:
             ##"metadata.request.timeout.ms"
@@ -183,9 +183,9 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
             ##"broker.address.ttl"
             ##"broker.address.family"
 
-            # None of these are hooked up (yet):
+            # None of these need to be hooked up
             ##"statistics.interval.ms"
-            ##"error_cb"
+            ##"error_cb"  # we let errors be reported via log_cb
             ##"stats_cb"
 
             ##"log_cb"  # gets set in _rd_kafka module
@@ -225,7 +225,9 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
             }
         topic_conf = {
             ##"opaque"
-            ##"group.id"
+            ##"group.id"  # see note above re group.id
+
+            # pykafka handles offset commits
             "auto.commit.enable": "false",
             ##"auto.commit.interval.ms"
             "auto.offset.reset": map_offset_types[self._auto_offset_reset],
