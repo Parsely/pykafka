@@ -579,6 +579,13 @@ Producer_delivery_report_callback(rd_kafka_t *rk,
 
     /* Producer_produce sent *Message as msg_opaque == rkmessage->_private */
     PyObject *message = (PyObject *)rkmessage->_private;
+
+    /* We temporarily bypass most of this function while our delivery reporting
+     * spec is in flux.  This code still works, but it would flood the log with
+     * warnings that messages don't carry futures */
+    goto cleanup;
+
+
     PyObject *future = Producer_get_message_future(message);
     if (! future) {
         log_clear_exception("Error in getting Message.delivery_future");

@@ -1,10 +1,11 @@
-from concurrent import futures
 import logging
+import time
 import weakref
 
 from pykafka.exceptions import (
         KafkaException, RdKafkaStoppedException, ProducerStoppedException)
 from pykafka.producer import Producer, CompressionType, random_partitioner
+from pykafka.protocol import Message
 from pykafka.utils.compat import get_bytes
 from . import _rd_kafka
 
@@ -62,17 +63,25 @@ class RdKafkaProducer(Producer):
 
     def stop(self):
         super(RdKafkaProducer, self).stop()
+        self._poller_thread.join()
         self._rdk_producer.stop()
 
-    def _produce(self, message):
+    def _produce(self, msg_tuple):
+        # Temporarily some unpacking here, because the expected signature of
+        # _produce has been in flux
+        (k, v), pid, attempt = msg_tuple
+        message = Message(value=v, partition_key=k, partition_id=pid)
         try:
             self._rdk_producer.produce(message)
         except RdKafkaStoppedException:
             raise ProducerStoppedException
 
     def _wait_all(self):
-        """Helper for stop().  Will block forever if used elsewhere"""
-        self._poller_thread.join()
+        # TODO rewrite this when we re-enable delivery-reporting
+        if not hasattr(self._rdk_producer, "_pending_messages"):
+            return  # _rdk_producer not running
+        while self._rdk_producer._pending_messages:
+            time.sleep(.3)
 
     def _mk_rdkafka_config_lists(self):
         """Populate conf, topic_conf to configure the rdkafka producer"""
