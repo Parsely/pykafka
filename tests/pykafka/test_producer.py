@@ -45,9 +45,12 @@ class ProducerIntegrationTests(unittest2.TestCase):
     def test_async_produce(self):
         payload = uuid4().bytes
 
-        prod = self._get_producer(min_queued_messages=1)
+        prod = self._get_producer(min_queued_messages=1, linger_ms=50)
         prod.produce(payload)
-        del prod  # force a flush so consume() won't time-out
+
+        # wait for producer to flush so consume() won't time-out
+        # TODO replace by `del prod` after we fix issue #352
+        time.sleep(.1)
 
         message = self.consumer.consume()
         assert message.value == payload
