@@ -1,9 +1,7 @@
 import logging
 import time
-import weakref
 
-from pykafka.exceptions import (
-        KafkaException, RdKafkaStoppedException, ProducerStoppedException)
+from pykafka.exceptions import RdKafkaStoppedException, ProducerStoppedException
 from pykafka.producer import Producer, CompressionType, random_partitioner
 from pykafka.protocol import Message
 from pykafka.utils.compat import get_bytes
@@ -37,6 +35,8 @@ class RdKafkaProducer(Producer):
         callargs = {k: v for k, v in vars().items()
                          if k not in ("self", "__class__")}
         self._rdk_producer = None
+        self._poller_thread = None
+        self._stop_poller_thread = cluster.handler.Event()
         # super() must come last because it calls start()
         super(RdKafkaProducer, self).__init__(**callargs)
 
@@ -52,17 +52,19 @@ class RdKafkaProducer(Producer):
             self._rdk_producer.start(brokers, self._topic.name)
             self._running = True
 
-            def poll(self):
-                while self._running or self._rdk_producer.outq_len() > 0:
-                    self._rdk_producer.poll(timeout_ms=1000)
-                assert(not self._rdk_producer._pending_messages)
+            def poll(rdk_handle, stop_event):
+                while not stop_event.is_set() or rdk_handle.outq_len() > 0:
+                    rdk_handle.poll(timeout_ms=1000)
+                assert(not rdk_handle._pending_messages)
                 log.debug("Exiting RdKafkaProducer poller thread cleanly.")
 
+            self._stop_poller_thread.clear()
             self._poller_thread = self._cluster.handler.spawn(
-                    poll, args=(weakref.proxy(self), ))
+                poll, args=(self._rdk_producer, self._stop_poller_thread))
 
     def stop(self):
         super(RdKafkaProducer, self).stop()
+        self._stop_poller_thread.set()
         self._poller_thread.join()
         self._rdk_producer.stop()
 
