@@ -110,7 +110,6 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
         ret = super(RdKafkaSimpleConsumer, self).stop()
         if self._rdk_consumer is not None:
             self._stop_poller_thread.set()
-            self._poller_thread.join()
             # Call _rd_kafka.Consumer.stop explicitly, so we may catch errors:
             self._rdk_consumer.stop()
             log.debug("Issued stop to _rdk_consumer.")

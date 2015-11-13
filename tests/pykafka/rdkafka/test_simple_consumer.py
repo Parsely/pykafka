@@ -70,6 +70,8 @@ def _latest_partition_offsets_by_reading(consumer, n_reads):
     return latest_offs
 
 
+@pytest.mark.skipif(platform.python_implementation() == "PyPy",
+                    reason="Unresolved crashes")
 class RdkBalancedConsumerIntegrationTests(
         test_balancedconsumer.BalancedConsumerIntegrationTests):
     USE_RDKAFKA = True
