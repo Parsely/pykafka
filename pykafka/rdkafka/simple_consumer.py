@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 import logging
+import time
 
 from pykafka.exceptions import RdKafkaStoppedException, ConsumerStoppedException
 from pykafka.simpleconsumer import SimpleConsumer, OffsetType
@@ -87,7 +88,7 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
     def consume(self, block=True):
         timeout_ms = self._consumer_timeout_ms if block else 1
         try:
-            msg = self._rdk_consumer.consume(timeout_ms)
+            msg = self._consume(timeout_ms)
         # if _rdk_consumer is None we'll catch an AttributeError here
         except (RdKafkaStoppedException, AttributeError) as e:
             if not self._running:
@@ -103,6 +104,26 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
             # set offset in OwnedPartition so the autocommit_worker can find it
             self._partitions_by_id[msg.partition_id].set_offset(msg.offset)
         return msg
+
+    def _consume(self, timeout_ms):
+        """Helper to allow catching interrupts around rd_kafka_consume"""
+        inner_timeout_ms = 500  # unblock at this interval at least
+
+        if timeout_ms < 0:
+            while True:
+                msg = self._rdk_consumer.consume(inner_timeout_ms)
+                if msg is not None:
+                    return msg
+        else:
+            t_start = time.time()
+            leftover_ms = timeout_ms
+            while leftover_ms > 0:
+                inner_timeout_ms = int(min(leftover_ms, inner_timeout_ms))
+                msg = self._rdk_consumer.consume(inner_timeout_ms)
+                if msg is not None:
+                    return msg
+                elapsed_ms = 1000 * (time.time() - t_start)
+                leftover_ms = timeout_ms - elapsed_ms
 
     def stop(self):
         # NB we should always call super() first, because it takes care of
