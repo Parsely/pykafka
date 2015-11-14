@@ -78,8 +78,11 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
         # held up in librdkafka
         def poll(rdk_handle, stop_event):
             while not stop_event.is_set():
-                rdk_handle.poll(timeout_ms=1000)
-            log.debug("Exiting RdKafkaSimpleConsumer poller thread.")
+                try:
+                    rdk_handle.poll(timeout_ms=1000)
+                except RdKafkaStoppedException:
+                    break
+            log.debug("Exiting RdKafkaSimpleConsumer poller thread cleanly.")
 
         self._stop_poller_thread.clear()
         self._poller_thread = self._cluster.handler.spawn(
