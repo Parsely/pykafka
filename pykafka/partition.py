@@ -27,7 +27,7 @@ from .protocol import PartitionOffsetRequest
 log = logging.getLogger(__name__)
 
 
-class Partition():
+class Partition(object):
     """
     A Partition is an abstraction over the kafka concept of a partition.
     A kafka partition is a logical division of the logs for a topic. Its
