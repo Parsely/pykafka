@@ -8,12 +8,12 @@ PyKafka
 
 .. image:: http://i.imgur.com/ztYl4lG.jpg
 
-PyKafka is a cluster-aware Kafka 0.8.2 protocol client for python. It includes python
-implementations of Kafka producers and consumers, and runs under python 2.7.
+PyKafka is a cluster-aware Kafka 0.8.2 protocol client for Python. It includes Python
+implementations of Kafka producers and consumers, and runs under Python 2.7+.
 
 PyKafka's primary goal is to provide a similar level of abstraction to the
-`JVM Kafka client`_ using idioms familiar to python programmers and exposing
-the most pythonic API possible.
+`JVM Kafka client`_ using idioms familiar to Python programmers and exposing
+the most Pythonic API possible.
 
 You can install PyKafka from PyPI with
 
@@ -120,7 +120,7 @@ previous versions will always be available in this repo.
 
 .. _PyPI package: https://pypi.python.org/pypi/samsa/0.3.11
 
-pykafka or kafka-python?
+PyKafka or kafka-python?
 ------------------------
 
 These are two different projects.
