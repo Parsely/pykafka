@@ -26,6 +26,8 @@ Full documentation and usage examples for PyKafka can be found on `readthedocs`_
 
 You can install PyKafka for local development and testing with
 
+::
+
     $ python setup.py develop
 
 .. _JVM Kafka client: https://github.com/apache/kafka/tree/0.8.2/clients/src/main/java/org/apache/kafka
