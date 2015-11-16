@@ -82,6 +82,7 @@ class RdKafkaProducer(Producer):
         # TODO rewrite this when we re-enable delivery-reporting
         if not hasattr(self._rdk_producer, "_pending_messages"):
             return  # _rdk_producer not running
+        log.info("Blocking until all messages are sent")
         while self._rdk_producer._pending_messages:
             time.sleep(.3)
 
