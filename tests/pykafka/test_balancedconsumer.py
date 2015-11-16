@@ -166,6 +166,10 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
                 auto_offset_reset=OffsetType.LATEST,
                 use_rdkafka=self.USE_RDKAFKA)
 
+            # Allow consumers time to finish rebalancing (this is unreliable,
+            # but the best we can do until we build rebalancing-hooks)
+            time.sleep(1)
+
             # Since we are consuming from the latest offset,
             # produce more messages to consume.
             for i in range(10):

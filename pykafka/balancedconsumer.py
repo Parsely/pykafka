@@ -297,6 +297,7 @@ class BalancedConsumer():
 
         This method should be called as part of a graceful shutdown process.
         """
+        log.debug("Stopping {}".format(self))
         with self._rebalancing_lock:
             # We acquire the lock in order to prevent a race condition where a
             # rebalance that is already underway might re-register the zk
