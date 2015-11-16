@@ -92,8 +92,8 @@ def encode_snappy(buff, xerial_compatible=False, xerial_blocksize=32 * 1024):
         out = BytesIO()
         full_data = list(zip(_XERIAL_V1_FORMAT, _XERIAL_V1_HEADER))
         header = b''.join(
-            [struct.pack('!' + fmt, dat) for fmt, dat in full_data
-         ])
+            [struct.pack('!' + fmt, dat) for fmt, dat in full_data]
+        )
 
         out.write(header)
         for chunk in _chunker():

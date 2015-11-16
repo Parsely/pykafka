@@ -34,7 +34,7 @@ from .utils.compat import range, iteritems
 log = logging.getLogger(__name__)
 
 
-class Broker():
+class Broker(object):
     """
     A Broker is an abstraction over a real kafka server instance.
     It is used to perform requests to these servers.

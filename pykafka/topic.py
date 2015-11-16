@@ -33,7 +33,7 @@ from .utils.compat import iteritems, itervalues
 log = logging.getLogger(__name__)
 
 
-class Topic():
+class Topic(object):
     """
     A Topic is an abstraction over the kafka concept of a topic.
     It contains a dictionary of partitions that comprise it.

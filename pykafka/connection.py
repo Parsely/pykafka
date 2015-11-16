@@ -102,10 +102,10 @@ class BrokerConnection(object):
 
     def request(self, request):
         """Send a request over the socket connection"""
-        bytes = request.get_bytes()
+        bytes_ = request.get_bytes()
         if not self._socket:
             raise SocketDisconnectedError
-        self._socket.sendall(bytes)
+        self._socket.sendall(bytes_)
 
     def response(self):
         """Wait for a response from the broker"""
