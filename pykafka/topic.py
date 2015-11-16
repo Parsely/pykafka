@@ -145,20 +145,19 @@ class Topic():
         brokers = self._cluster.brokers
         if len(p_metas) > 0:
             log.info("Adding %d partitions", len(p_metas))
-        try:
-            for id_, meta in iteritems(p_metas):
-                if meta.id not in self._partitions:
-                    log.debug('Adding partition %s/%s', self.name, meta.id)
-                    self._partitions[meta.id] = Partition(
-                        self, meta.id,
-                        brokers[meta.leader],
-                        [brokers[b] for b in meta.replicas],
-                        [brokers[b] for b in meta.isr],
-                    )
-                else:
-                    self._partitions[id_].update(brokers, meta)
-        except KeyError:
-            raise LeaderNotAvailable()
+        for id_, meta in iteritems(p_metas):
+            if meta.leader not in brokers:
+                raise LeaderNotAvailable()
+            if meta.id not in self._partitions:
+                log.debug('Adding partition %s/%s', self.name, meta.id)
+                self._partitions[meta.id] = Partition(
+                    self, meta.id,
+                    brokers[meta.leader],
+                    [brokers[b] for b in meta.replicas],
+                    [brokers[b] for b in meta.isr],
+                )
+            else:
+                self._partitions[id_].update(brokers, meta)
 
     def get_simple_consumer(self,
                             consumer_group=None,
