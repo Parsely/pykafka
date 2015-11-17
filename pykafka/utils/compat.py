@@ -63,7 +63,7 @@ else:
     buffer = buffer
 
     # -- begin unmodified backport of threading.Semaphore from Python 3.4 -- #
-    class Semaphore:
+    class Semaphore(object):
         """This class implements semaphore objects.
 
         Semaphores manage a counter representing the number of release() calls minus

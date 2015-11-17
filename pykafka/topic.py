@@ -41,7 +41,7 @@ except ImportError:
     log.info("Could not load pykafka.rdkafka extension.", exc_info=True)
 
 
-class Topic():
+class Topic(object):
     """
     A Topic is an abstraction over the kafka concept of a topic.
     It contains a dictionary of partitions that comprise it.

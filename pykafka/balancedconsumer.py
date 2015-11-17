@@ -58,7 +58,7 @@ def _catch_thread_exception(fn):
     return wrapped
 
 
-class BalancedConsumer():
+class BalancedConsumer(object):
     """
     A self-balancing consumer for Kafka that uses ZooKeeper to communicate
     with other balancing consumers.
