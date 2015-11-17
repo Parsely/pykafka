@@ -18,7 +18,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 __all__ = ["BalancedConsumer"]
-import functools
 import itertools
 import logging
 import socket
@@ -416,6 +415,17 @@ class BalancedConsumer(object):
         participants = sorted(participants)
         return participants
 
+    def _build_watch_callback(self, fn, proxy):
+        """Return a function that's safe to use as a ChildrenWatch callback"""
+        def _callback(children):
+            # discover whether the referenced object still exists
+            try:
+                proxy.__repr__()
+            except ReferenceError:
+                return
+            return fn(proxy, children)
+        return _callback
+
     def _set_watches(self):
         """Set watches in zookeeper that will trigger rebalances.
 
@@ -425,9 +435,9 @@ class BalancedConsumer(object):
         cluster.
         """
         proxy = weakref.proxy(self)
-        _brokers_changed = functools.partial(BalancedConsumer._brokers_changed, proxy)
-        _topics_changed = functools.partial(BalancedConsumer._topics_changed, proxy)
-        _consumers_changed = functools.partial(BalancedConsumer._consumers_changed, proxy)
+        _brokers_changed = self._build_watch_callback(BalancedConsumer._brokers_changed, proxy)
+        _topics_changed = self._build_watch_callback(BalancedConsumer._topics_changed, proxy)
+        _consumers_changed = self._build_watch_callback(BalancedConsumer._consumers_changed, proxy)
 
         self._setting_watches = True
         # Set all our watches and then rebalance
