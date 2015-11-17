@@ -102,7 +102,8 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
     def setUpClass(cls):
         cls.kafka = get_cluster()
         cls.topic_name = b'test-data'
-        cls.kafka.create_topic(cls.topic_name, 3, 2)
+        cls.n_partitions = 3
+        cls.kafka.create_topic(cls.topic_name, cls.n_partitions, 2)
         cls.client = KafkaClient(cls.kafka.brokers)
         cls.prod = cls.client.topics[cls.topic_name].get_producer(
             min_queued_messages=1
@@ -166,9 +167,8 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
                 auto_offset_reset=OffsetType.LATEST,
                 use_rdkafka=self.USE_RDKAFKA)
 
-            # Allow consumers time to finish rebalancing (this is unreliable,
-            # but the best we can do until we build rebalancing-hooks)
-            time.sleep(1)
+            # Make sure we're done before producing more messages:
+            self.wait_for_rebalancing(consumer_a, consumer_b)
 
             # Since we are consuming from the latest offset,
             # produce more messages to consume.
@@ -230,7 +230,6 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
         with self.assertRaises(NoPartitionsForConsumerException):
             consumer.consume()
 
-
     def test_zk_conn_lost(self):
         """Check we restore zookeeper nodes correctly after connection loss
 
@@ -262,11 +261,9 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
                 self.assertFalse(consumer._check_held_partitions())
 
             # Finally, confirm that _rebalance() resolves the discrepancy:
-            time.sleep(.3)  # allow consumers time to begin rebalancing
-            with consumer._rebalancing_lock:  # wait until rebalancing finishes
-                self.assertTrue(consumer._check_held_partitions())
-            with other_consumer._rebalancing_lock:
-                self.assertTrue(other_consumer._check_held_partitions())
+            self.wait_for_rebalancing(consumer, other_consumer)
+            self.assertTrue(consumer._check_held_partitions())
+            self.assertTrue(other_consumer._check_held_partitions())
         finally:
             try:
                 consumer.stop()
@@ -274,6 +271,23 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
                 zk.stop()
             except:
                 pass
+
+    def wait_for_rebalancing(self, *balanced_consumers):
+        """Test helper that loops while rebalancing is ongoing
+
+        Needs to be given all consumer instances active in a consumer group.
+        Waits for up to 100 seconds, which should be enough for even a very
+        oversubscribed test cluster.
+        """
+        for _ in range(500):
+            n_parts = [len(cons.partitions) for cons in balanced_consumers]
+            if (max(n_parts) - min(n_parts) <= 1
+                    and sum(n_parts) == self.n_partitions):
+                break
+            else:
+                time.sleep(.2)
+        else:
+            raise AssertionError("Rebalancing failed")
 
 
 if __name__ == "__main__":
