@@ -11,13 +11,18 @@
 #include <librdkafka/rdkafka.h>
 
 
+static PyObject *pykafka_exceptions;  /* ~ import pykafka.exceptions */
+static PyObject *Message;  /* ~ from pykafka.protocol import Message */
+
+static PyObject *logger;  /* ~ logging.getLogger */
+
+
 /**
  * Logging
  */
 
-static PyObject *logger;
 
-
+/* If used as librdkafka log_cb, passes log messages into python logging */
 static void
 logging_callback(const rd_kafka_t *rk,
                  int level,
@@ -52,10 +57,8 @@ logging_callback(const rd_kafka_t *rk,
 
 
 /**
- * Exception types
+ * Exception helpers
  */
-
-static PyObject *pykafka_exceptions;
 
 
 /* Raise an exception from pykafka.exceptions (always returns NULL, to allow
@@ -71,7 +74,7 @@ set_pykafka_error(const char *err_name, const char *err_msg)
 }
 
 
-/* Given an error code, find the most fitting class from pykafka.exceptions */
+/* Given an error code, return most suitable class from pykafka.exceptions */
 static PyObject *
 find_pykafka_error(rd_kafka_resp_err_t err)
 {
@@ -116,14 +119,6 @@ cleanup:
     Py_XDECREF(error);
     Py_XDECREF(err_args);
 }
-
-
-/**
- * Message type
- */
-
-
-PyObject *Message;  /* pykafka.protocol.Message */
 
 
 /**
@@ -189,6 +184,7 @@ RdkHandle_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 }
 
 
+/* Release RdkHandle.rwlock (see RdkHandle docstring) */
 static int
 RdkHandle_unlock(RdkHandle *self)
 {
@@ -201,7 +197,11 @@ RdkHandle_unlock(RdkHandle *self)
 
 
 /* Get shared lock and optionally check handle is running.  Returns non-zero
- * if error has been set */
+ * if error has been set.
+ *
+ * Should be used by any method that accesses an RdkHandle, to prevent the
+ * handle being concurrently destroyed on another thread (by calling
+ * RdkHandle_stop).  See also RdkHandle docstring.  */
 static int
 RdkHandle_safe_lock(RdkHandle *self, int check_running)
 {
@@ -222,7 +222,10 @@ RdkHandle_safe_lock(RdkHandle *self, int check_running)
 }
 
 
-/* Get exclusive lock on handle.  Returns non-zero if error has been set */
+/* Get exclusive lock on handle.  Returns non-zero if error has been set.
+ *
+ * Should be used by any method that might render accessing RdkHandle members
+ * unsafe (in particular, RdkHandle_stop).  See also RdkHandle docstring.  */
 static int
 RdkHandle_excl_lock(RdkHandle *self)
 {
@@ -238,6 +241,10 @@ RdkHandle_excl_lock(RdkHandle *self)
 }
 
 
+PyDoc_STRVAR(RdkHandle_outq_len__doc__,
+    "outq_len(self) -> int\n"
+    "\n"
+    "Number of messages pending shipping to a broker.");
 static PyObject *
 RdkHandle_outq_len(RdkHandle *self)
 {
@@ -253,6 +260,11 @@ RdkHandle_outq_len(RdkHandle *self)
 }
 
 
+PyDoc_STRVAR(RdkHandle_poll__doc__,
+    "poll(self, timeout_ms) -> int\n"
+    "\n"
+    "Poll the handle for events (in particular delivery callbacks) and\n"
+    "return the total number of callbacks triggered.");
 static PyObject *
 RdkHandle_poll(RdkHandle *self, PyObject *args, PyObject *kwds)
 {
@@ -274,6 +286,11 @@ RdkHandle_poll(RdkHandle *self, PyObject *args, PyObject *kwds)
 }
 
 
+PyDoc_STRVAR(RdkHandle_stop__doc__,
+    "stop(self)\n"
+    "\n"
+    "Shut down the librdkafka handle and clean up.  This may block until\n"
+    "other methods accessing the same handle concurrently have finished.\n");
 static PyObject *
 RdkHandle_stop(RdkHandle *self)
 {
@@ -332,15 +349,15 @@ RdkHandle_dealloc(PyObject *self, PyObject *(*stop_func) (RdkHandle *))
 
 
 PyDoc_STRVAR(RdkHandle_configure__doc__,
-"Set up and populate the rd_kafka_(topic_)conf_t\n"
-"\n"
-"Somewhat inelegantly (for the benefit of code reuse, whilst avoiding some\n"
-"harrowing partial binding for C functions) this requires that you call it\n"
-"twice, once with a `conf` list only, and again with `topic_conf` only.\n"
-"\n"
-"Repeated calls work incrementally; you can wipe configuration completely\n"
-"by calling Consumer_stop()\n");
-
+    "configure(self, conf) OR configure(self, topic_conf)\n"
+    "\n"
+    "Set up and populate the rd_kafka_(topic_)conf_t.  Somewhat inelegantly\n"
+    "(for the benefit of code reuse, whilst avoiding some harrowing partial\n"
+    "binding for C functions) this requires that you call it twice, once\n"
+    "with a `conf` list only, and again with `topic_conf` only.\n"
+    "\n"
+    "Repeated calls work incrementally; you can wipe configuration completely\n"
+    "by calling Consumer_stop()\n");
 static PyObject *
 RdkHandle_configure(RdkHandle *self, PyObject *args, PyObject *kwds)
 {
@@ -430,6 +447,7 @@ RdkHandle_start_fail(RdkHandle *self, PyObject *(*stop_func) (RdkHandle *))
 }
 
 
+/* Shared logic of Consumer_start and Producer_start */
 static PyObject *
 RdkHandle_start(RdkHandle *self,
                 rd_kafka_type_t rdk_type,
@@ -549,7 +567,7 @@ Producer_discard_from_pending(PyObject *pending, PyObject *message)
 
 /* Helper function to retrieve Message.delivery_future.  NB may return Py_None
  * if user has already discarded future */
-PyObject *
+static PyObject *
 Producer_get_message_future(PyObject *message)
 {
     PyObject *wref = NULL;
@@ -570,6 +588,10 @@ failed:
 }
 
 
+/* Callback to be used as librdkafka dr_msg_cb.  Note that this must always
+ * be configured to run, even if we do not care about delivery reporting,
+ * because we keep the Message objects that we produce from alive until this
+ * callback releases them, in order to avoid having to copy the payload  */
 static void
 Producer_delivery_report_callback(rd_kafka_t *rk,
                                   const rd_kafka_message_t *rkmessage,
@@ -615,9 +637,13 @@ cleanup:
 }
 
 
-/* Starts the underlying rdkafka producer after configuring delivery-reporting.
- * Note that following start, you _must_ ensure that Producer.poll() is called
- * regularly, or delivery reports and unfulfilled Futures may pile up */
+PyDoc_STRVAR(Producer_start__doc__,
+    "start(self, brokers, topic_name)\n"
+    "\n"
+    "Starts the underlying rdkafka producer.  Configuration should have been\n"
+    "provided through earlier calls to configure().  Note that following\n"
+    "start, you _must_ ensure that poll() is called regularly, or delivery\n"
+    "reports may pile up\n");
 static PyObject *
 Producer_start(RdkHandle *self, PyObject *args, PyObject *kwds)
 {
@@ -655,6 +681,11 @@ failed:
 }
 
 
+PyDoc_STRVAR(Producer_produce__doc__,
+    "produce(self, message)\n"
+    "\n"
+    "Produces a `pykafka.protocol.Message` through librdkafka.  Will keep\n"
+    "a reference to the message internally until delivery is confirmed\n");
 static PyObject *
 Producer_produce(RdkHandle *self, PyObject *message)
 {
@@ -740,13 +771,18 @@ failed:
 
 
 static PyMethodDef Producer_methods[] = {
-    {"produce", (PyCFunction)Producer_produce, METH_O, "Produce to kafka."},
-    {"stop", (PyCFunction)RdkHandle_stop, METH_NOARGS, "Destroy producer."},
+    {"produce", (PyCFunction)Producer_produce,
+        METH_O, Producer_produce__doc__},
+    {"stop", (PyCFunction)RdkHandle_stop,
+        METH_NOARGS, RdkHandle_stop__doc__},
     {"configure", (PyCFunction)RdkHandle_configure,
         METH_VARARGS | METH_KEYWORDS, RdkHandle_configure__doc__},
-    {"start", (PyCFunction)Producer_start, METH_VARARGS | METH_KEYWORDS, NULL},
-    {"outq_len", (PyCFunction)RdkHandle_outq_len, METH_NOARGS, NULL},
-    {"poll", (PyCFunction)RdkHandle_poll, METH_VARARGS | METH_KEYWORDS, NULL},
+    {"start", (PyCFunction)Producer_start,
+        METH_VARARGS | METH_KEYWORDS, Producer_start__doc__},
+    {"outq_len", (PyCFunction)RdkHandle_outq_len,
+        METH_NOARGS, RdkHandle_outq_len__doc__},
+    {"poll", (PyCFunction)RdkHandle_poll,
+        METH_VARARGS | METH_KEYWORDS, RdkHandle_poll__doc__},
     {NULL, NULL, 0, NULL}
 };
 
@@ -853,7 +889,8 @@ Consumer_dealloc(PyObject *self)
 }
 
 
-/* NB: assumes self->rwlock is held and releases it. */
+/* Cleanup helper for Consumer_start.
+ * NB: assumes self->rwlock is held and releases it. */
 static PyObject *
 Consumer_start_fail(RdkHandle *self)
 {
@@ -861,6 +898,13 @@ Consumer_start_fail(RdkHandle *self)
 }
 
 
+PyDoc_STRVAR(Consumer_start__doc__,
+    "start(self, brokers, topic_name, partition_ids, start_offsets)\n"
+    "\n"
+    "Starts the underlying rdkafka consumer.  Configuration should have been\n"
+    "provided through earlier calls to configure().  Note that following\n"
+    "start, you must ensure that poll() is called regularly, as required\n"
+    "by librdkafka\n");
 static PyObject *
 Consumer_start(RdkHandle *self, PyObject *args, PyObject *kwds)
 {
@@ -948,6 +992,11 @@ Consumer_start(RdkHandle *self, PyObject *args, PyObject *kwds)
 }
 
 
+PyDoc_STRVAR(Consumer_consume__doc__,
+    "consume(self, timeout_ms) -> pykafka.protocol.Message or None \n"
+    "\n"
+    "Block until a message can be returned, or return None if timeout_ms has\n"
+    "been reached.\n");
 static PyObject *
 Consumer_consume(RdkHandle *self, PyObject *args)
 {
@@ -1011,12 +1060,15 @@ cleanup:
 
 static PyMethodDef Consumer_methods[] = {
     {"consume", (PyCFunction)Consumer_consume,
-        METH_VARARGS, "Consume from kafka."},
-    {"stop", (PyCFunction)Consumer_stop, METH_NOARGS, "Destroy consumer."},
+        METH_VARARGS, Consumer_consume__doc__},
+    {"stop", (PyCFunction)Consumer_stop,
+        METH_NOARGS, RdkHandle_stop__doc__},
     {"configure", (PyCFunction)RdkHandle_configure,
         METH_VARARGS | METH_KEYWORDS, RdkHandle_configure__doc__},
-    {"start", (PyCFunction)Consumer_start, METH_VARARGS | METH_KEYWORDS, NULL},
-    {"poll", (PyCFunction)RdkHandle_poll, METH_VARARGS | METH_KEYWORDS, NULL},
+    {"start", (PyCFunction)Consumer_start,
+        METH_VARARGS | METH_KEYWORDS, Consumer_start__doc__},
+    {"poll", (PyCFunction)RdkHandle_poll,
+        METH_VARARGS | METH_KEYWORDS, RdkHandle_poll__doc__},
     {NULL, NULL, 0, NULL}
 };
 
@@ -1067,6 +1119,11 @@ static PyTypeObject ConsumerType = {
  * Debugging helpers
  */
 
+
+PyDoc_STRVAR(debug_thread_cnt__doc__,
+    "_thread_cnt() -> int\n"
+    "\n"
+    "Debugging helper, reports number of librdkafka threads running.\n");
 static PyObject *
 debug_thread_cnt(PyObject *self, PyObject *args)
 {
@@ -1074,6 +1131,11 @@ debug_thread_cnt(PyObject *self, PyObject *args)
 }
 
 
+PyDoc_STRVAR(debug_wait_destroyed__doc__,
+    "_wait_destroyed(timeout_ms)\n"
+    "\n"
+    "Debugging helper, blocks until all rdkafka handles have been destroyed.\n"
+    "Raises exception if timeout_ms is reached before then\n");
 static PyObject *
 debug_wait_destroyed(PyObject *self, PyObject *arg)
 {
@@ -1102,8 +1164,10 @@ static const char module_name[] = "pykafka.rdkafka._rd_kafka";
 
 
 static PyMethodDef pyrdk_methods[] = {
-    {"_thread_cnt", debug_thread_cnt, METH_NOARGS, NULL},
-    {"_wait_destroyed", debug_wait_destroyed, METH_O, NULL},
+    {"_thread_cnt", debug_thread_cnt,
+        METH_NOARGS, debug_thread_cnt__doc__},
+    {"_wait_destroyed", debug_wait_destroyed,
+        METH_O, debug_wait_destroyed__doc__},
     {NULL, NULL, 0, NULL}
 };
 
