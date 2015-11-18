@@ -246,7 +246,8 @@ class SimpleConsumer(object):
             )
 
         def _handle_NotCoordinatorForConsumer(parts):
-            self._discover_offset_manager()
+            log.info("Updating cluster in response to NotCoordinatorForConsumer")
+            self._update()
 
         def _handle_NotLeaderForPartition(parts):
             log.info("Updating cluster in response to NotLeaderForPartition")
