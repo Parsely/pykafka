@@ -7,7 +7,7 @@ from kazoo.client import KazooClient
 
 from pykafka import KafkaClient
 from pykafka.balancedconsumer import BalancedConsumer, OffsetType
-from pykafka.exceptions import NoPartitionsForConsumerException
+from pykafka.exceptions import NoPartitionsForConsumerException, ConsumerStoppedException
 from pykafka.test.utils import get_cluster, stop_cluster
 from pykafka.utils.compat import range
 
@@ -42,6 +42,7 @@ class TestBalancedConsumer(unittest2.TestCase):
         """
         self._mock_consumer._setup_internal_consumer(start=False)
         self._mock_consumer._consumer._partitions_by_id = {1: "dummy"}
+        self._mock_consumer._running = True
         start = time.time()
         self._mock_consumer.consume()
         self.assertEqual(int(time.time() - start), int(self._consumer_timeout / 1000))
@@ -55,7 +56,8 @@ class TestBalancedConsumer(unittest2.TestCase):
         consumer._consumer._partitions_by_id = {1: "dummy"}
 
         consumer.stop()
-        self.assertIsNone(consumer.consume())
+        with self.assertRaises(ConsumerStoppedException):
+            consumer.consume()
 
     def test_decide_partitions(self):
         """Test partition assignment for a number of partitions/consumers."""

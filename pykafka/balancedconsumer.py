@@ -683,7 +683,7 @@ class BalancedConsumer(object):
                 message = self._consumer.consume(block=block)
             except ConsumerStoppedException:
                 if not self._running:
-                    return
+                    raise
                 continue
             if message:
                 self._last_message_time = time.time()
