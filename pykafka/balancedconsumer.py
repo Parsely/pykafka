@@ -416,13 +416,16 @@ class BalancedConsumer(object):
         return participants
 
     def _build_watch_callback(self, fn, proxy):
-        """Return a function that's safe to use as a ChildrenWatch callback"""
+        """Return a function that's safe to use as a ChildrenWatch callbacks
+
+        Fixes the issue from https://github.com/Parsely/pykafka/issues/345
+        """
         def _callback(children):
             # discover whether the referenced object still exists
             try:
                 proxy.__repr__()
             except ReferenceError:
-                return
+                return False
             return fn(proxy, children)
         return _callback
 
