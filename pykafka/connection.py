@@ -105,7 +105,11 @@ class BrokerConnection(object):
         bytes_ = request.get_bytes()
         if not self._socket:
             raise SocketDisconnectedError
-        self._socket.sendall(bytes_)
+        try:
+            self._socket.sendall(bytes_)
+        except SocketDisconnectedError:
+            self.disconnect()
+            raise
 
     def response(self):
         """Wait for a response from the broker"""
@@ -122,6 +126,10 @@ class BrokerConnection(object):
                 raise SocketDisconnectedError
             size += r
         size = struct.unpack('!i', size)[0]
-        recvall_into(self._socket, self._buff, size)
+        try:
+            recvall_into(self._socket, self._buff, size)
+        except SocketDisconnectedError:
+            self.disconnect()
+            raise
         # Drop CorrelationId => int32
         return buffer(self._buff[4:4 + size])
