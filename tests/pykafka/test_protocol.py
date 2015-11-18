@@ -104,7 +104,7 @@ class TestFetchAPI(unittest2.TestCase):
             'offset': 0,
             'partition_id': 0,
             'produce_attempt': 0,
-            'delivery_future': None,
+            'delivery_report_q': None,
             'partition': None
         }, {
             'partition_key': b'test_key',
@@ -113,7 +113,7 @@ class TestFetchAPI(unittest2.TestCase):
             'offset': 1,
             'partition_id': 0,
             'produce_attempt': 0,
-            'delivery_future': None,
+            'delivery_report_q': None,
             'partition': None
         }, {
             'partition_key': None,
@@ -122,7 +122,7 @@ class TestFetchAPI(unittest2.TestCase):
             'offset': 2,
             'partition_id': 0,
             'produce_attempt': 0,
-            'delivery_future': None,
+            'delivery_report_q': None,
             'partition': None
         }]
 

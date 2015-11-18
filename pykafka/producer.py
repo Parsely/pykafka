@@ -19,9 +19,9 @@ limitations under the License.
 """
 __all__ = ["Producer"]
 from collections import deque
-from concurrent import futures
 import logging
 import sys
+import threading
 import time
 import traceback
 import weakref
@@ -38,7 +38,7 @@ from .exceptions import (
 )
 from .partitioners import random_partitioner
 from .protocol import Message, ProduceRequest
-from .utils.compat import iteritems, range, itervalues
+from .utils.compat import iteritems, range, itervalues, Queue
 
 log = logging.getLogger(__name__)
 
@@ -133,6 +133,7 @@ class Producer(object):
         self._worker_exception = None
         self._worker_trace_logged = False
         self._owned_brokers = None
+        self._delivery_reports = _DeliveryReportQueue()
         self._running = False
         self._update_lock = self._cluster.handler.Lock()
         self.start()
@@ -230,13 +231,6 @@ class Producer(object):
         :param partition_key: The key to use when deciding which partition to send this
             message to
         :type partition_key: bytes
-
-        :returns: a `Future` if the producer was created with `sync=False`,
-            or `None` for `sync=True` (and in that case, any exceptions that
-            the future would have carried are raised here directly).  The
-            `Future` carries the (successfully or unsuccessfully) produced
-            :class:`pykafka.protocol.Message` in an extra field, `kafka_msg`.
-        :rtype: `concurrent.futures.Future`
         """
         if not (isinstance(message, bytes) or message is None):
             raise TypeError("Producer.produce accepts a bytes object, but it "
@@ -246,20 +240,28 @@ class Producer(object):
         partitions = list(self._topic.partitions.values())
         partition_id = self._partitioner(partitions, partition_key).id
 
-        future = futures.Future()
         msg = Message(value=message,
                       partition_key=partition_key,
                       partition_id=partition_id,
-                      # prevent circular ref; see future.kafka_msg below
-                      delivery_future=weakref.ref(future))
+                      # We must pass our thread-local Queue instance directly,
+                      # as results will be written to it in a worker thread
+                      delivery_report_q=self._delivery_reports.queue)
         self._produce(msg)
 
-        self._raise_worker_exceptions()
         if self._synchronous:
-            return future.result()
+            reported_msg, exc = self.get_delivery_report()
+            assert reported_msg is msg
+            if exc is not None:
+                raise exc
+        self._raise_worker_exceptions()
 
-        future.kafka_msg = msg
-        return future
+    def get_delivery_report(self, block=True, timeout=None):
+        """Fetch delivery reports for messages produced on the current thread
+
+        Returns 2-tuples of a `pykafka.protocol.Message` and either `None`
+        (for successful deliveries) or `Exception` (for failed deliveries)
+        """
+        return self._delivery_reports.queue.get(block, timeout)
 
     def _produce(self, message):
         """Enqueue a message for the relevant broker
@@ -275,6 +277,10 @@ class Producer(object):
                 success = True
             else:
                 success = False
+
+    def _put_delivery_report(self, msg, exc=None):
+        """Post a delivery report (see get_delivery_report())"""
+        msg.delivery_report_q.put((msg, exc))
 
     def _send_request(self, message_batch, owned_broker):
         """Send the produce request to the broker and handle the response.
@@ -306,9 +312,7 @@ class Producer(object):
         def mark_as_delivered(message_batch):
             owned_broker.increment_messages_pending(-1 * len(message_batch))
             for msg in message_batch:
-                f = msg.delivery_future()
-                if f is not None:  # else user discarded future already
-                    f.set_result(None)
+                self._put_delivery_report(msg)
 
         try:
             response = owned_broker.broker.produce_messages(req)
@@ -360,9 +364,7 @@ class Producer(object):
                                                 MessageSizeTooLarge)
                 for msg in mset.messages:
                     if (non_recoverable or msg.produce_attempt >= self._max_retries):
-                        f = msg.delivery_future()
-                        if f is not None:  # else user discarded future already
-                            f.set_exception(exc)
+                        self._put_delivery_report(msg, exc)
                     else:
                         msg.produce_attempt += 1
                         self._produce(msg)
@@ -503,3 +505,9 @@ class OwnedBroker(object):
             else:
                 raise ProducerQueueFullError("Queue full for broker %d",
                                              self.broker.id)
+
+
+class _DeliveryReportQueue(threading.local):
+
+    def __init__(self):
+        self.queue = Queue()

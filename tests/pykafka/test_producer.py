@@ -50,8 +50,11 @@ class ProducerIntegrationTests(unittest2.TestCase):
         payload = uuid4().bytes
 
         prod = self.client.topics[self.topic_name].get_producer(min_queued_messages=1)
-        future = prod.produce(payload)
-        self.assertIsNone(future.result())
+        prod.produce(payload)
+
+        report = prod.get_delivery_report()
+        self.assertEqual(report[0].value, payload)
+        self.assertIsNone(report[1])
 
         message = self.consumer.consume()
         assert message.value == payload
@@ -73,8 +76,9 @@ class ProducerIntegrationTests(unittest2.TestCase):
         for broker in self.client.brokers.values():
             broker._connection.disconnect()
 
-        future = prod.produce(payload)
-        self.assertIsNone(future.result())
+        prod.produce(payload)
+        report = prod.get_delivery_report()
+        self.assertIsNone(report[1])
 
         self.consumer.start()
         self.consumer.reset_offsets(
