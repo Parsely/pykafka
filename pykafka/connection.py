@@ -105,7 +105,11 @@ class BrokerConnection(object):
         bytes_ = request.get_bytes()
         if not self._socket:
             raise SocketDisconnectedError
-        self._socket.sendall(bytes_)
+        try:
+            self._socket.sendall(bytes_)
+        except SocketDisconnectedError:
+            self.disconnect()
+            raise
 
     def response(self):
         """Wait for a response from the broker"""
