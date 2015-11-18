@@ -416,7 +416,7 @@ class BalancedConsumer(object):
         return participants
 
     def _build_watch_callback(self, fn, proxy):
-        """Return a function that's safe to use as a ChildrenWatch callbacks
+        """Return a function that's safe to use as a ChildrenWatch callback
 
         Fixes the issue from https://github.com/Parsely/pykafka/issues/345
         """
