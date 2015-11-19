@@ -11,6 +11,7 @@ from pykafka.exceptions import NoPartitionsForConsumerException, ConsumerStopped
 from pykafka.test.utils import get_cluster, stop_cluster
 from pykafka.utils.compat import range
 
+
 def buildMockConsumer(num_partitions=10, num_participants=1, timeout=2000):
     consumer_group = 'testgroup'
     topic = mock.Mock()
@@ -200,25 +201,23 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
         zk.start()
 
         consumer = self.client.topics[self.topic_name].get_balanced_consumer(
-                b'test_external_kazoo_client',
-                zookeeper=zk,
-                consumer_timeout_ms=10)
-        messages = [msg for msg in consumer]
+            b'test_external_kazoo_client',
+            zookeeper=zk,
+            consumer_timeout_ms=10)
+        [msg for msg in consumer]
         consumer.stop()
-
 
     def test_no_partitions(self):
         """Ensure a consumer assigned no partitions immediately exits"""
         consumer = self.client.topics[self.topic_name].get_balanced_consumer(
-                b'test_no_partitions',
-                zookeeper_connect=self.kafka.zookeeper,
-                auto_start=False)
+            b'test_no_partitions',
+            zookeeper_connect=self.kafka.zookeeper,
+            auto_start=False)
         consumer._decide_partitions = lambda p: set()
         consumer.start()
         self.assertFalse(consumer._running)
         with self.assertRaises(NoPartitionsForConsumerException):
             consumer.consume()
-
 
     def test_zk_conn_lost(self):
         """Check we restore zookeeper nodes correctly after connection loss
