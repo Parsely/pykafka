@@ -116,6 +116,40 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
     def tearDownClass(cls):
         stop_cluster(cls.kafka)
 
+    def test_rebalance_callbacks(self):
+        def on_partitions_assigned(cns, partitions):
+            self.assertTrue(len(partitions) > 0)
+            held = cns._get_held_partitions()
+            self.assertEqual(held | partitions, held)
+            self.assigned_called = True
+
+        def on_partitions_revoked(cns, partitions):
+            held = cns._get_held_partitions()
+            self.assertEqual(held & partitions, set())
+            self.revoked_called = True
+
+        self.assigned_called = False
+        self.revoked_called = False
+        try:
+            consumer_a = self.client.topics[self.topic_name].get_balanced_consumer(
+                b'test_consume_earliest', zookeeper_connect=self.kafka.zookeeper,
+                auto_offset_reset=OffsetType.EARLIEST,
+                partitions_assigned_callback=on_partitions_assigned,
+                partitions_revoked_callback=on_partitions_revoked
+            )
+            consumer_b = self.client.topics[self.topic_name].get_balanced_consumer(
+                b'test_consume_earliest', zookeeper_connect=self.kafka.zookeeper,
+                auto_offset_reset=OffsetType.EARLIEST
+            )
+            self.assertTrue(self.assigned_called)
+            self.assertTrue(self.revoked_called)
+        finally:
+            try:
+                consumer_a.stop()
+                consumer_b.stop()
+            except:
+                pass
+
     def test_consume_earliest(self):
         try:
             consumer_a = self.client.topics[self.topic_name].get_balanced_consumer(
