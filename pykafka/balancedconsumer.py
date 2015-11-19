@@ -84,7 +84,8 @@ class BalancedConsumer(object):
                  zookeeper=None,
                  auto_start=True,
                  reset_offset_on_start=False,
-                 rebalance_callback=None):
+                 partitions_assigned_callback=None,
+                 partitions_revoked_callback=None):
         """Create a BalancedConsumer instance
 
         :param topic: The topic this consumer should consume
@@ -158,10 +159,16 @@ class BalancedConsumer(object):
             internal offset counter to `self._auto_offset_reset` and commit that
             offset immediately upon starting up
         :type reset_offset_on_start: bool
-        :param rebalance_callback: Function accepting one argument to be called
-            after a rebalance has completed. The argument is a reference to the
-            consumer that just completed its rebalance.
-        :type rebalance_callback: function
+        :param partitions_assigned_callback: Function accepting two arguments to be called
+            after a rebalance has completed. The arguments are a reference to the
+            consumer that just completed its rebalance and a sequence of Partition
+            instances that the consumer owns after rebalance.
+        :type partitions_assigned_callback: function
+        :param partitions_revoked_callback: Function accepting two arguments to be called
+            after a rebalance has completed. The arguments are a reference to the
+            consumer that just completed its rebalance and a sequence of Partition
+            instances that the consumer no longer owns after rebalance.
+        :type partitions_revoked_callback: function
         """
         self._cluster = cluster
         self._consumer_group = consumer_group
@@ -183,7 +190,8 @@ class BalancedConsumer(object):
         self._zookeeper_connect = zookeeper_connect
         self._zookeeper_connection_timeout_ms = zookeeper_connection_timeout_ms
         self._reset_offset_on_start = reset_offset_on_start
-        self._rebalance_callback = rebalance_callback
+        self._partitions_assigned_callback = partitions_assigned_callback
+        self._partitions_revoked_callback = partitions_revoked_callback
         self._running = False
         self._worker_exception = None
         self._worker_trace_logged = False
@@ -552,10 +560,12 @@ class BalancedConsumer(object):
                         raise
                     log.info('Unable to acquire partition %s. Retrying', ex.partition)
                     time.sleep(i * (self._rebalance_backoff_ms / 1000))
+            if self._partitions_assigned_callback is not None:
+                self._partitions_assigned_callback(self, new_partitions)
+            if self._partitions_revoked_callback is not None:
+                self._partitions_revoked_callback(self, current_zk_parts - new_partitions)
         if should_stop:
             self.stop()
-        if self._rebalance_callback is not None:
-            self._rebalance_callback(self)
 
     def _path_from_partition(self, p):
         """Given a partition, return its path in zookeeper.
