@@ -50,6 +50,22 @@ class TestSimpleConsumer(unittest2.TestCase):
             self.assertEquals(len(messages), self.total_msgs)
             self.assertTrue(None not in messages)
 
+    @staticmethod
+    def _convert_offsets(offset_responses):
+        """Helper function to translate Offset(Fetch)PartitionResponse
+
+        Calls like consumer.fetch_offsets() and earliest_available_offsets()
+        return lists of OffsetPartitionResponses.  These hold the next offset
+        to be consumed, whereas consumer.held_offsets returns the latest
+        consumed offset.  This translates them to facilitate comparisons.
+        """
+        if isinstance(offset_responses, dict):
+            offset_responses = iteritems(offset_responses)
+        f1 = lambda off: OffsetType.EARLIEST if off == 0 else off - 1
+        f2 = lambda off: off[0] if isinstance(off, list) else off
+        return {partition_id: f1(f2(offset_response.offset))
+                for partition_id, offset_response in offset_responses}
+
     def test_offset_commit(self):
         """Check fetched offsets match pre-commit internal state"""
         with self._get_simple_consumer(
@@ -58,8 +74,7 @@ class TestSimpleConsumer(unittest2.TestCase):
             offsets_committed = consumer.held_offsets
             consumer.commit_offsets()
 
-            offsets_fetched = dict((r[0], r[1].offset - 1)
-                                   for r in consumer.fetch_offsets())
+            offsets_fetched = self._convert_offsets(consumer.fetch_offsets())
             self.assertEquals(offsets_fetched, offsets_committed)
 
     def test_offset_resume(self):
@@ -79,26 +94,24 @@ class TestSimpleConsumer(unittest2.TestCase):
         with self._get_simple_consumer(
                 auto_offset_reset=OffsetType.EARLIEST,
                 reset_offset_on_start=True) as consumer:
-            earliest = consumer.topic.earliest_available_offsets()
-            earliest_minus_one = consumer.held_offsets
-            self.assertTrue(all(
-                earliest_minus_one[i] == earliest[i].offset[0] - 1
-                for i in earliest.keys()))
+            earliest_offs = self._convert_offsets(
+                consumer.topic.earliest_available_offsets())
+            self.assertEquals(earliest_offs, consumer.held_offsets)
             self.assertIsNotNone(consumer.consume())
 
         with self._get_simple_consumer(
                 auto_offset_reset=OffsetType.LATEST,
                 reset_offset_on_start=True,
                 consumer_timeout_ms=500) as consumer:
-            latest = consumer.topic.latest_available_offsets()
-            latest_minus_one = consumer.held_offsets
-            self.assertTrue(all(
-                latest_minus_one[i] == latest[i].offset[0] - 1
-                for i in latest.keys()))
+            latest_offs = self._convert_offsets(
+                consumer.topic.latest_available_offsets())
+            self.assertEquals(latest_offs, consumer.held_offsets)
             self.assertIsNone(consumer.consume(block=False))
 
-        difference = sum(latest_minus_one[i] - earliest_minus_one[i]
-                         for i in latest_minus_one.keys())
+        difference = sum(latest_offs[i] - earliest_offs[i]
+                         if earliest_offs[i] >= 0 else latest_offs[i] + 1
+                         if latest_offs[i] >= 0 else 0
+                         for i in latest_offs)
         self.assertEqual(difference, self.total_msgs)
 
     def test_reset_offsets(self):
