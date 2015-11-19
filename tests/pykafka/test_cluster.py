@@ -2,6 +2,7 @@ import unittest
 from uuid import uuid4
 
 from pykafka import KafkaClient, Topic
+from pykafka.utils.compat import itervalues
 from pykafka.test.utils import get_cluster, stop_cluster
 
 
@@ -55,6 +56,15 @@ class ClusterIntegrationTests(unittest.TestCase):
         self.assertEqual(len(self.client.topics), startlen)
         self.assertNotIn(name_b, self.client.topics)
 
+    def test_zk_connect(self):
+        """Clusters started with broker lists and zk connect strings should get same brokers"""
+        zk_client = KafkaClient(self.kafka.zookeeper)
+        kafka_client = KafkaClient(self.kafka.brokers)
+        zk_brokers = ["{}:{}".format(b.host, b.port)
+                      for b in itervalues(zk_client.brokers)]
+        kafka_brokers = ["{}:{}".format(b.host, b.port)
+                         for b in itervalues(kafka_client.brokers)]
+        self.assertEqual(zk_brokers, kafka_brokers)
 
 if __name__ == "__main__":
     unittest.main()
