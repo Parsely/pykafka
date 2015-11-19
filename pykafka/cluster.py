@@ -175,6 +175,7 @@ class Cluster(object):
         self._source_address = source_address
         self._source_host = self._source_address.split(':')[0]
         self._source_port = 0
+        self._zookeeper_connect = None
         if ':' in self._source_address:
             self._source_port = int(self._source_address.split(':')[1])
         self.update()
@@ -267,6 +268,7 @@ class Cluster(object):
 
                 metadata = self._request_metadata(broker_connects, topics)
                 if metadata is not None:
+                    self._zookeeper_connect = self._seed_hosts
                     return metadata
 
         # Couldn't connect anywhere. Raise an error.
