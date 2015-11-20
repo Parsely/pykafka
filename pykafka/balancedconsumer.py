@@ -335,7 +335,7 @@ class BalancedConsumer(object):
 
     def _setup_internal_consumer(self, partitions=None, start=True):
         """Instantiate an internal SimpleConsumer instance"""
-        self._consumer = self._get_internal_consumer(paritions=partitions, start=start)
+        self._consumer = self._get_internal_consumer(partitions=partitions, start=start)
 
     def _get_internal_consumer(self, partitions=None, start=True):
         """Instantiate a SimpleConsumer for internal use.
