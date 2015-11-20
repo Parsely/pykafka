@@ -9,7 +9,7 @@ from pykafka import KafkaClient
 from pykafka.balancedconsumer import BalancedConsumer, OffsetType
 from pykafka.exceptions import NoPartitionsForConsumerException, ConsumerStoppedException
 from pykafka.test.utils import get_cluster, stop_cluster
-from pykafka.utils.compat import range
+from pykafka.utils.compat import range, iterkeys, iteritems
 
 
 def buildMockConsumer(num_partitions=10, num_participants=1, timeout=2000):
@@ -117,19 +117,23 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
         stop_cluster(cls.kafka)
 
     def test_rebalance_callbacks(self):
-        def on_partitions_assigned(cns, partitions):
-            self.assertTrue(len(partitions) > 0)
-            held = cns._get_held_partitions()
-            self.assertEqual(held | partitions, held)
+        def on_partitions_assigned(cns, partition_offsets):
+            self.assertTrue(len(partition_offsets) > 0)
+            held_ids = set([p.id for p in cns._get_held_partitions()])
+            self.assertEqual(held_ids | set(iterkeys(partition_offsets)), held_ids)
             self.assigned_called = True
+            for id_ in iterkeys(partition_offsets):
+                partition_offsets[id_] = self.offset_reset
+            return partition_offsets
 
-        def on_partitions_revoked(cns, partitions):
-            held = cns._get_held_partitions()
-            self.assertEqual(held & partitions, set())
+        def on_partitions_revoked(cns, partition_offsets):
+            held_ids = set([p.id for p in cns._get_held_partitions()])
+            self.assertEqual(held_ids & set(iterkeys(partition_offsets)), set())
             self.revoked_called = True
 
         self.assigned_called = False
         self.revoked_called = False
+        self.offset_reset = 50
         try:
             consumer_a = self.client.topics[self.topic_name].get_balanced_consumer(
                 b'test_consume_earliest', zookeeper_connect=self.kafka.zookeeper,
@@ -143,6 +147,9 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
             )
             self.assertTrue(self.assigned_called)
             self.assertTrue(self.revoked_called)
+            with consumer_a._rebalancing_lock:
+                for _, offset in iteritems(consumer_a.held_offsets):
+                    self.assertEqual(offset, self.offset_reset)
         finally:
             try:
                 consumer_a.stop()

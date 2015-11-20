@@ -35,7 +35,7 @@ from .common import OffsetType
 from .exceptions import (KafkaException, PartitionOwnedError,
                          ConsumerStoppedException, NoPartitionsForConsumerException)
 from .simpleconsumer import SimpleConsumer
-from .utils.compat import range, get_bytes, itervalues
+from .utils.compat import range, get_bytes, itervalues, iteritems
 
 
 log = logging.getLogger(__name__)
@@ -331,7 +331,7 @@ class BalancedConsumer(object):
         self._zookeeper = KazooClient(zookeeper_connect, timeout=timeout / 1000)
         self._zookeeper.start()
 
-    def _setup_internal_consumer(self, partitions=None, start=True):
+    def _get_internal_consumer(self, partitions=None, start=True):
         """Instantiate an internal SimpleConsumer.
 
         If there is already a SimpleConsumer instance held by this object,
@@ -344,10 +344,10 @@ class BalancedConsumer(object):
         if self._consumer is not None:
             self._consumer.stop()
             # only use this setting for the first call to
-            # _setup_internal_consumer. subsequent calls should not
+            # _get_internal_consumer. subsequent calls should not
             # reset the offsets, since they can happen at any time
             reset_offset_on_start = False
-        self._consumer = SimpleConsumer(
+        return SimpleConsumer(
             self._topic,
             self._cluster,
             consumer_group=self._consumer_group,
@@ -549,7 +549,25 @@ class BalancedConsumer(object):
 
                     # Only re-create internal consumer if something changed.
                     if new_partitions != self._partitions:
-                        self._setup_internal_consumer(list(new_partitions))
+                        cns = self._get_internal_consumer(list(new_partitions))
+                        if self._partitions_revoked_callback is not None:
+                            self._partitions_revoked_callback(
+                                self, self._get_held_offsets_for_partitions(
+                                    current_zk_parts - new_partitions, cns))
+                        if self._partitions_assigned_callback is not None:
+                            new_offsets = self._partitions_assigned_callback(
+                                self,
+                                self._get_held_offsets_for_partitions(
+                                    new_partitions, cns)
+                            )
+                            if new_offsets:
+                                cns.reset_offsets(
+                                    partition_offsets=[
+                                        (part, new_offsets[part.id])
+                                        for part in itervalues(cns.partitions)
+                                        if part.id in new_offsets]
+                                )
+                        self._consumer = cns
 
                     log.info('Rebalancing Complete.')
                     break
@@ -560,12 +578,21 @@ class BalancedConsumer(object):
                         raise
                     log.info('Unable to acquire partition %s. Retrying', ex.partition)
                     time.sleep(i * (self._rebalance_backoff_ms / 1000))
-            if self._partitions_assigned_callback is not None:
-                self._partitions_assigned_callback(self, new_partitions)
-            if self._partitions_revoked_callback is not None:
-                self._partitions_revoked_callback(self, current_zk_parts - new_partitions)
         if should_stop:
             self.stop()
+
+    def _get_held_offsets_for_partitions(self, partitions, cns):
+        """Return held offsets from a consumer for a set of partitions
+
+        :param partitions: The partitions for which to return currently held offsets
+        :type partitions: Iterable of :class:`pykafka.partition.Partition`
+        :param cns: The consumer from which to fetch held offsets
+        :type cns: :class:`pykafka.simpleconsumer.SimpleConsumer`
+        """
+        if cns.held_offsets is None:
+            return {}
+        ids = [partition.id for partition in partitions]
+        return {id_: offset for id_, offset in iteritems(cns.held_offsets) if id_ in ids}
 
     def _path_from_partition(self, p):
         """Given a partition, return its path in zookeeper.
