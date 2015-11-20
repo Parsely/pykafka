@@ -333,6 +333,10 @@ class BalancedConsumer(object):
         self._zookeeper = KazooClient(zookeeper_connect, timeout=timeout / 1000)
         self._zookeeper.start()
 
+    def _setup_internal_consumer(self, partitions=None, start=True):
+        """Instantiate an internal SimpleConsumer instance"""
+        self._consumer = self._get_internal_consumer(paritions=partitions, start=start)
+
     def _get_internal_consumer(self, partitions=None, start=True):
         """Instantiate a SimpleConsumer for internal use.
 
