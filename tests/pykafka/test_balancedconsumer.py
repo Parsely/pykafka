@@ -117,30 +117,28 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
         stop_cluster(cls.kafka)
 
     def test_rebalance_callbacks(self):
-        def on_partitions_assigned(cns, partition_offsets):
-            self.assertTrue(len(partition_offsets) > 0)
+        def on_rebalance(cns, old_partition_offsets, new_partition_offsets):
+            self.assertTrue(len(new_partition_offsets) > 0)
             held_ids = set([p.id for p in cns._get_held_partitions()])
-            self.assertEqual(held_ids | set(iterkeys(partition_offsets)), held_ids)
+            new_ids = set(iterkeys(new_partition_offsets))
+            old_ids = set(iterkeys(old_partition_offsets))
+            revoked_ids = old_ids - new_ids
+            assigned_ids = new_ids - old_ids
+            self.assertEqual(assigned_ids & revoked_ids, set())
+            self.assertEqual(held_ids | new_ids, held_ids)
+            self.assertNotEqual(held_ids & old_ids, held_ids)
             self.assigned_called = True
-            for id_ in iterkeys(partition_offsets):
-                partition_offsets[id_] = self.offset_reset
-            return partition_offsets
-
-        def on_partitions_revoked(cns, partition_offsets):
-            self.assertTrue(len(partition_offsets) > 0)
-            held_ids = set([p.id for p in cns._get_held_partitions()])
-            self.assertEqual(held_ids & set(iterkeys(partition_offsets)), set())
-            self.revoked_called = True
+            for id_ in iterkeys(new_partition_offsets):
+                new_partition_offsets[id_] = self.offset_reset
+            return new_partition_offsets
 
         self.assigned_called = False
-        self.revoked_called = False
         self.offset_reset = 50
         try:
             consumer_a = self.client.topics[self.topic_name].get_balanced_consumer(
                 b'test_consume_earliest', zookeeper_connect=self.kafka.zookeeper,
                 auto_offset_reset=OffsetType.EARLIEST,
-                partitions_assigned_callback=on_partitions_assigned,
-                partitions_revoked_callback=on_partitions_revoked
+                post_rebalance_callback=on_rebalance
             )
             consumer_b = self.client.topics[self.topic_name].get_balanced_consumer(
                 b'test_consume_earliest', zookeeper_connect=self.kafka.zookeeper,
@@ -149,7 +147,6 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
             time.sleep(3)
             with consumer_a._rebalancing_lock:
                 self.assertTrue(self.assigned_called)
-                self.assertTrue(self.revoked_called)
                 for _, offset in iteritems(consumer_a.held_offsets):
                     self.assertEqual(offset, self.offset_reset)
         finally:

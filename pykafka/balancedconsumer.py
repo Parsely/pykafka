@@ -84,8 +84,7 @@ class BalancedConsumer(object):
                  zookeeper=None,
                  auto_start=True,
                  reset_offset_on_start=False,
-                 partitions_assigned_callback=None,
-                 partitions_revoked_callback=None):
+                 post_rebalance_callback=None):
         """Create a BalancedConsumer instance
 
         :param topic: The topic this consumer should consume
@@ -159,18 +158,16 @@ class BalancedConsumer(object):
             internal offset counter to `self._auto_offset_reset` and commit that
             offset immediately upon starting up
         :type reset_offset_on_start: bool
-        :param partitions_assigned_callback: Function accepting two arguments to be called
-            after a rebalance has completed. The arguments are a reference to the
-            consumer that just completed its rebalance and a sequence of Partition
-            instances that the consumer owns after rebalance. This function may also
-            return a dictionary of `{partition_id: new_offset}` to have the consumer
-            reset its offsets to these new values.
-        :type partitions_assigned_callback: function
-        :param partitions_revoked_callback: Function accepting two arguments to be called
-            after a rebalance has completed. The arguments are a reference to the
-            consumer that just completed its rebalance and a sequence of Partition
-            instances that the consumer no longer owns after rebalance.
-        :type partitions_revoked_callback: function
+        :param post_rebalance_callback: A function to be called when a rebalance has
+            completed. This function should accept three arguments: the
+            :class:`pykafka.balancedconsumer.BalancedConsumer` instance that just
+            completed its rebalance, a dict of partitions that it owned before the
+            rebalance, and a dict of partitions it owns after the rebalance. These dicts
+            map partition ids to the most recently known offsets for those partitions.
+            This function can optionally return a dictionary mapping partition ids to
+            offsets. If it does, the consumer will reset its offsets to the supplied
+            values before continuing consumption.
+        :type post_rebalance_callback: function
         """
         self._cluster = cluster
         self._consumer_group = consumer_group
@@ -192,8 +189,7 @@ class BalancedConsumer(object):
         self._zookeeper_connect = zookeeper_connect
         self._zookeeper_connection_timeout_ms = zookeeper_connection_timeout_ms
         self._reset_offset_on_start = reset_offset_on_start
-        self._partitions_assigned_callback = partitions_assigned_callback
-        self._partitions_revoked_callback = partitions_revoked_callback
+        self._post_rebalance_callback = post_rebalance_callback
         self._running = False
         self._worker_exception = None
         self._worker_trace_logged = False
@@ -513,7 +509,7 @@ class BalancedConsumer(object):
 
         This method is called whenever a zookeeper watch is triggered.
         """
-        def _get_held_offsets_for_partitions(partitions, cns):
+        def _get_held_offsets(partitions, cns):
             """Return held offsets from a consumer for a set of partitions
 
             :param partitions: The partitions for which to return currently held offsets
@@ -521,6 +517,8 @@ class BalancedConsumer(object):
             :param cns: The consumer from which to fetch held offsets
             :type cns: :class:`pykafka.simpleconsumer.SimpleConsumer`
             """
+            if cns is None:
+                return {}
             ids = [partition.id for partition in partitions]
             return {id_: offset for id_, offset in iteritems(cns.held_offsets) if id_ in ids}
 
@@ -567,22 +565,16 @@ class BalancedConsumer(object):
                     # Only re-create internal consumer if something changed.
                     if new_partitions != self._partitions:
                         cns = self._get_internal_consumer(list(new_partitions))
-                        if self._consumer is not None and \
-                                self._partitions_revoked_callback is not None:
-                            self._partitions_revoked_callback(
-                                self, _get_held_offsets_for_partitions(
-                                    current_zk_parts - new_partitions, self._consumer))
-                        if self._partitions_assigned_callback is not None:
-                            new_offsets = self._partitions_assigned_callback(
-                                self,
-                                _get_held_offsets_for_partitions(new_partitions, cns))
-                            if new_offsets:
-                                cns.reset_offsets(
-                                    partition_offsets=[
-                                        (part, new_offsets[part.id])
-                                        for part in itervalues(cns.partitions)
-                                        if part.id in new_offsets]
-                                )
+                        old_offsets = _get_held_offsets(current_zk_parts, self._consumer)
+                        new_offsets = _get_held_offsets(new_partitions, cns)
+                        if self._post_rebalance_callback is not None:
+                            reset_offsets = self._post_rebalance_callback(
+                                self, old_offsets, new_offsets)
+                            if reset_offsets:
+                                cns.reset_offsets(partition_offsets=[
+                                    (part, new_offsets[part.id])
+                                    for part in itervalues(cns.partitions)
+                                    if part.id in new_offsets])
                         self._consumer = cns
 
                     log.info('Rebalancing Complete.')
