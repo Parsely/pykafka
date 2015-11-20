@@ -58,10 +58,18 @@ class TopicDict(dict):
             return topic_ref()
         else:
             # Topic exists, but needs to be instantiated locally
-            meta = self._cluster()._get_metadata([key])
-            topic = Topic(self._cluster(), meta.topics[key])
-            self[key] = weakref.ref(topic)
-            return topic
+            max_retries = 3
+            for i in range(max_retries):
+                meta = self._cluster()._get_metadata([key])
+                try:
+                    topic = Topic(self._cluster(), meta.topics[key])
+                except LeaderNotAvailable:
+                    log.warning("LeaderNotAvailable encountered during Topic creation")
+                    if i == max_retries - 1:
+                        raise
+                else:
+                    self[key] = weakref.ref(topic)
+                    return topic
 
     def __missing__(self, key):
         log.warning('Topic %s not found. Attempting to auto-create.', key)
@@ -229,7 +237,7 @@ class Cluster(object):
     def _get_metadata(self, topics=None):
         """Get fresh cluster metadata from a broker."""
         # Works either on existing brokers or seed_hosts list
-        brokers = [b for b in self.brokers.values() if b.connected]
+        brokers = random.shuffle([b for b in self.brokers.values() if b.connected])
         if brokers:
             for broker in brokers:
                 response = broker.request_metadata(topics)
@@ -377,7 +385,7 @@ class Cluster(object):
             try:
                 self._topics._update_topics(metadata.topics)
             except LeaderNotAvailable:
-                log.warning("LeaderNotAvailable encountered. This is "
+                log.warning("LeaderNotAvailable encountered. This may be "
                             "because one or more partitions have no available replicas.")
             else:
                 break
