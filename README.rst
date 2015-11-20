@@ -99,13 +99,13 @@ PyKafka includes a small collection of `CLI tools`_ that can help with common ta
 related to the administration of a Kafka cluster, including offset and lag monitoring and
 topic inspection. The full, up-to-date interface for these tools can be fould by running
 
-.. sourcecode::
+.. sourcecode:: sh
 
     $ python cli/kafka_tools.py --help
 
 or after installing PyKafka via setuptools or pip:
 
-.. sourcecode::
+.. sourcecode:: sh
 
     $ kafka-tools --help
 
