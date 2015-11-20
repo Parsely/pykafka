@@ -146,9 +146,10 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
                 b'test_consume_earliest', zookeeper_connect=self.kafka.zookeeper,
                 auto_offset_reset=OffsetType.EARLIEST
             )
-            self.assertTrue(self.assigned_called)
-            self.assertTrue(self.revoked_called)
+            time.sleep(3)
             with consumer_a._rebalancing_lock:
+                self.assertTrue(self.assigned_called)
+                self.assertTrue(self.revoked_called)
                 for _, offset in iteritems(consumer_a.held_offsets):
                     self.assertEqual(offset, self.offset_reset)
         finally:
