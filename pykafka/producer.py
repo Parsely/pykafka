@@ -19,6 +19,7 @@ limitations under the License.
 """
 __all__ = ["Producer"]
 from collections import deque
+import gevent
 import logging
 import sys
 import threading
@@ -267,6 +268,7 @@ class Producer(object):
             if exc is not None:
                 raise exc
         self._raise_worker_exceptions()
+        gevent.sleep()
 
     def get_delivery_report(self, block=True, timeout=None):
         """Fetch delivery reports for messages produced on the current thread
@@ -392,6 +394,7 @@ class Producer(object):
         log.info("Blocking until all messages are sent")
         while any(q.message_is_pending() for q in itervalues(self._owned_brokers)):
             time.sleep(.3)
+            gevent.sleep(.3)
             self._raise_worker_exceptions()
 
 
@@ -441,6 +444,7 @@ class OwnedBroker(object):
                      self.broker.port)
         log.info("Starting new produce worker for broker %s", broker.id)
         self.producer._cluster.handler.spawn(queue_reader)
+        gevent.sleep()
 
     def stop(self):
         self.running = False
@@ -469,6 +473,7 @@ class OwnedBroker(object):
             self.increment_messages_pending(1)
             if len(self.queue) >= self.producer._min_queued_messages:
                 if not self.flush_ready.is_set():
+                    log.info("setting flush_ready")
                     self.flush_ready.set()
 
     def flush(self, linger_ms, release_pending=False):

@@ -18,6 +18,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 __all__ = ["SimpleConsumer"]
+import gevent
 import itertools
 import logging
 import sys
@@ -319,7 +320,9 @@ class SimpleConsumer(object):
                     break
             log.debug("Autocommitter thread exiting")
         log.debug("Starting autocommitter thread")
-        return self._cluster.handler.spawn(autocommitter)
+        t = self._cluster.handler.spawn(autocommitter)
+        gevent.sleep()
+        return t
 
     def _setup_fetch_workers(self):
         """Start the fetcher threads"""
@@ -341,8 +344,10 @@ class SimpleConsumer(object):
                     break
             log.debug("Fetcher thread exiting")
         log.info("Starting %s fetcher threads", self._num_consumer_fetchers)
-        return [self._cluster.handler.spawn(fetcher)
-                for i in range(self._num_consumer_fetchers)]
+        t = [self._cluster.handler.spawn(fetcher)
+             for i in range(self._num_consumer_fetchers)]
+        gevent.sleep()
+        return t
 
     def __iter__(self):
         """Yield an infinite stream of messages until the consumer times out"""
@@ -665,6 +670,7 @@ class SimpleConsumer(object):
         sorted_by_leader = sorted(iteritems(self._partitions_by_leader),
                                   key=lambda k: k[0].id)
         for broker, owned_partitions in sorted_by_leader:
+            gevent.sleep()
             partition_reqs = {}
             sorted_offsets = sorted(owned_partitions, key=lambda k: k.partition.id)
             for owned_partition in sorted_offsets:

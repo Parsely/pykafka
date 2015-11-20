@@ -20,6 +20,10 @@ __all__ = ["ResponseFuture", "Handler", "ThreadingHandler", "RequestHandler"]
 
 from collections import namedtuple
 import functools
+import gevent
+from gevent.queue import JoinableQueue
+from gevent.event import Event as GEEvent
+from gevent.lock import RLock as GERLock
 import logging
 import threading
 
@@ -71,8 +75,7 @@ class Handler(object):
 
 
 class ThreadingHandler(Handler):
-    """A handler. that uses a :class:`threading.Thread` to perform its work"""
-    QueueEmptyError = Empty
+    """A handler that uses a :class:`threading.Thread` to perform its work"""
     Queue = Queue
     Event = threading.Event
     Lock = threading.Lock
@@ -83,6 +86,18 @@ class ThreadingHandler(Handler):
         t = threading.Thread(target=target, *args, **kwargs)
         t.daemon = True
         t.start()
+        return t
+
+
+class GEventHandler(Handler):
+    """A handler that uses a greenlet to perform its work"""
+    Queue = JoinableQueue
+    Event = GEEvent
+    Lock = GERLock  # fixme
+    RLock = GERLock
+
+    def spawn(self, target, *args, **kwargs):
+        t = gevent.spawn(target, *args, **kwargs)
         return t
 
 

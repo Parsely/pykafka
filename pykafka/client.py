@@ -19,6 +19,7 @@ limitations under the License.
 
 __all__ = ["KafkaClient"]
 
+from .handlers import ThreadingHandler, GEventHandler
 import logging
 
 from .cluster import Cluster
@@ -63,7 +64,8 @@ class KafkaClient(object):
         self._source_address = source_address
         self._socket_timeout_ms = socket_timeout_ms
         self._offsets_channel_socket_timeout_ms = offsets_channel_socket_timeout_ms
-        self._handler = ThreadingHandler()
+        self._handler = GEventHandler()
+        self._use_rdkafka = rd_kafka and not ignore_rdkafka
         self.cluster = Cluster(
             self._seed_hosts,
             self._handler,
