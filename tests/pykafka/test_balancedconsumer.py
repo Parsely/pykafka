@@ -127,6 +127,7 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
             return partition_offsets
 
         def on_partitions_revoked(cns, partition_offsets):
+            self.assertTrue(len(partition_offsets) > 0)
             held_ids = set([p.id for p in cns._get_held_partitions()])
             self.assertEqual(held_ids & set(iterkeys(partition_offsets)), set())
             self.revoked_called = True
