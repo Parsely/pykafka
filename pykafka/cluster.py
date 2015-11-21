@@ -18,15 +18,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 __all__ = ["Cluster"]
+import json
 import logging
 import random
 import time
 import weakref
 
+from kazoo.client import KazooClient
+
 from .broker import Broker
 from .exceptions import (ERROR_CODES,
                          ConsumerCoordinatorNotAvailable,
-                         KafkaException,
                          SocketDisconnectedError,
                          LeaderNotAvailable)
 from .protocol import ConsumerMetadataRequest, ConsumerMetadataResponse
@@ -56,10 +58,18 @@ class TopicDict(dict):
             return topic_ref()
         else:
             # Topic exists, but needs to be instantiated locally
-            meta = self._cluster()._get_metadata([key])
-            topic = Topic(self._cluster(), meta.topics[key])
-            self[key] = weakref.ref(topic)
-            return topic
+            max_retries = 3
+            for i in range(max_retries):
+                meta = self._cluster()._get_metadata([key])
+                try:
+                    topic = Topic(self._cluster(), meta.topics[key])
+                except LeaderNotAvailable:
+                    log.warning("LeaderNotAvailable encountered during Topic creation")
+                    if i == max_retries - 1:
+                        raise
+                else:
+                    self[key] = weakref.ref(topic)
+                    return topic
 
     def __missing__(self, key):
         log.warning('Topic %s not found. Attempting to auto-create.', key)
@@ -145,7 +155,8 @@ class Cluster(object):
                  source_address=''):
         """Create a new Cluster instance.
 
-        :param hosts: Comma-separated list of kafka hosts to used to connect.
+        :param hosts: Comma-separated list of kafka hosts to used to connect. Also
+            accepts a KazooClient connect string
         :type hosts: bytes
         :param handler: The concurrency handler for network requests.
         :type handler: :class:`pykafka.handlers.Handler`
@@ -171,6 +182,7 @@ class Cluster(object):
         self._source_address = source_address
         self._source_host = self._source_address.split(':')[0]
         self._source_port = 0
+        self._zookeeper_connect = None
         if ':' in self._source_address:
             self._source_port = int(self._source_address.split(':')[1])
         self.update()
@@ -198,32 +210,74 @@ class Cluster(object):
         """The concurrency handler for network requests"""
         return self._handler
 
+    def _request_metadata(self, broker_connects, topics):
+        """Request broker metadata from a set of brokers
+
+        Returns the result of the first successful metadata request
+
+        :param broker_connects: The set of brokers to which to attempt to connect
+        :type broker_connects: Iterable of two-element sequences of the format
+            (broker_host, broker_port)
+        """
+        try:
+            for host, port in broker_connects:
+                broker = Broker(-1, host, int(port), self._handler,
+                                self._socket_timeout_ms,
+                                self._offsets_channel_socket_timeout_ms,
+                                buffer_size=1024 * 1024,
+                                source_host=self._source_host,
+                                source_port=self._source_port)
+                response = broker.request_metadata(topics)
+                if response is not None:
+                    return response
+        except Exception as e:
+            log.error('Unable to connect to broker %s:%s', host, port)
+            log.exception(e)
+
     def _get_metadata(self, topics=None):
         """Get fresh cluster metadata from a broker."""
         # Works either on existing brokers or seed_hosts list
-        brokers = [b for b in self.brokers.values() if b.connected]
+        brokers = random.shuffle([b for b in self.brokers.values() if b.connected])
         if brokers:
             for broker in brokers:
                 response = broker.request_metadata(topics)
                 if response is not None:
                     return response
         else:  # try seed hosts
-            brokers = self._seed_hosts.split(',')
-            for broker_str in brokers:
+            metadata = None
+            broker_connects = [broker_str.split(":")
+                               for broker_str in self._seed_hosts.split(',')]
+            metadata = self._request_metadata(broker_connects, topics)
+            if metadata is not None:
+                return metadata
+
+            # try treating seed_hosts as a zookeeper host list
+            zookeeper = KazooClient(self._seed_hosts, timeout=self._socket_timeout_ms)
+            try:
+                zookeeper.start()
+            except Exception as e:
+                log.error('Unable to connect to ZooKeeper instance %s', self._seed_hosts)
+                log.exception(e)
+            else:
                 try:
-                    h, p = broker_str.split(':')
-                    broker = Broker(-1, h, int(p), self._handler,
-                                    self._socket_timeout_ms,
-                                    self._offsets_channel_socket_timeout_ms,
-                                    buffer_size=1024 * 1024,
-                                    source_host=self._source_host,
-                                    source_port=self._source_port)
-                    response = broker.request_metadata(topics)
-                    if response is not None:
-                        return response
+                    # get a list of connect strings from zookeeper
+                    brokers_path = "/brokers/ids/"
+                    broker_ids = zookeeper.get_children(brokers_path)
+                    broker_connects = []
+                    for broker_id in broker_ids:
+                        broker_json, _ = zookeeper.get("{}{}".format(brokers_path, broker_id))
+                        broker_info = json.loads(broker_json.decode("utf-8"))
+                        broker_connects.append((broker_info['host'], broker_info['port']))
+                    zookeeper.stop()
                 except Exception as e:
-                    log.error('Unable to connect to broker %s', broker_str)
+                    log.error('Unable to fetch broker info from ZooKeeper')
                     log.exception(e)
+
+                metadata = self._request_metadata(broker_connects, topics)
+                if metadata is not None:
+                    self._zookeeper_connect = self._seed_hosts
+                    return metadata
+
         # Couldn't connect anywhere. Raise an error.
         raise RuntimeError(
             'Unable to connect to a broker to fetch metadata. See logs.')
@@ -331,7 +385,7 @@ class Cluster(object):
             try:
                 self._topics._update_topics(metadata.topics)
             except LeaderNotAvailable:
-                log.warning("LeaderNotAvailable encountered. This is "
+                log.warning("LeaderNotAvailable encountered. This may be "
                             "because one or more partitions have no available replicas.")
             else:
                 break

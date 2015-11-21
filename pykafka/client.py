@@ -47,7 +47,8 @@ class KafkaClient(object):
         Documentation for source_address can be found at
         https://docs.python.org/2/library/socket.html#socket.create_connection
 
-        :param hosts: Comma-separated list of kafka hosts to used to connect.
+        :param hosts: Comma-separated list of kafka hosts to used to connect. Also
+            accepts a KazooClient connect string.
         :type hosts: bytes
         :param socket_timeout_ms: The socket timeout (in milliseconds) for
             network requests

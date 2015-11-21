@@ -163,4 +163,7 @@ class Topic(object):
         :param consumer_group: The name of the consumer group to join
         :type consumer_group: str
         """
+        if "zookeeper_connect" not in kwargs and \
+                self._cluster._zookeeper_connect is not None:
+            kwargs['zookeeper_connect'] = self._cluster._zookeeper_connect
         return BalancedConsumer(self, self._cluster, consumer_group, **kwargs)

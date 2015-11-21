@@ -261,8 +261,7 @@ class BalancedConsumer(object):
         """Return a map from partition id to held offset for each partition"""
         if not self._consumer:
             return None
-        return dict((p.partition.id, p.last_offset_consumed)
-                    for p in self._consumer._partitions_by_id.itervalues())
+        return self._consumer.held_offsets
 
     def start(self):
         """Open connections and join a cluster."""
@@ -683,7 +682,7 @@ class BalancedConsumer(object):
                 message = self._consumer.consume(block=block)
             except ConsumerStoppedException:
                 if not self._running:
-                    return
+                    raise
                 continue
             if message:
                 self._last_message_time = time.time()
