@@ -66,35 +66,34 @@ The example above would produce to kafka synchronously, that is, the call only
 returns after we have confirmation that the message made it to the cluster.
 
 To achieve higher throughput however, we recommend using the ``Producer`` in
-asynchronous mode.  In that configuration, ``produce()`` calls will return a
-``concurrent.futures.Future`` (`docs`_), which you may evaluate later (or, if
-reliable delivery is not a concern, you're free to discard it unevaluated).
-Here's a rough usage example:
+asynchronous mode, so that ``produce()`` calls will return immediately and the
+producer may opt to send messages in larger batches.  You can still obtain
+delivery confirmation for messages, through a queue interface which can be
+enabled by setting ``delivery_reports=True``.  Here's a rough usage example:
 
 .. sourcecode:: python
 
-    >>> with topic.get_producer() as producer:
+    >>> with topic.get_producer(delivery_reports=True) as producer:
     ...     count = 0
-    ...     pending = []
     ...     while True:
     ...         count += 1
-    ...         future = producer.produce('test message',
-    ...                                   partition_key='{}'.format(count))
-    ...         pending.append(future)
+    ...         producer.produce('test msg', partition_key='{}'.format(count))
     ...         if count % 10**5 == 0:  # adjust this or bring lots of RAM ;)
-    ...             done, not_done = concurrent.futures.wait(pending,
-                                                             timeout=.001)
-    ...             for future in done:
-    ...                 message_key = future.kafka_msg.partition_key
-    ...                 if future.exception() is not None:
-    ...                     print 'Failed to deliver message {}: {}'.format(
-    ...                         message_key, repr(future.exception()))
-    ...                 else:
-    ...                     print 'Successfully delivered message {}'.format(
-    ...                         message_key)
-    ...             pending = list(not_done)
+    ...             while True:
+    ...                 try:
+    ...                     msg, exc = producer.get_delivery_report(block=False)
+    ...                     if exc is not None:
+    ...                         print 'Failed to deliver msg {}: {}'.format(
+    ...                             msg.partition_key, repr(exc))
+    ...                     else:
+    ...                         print 'Successfully delivered msg {}'.format(
+    ...                         msg.partition_key)
+    ...                 except Queue.Empty:
+    ...                     break
 
-.. _docs: https://pythonhosted.org/futures/#future-objects
+Note that the delivery-report queue is thread-local: it will only serve reports
+for messages which were produced from the current thread.
+
 
 You can also consume messages from this topic using a `Consumer` instance.
 

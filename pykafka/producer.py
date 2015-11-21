@@ -29,6 +29,7 @@ import weakref
 from .common import CompressionType
 from .exceptions import (
     ERROR_CODES,
+    KafkaException,
     InvalidMessageSize,
     MessageSizeTooLarge,
     NotLeaderForPartition,
@@ -65,7 +66,8 @@ class Producer(object):
                  min_queued_messages=70000,
                  linger_ms=5 * 1000,
                  block_on_queue_full=True,
-                 sync=False):
+                 sync=False,
+                 delivery_reports=False):
         """Instantiate a new AsyncProducer
 
         :param cluster: The cluster to which to connect
@@ -113,9 +115,18 @@ class Producer(object):
             indicates we should block until space is available in the queue.
             If False, we should throw an error immediately.
         :type block_on_queue_full: bool
-        :param sync: Whether calls to `produce` should wait for the
-            message to send before returning
+        :param sync: Whether calls to `produce` should wait for the message to
+            send before returning.  If `True`, an exception will be raised from
+            `produce()` if delivery to kafka failed.
         :type sync: bool
+        :param delivery_reports: If set to `True`, the producer will maintain a
+            thread-local queue on which delivery reports are posted for each
+            message produced.  These must regularly be retrieved through
+            `get_delivery_report()`, which returns a 2-tuple of
+            :class:`pykafka.protocol.Message` and either `None` (for success)
+            or an `Exception` in case of failed delivery to kafka.
+            This setting is ignored when `sync=True`.
+        :type delivery_reports: bool
         """
         self._cluster = cluster
         self._topic = topic
@@ -133,7 +144,9 @@ class Producer(object):
         self._worker_exception = None
         self._worker_trace_logged = False
         self._owned_brokers = None
-        self._delivery_reports = _DeliveryReportQueue()
+        self._delivery_reports = (_DeliveryReportQueue()
+                                  if delivery_reports or self._synchronous
+                                  else _DeliveryReportNone())
         self._running = False
         self._update_lock = self._cluster.handler.Lock()
         self.start()
@@ -259,9 +272,14 @@ class Producer(object):
         """Fetch delivery reports for messages produced on the current thread
 
         Returns 2-tuples of a `pykafka.protocol.Message` and either `None`
-        (for successful deliveries) or `Exception` (for failed deliveries)
+        (for successful deliveries) or `Exception` (for failed deliveries).
+        This interface is only available if you enabled `delivery_reports` on
+        init (and you did not use `sync=True`)
         """
-        return self._delivery_reports.queue.get(block, timeout)
+        try:
+            return self._delivery_reports.queue.get(block, timeout)
+        except AttributeError:
+            raise KafkaException("Delivery-reporting is disabled")
 
     def _produce(self, message):
         """Enqueue a message for the relevant broker
@@ -277,10 +295,6 @@ class Producer(object):
                 success = True
             else:
                 success = False
-
-    def _put_delivery_report(self, msg, exc=None):
-        """Post a delivery report (see get_delivery_report())"""
-        msg.delivery_report_q.put((msg, exc))
 
     def _send_request(self, message_batch, owned_broker):
         """Send the produce request to the broker and handle the response.
@@ -312,7 +326,7 @@ class Producer(object):
         def mark_as_delivered(message_batch):
             owned_broker.increment_messages_pending(-1 * len(message_batch))
             for msg in message_batch:
-                self._put_delivery_report(msg)
+                self._delivery_reports.put(msg)
 
         try:
             response = owned_broker.broker.produce_messages(req)
@@ -364,7 +378,7 @@ class Producer(object):
                                                 MessageSizeTooLarge)
                 for msg in mset.messages:
                     if (non_recoverable or msg.produce_attempt >= self._max_retries):
-                        self._put_delivery_report(msg, exc)
+                        self._delivery_reports.put(msg, exc)
                     else:
                         msg.produce_attempt += 1
                         self._produce(msg)
@@ -508,6 +522,20 @@ class OwnedBroker(object):
 
 
 class _DeliveryReportQueue(threading.local):
-
+    """Helper that instantiates a new report queue on every calling thread"""
     def __init__(self):
         self.queue = Queue()
+
+    @staticmethod
+    def put(msg, exc=None):
+        msg.delivery_report_q.put((msg, exc))
+
+
+class _DeliveryReportNone(object):
+    """Stand-in for when _DeliveryReportQueue has been disabled"""
+    def __init__(self):
+        self.queue = None
+
+    @staticmethod
+    def put(msg, exc=None):
+        return

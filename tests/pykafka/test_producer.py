@@ -49,7 +49,8 @@ class ProducerIntegrationTests(unittest2.TestCase):
     def test_async_produce(self):
         payload = uuid4().bytes
 
-        prod = self.client.topics[self.topic_name].get_producer(min_queued_messages=1)
+        prod = self.client.topics[self.topic_name].get_producer(
+            min_queued_messages=1, delivery_reports=True)
         prod.produce(payload)
 
         report = prod.get_delivery_report()
@@ -63,7 +64,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
         """Test our retry-loop with a recoverable error"""
         payload = uuid4().bytes
         topic = self.client.topics[self.topic_name]
-        prod = topic.get_producer(min_queued_messages=1)
+        prod = topic.get_producer(min_queued_messages=1, delivery_reports=True)
 
         # We must stop the consumer for this test, to ensure that it is the
         # producer that will encounter the disconnected brokers and initiate
