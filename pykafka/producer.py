@@ -444,7 +444,6 @@ class OwnedBroker(object):
                      self.broker.port)
         log.info("Starting new produce worker for broker %s", broker.id)
         self.producer._cluster.handler.spawn(queue_reader)
-        gevent.sleep()
 
     def stop(self):
         self.running = False
