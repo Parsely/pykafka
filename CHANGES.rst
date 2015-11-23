@@ -1,6 +1,26 @@
 Changelog
 =========
 
+2.0.4 (2015-11-23)
+------------------
+
+`Compare 2.0.4`_
+
+.. _Compare 2.0.4: https://github.com/Parsely/pykafka/compare/2.0.3...a3e6398c6b5291f189f4cc3de66c1cb7f160564c
+
+Features
+********
+
+* Allowed discovery of Kafka brokers via a ZooKeeper connect string supplied to
+  `KafkaClient`
+
+Bug Fixes
+*********
+
+* Made `BalancedConsumer`'s ZooKeeper watches close quietly on consumer exit
+* Disconnect sockets in response to any socket-level errors
+* Fixed `HashingPartitioner` for python 3
+
 2.0.3 (2015-11-10)
 ------------------
 
