@@ -62,6 +62,9 @@ class Partition(object):
             my_id=self._id,
         )
 
+    def __lt__(self, other):
+        return hash(self) < hash(other)
+
     @property
     def id(self):
         """The identifying int for this partition, unique within its topic"""

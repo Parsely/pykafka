@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from pykafka import KafkaClient
 from pykafka.exceptions import ProducerQueueFullError
+from pykafka.partitioners import hashing_partitioner
 from pykafka.test.utils import get_cluster, stop_cluster
 
 
@@ -33,6 +34,20 @@ class ProducerIntegrationTests(unittest2.TestCase):
 
         prod = self.client.topics[self.topic_name].get_sync_producer(min_queued_messages=1)
         prod.produce(payload)
+
+        # set a timeout so we don't wait forever if we break producer code
+        message = self.consumer.consume()
+        assert message.value == payload
+
+    def test_produce_hashing_partitioner(self):
+        # unique bytes, just to be absolutely sure we're not fetching data
+        # produced in a previous test
+        payload = uuid4().bytes
+
+        prod = self.client.topics[self.topic_name].get_sync_producer(
+            min_queued_messages=1,
+            partitioner=hashing_partitioner)
+        prod.produce(payload, partition_key=b"dummy")
 
         # set a timeout so we don't wait forever if we break producer code
         message = self.consumer.consume()
@@ -110,7 +125,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
     def test_null_payloads(self):
         """Test that None is accepted as a null payload"""
         prod = self.client.topics[self.topic_name].get_sync_producer(
-                min_queued_messages=1)
+            min_queued_messages=1)
         prod.produce(None)
         self.assertIsNone(self.consumer.consume().value)
         prod.produce(None, partition_key=b"whatever")
