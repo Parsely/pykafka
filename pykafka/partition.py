@@ -63,7 +63,7 @@ class Partition(object):
         )
 
     def __lt__(self, other):
-        return hash(self) < hash(other)
+        return self._id < other._id
 
     @property
     def id(self):
