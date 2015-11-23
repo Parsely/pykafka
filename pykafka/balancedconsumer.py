@@ -18,7 +18,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 __all__ = ["BalancedConsumer"]
-import functools
 import itertools
 import logging
 import socket
@@ -36,7 +35,7 @@ from .common import OffsetType
 from .exceptions import (KafkaException, PartitionOwnedError,
                          ConsumerStoppedException, NoPartitionsForConsumerException)
 from .simpleconsumer import SimpleConsumer
-from .utils.compat import range, get_bytes, itervalues
+from .utils.compat import range, get_bytes, itervalues, iteritems
 try:
     from . import rdkafka
 except ImportError:
@@ -89,6 +88,7 @@ class BalancedConsumer(object):
                  zookeeper=None,
                  auto_start=True,
                  reset_offset_on_start=False,
+                 post_rebalance_callback=None,
                  use_rdkafka=False):
         """Create a BalancedConsumer instance
 
@@ -163,6 +163,16 @@ class BalancedConsumer(object):
             internal offset counter to `self._auto_offset_reset` and commit that
             offset immediately upon starting up
         :type reset_offset_on_start: bool
+        :param post_rebalance_callback: A function to be called when a rebalance has
+            completed. This function should accept three arguments: the
+            :class:`pykafka.balancedconsumer.BalancedConsumer` instance that just
+            completed its rebalance, a dict of partitions that it owned before the
+            rebalance, and a dict of partitions it owns after the rebalance. These dicts
+            map partition ids to the most recently known offsets for those partitions.
+            This function can optionally return a dictionary mapping partition ids to
+            offsets. If it does, the consumer will reset its offsets to the supplied
+            values before continuing consumption.
+        :type post_rebalance_callback: function
         :param use_rdkafka: Use librdkafka-backed consumer if available
         :type use_rdkafka: bool
         """
@@ -186,6 +196,7 @@ class BalancedConsumer(object):
         self._zookeeper_connect = zookeeper_connect
         self._zookeeper_connection_timeout_ms = zookeeper_connection_timeout_ms
         self._reset_offset_on_start = reset_offset_on_start
+        self._post_rebalance_callback = post_rebalance_callback
         self._running = False
         self._worker_exception = None
         self._worker_trace_logged = False
@@ -273,8 +284,7 @@ class BalancedConsumer(object):
         """Return a map from partition id to held offset for each partition"""
         if not self._consumer:
             return None
-        return dict((p.partition.id, p.last_offset_consumed)
-                    for p in self._consumer._partitions_by_id.itervalues())
+        return self._consumer.held_offsets
 
     def start(self):
         """Open connections and join a cluster."""
@@ -332,7 +342,11 @@ class BalancedConsumer(object):
         self._zookeeper.start()
 
     def _setup_internal_consumer(self, partitions=None, start=True):
-        """Instantiate an internal SimpleConsumer.
+        """Instantiate an internal SimpleConsumer instance"""
+        self._consumer = self._get_internal_consumer(partitions=partitions, start=start)
+
+    def _get_internal_consumer(self, partitions=None, start=True):
+        """Instantiate a SimpleConsumer for internal use.
 
         If there is already a SimpleConsumer instance held by this object,
         disable its workers and mark it for garbage collection before
@@ -344,12 +358,12 @@ class BalancedConsumer(object):
         if self._consumer is not None:
             self._consumer.stop()
             # only use this setting for the first call to
-            # _setup_internal_consumer. subsequent calls should not
+            # _get_internal_consumer. subsequent calls should not
             # reset the offsets, since they can happen at any time
             reset_offset_on_start = False
         Cls = (rdkafka.RdKafkaSimpleConsumer
                if self._use_rdkafka else SimpleConsumer)
-        self._consumer = Cls(
+        return Cls(
             self._topic,
             self._cluster,
             consumer_group=self._consumer_group,
@@ -430,6 +444,20 @@ class BalancedConsumer(object):
         participants = sorted(participants)
         return participants
 
+    def _build_watch_callback(self, fn, proxy):
+        """Return a function that's safe to use as a ChildrenWatch callback
+
+        Fixes the issue from https://github.com/Parsely/pykafka/issues/345
+        """
+        def _callback(children):
+            # discover whether the referenced object still exists
+            try:
+                proxy.__repr__()
+            except ReferenceError:
+                return False
+            return fn(proxy, children)
+        return _callback
+
     def _set_watches(self):
         """Set watches in zookeeper that will trigger rebalances.
 
@@ -439,9 +467,9 @@ class BalancedConsumer(object):
         cluster.
         """
         proxy = weakref.proxy(self)
-        _brokers_changed = functools.partial(BalancedConsumer._brokers_changed, proxy)
-        _topics_changed = functools.partial(BalancedConsumer._topics_changed, proxy)
-        _consumers_changed = functools.partial(BalancedConsumer._consumers_changed, proxy)
+        _brokers_changed = self._build_watch_callback(BalancedConsumer._brokers_changed, proxy)
+        _topics_changed = self._build_watch_callback(BalancedConsumer._topics_changed, proxy)
+        _consumers_changed = self._build_watch_callback(BalancedConsumer._consumers_changed, proxy)
 
         self._setting_watches = True
         # Set all our watches and then rebalance
@@ -495,6 +523,19 @@ class BalancedConsumer(object):
 
         This method is called whenever a zookeeper watch is triggered.
         """
+        def _get_held_offsets(partitions, cns):
+            """Return held offsets from a consumer for a set of partitions
+
+            :param partitions: The partitions for which to return currently held offsets
+            :type partitions: Iterable of :class:`pykafka.partition.Partition`
+            :param cns: The consumer from which to fetch held offsets
+            :type cns: :class:`pykafka.simpleconsumer.SimpleConsumer`
+            """
+            if cns is None:
+                return {}
+            ids = [partition.id for partition in partitions]
+            return {id_: offset for id_, offset in iteritems(cns.held_offsets) if id_ in ids}
+
         if self._consumer is not None:
             self.commit_offsets()
         # this is necessary because we can't stop() while the lock is held
@@ -537,7 +578,18 @@ class BalancedConsumer(object):
 
                     # Only re-create internal consumer if something changed.
                     if new_partitions != self._partitions:
-                        self._setup_internal_consumer(list(new_partitions))
+                        cns = self._get_internal_consumer(list(new_partitions))
+                        old_offsets = _get_held_offsets(current_zk_parts, self._consumer)
+                        new_offsets = _get_held_offsets(new_partitions, cns)
+                        if self._post_rebalance_callback is not None:
+                            reset_offsets = self._post_rebalance_callback(
+                                self, old_offsets, new_offsets)
+                            if reset_offsets:
+                                cns.reset_offsets(partition_offsets=[
+                                    (part, new_offsets[part.id])
+                                    for part in itervalues(cns.partitions)
+                                    if part.id in new_offsets])
+                        self._consumer = cns
 
                     log.info('Rebalancing Complete.')
                     break
@@ -684,7 +736,7 @@ class BalancedConsumer(object):
                 message = self._consumer.consume(block=block)
             except ConsumerStoppedException:
                 if not self._running:
-                    return
+                    raise
                 continue
             if message:
                 self._last_message_time = time.time()

@@ -246,7 +246,8 @@ class SimpleConsumer(object):
             )
 
         def _handle_NotCoordinatorForConsumer(parts):
-            self._discover_offset_manager()
+            log.info("Updating cluster in response to NotCoordinatorForConsumer")
+            self._update()
 
         def _handle_NotLeaderForPartition(parts):
             log.info("Updating cluster in response to NotLeaderForPartition")
@@ -282,7 +283,9 @@ class SimpleConsumer(object):
     @property
     def held_offsets(self):
         """Return a map from partition id to held offset for each partition"""
-        return {p.partition.id: p.last_offset_consumed
+        return {p.partition.id:
+                (OffsetType.EARLIEST if p.last_offset_consumed == -1
+                 else p.last_offset_consumed)
                 for p in itervalues(self._partitions_by_id)}
 
     def __del__(self):
