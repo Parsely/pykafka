@@ -58,9 +58,42 @@ producing messages.
 
 .. sourcecode:: python
 
-    >>> with topic.get_producer() as producer:
+    >>> with topic.get_sync_producer() as producer:
     ...     for i in range(4):
     ...         producer.produce('test message ' + i ** 2)
+
+The example above would produce to kafka synchronously, that is, the call only
+returns after we have confirmation that the message made it to the cluster.
+
+To achieve higher throughput however, we recommend using the ``Producer`` in
+asynchronous mode, so that ``produce()`` calls will return immediately and the
+producer may opt to send messages in larger batches.  You can still obtain
+delivery confirmation for messages, through a queue interface which can be
+enabled by setting ``delivery_reports=True``.  Here's a rough usage example:
+
+.. sourcecode:: python
+
+    >>> with topic.get_producer(delivery_reports=True) as producer:
+    ...     count = 0
+    ...     while True:
+    ...         count += 1
+    ...         producer.produce('test msg', partition_key='{}'.format(count))
+    ...         if count % 10**5 == 0:  # adjust this or bring lots of RAM ;)
+    ...             while True:
+    ...                 try:
+    ...                     msg, exc = producer.get_delivery_report(block=False)
+    ...                     if exc is not None:
+    ...                         print 'Failed to deliver msg {}: {}'.format(
+    ...                             msg.partition_key, repr(exc))
+    ...                     else:
+    ...                         print 'Successfully delivered msg {}'.format(
+    ...                         msg.partition_key)
+    ...                 except Queue.Empty:
+    ...                     break
+
+Note that the delivery-report queue is thread-local: it will only serve reports
+for messages which were produced from the current thread.
+
 
 You can also consume messages from this topic using a `Consumer` instance.
 
