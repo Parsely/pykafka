@@ -9,7 +9,7 @@ from pykafka import KafkaClient
 from pykafka.balancedconsumer import BalancedConsumer, OffsetType
 from pykafka.exceptions import NoPartitionsForConsumerException, ConsumerStoppedException
 from pykafka.test.utils import get_cluster, stop_cluster
-from pykafka.utils.compat import range
+from pykafka.utils.compat import range, iterkeys, iteritems
 
 
 def buildMockConsumer(num_partitions=10, num_participants=1, timeout=2000):
@@ -115,6 +115,46 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
     @classmethod
     def tearDownClass(cls):
         stop_cluster(cls.kafka)
+
+    def test_rebalance_callbacks(self):
+        def on_rebalance(cns, old_partition_offsets, new_partition_offsets):
+            self.assertTrue(len(new_partition_offsets) > 0)
+            held_ids = set([p.id for p in cns._get_held_partitions()])
+            new_ids = set(iterkeys(new_partition_offsets))
+            old_ids = set(iterkeys(old_partition_offsets))
+            revoked_ids = old_ids - new_ids
+            assigned_ids = new_ids - old_ids
+            self.assertEqual(assigned_ids & revoked_ids, set())
+            self.assertEqual(held_ids | new_ids, held_ids)
+            self.assertNotEqual(held_ids & old_ids, held_ids)
+            self.assigned_called = True
+            for id_ in iterkeys(new_partition_offsets):
+                new_partition_offsets[id_] = self.offset_reset
+            return new_partition_offsets
+
+        self.assigned_called = False
+        self.offset_reset = 50
+        try:
+            consumer_a = self.client.topics[self.topic_name].get_balanced_consumer(
+                b'test_consume_earliest', zookeeper_connect=self.kafka.zookeeper,
+                auto_offset_reset=OffsetType.EARLIEST,
+                post_rebalance_callback=on_rebalance
+            )
+            consumer_b = self.client.topics[self.topic_name].get_balanced_consumer(
+                b'test_consume_earliest', zookeeper_connect=self.kafka.zookeeper,
+                auto_offset_reset=OffsetType.EARLIEST
+            )
+            time.sleep(3)
+            with consumer_a._rebalancing_lock:
+                self.assertTrue(self.assigned_called)
+                for _, offset in iteritems(consumer_a.held_offsets):
+                    self.assertEqual(offset, self.offset_reset)
+        finally:
+            try:
+                consumer_a.stop()
+                consumer_b.stop()
+            except:
+                pass
 
     def test_consume_earliest(self):
         try:

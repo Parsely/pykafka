@@ -35,7 +35,7 @@ from .common import OffsetType
 from .exceptions import (KafkaException, PartitionOwnedError,
                          ConsumerStoppedException, NoPartitionsForConsumerException)
 from .simpleconsumer import SimpleConsumer
-from .utils.compat import range, get_bytes, itervalues
+from .utils.compat import range, get_bytes, itervalues, iteritems
 
 
 log = logging.getLogger(__name__)
@@ -83,7 +83,8 @@ class BalancedConsumer(object):
                  zookeeper_connect='127.0.0.1:2181',
                  zookeeper=None,
                  auto_start=True,
-                 reset_offset_on_start=False):
+                 reset_offset_on_start=False,
+                 post_rebalance_callback=None):
         """Create a BalancedConsumer instance
 
         :param topic: The topic this consumer should consume
@@ -157,6 +158,16 @@ class BalancedConsumer(object):
             internal offset counter to `self._auto_offset_reset` and commit that
             offset immediately upon starting up
         :type reset_offset_on_start: bool
+        :param post_rebalance_callback: A function to be called when a rebalance has
+            completed. This function should accept three arguments: the
+            :class:`pykafka.balancedconsumer.BalancedConsumer` instance that just
+            completed its rebalance, a dict of partitions that it owned before the
+            rebalance, and a dict of partitions it owns after the rebalance. These dicts
+            map partition ids to the most recently known offsets for those partitions.
+            This function can optionally return a dictionary mapping partition ids to
+            offsets. If it does, the consumer will reset its offsets to the supplied
+            values before continuing consumption.
+        :type post_rebalance_callback: function
         """
         self._cluster = cluster
         self._consumer_group = consumer_group
@@ -178,6 +189,7 @@ class BalancedConsumer(object):
         self._zookeeper_connect = zookeeper_connect
         self._zookeeper_connection_timeout_ms = zookeeper_connection_timeout_ms
         self._reset_offset_on_start = reset_offset_on_start
+        self._post_rebalance_callback = post_rebalance_callback
         self._running = False
         self._worker_exception = None
         self._worker_trace_logged = False
@@ -318,7 +330,11 @@ class BalancedConsumer(object):
         self._zookeeper.start()
 
     def _setup_internal_consumer(self, partitions=None, start=True):
-        """Instantiate an internal SimpleConsumer.
+        """Instantiate an internal SimpleConsumer instance"""
+        self._consumer = self._get_internal_consumer(partitions=partitions, start=start)
+
+    def _get_internal_consumer(self, partitions=None, start=True):
+        """Instantiate a SimpleConsumer for internal use.
 
         If there is already a SimpleConsumer instance held by this object,
         disable its workers and mark it for garbage collection before
@@ -330,10 +346,10 @@ class BalancedConsumer(object):
         if self._consumer is not None:
             self._consumer.stop()
             # only use this setting for the first call to
-            # _setup_internal_consumer. subsequent calls should not
+            # _get_internal_consumer. subsequent calls should not
             # reset the offsets, since they can happen at any time
             reset_offset_on_start = False
-        self._consumer = SimpleConsumer(
+        return SimpleConsumer(
             self._topic,
             self._cluster,
             consumer_group=self._consumer_group,
@@ -493,6 +509,19 @@ class BalancedConsumer(object):
 
         This method is called whenever a zookeeper watch is triggered.
         """
+        def _get_held_offsets(partitions, cns):
+            """Return held offsets from a consumer for a set of partitions
+
+            :param partitions: The partitions for which to return currently held offsets
+            :type partitions: Iterable of :class:`pykafka.partition.Partition`
+            :param cns: The consumer from which to fetch held offsets
+            :type cns: :class:`pykafka.simpleconsumer.SimpleConsumer`
+            """
+            if cns is None:
+                return {}
+            ids = [partition.id for partition in partitions]
+            return {id_: offset for id_, offset in iteritems(cns.held_offsets) if id_ in ids}
+
         if self._consumer is not None:
             self.commit_offsets()
         # this is necessary because we can't stop() while the lock is held
@@ -535,7 +564,18 @@ class BalancedConsumer(object):
 
                     # Only re-create internal consumer if something changed.
                     if new_partitions != self._partitions:
-                        self._setup_internal_consumer(list(new_partitions))
+                        cns = self._get_internal_consumer(list(new_partitions))
+                        old_offsets = _get_held_offsets(current_zk_parts, self._consumer)
+                        new_offsets = _get_held_offsets(new_partitions, cns)
+                        if self._post_rebalance_callback is not None:
+                            reset_offsets = self._post_rebalance_callback(
+                                self, old_offsets, new_offsets)
+                            if reset_offsets:
+                                cns.reset_offsets(partition_offsets=[
+                                    (part, new_offsets[part.id])
+                                    for part in itervalues(cns.partitions)
+                                    if part.id in new_offsets])
+                        self._consumer = cns
 
                     log.info('Rebalancing Complete.')
                     break
