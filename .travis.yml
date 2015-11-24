@@ -23,7 +23,7 @@ notifications:
     - emmett@parsely.com
 
 install:
-    - pip install codecov kazoo tox testinstances
+    - pip install codecov kazoo tox testinstances gevent
     - wget https://github.com/edenhill/librdkafka/archive/0.8.6.tar.gz
     - tar -xzf 0.8.6.tar.gz
     - cd librdkafka-0.8.6/ && ./configure --prefix=$HOME
