@@ -82,7 +82,10 @@ class ThreadingHandler(Handler):
     Lock = threading.Lock
     # turn off RLock's super annoying default logging
     RLock = functools.partial(threading.RLock, verbose=False)
-    sleep = time.sleep
+
+    def _sleep(instance, seconds=0):
+        time.sleep(seconds)
+    sleep = _sleep
 
     def spawn(self, target, *args, **kwargs):
         t = threading.Thread(target=target, *args, **kwargs)
@@ -97,6 +100,7 @@ class GEventHandler(Handler):
     Event = GEEvent
     Lock = GERLock  # fixme
     RLock = GERLock
+
     def _sleep(instance, seconds=0):
         gevent.sleep(seconds)
     sleep = _sleep

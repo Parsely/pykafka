@@ -18,7 +18,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 __all__ = ["SimpleConsumer"]
-import gevent
 import itertools
 import logging
 import sys
@@ -343,7 +342,7 @@ class SimpleConsumer(object):
             log.debug("Fetcher thread exiting")
         log.info("Starting %s fetcher threads", self._num_consumer_fetchers)
         return [self._cluster.handler.spawn(fetcher)
-             for i in range(self._num_consumer_fetchers)]
+                for i in range(self._num_consumer_fetchers)]
 
     def __iter__(self):
         """Yield an infinite stream of messages until the consumer times out"""
