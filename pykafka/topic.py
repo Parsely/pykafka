@@ -33,6 +33,14 @@ from .utils.compat import iteritems, itervalues
 log = logging.getLogger(__name__)
 
 
+try:
+    from . import rdkafka
+    log.info("Successfully loaded pykafka.rdkafka extension.")
+except ImportError:
+    rdkafka = False
+    log.info("Could not load pykafka.rdkafka extension.", exc_info=True)
+
+
 class Topic(object):
     """
     A Topic is an abstraction over the kafka concept of a topic.
@@ -69,12 +77,15 @@ class Topic(object):
         """A dictionary containing all known partitions for this topic"""
         return self._partitions
 
-    def get_producer(self, **kwargs):
+    def get_producer(self, use_rdkafka=False, **kwargs):
         """Create a :class:`pykafka.producer.Producer` for this topic.
 
         For a description of all available `kwargs`, see the Producer docstring.
         """
-        return Producer(self._cluster, self, **kwargs)
+        if not rdkafka and use_rdkafka:
+            raise ImportError("use_rdkafka requires rdkafka to be installed")
+        Cls = rdkafka.RdKafkaProducer if rdkafka and use_rdkafka else Producer
+        return Cls(self._cluster, self, **kwargs)
 
     def get_sync_producer(self, **kwargs):
         """Create a :class:`pykafka.producer.Producer` for this topic.
@@ -148,14 +159,25 @@ class Topic(object):
             else:
                 self._partitions[id_].update(brokers, meta)
 
-    def get_simple_consumer(self, consumer_group=None, **kwargs):
+    def get_simple_consumer(self,
+                            consumer_group=None,
+                            use_rdkafka=False,
+                            **kwargs):
         """Return a SimpleConsumer of this topic
 
         :param consumer_group: The name of the consumer group to join
         :type consumer_group: str
+        :param use_rdkafka: Use librdkafka-backed consumer if available
+        :type use_rdkafka: bool
         """
-        return SimpleConsumer(self, self._cluster,
-                              consumer_group=consumer_group, **kwargs)
+        if not rdkafka and use_rdkafka:
+            raise ImportError("use_rdkafka requires rdkafka to be installed")
+        Cls = (rdkafka.RdKafkaSimpleConsumer
+               if rdkafka and use_rdkafka else SimpleConsumer)
+        return Cls(self,
+                   self._cluster,
+                   consumer_group=consumer_group,
+                   **kwargs)
 
     def get_balanced_consumer(self, consumer_group, **kwargs):
         """Return a BalancedConsumer of this topic

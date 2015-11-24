@@ -323,8 +323,9 @@ class SimpleConsumer(object):
 
     def _setup_fetch_workers(self):
         """Start the fetcher threads"""
-        self = weakref.proxy(self)
+        # NB this gets overridden in rdkafka.RdKafkaSimpleConsumer
 
+        self = weakref.proxy(self)
         def fetcher():
             while True:
                 try:

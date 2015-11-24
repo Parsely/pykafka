@@ -13,6 +13,7 @@ from pykafka.test.utils import get_cluster, stop_cluster
 
 class ProducerIntegrationTests(unittest2.TestCase):
     maxDiff = None
+    USE_RDKAFKA = False
 
     @classmethod
     def setUpClass(cls):
@@ -28,22 +29,24 @@ class ProducerIntegrationTests(unittest2.TestCase):
         cls.consumer.stop()
         stop_cluster(cls.kafka)
 
+    def _get_producer(self, **kwargs):
+        topic = self.client.topics[self.topic_name]
+        return topic.get_producer(use_rdkafka=self.USE_RDKAFKA, **kwargs)
+
     def test_produce(self):
         # unique bytes, just to be absolutely sure we're not fetching data
         # produced in a previous test
         payload = uuid4().bytes
 
-        prod = self.client.topics[self.topic_name].get_sync_producer(min_queued_messages=1)
+        prod = self._get_producer(sync=True, min_queued_messages=1)
         prod.produce(payload)
 
-        # set a timeout so we don't wait forever if we break producer code
         message = self.consumer.consume()
         assert message.value == payload
 
     def test_sync_produce_raises(self):
         """Ensure response errors are raised in produce() if sync=True"""
-        topic = self.client.topics[self.topic_name]
-        with topic.get_sync_producer(min_queued_messages=1) as prod:
+        with self._get_producer(sync=True, min_queued_messages=1) as prod:
             with self.assertRaises(MessageSizeTooLarge):
                 prod.produce(10 ** 7 * b" ")
 
@@ -52,7 +55,8 @@ class ProducerIntegrationTests(unittest2.TestCase):
         # produced in a previous test
         payload = uuid4().bytes
 
-        prod = self.client.topics[self.topic_name].get_sync_producer(
+        prod = self._get_producer(
+            sync=True,
             min_queued_messages=1,
             partitioner=hashing_partitioner)
         prod.produce(payload, partition_key=b"dummy")
@@ -64,8 +68,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
     def test_async_produce(self):
         payload = uuid4().bytes
 
-        prod = self.client.topics[self.topic_name].get_producer(
-            min_queued_messages=1, delivery_reports=True)
+        prod = self._get_producer(min_queued_messages=1, delivery_reports=True)
         prod.produce(payload)
 
         report = prod.get_delivery_report()
@@ -78,8 +81,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
     def test_recover_disconnected(self):
         """Test our retry-loop with a recoverable error"""
         payload = uuid4().bytes
-        topic = self.client.topics[self.topic_name]
-        prod = topic.get_producer(min_queued_messages=1, delivery_reports=True)
+        prod = self._get_producer(min_queued_messages=1, delivery_reports=True)
 
         # We must stop the consumer for this test, to ensure that it is the
         # producer that will encounter the disconnected brokers and initiate
@@ -108,7 +110,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
         """Ensure that the producer works as a context manager"""
         payload = uuid4().bytes
 
-        with self.client.topics[self.topic_name].get_producer(min_queued_messages=1) as producer:
+        with self._get_producer(min_queued_messages=1) as producer:
             producer.produce(payload)
 
         message = self.consumer.consume()
@@ -116,8 +118,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
 
     def test_async_produce_queue_full(self):
         """Ensure that the producer raises an error when its queue is full"""
-        topic = self.client.topics[self.topic_name]
-        with topic.get_producer(block_on_queue_full=False,
+        with self._get_producer(block_on_queue_full=False,
                                 max_queued_messages=1,
                                 linger_ms=1000) as producer:
             with self.assertRaises(ProducerQueueFullError):
@@ -129,8 +130,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
     def test_async_produce_lingers(self):
         """Ensure that the context manager waits for linger_ms milliseconds"""
         linger = 3
-        topic = self.client.topics[self.topic_name]
-        with topic.get_producer(linger_ms=linger * 1000) as producer:
+        with self._get_producer(linger_ms=linger * 1000) as producer:
             start = time.time()
             producer.produce(uuid4().bytes)
             producer.produce(uuid4().bytes)
@@ -140,9 +140,8 @@ class ProducerIntegrationTests(unittest2.TestCase):
 
     def test_async_produce_thread_exception(self):
         """Ensure that an exception on a worker thread is raised to the main thread"""
-        topic = self.client.topics[self.topic_name]
         with self.assertRaises(AttributeError):
-            with topic.get_producer(min_queued_messages=1) as producer:
+            with self._get_producer(min_queued_messages=1) as producer:
                 # get some dummy data into the queue that will cause a crash
                 # when flushed:
                 msg = Message("stuff", partition_id=0)
@@ -158,17 +157,16 @@ class ProducerIntegrationTests(unittest2.TestCase):
         occur (hence `sync=True`, which would surface most exceptions)
         """
         kwargs = dict(linger_ms=1, sync=True, required_acks=0)
-        prod = self.client.topics[self.topic_name].get_producer(**kwargs)
+        prod = self._get_producer(**kwargs)
         prod.produce(uuid4().bytes)
 
         kwargs["required_acks"] = -1
-        prod = self.client.topics[self.topic_name].get_producer(**kwargs)
+        prod = self._get_producer(**kwargs)
         prod.produce(uuid4().bytes)
 
     def test_null_payloads(self):
         """Test that None is accepted as a null payload"""
-        prod = self.client.topics[self.topic_name].get_sync_producer(
-            min_queued_messages=1)
+        prod = self._get_producer(sync=True, min_queued_messages=1)
         prod.produce(None)
         self.assertIsNone(self.consumer.consume().value)
         prod.produce(None, partition_key=b"whatever")

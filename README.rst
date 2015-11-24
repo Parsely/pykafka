@@ -9,8 +9,11 @@ PyKafka
 .. image:: http://i.imgur.com/ztYl4lG.jpg
 
 PyKafka is a cluster-aware Kafka 0.8.2 protocol client for Python. It includes Python
-implementations of Kafka producers and consumers, and runs under Python 2.7+, Python 3.4+,
+implementations of Kafka producers and consumers, which are optionally backed
+by a C extension built on `librdkafka`_, and runs under Python 2.7+, Python 3.4+,
 and PyPy.
+
+.. _librdkafka: https://github.com/edenhill/librdkafka
 
 PyKafka's primary goal is to provide a similar level of abstraction to the
 `JVM Kafka client`_ using idioms familiar to Python programmers and exposing
@@ -124,6 +127,28 @@ You can have as many `BalancedConsumer` instances consuming a topic as that
 topic has partitions. If they are all connected to the same zookeeper instance,
 they will communicate with it to automatically balance the partitions between
 themselves.
+
+Using the librdkafka extension
+------------------------------
+
+To use the librdkafka extension, you need to make sure the header files and
+shared library are somewhere where python can find them, both when you build
+the extension (which is taken care of by ``setup.py develop``) and at run time.
+Typically, this means that you need to either install librdkafka in a place
+conventional for your system, or declare ``C_INCLUDE_PATH``, ``LIBRARY_PATH``,
+and ``LD_LIBRARY_PATH`` in your shell environment.
+
+After that, all that's needed is that you pass an extra parameter
+``use_rdkafka=True`` to ``topic.get_producer()``,
+``topic.get_simple_consumer()``, or ``topic.get_balanced_consumer()``.  Note
+that some configuration options may have different optimal values; it may be
+worthwhile to consult librdkafka's `configuration notes`_ for this.
+
+We currently test against librdkafka `0.8.6`_ only.  Note that use on pypy is
+not recommended at this time; the producer is certainly expected to crash.
+
+.. _0.8.6: https://github.com/edenhill/librdkafka/releases/tag/0.8.6
+.. _configuration notes: https://github.com/edenhill/librdkafka/blob/0.8.6/CONFIGURATION.md
 
 Operational Tools
 -----------------

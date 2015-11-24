@@ -36,6 +36,10 @@ from .exceptions import (KafkaException, PartitionOwnedError,
                          ConsumerStoppedException, NoPartitionsForConsumerException)
 from .simpleconsumer import SimpleConsumer
 from .utils.compat import range, get_bytes, itervalues, iteritems
+try:
+    from . import rdkafka
+except ImportError:
+    rdkafka = False
 
 
 log = logging.getLogger(__name__)
@@ -84,7 +88,8 @@ class BalancedConsumer(object):
                  zookeeper=None,
                  auto_start=True,
                  reset_offset_on_start=False,
-                 post_rebalance_callback=None):
+                 post_rebalance_callback=None,
+                 use_rdkafka=False):
         """Create a BalancedConsumer instance
 
         :param topic: The topic this consumer should consume
@@ -168,6 +173,8 @@ class BalancedConsumer(object):
             offsets. If it does, the consumer will reset its offsets to the supplied
             values before continuing consumption.
         :type post_rebalance_callback: function
+        :param use_rdkafka: Use librdkafka-backed consumer if available
+        :type use_rdkafka: bool
         """
         self._cluster = cluster
         self._consumer_group = consumer_group
@@ -193,6 +200,10 @@ class BalancedConsumer(object):
         self._running = False
         self._worker_exception = None
         self._worker_trace_logged = False
+
+        if not rdkafka and use_rdkafka:
+            raise ImportError("use_rdkafka requires rdkafka to be installed")
+        self._use_rdkafka = rdkafka and use_rdkafka
 
         self._rebalancing_lock = cluster.handler.Lock()
         self._consumer = None
@@ -296,6 +307,7 @@ class BalancedConsumer(object):
 
         This method should be called as part of a graceful shutdown process.
         """
+        log.debug("Stopping {}".format(self))
         with self._rebalancing_lock:
             # We acquire the lock in order to prevent a race condition where a
             # rebalance that is already underway might re-register the zk
@@ -349,7 +361,9 @@ class BalancedConsumer(object):
             # _get_internal_consumer. subsequent calls should not
             # reset the offsets, since they can happen at any time
             reset_offset_on_start = False
-        return SimpleConsumer(
+        Cls = (rdkafka.RdKafkaSimpleConsumer
+               if self._use_rdkafka else SimpleConsumer)
+        return Cls(
             self._topic,
             self._cluster,
             consumer_group=self._consumer_group,

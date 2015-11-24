@@ -28,7 +28,7 @@ def buildMockConsumer(num_partitions=10, num_participants=1, timeout=2000):
     cluster = mock.MagicMock()
     zk = mock.MagicMock()
     return BalancedConsumer(topic, cluster, consumer_group,
-                            zookeeper=zk, auto_start=False,
+                            zookeeper=zk, auto_start=False, use_rdkafka=False,
                             consumer_timeout_ms=timeout), topic
 
 
@@ -99,12 +99,14 @@ class TestBalancedConsumer(unittest2.TestCase):
 
 class BalancedConsumerIntegrationTests(unittest2.TestCase):
     maxDiff = None
+    USE_RDKAFKA = False
 
     @classmethod
     def setUpClass(cls):
         cls.kafka = get_cluster()
         cls.topic_name = b'test-data'
-        cls.kafka.create_topic(cls.topic_name, 3, 2)
+        cls.n_partitions = 3
+        cls.kafka.create_topic(cls.topic_name, cls.n_partitions, 2)
         cls.client = KafkaClient(cls.kafka.brokers)
         cls.prod = cls.client.topics[cls.topic_name].get_producer(
             min_queued_messages=1
@@ -138,12 +140,12 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
             consumer_a = self.client.topics[self.topic_name].get_balanced_consumer(
                 b'test_consume_earliest', zookeeper_connect=self.kafka.zookeeper,
                 auto_offset_reset=OffsetType.EARLIEST,
-                post_rebalance_callback=on_rebalance
-            )
+                post_rebalance_callback=on_rebalance,
+                use_rdkafka=self.USE_RDKAFKA)
             consumer_b = self.client.topics[self.topic_name].get_balanced_consumer(
                 b'test_consume_earliest', zookeeper_connect=self.kafka.zookeeper,
-                auto_offset_reset=OffsetType.EARLIEST
-            )
+                auto_offset_reset=OffsetType.EARLIEST,
+                use_rdkafka=self.USE_RDKAFKA)
             time.sleep(3)
             with consumer_a._rebalancing_lock:
                 self.assertTrue(self.assigned_called)
@@ -158,14 +160,17 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
 
     def test_consume_earliest(self):
         try:
-            consumer_a = self.client.topics[self.topic_name].get_balanced_consumer(
-                b'test_consume_earliest', zookeeper_connect=self.kafka.zookeeper,
-                auto_offset_reset=OffsetType.EARLIEST
-            )
-            consumer_b = self.client.topics[self.topic_name].get_balanced_consumer(
-                b'test_consume_earliest', zookeeper_connect=self.kafka.zookeeper,
-                auto_offset_reset=OffsetType.EARLIEST
-            )
+            topic = self.client.topics[self.topic_name]
+            consumer_a = topic.get_balanced_consumer(
+                b'test_consume_earliest',
+                zookeeper_connect=self.kafka.zookeeper,
+                auto_offset_reset=OffsetType.EARLIEST,
+                use_rdkafka=self.USE_RDKAFKA)
+            consumer_b = topic.get_balanced_consumer(
+                b'test_consume_earliest',
+                zookeeper_connect=self.kafka.zookeeper,
+                auto_offset_reset=OffsetType.EARLIEST,
+                use_rdkafka=self.USE_RDKAFKA)
 
             # Consume from both a few times
             messages = [consumer_a.consume() for i in range(1)]
@@ -193,14 +198,20 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
 
     def test_consume_latest(self):
         try:
-            consumer_a = self.client.topics[self.topic_name].get_balanced_consumer(
-                b'test_consume_latest', zookeeper_connect=self.kafka.zookeeper,
-                auto_offset_reset=OffsetType.LATEST
-            )
-            consumer_b = self.client.topics[self.topic_name].get_balanced_consumer(
-                b'test_consume_latest', zookeeper_connect=self.kafka.zookeeper,
-                auto_offset_reset=OffsetType.LATEST
-            )
+            topic = self.client.topics[self.topic_name]
+            consumer_a = topic.get_balanced_consumer(
+                b'test_consume_latest',
+                zookeeper_connect=self.kafka.zookeeper,
+                auto_offset_reset=OffsetType.LATEST,
+                use_rdkafka=self.USE_RDKAFKA)
+            consumer_b = topic.get_balanced_consumer(
+                b'test_consume_latest',
+                zookeeper_connect=self.kafka.zookeeper,
+                auto_offset_reset=OffsetType.LATEST,
+                use_rdkafka=self.USE_RDKAFKA)
+
+            # Make sure we're done before producing more messages:
+            self.wait_for_rebalancing(consumer_a, consumer_b)
 
             # Since we are consuming from the latest offset,
             # produce more messages to consume.
@@ -243,7 +254,8 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
         consumer = self.client.topics[self.topic_name].get_balanced_consumer(
             b'test_external_kazoo_client',
             zookeeper=zk,
-            consumer_timeout_ms=10)
+            consumer_timeout_ms=10,
+            use_rdkafka=self.USE_RDKAFKA)
         [msg for msg in consumer]
         consumer.stop()
 
@@ -252,7 +264,8 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
         consumer = self.client.topics[self.topic_name].get_balanced_consumer(
             b'test_no_partitions',
             zookeeper_connect=self.kafka.zookeeper,
-            auto_start=False)
+            auto_start=False,
+            use_rdkafka=self.USE_RDKAFKA)
         consumer._decide_partitions = lambda p: set()
         consumer.start()
         self.assertFalse(consumer._running)
@@ -270,12 +283,15 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
             topic = self.client.topics[self.topic_name]
             consumer_group = b'test_zk_conn_lost'
 
-            consumer = topic.get_balanced_consumer(consumer_group, zookeeper=zk)
+            consumer = topic.get_balanced_consumer(consumer_group,
+                                                   zookeeper=zk,
+                                                   use_rdkafka=self.USE_RDKAFKA)
             self.assertTrue(consumer._check_held_partitions())
             zk.stop()  # expires session, dropping all our nodes
 
             # Start a second consumer on a different zk connection
-            other_consumer = topic.get_balanced_consumer(consumer_group)
+            other_consumer = topic.get_balanced_consumer(
+                consumer_group, use_rdkafka=self.USE_RDKAFKA)
 
             # Slightly contrived: we'll grab a lock to keep _rebalance() from
             # starting when we restart the zk connection (restart triggers a
@@ -287,11 +303,9 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
                 self.assertFalse(consumer._check_held_partitions())
 
             # Finally, confirm that _rebalance() resolves the discrepancy:
-            time.sleep(.3)  # allow consumers time to begin rebalancing
-            with consumer._rebalancing_lock:  # wait until rebalancing finishes
-                self.assertTrue(consumer._check_held_partitions())
-            with other_consumer._rebalancing_lock:
-                self.assertTrue(other_consumer._check_held_partitions())
+            self.wait_for_rebalancing(consumer, other_consumer)
+            self.assertTrue(consumer._check_held_partitions())
+            self.assertTrue(other_consumer._check_held_partitions())
         finally:
             try:
                 consumer.stop()
@@ -299,6 +313,23 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
                 zk.stop()
             except:
                 pass
+
+    def wait_for_rebalancing(self, *balanced_consumers):
+        """Test helper that loops while rebalancing is ongoing
+
+        Needs to be given all consumer instances active in a consumer group.
+        Waits for up to 100 seconds, which should be enough for even a very
+        oversubscribed test cluster.
+        """
+        for _ in range(500):
+            n_parts = [len(cons.partitions) for cons in balanced_consumers]
+            if (max(n_parts) - min(n_parts) <= 1
+                    and sum(n_parts) == self.n_partitions):
+                break
+            else:
+                time.sleep(.2)
+        else:
+            raise AssertionError("Rebalancing failed")
 
 
 if __name__ == "__main__":

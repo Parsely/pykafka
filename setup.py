@@ -18,8 +18,12 @@ import re
 import sys
 import os
 
+from distutils.command.build_ext import build_ext
+from distutils.errors import CCompilerError, DistutilsExecError, DistutilsPlatformError
 from setuptools import setup, find_packages
 from setuptools.command.test import test as TestCommand
+from setuptools.extension import Extension
+
 
 # Get version without importing, which avoids dependency issues
 def get_version():
@@ -48,6 +52,36 @@ tests_require = [
 dependency_links = []
 setup_requires = []
 
+
+class ve_build_ext(build_ext):
+    """This class allows C extension building to fail.
+
+    If the name seems horribly random: we've kept it for historic reasons, see
+    http://nedbatchelder.com/blog/201212/skipping_c_extensions.html
+    This particular evolution was honestly stolen from the sqlalchemy project.
+    """
+    class BuildFailed(Exception):
+        def __init__(self):
+            self.cause = sys.exc_info()[1]  # work around py 2/3 different syntax
+
+    def run(self):
+        try:
+            build_ext.run(self)
+        except DistutilsPlatformError:
+            raise self.BuildFailed()
+
+    def build_extension(self, ext):
+        try:
+            build_ext.build_extension(self, ext)
+        except (CCompilerError, DistutilsExecError, DistutilsPlatformError):
+            raise self.BuildFailed()
+        except ValueError:
+            # this can happen on Windows 64 bit, see Python issue 7511
+            if "'path'" in str(sys.exc_info()[1]):  # works with both py 2/3
+                raise self.BuildFailed()
+            raise
+
+
 class PyTest(TestCommand):
     user_options = [('pytest-args=', 'a', "Arguments to pass to py.test")]
 
@@ -69,47 +103,68 @@ class PyTest(TestCommand):
 if 'nosetests' in sys.argv[1:]:
     setup_requires.append('nose')
 
-setup(
-    name='pykafka',
-    version=get_version(),
-    author='Keith Bourgoin and Emmett Butler',
-    author_email='pykafka-user@googlegroups.com',
-    url='https://github.com/Parsely/pykafka',
-    description='Full-Featured Pure-Python Kafka Client',
-    keywords='apache kafka client driver',
-    license='Apache License 2.0',
-    packages=find_packages(),
-    entry_points={
-        'console_scripts': [
-            'kafka-tools = pykafka.cli.kafka_tools:main',
+
+def run_setup(with_rdkafka=True):
+    """This just calls setuptools.setup() but makes ext_modules optional"""
+    ext_modules = []
+    if with_rdkafka:
+        ext_modules.append(Extension(
+            'pykafka.rdkafka._rd_kafka',
+            libraries=['rdkafka'],
+            sources=['pykafka/rdkafka/_rd_kafkamodule.c']))
+
+    setup(
+        name='pykafka',
+        version=get_version(),
+        author='Keith Bourgoin and Emmett Butler',
+        author_email='pykafka-user@googlegroups.com',
+        url='https://github.com/Parsely/pykafka',
+        description='Full-Featured Pure-Python Kafka Client',
+        keywords='apache kafka client driver',
+        license='Apache License 2.0',
+        packages=find_packages(),
+        entry_points={
+            'console_scripts': [
+                'kafka-tools = pykafka.cli.kafka_tools:main',
+                ]
+        },
+        install_requires=install_requires,
+        tests_require=tests_require,
+        setup_requires=setup_requires,
+        extras_require={
+            'test': tests_require,
+            'all': install_requires + tests_require,
+            'docs': ['sphinx'] + tests_require,
+            'lint': lint_requires
+        },
+        cmdclass={'test': PyTest, 'build_ext': ve_build_ext},
+        ext_modules=ext_modules,
+        dependency_links=dependency_links,
+        zip_safe=False,
+        test_suite='nose.collector',
+        include_package_data=True,
+        classifiers=[
+                "Development Status :: 5 - Production/Stable",
+                "Intended Audience :: Developers",
+                "License :: OSI Approved :: Apache Software License",
+                "Programming Language :: Python",
+                "Programming Language :: Python :: 2",
+                "Programming Language :: Python :: 2.7",
+                "Programming Language :: Python :: 3",
+                "Programming Language :: Python :: 3.4",
+                "Programming Language :: Python :: 3.5",
+                "Topic :: Database",
+                "Topic :: Database :: Front-Ends",
+                "Topic :: Software Development :: Libraries :: Python Modules",
             ]
-    },
-    install_requires=install_requires,
-    tests_require=tests_require,
-    setup_requires=setup_requires,
-    extras_require={
-        'test': tests_require,
-        'all': install_requires + tests_require,
-        'docs': ['sphinx'] + tests_require,
-        'lint': lint_requires
-    },
-    cmdclass={'test': PyTest},
-    dependency_links=dependency_links,
-    zip_safe=False,
-    test_suite='nose.collector',
-    include_package_data=True,
-    classifiers=[
-            "Development Status :: 5 - Production/Stable",
-            "Intended Audience :: Developers",
-            "License :: OSI Approved :: Apache Software License",
-            "Programming Language :: Python",
-            "Programming Language :: Python :: 2",
-            "Programming Language :: Python :: 2.7",
-            "Programming Language :: Python :: 3",
-            "Programming Language :: Python :: 3.4",
-            "Programming Language :: Python :: 3.5",
-            "Topic :: Database",
-            "Topic :: Database :: Front-Ends",
-            "Topic :: Software Development :: Libraries :: Python Modules",
-        ]
-)
+    )
+
+try:
+    run_setup()
+except ve_build_ext.BuildFailed as exc:
+    print(15 * "-")
+    print("INFO: Failed to build rdkafka extension:")
+    print(exc.cause)
+    print("INFO: will now attempt setup without extension.")
+    print(15 * "-")
+    run_setup(with_rdkafka=False)
