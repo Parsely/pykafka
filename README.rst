@@ -97,7 +97,6 @@ enabled by setting ``delivery_reports=True``.  Here's a rough usage example:
 Note that the delivery-report queue is thread-local: it will only serve reports
 for messages which were produced from the current thread.
 
-
 You can also consume messages from this topic using a `Consumer` instance.
 
 .. sourcecode:: python
@@ -131,8 +130,9 @@ themselves.
 Using the librdkafka extension
 ------------------------------
 
-To use the librdkafka extension, you need to make sure the header files and
-shared library are somewhere where python can find them, both when you build
+PyKafka includes a C extension that makes use of librdkafka to speed up producer
+and consumer operation. To use the librdkafka extension, you need to make sure the header
+files and shared library are somewhere where python can find them, both when you build
 the extension (which is taken care of by ``setup.py develop``) and at run time.
 Typically, this means that you need to either install librdkafka in a place
 conventional for your system, or declare ``C_INCLUDE_PATH``, ``LIBRARY_PATH``,
