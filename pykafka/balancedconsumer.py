@@ -262,7 +262,7 @@ class BalancedConsumer(object):
                 try:
                     if not self._running:
                         break
-                    time.sleep(120)
+                    self._cluster.handler.sleep(120)
                     if not self._check_held_partitions():
                         self._rebalance()
                 except Exception as e:
@@ -591,7 +591,7 @@ class BalancedConsumer(object):
                                     ex.partition, i)
                         raise
                     log.info('Unable to acquire partition %s. Retrying', ex.partition)
-                    time.sleep(i * (self._rebalance_backoff_ms / 1000))
+                    self._cluster.handler.sleep(i * (self._rebalance_backoff_ms / 1000))
         if should_stop:
             self.stop()
 
