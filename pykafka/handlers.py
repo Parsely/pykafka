@@ -21,9 +21,9 @@ __all__ = ["ResponseFuture", "Handler", "ThreadingHandler", "RequestHandler"]
 from collections import namedtuple
 import functools
 import gevent
-from gevent.queue import JoinableQueue
-from gevent.event import Event as GEEvent
-from gevent.lock import RLock as GERLock
+import gevent.event
+import gevent.lock
+import gevent.queue
 import logging
 import threading
 import time
@@ -95,10 +95,10 @@ class ThreadingHandler(Handler):
 
 class GEventHandler(Handler):
     """A handler that uses a greenlet to perform its work"""
-    Queue = JoinableQueue
-    Event = GEEvent
-    Lock = GERLock  # fixme
-    RLock = GERLock
+    Queue = gevent.queue.JoinableQueue
+    Event = gevent.event.Event
+    Lock = gevent.lock.RLock  # fixme
+    RLock = gevent.lock.RLock
 
     def sleep(self, seconds=0):
         gevent.sleep(seconds)
