@@ -31,7 +31,8 @@ class RdKafkaProducer(Producer):
                  min_queued_messages=2000,  # NB differs from pykafka.Producer
                  linger_ms=5 * 1000,
                  block_on_queue_full=True,
-                 sync=False):
+                 sync=False,
+                 delivery_reports=False):
         callargs = {k: v for k, v in vars().items()
                          if k not in ("self", "__class__")}
         self._rdk_producer = None
@@ -49,13 +50,13 @@ class RdKafkaProducer(Producer):
             self._rdk_producer = _rd_kafka.Producer()
             self._rdk_producer.configure(conf=conf)
             self._rdk_producer.configure(topic_conf=topic_conf)
-            self._rdk_producer.start(brokers, self._topic.name)
+            self._rdk_producer.start(
+                brokers, self._topic.name, self._delivery_reports.put)
             self._running = True
 
             def poll(rdk_handle, stop_event):
                 while not stop_event.is_set() or rdk_handle.outq_len() > 0:
                     rdk_handle.poll(timeout_ms=1000)
-                assert(not rdk_handle._pending_messages)
                 log.debug("Exiting RdKafkaProducer poller thread cleanly.")
 
             self._stop_poller_thread.clear()
@@ -63,28 +64,20 @@ class RdKafkaProducer(Producer):
                 poll, args=(self._rdk_producer, self._stop_poller_thread))
 
     def stop(self):
-        super(RdKafkaProducer, self).stop()
         self._stop_poller_thread.set()
-        self._poller_thread.join()
+        super(RdKafkaProducer, self).stop()
         self._rdk_producer.stop()
 
-    def _produce(self, msg_tuple):
-        # Temporarily some unpacking here, because the expected signature of
-        # _produce has been in flux
-        (k, v), pid, attempt = msg_tuple
-        message = Message(value=v, partition_key=k, partition_id=pid)
+    def _produce(self, message):
         try:
             self._rdk_producer.produce(message)
         except RdKafkaStoppedException:
             raise ProducerStoppedException
 
     def _wait_all(self):
-        # TODO rewrite this when we re-enable delivery-reporting
-        if not hasattr(self._rdk_producer, "_pending_messages"):
-            return  # _rdk_producer not running
         log.info("Blocking until all messages are sent")
-        while self._rdk_producer._pending_messages:
-            time.sleep(.3)
+        if self._poller_thread is not None:
+            self._poller_thread.join()
 
     def _mk_rdkafka_config_lists(self):
         """Populate conf, topic_conf to configure the rdkafka producer"""

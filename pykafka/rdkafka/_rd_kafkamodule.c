@@ -152,9 +152,6 @@ typedef struct {
     /* Consumer-specific fields */
     rd_kafka_queue_t *rdk_queue_handle;
     PyObject *partition_ids;
-
-    /* Producer-specific fields; see Producer_produce for details */
-    PyObject *pending;
 } RdkHandle;
 
 
@@ -163,8 +160,6 @@ typedef struct {
 static PyMemberDef RdkHandle_members[] = {
     {"_partition_ids", T_OBJECT_EX, offsetof(RdkHandle, partition_ids),
                        READONLY, "Partitions fetched from by this consumer"},
-    {"_pending_messages", T_OBJECT_EX, offsetof(RdkHandle, pending),
-                          READONLY, "Messages pending a delivery report"},
     {NULL}
 };
 
@@ -308,6 +303,8 @@ RdkHandle_stop(RdkHandle *self)
             self->rdk_topic_handle = NULL;
         }
         if (self->rdk_handle) {
+            PyObject *opaque = (PyObject *)rd_kafka_opaque(self->rdk_handle);
+            Py_XDECREF(opaque);
             rd_kafka_destroy(self->rdk_handle);
             self->rdk_handle = NULL;
         }
@@ -322,7 +319,6 @@ RdkHandle_stop(RdkHandle *self)
     Py_END_ALLOW_THREADS
 
     Py_CLEAR(self->partition_ids);
-    Py_CLEAR(self->pending);
 
     if (RdkHandle_unlock(self)) return NULL;
     Py_INCREF(Py_None);
@@ -516,75 +512,28 @@ Producer_dealloc(PyObject *self)
 }
 
 
-/* Helper function for Producer_delivery_report_callback.  Because it is a
- * non-python callback, it cannot raise exceptions.  We therefore try to log
- * the traceback, then clear the exception */
-static void
-log_clear_exception(const char *msg)
-{
-    Py_XDECREF(PyObject_CallMethod(logger, "exception", "s", msg));
-    PyErr_Clear();
-}
-
-
 /* Helper function for Producer_delivery_report_callback: find an exception
- * corresponding to `err`, and set that on `future`.  Returns -1 on failure,
- * or 0 on success */
+ * corresponding to `err`, and send that into the report queue.  Returns -1
+ * on failure, or 0 on success */
 static int
-Producer_delivery_report_set_exception(PyObject *future,
-                                       rd_kafka_resp_err_t err)
+Producer_delivery_report_put(PyObject *put_func,
+                             PyObject *message,
+                             rd_kafka_resp_err_t err)
 {
-    int retval = 0;
     PyObject *exc = NULL;
-
-    set_pykafka_error_from_code(err, &exc);
-    if (! exc) goto cleanup;
-    PyObject *res = PyObject_CallMethod(future, "set_exception", "O", exc);
-    if (! res) goto cleanup;
-    else Py_DECREF(res);
-
-cleanup:
-    if (PyErr_Occurred()) {
-        log_clear_exception("Couldn't pass error to Future.set_exception");
-        retval = -1;
+    if (err == RD_KAFKA_RESP_ERR_NO_ERROR) {
+        exc = Py_None;
+        Py_INCREF(Py_None);
+    } else {
+        set_pykafka_error_from_code(err, &exc);
+        if (! exc) return -1;
     }
-    Py_XDECREF(exc);
-    return retval;
-}
+    PyObject *res = PyObject_CallFunctionObjArgs(put_func, message, exc, NULL);
 
-/* Helper function to drop message from the keep-alive set `pending` */
-static int
-Producer_discard_from_pending(PyObject *pending, PyObject *message)
-{
-    int res = PySet_Discard(pending, message);
-    if (res == 1) return 0;
-    if (res == 0) set_pykafka_error("RdKafkaException",
-                                    "Message not found in pending messages!");
-    /* if (res == -1) error already set */
-    return -1;
-}
-
-
-/* Helper function to retrieve Message.delivery_future.  NB may return Py_None
- * if user has already discarded future */
-static PyObject *
-Producer_get_message_future(PyObject *message)
-{
-    PyObject *wref = NULL;
-    PyObject *future = NULL;
-
-    /* We expect message.delivery_future to be a weakref to a future */
-    wref = PyObject_GetAttrString(message, "delivery_future");
-    if (! wref) goto failed;
-    future = PyObject_CallObject(wref, NULL);
-    if (! future) goto failed;
-
-    Py_DECREF(wref);
-    return future;
-failed:
-    Py_XDECREF(wref);
-    Py_XDECREF(future);
-    return NULL;
+    Py_DECREF(exc);
+    if (! res) return -1;
+    else Py_DECREF(res);
+    return 0;
 }
 
 
@@ -601,46 +550,26 @@ Producer_delivery_report_callback(rd_kafka_t *rk,
 
     /* Producer_produce sent *Message as msg_opaque == rkmessage->_private */
     PyObject *message = (PyObject *)rkmessage->_private;
-
-    /* We temporarily bypass most of this function while our delivery reporting
-     * spec is in flux.  This code still works, but it would flood the log with
-     * warnings that messages don't carry futures */
-    goto cleanup;
-
-
-    PyObject *future = Producer_get_message_future(message);
-    if (! future) {
-        log_clear_exception("Error in getting Message.delivery_future");
-        goto cleanup;
+    PyObject *put_func = (PyObject *)opaque;
+    if (-1 == Producer_delivery_report_put(put_func, message, rkmessage->err)) {
+        /* Must swallow exception as this is a non-python callback */
+        PyObject *res = PyObject_CallMethod(
+            logger, "exception", "s", "Failure in delivery callback");
+        Py_XDECREF(res);
+        PyErr_Clear();
     }
-    if (future == Py_None) {
-        Py_DECREF(future);
-        goto cleanup;
-    }
-    if (rkmessage->err == RD_KAFKA_RESP_ERR_NO_ERROR) {
-        PyObject *res = PyObject_CallMethod(future, "set_result", "z", NULL);
-        if (! res) log_clear_exception("Failure in Future.set_result");
-        else Py_DECREF(res);
-    } else {
-        Producer_delivery_report_set_exception(future, rkmessage->err);
-    }
-    Py_DECREF(future);
 
-cleanup:
-    /* NB even though `opaque` refers to RdkHandle.pending, we can safely
-     * access it without locking RdkHandle.rwlock because these callbacks only
-     * ever run while RdkHandle_poll holds a lock */
-    if (Producer_discard_from_pending((PyObject *)opaque, message)) {
-        log_clear_exception("Problem removing message from pending messages");
-    }
+    Py_DECREF(message);  /* We INCREF'd this in Producer_produce() */
     PyGILState_Release(gstate);
 }
 
 
 PyDoc_STRVAR(Producer_start__doc__,
-    "start(self, brokers, topic_name)\n"
+    "start(self, brokers, topic_name, delivery_put)\n"
     "\n"
-    "Starts the underlying rdkafka producer.  Configuration should have been\n"
+    "Starts the underlying rdkafka producer, given a broker connection\n"
+    "string, a topic name, and a (bound) method that we can send delivery\n"
+    "reports (as in `put(msg, exception)`).  Configuration should have been\n"
     "provided through earlier calls to configure().  Note that following\n"
     "start, you _must_ ensure that poll() is called regularly, or delivery\n"
     "reports may pile up\n");
@@ -649,11 +578,12 @@ Producer_start(RdkHandle *self, PyObject *args, PyObject *kwds)
 {
     if (RdkHandle_excl_lock(self)) return NULL;
 
-    char *keywords[] = {"brokers", "topic_name", NULL};
+    char *keywords[] = {"brokers", "topic_name", "delivery_put", NULL};
     PyObject *brokers = NULL;
     PyObject *topic_name = NULL;
+    PyObject *delivery_put = NULL;
     if (! PyArg_ParseTupleAndKeywords(
-            args, kwds, "SS", keywords, &brokers, &topic_name)) {
+        args, kwds, "SSO", keywords, &brokers, &topic_name, &delivery_put)) {
         goto failed;
     }
 
@@ -665,9 +595,8 @@ Producer_start(RdkHandle *self, PyObject *args, PyObject *kwds)
     }
     rd_kafka_conf_set_dr_msg_cb(self->rdk_conf,
                                 Producer_delivery_report_callback);
-    self->pending = PySet_New(NULL);
-    if (! self->pending) goto failed;
-    rd_kafka_conf_set_opaque(self->rdk_conf, self->pending);
+    Py_INCREF(delivery_put);
+    rd_kafka_conf_set_opaque(self->rdk_conf, delivery_put);
 
     if (RdkHandle_unlock(self)) return NULL;
     return RdkHandle_start(
@@ -695,11 +624,11 @@ Producer_produce(RdkHandle *self, PyObject *message)
     PyObject *partition_key = NULL;
     PyObject *partition_id = NULL;
 
-    /* Keep message alive until the delivery-callback runs,  so that at
-     * callback time we can access Message.delivery_future, and in addition, we
-     * can then tell librdkafka that there's no need to copy the payload and it
-     * can safely use the raw Message bytes directly */
-    if (PySet_Add(self->pending, message)) goto failed;
+    /* Keep message alive until the delivery-callback runs.  Needed both
+     * because we may want to put the message on a report queue when the
+     * callback runs, and because we'll tell rd_kafka_produce() not to copy
+     * the payload and it can safely use the raw Message bytes directly */
+    Py_INCREF(message);
 
     /* Get pointers to raw Message contents */
     value = PyObject_GetAttrString(message, "value");
@@ -738,27 +667,24 @@ Producer_produce(RdkHandle *self, PyObject *message)
     if (res == -1) {
         rd_kafka_resp_err_t err = rd_kafka_errno2err(errno);
         if (err == RD_KAFKA_RESP_ERR__QUEUE_FULL) {
-            /* Remove `future` as we're not going to return it */
-            if (! Producer_discard_from_pending(self->pending, message)) {
-                set_pykafka_error("ProducerQueueFullError", "");
-            }  /* else: error already set */
+            set_pykafka_error("ProducerQueueFullError", "");
             goto failed;
         } else {
-            /* Any other errors should go through Message.delivery_future,
+            /* Any other errors should go through the report queue,
              * because that's where pykafka.Producer would put them */
-            PyObject *future = Producer_get_message_future(message);
-            if (! future) goto failed;
-            if (-1 == Producer_delivery_report_set_exception(future, err)) {
-                set_pykafka_error("RdKafkaException", "see log for details");
+            PyObject *put_func = (PyObject *)rd_kafka_opaque(self->rdk_handle);
+            if (-1 == Producer_delivery_report_put(put_func, message, err)) {
                 goto failed;
             }
         }
+        Py_DECREF(message);  /* There won't be a delivery-callback */
     }
 
     Py_DECREF(value);
     Py_DECREF(partition_key);
     Py_DECREF(partition_id);
     if (RdkHandle_unlock(self)) return NULL;
+
     Py_INCREF(Py_None);
     return Py_None;
 failed:
@@ -928,6 +854,16 @@ Consumer_start(RdkHandle *self, PyObject *args, PyObject *kwds)
                                       &start_offsets)) {
         return NULL;
     }
+
+    /* Set the application opaque NULL, just to make stop() simpler */
+    if (RdkHandle_excl_lock(self)) return NULL;
+    if (! self->rdk_conf) {
+        set_pykafka_error("RdKafkaException",
+                          "Please run configure() before starting.");
+        return NULL;
+    }
+    rd_kafka_conf_set_opaque(self->rdk_conf, NULL);
+    if (RdkHandle_unlock(self)) return NULL;
 
     /* Basic setup */
     PyObject *res = RdkHandle_start(

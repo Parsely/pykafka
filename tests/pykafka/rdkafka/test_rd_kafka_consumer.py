@@ -63,6 +63,8 @@ class TestRdKafkaConsumer(unittest2.TestCase):
         """
         with self.assert_thread_cnt_non_increasing():
             consumer = _rd_kafka.Consumer()
+            consumer.configure(conf=[])
+            consumer.configure(topic_conf=[])
             consumer.start(brokers=get_bytes(self.kafka.brokers),
                            topic_name=self.topic_name,
                            partition_ids=self.partition_ids,
