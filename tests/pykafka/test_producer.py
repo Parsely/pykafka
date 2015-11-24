@@ -46,8 +46,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
 
     def test_sync_produce_raises(self):
         """Ensure response errors are raised in produce() if sync=True"""
-        topic = self.client.topics[self.topic_name]
-        with topic.get_sync_producer(min_queued_messages=1) as prod:
+        with self._get_producer(sync=True, min_queued_messages=1) as prod:
             with self.assertRaises(MessageSizeTooLarge):
                 prod.produce(10 ** 7 * b" ")
 
@@ -56,7 +55,8 @@ class ProducerIntegrationTests(unittest2.TestCase):
         # produced in a previous test
         payload = uuid4().bytes
 
-        prod = self.client.topics[self.topic_name].get_sync_producer(
+        prod = self._get_producer(
+            sync=True,
             min_queued_messages=1,
             partitioner=hashing_partitioner)
         prod.produce(payload, partition_key=b"dummy")
@@ -81,8 +81,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
     def test_recover_disconnected(self):
         """Test our retry-loop with a recoverable error"""
         payload = uuid4().bytes
-        topic = self.client.topics[self.topic_name]
-        prod = topic.get_producer(min_queued_messages=1, delivery_reports=True)
+        prod = self._get_producer(min_queued_messages=1, delivery_reports=True)
 
         # We must stop the consumer for this test, to ensure that it is the
         # producer that will encounter the disconnected brokers and initiate
@@ -141,7 +140,6 @@ class ProducerIntegrationTests(unittest2.TestCase):
 
     def test_async_produce_thread_exception(self):
         """Ensure that an exception on a worker thread is raised to the main thread"""
-        topic = self.client.topics[self.topic_name]
         with self.assertRaises(AttributeError):
             with self._get_producer(min_queued_messages=1) as producer:
                 # get some dummy data into the queue that will cause a crash
