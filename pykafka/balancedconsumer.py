@@ -591,9 +591,8 @@ class BalancedConsumer(object):
                                 self, old_offsets, new_offsets)
                             if reset_offsets:
                                 cns.reset_offsets(partition_offsets=[
-                                    (part, reset_offsets[part.id])
-                                    for part in itervalues(cns.partitions)
-                                    if part.id in reset_offsets])
+                                    (cns.partitions[id_], offset) for
+                                    (id_, offset) in iteritems(reset_offsets)])
                         self._consumer = cns
 
                     log.info('Rebalancing Complete.')
