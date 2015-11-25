@@ -7,6 +7,7 @@ import sys
 import time
 
 import tabulate
+from kazoo.client import KazooClient
 
 import pykafka
 from pykafka.common import OffsetType
@@ -65,7 +66,7 @@ def fetch_consumer_lag(client, topic, consumer_group):
 # Commands
 #
 
-def consume_to_file(client, args):
+def consume_topic(client, args):
     """Dump messages from a topic to a file or stdout.
 
     :param client: KafkaClient connected to the cluster.
@@ -81,6 +82,8 @@ def consume_to_file(client, args):
     # Don't auto-create topics.
     if args.topic not in client.topics:
         raise ValueError('Topic {} does not exist.'.format(args.topic))
+    zk = KazooClient(hosts=args.zookeeper)
+    zk.start()
     topic = client.topics[args.topic]
     consumer = topic.get_balanced_consumer(args.consumer_group,
                                            consumer_timeout_ms=100,
@@ -88,7 +91,8 @@ def consume_to_file(client, args):
                                            auto_offset_reset=OffsetType.LATEST,
                                            reset_offset_on_start=True,
                                            auto_commit_enable=True,
-                                           auto_commit_interval_ms=3 * 1000)
+                                           auto_commit_interval_ms=3000,
+                                           zookeeper=zk)
     num_consumed = 0
     while num_consumed < args.limit:
         msg = consumer.consume()
@@ -284,6 +288,11 @@ def _add_topic(parser):
                         help='Topic name.',
                         type=_encode_utf8)
 
+def _add_zookeeper(parser):
+    """Add zookeeper to arg parser."""
+    parser.add_argument('-z', '--zookeeper',
+                        metavar='ZOOKEEPER',
+                        help='URL of ZooKeeper to use for balanced consumer.')
 
 def _get_arg_parser():
     output = argparse.ArgumentParser(description='Tools for Kafka.')
@@ -302,11 +311,12 @@ def _get_arg_parser():
     parser = subparsers.add_parser(
         'consume_topic',
         help='Dump messages for a topic to a file or stdout.')
-    parser.set_defaults(func=consume_to_file)
+    parser.set_defaults(func=consume_topic)
     _add_topic(parser)
     _add_consumer_group(parser)
     _add_limit(parser)
     _add_outfile(parser)
+    _add_zookeeper(parser)
 
     # Desc Topic
     parser = subparsers.add_parser(
