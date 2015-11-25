@@ -42,16 +42,14 @@ def handle_partition_responses(error_handlers,
     :type partitions_by_id: dict
         {int: :class:`pykafka.simpleconsumer.OwnedPartition`}
     """
-    error_handlers = error_handlers.copy()
-    if success_handler is not None:
-        error_handlers[0] = success_handler
-
     if parts_by_error is None:
         parts_by_error = build_parts_by_error(response, partitions_by_id)
 
     for errcode, parts in iteritems(parts_by_error):
-        if errcode in error_handlers:
+        if errcode != 0:
             error_handlers[errcode](parts)
+        elif success_handler is not None:
+            success_handler(parts)
 
     return parts_by_error
 
