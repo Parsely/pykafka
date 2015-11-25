@@ -1,6 +1,31 @@
 Changelog
 =========
 
+2.1.0 (2015-11-25)
+------------------
+
+`Compare 2.1.0`_
+
+.. _Compare 2.1.0: https://github.com/Parsely/pykafka/compare/2.0.4...468d10cff6f07c4dff59535618c42f84b93d9b7d
+
+Features
+********
+
+* Addded an optional C extension making use of librdkafka for enhanced producer and
+  consumer performance
+* Added a delivery report queue to the `Producer` allowing per-message errors
+  to be handled
+* Added a callback indicating that the `BalancedConsumer` is in the process of rebalancing
+
+Bug Fixes
+*********
+
+* Fixed a longstanding issue causing certain tests to hang on Travis
+* Fixed a bug causing the default error handles in the consumer to mask unknown error
+  codes
+* Moved the `Message` class to using `__slots__` to minimize its memory footprint
+
+
 2.0.4 (2015-11-23)
 ------------------
 
