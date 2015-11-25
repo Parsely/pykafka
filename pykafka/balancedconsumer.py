@@ -528,19 +528,6 @@ class BalancedConsumer(object):
 
         This method is called whenever a zookeeper watch is triggered.
         """
-        def _get_held_offsets(partitions, cns):
-            """Return held offsets from a consumer for a set of partitions
-
-            :param partitions: The partitions for which to return currently held offsets
-            :type partitions: Iterable of :class:`pykafka.partition.Partition`
-            :param cns: The consumer from which to fetch held offsets
-            :type cns: :class:`pykafka.simpleconsumer.SimpleConsumer`
-            """
-            if cns is None:
-                return {}
-            ids = [partition.id for partition in partitions]
-            return {id_: offset for id_, offset in iteritems(cns.held_offsets) if id_ in ids}
-
         if self._consumer is not None:
             self.commit_offsets()
         # this is necessary because we can't stop() while the lock is held
@@ -584,9 +571,10 @@ class BalancedConsumer(object):
                     # Only re-create internal consumer if something changed.
                     if new_partitions != self._partitions:
                         cns = self._get_internal_consumer(list(new_partitions))
-                        old_offsets = _get_held_offsets(current_zk_parts, self._consumer)
-                        new_offsets = _get_held_offsets(new_partitions, cns)
                         if self._post_rebalance_callback is not None:
+                            old_offsets = (self._consumer.held_offsets
+                                           if self._consumer else dict())
+                            new_offsets = cns.held_offsets
                             reset_offsets = self._post_rebalance_callback(
                                 self, old_offsets, new_offsets)
                             if reset_offsets:
