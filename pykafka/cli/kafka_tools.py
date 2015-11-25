@@ -191,7 +191,7 @@ def print_topics(client, args):
     print(tabulate.tabulate(
         [(t.name,
           len(t.partitions),
-          len(t.partitions.values()[0].replicas) - 1)
+          len(list(t.partitions.values())[0].replicas) - 1)
          for t in client.topics.values()],
         headers=['Topic', 'Partitions', 'Replication'],
         numalign='center',
@@ -239,6 +239,15 @@ def reset_offsets(client, args):
     )
 
 
+def _encode_utf8(string):
+    """Converts argument to UTF-8-encoded bytes.
+
+    Used to make dict lookups work in Python 3 because topics and things are
+    bytes.
+    """
+    return string.encode('utf-8', errors='replace')
+
+
 def _add_consumer_group(parser):
     """Add consumer_group to arg parser."""
     parser.add_argument('consumer_group',
@@ -272,7 +281,8 @@ def _add_topic(parser):
     """Add topic to arg parser."""
     parser.add_argument('topic',
                         metavar='TOPIC',
-                        help='Topic name.')
+                        help='Topic name.',
+                        type=_encode_utf8)
 
 
 def _get_arg_parser():
