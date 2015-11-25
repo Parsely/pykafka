@@ -276,7 +276,7 @@ class BalancedConsumer(object):
 
     @property
     def partitions(self):
-        return self._consumer.partitions if self._consumer else None
+        return self._consumer.partitions if self._consumer else dict()
 
     @property
     def _partitions(self):
