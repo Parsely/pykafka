@@ -73,11 +73,6 @@ def consume_topic(client, args):
     :type client:  :class:`pykafka.KafkaClient`
     :param topic:  Name of the topic.
     :type topic:  :class:`str`
-    :param offset: Offset to reset to. Can be earliest, latest or a datetime.
-        Using a datetime will reset the offset to the latest message published
-        *before* the datetime.
-    :type offset: :class:`pykafka.common.OffsetType` or
-        :class:`datetime.datetime`
     """
     # Don't auto-create topics.
     if args.topic not in client.topics:
