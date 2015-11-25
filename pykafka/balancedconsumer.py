@@ -163,8 +163,8 @@ class BalancedConsumer(object):
             internal offset counter to `self._auto_offset_reset` and commit that
             offset immediately upon starting up
         :type reset_offset_on_start: bool
-        :param post_rebalance_callback: A function to be called when a rebalance has
-            completed. This function should accept three arguments: the
+        :param post_rebalance_callback: A function to be called when a rebalance is
+            in progress. This function should accept three arguments: the
             :class:`pykafka.balancedconsumer.BalancedConsumer` instance that just
             completed its rebalance, a dict of partitions that it owned before the
             rebalance, and a dict of partitions it owns after the rebalance. These dicts
@@ -172,6 +172,11 @@ class BalancedConsumer(object):
             This function can optionally return a dictionary mapping partition ids to
             offsets. If it does, the consumer will reset its offsets to the supplied
             values before continuing consumption.
+            Note that the BalancedConsumer is in a poorly defined state at
+            the time this callback runs, so that accessing its properties
+            (such as `held_offsets` or `partitions`) might yield confusing
+            results.  Instead, the callback should really rely on the
+            provided partition-id dicts, which are well-defined.
         :type post_rebalance_callback: function
         :param use_rdkafka: Use librdkafka-backed consumer if available
         :type use_rdkafka: bool
