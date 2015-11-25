@@ -121,14 +121,6 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
     def test_rebalance_callbacks(self):
         def on_rebalance(cns, old_partition_offsets, new_partition_offsets):
             self.assertTrue(len(new_partition_offsets) > 0)
-            held_ids = set([p.id for p in cns._get_held_partitions()])
-            new_ids = set(iterkeys(new_partition_offsets))
-            old_ids = set(iterkeys(old_partition_offsets))
-            revoked_ids = old_ids - new_ids
-            assigned_ids = new_ids - old_ids
-            self.assertEqual(assigned_ids & revoked_ids, set())
-            self.assertEqual(held_ids | new_ids, held_ids)
-            self.assertNotEqual(held_ids & old_ids, held_ids)
             self.assigned_called = True
             for id_ in iterkeys(new_partition_offsets):
                 new_partition_offsets[id_] = self.offset_reset
@@ -137,20 +129,22 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
         self.assigned_called = False
         self.offset_reset = 50
         try:
+            consumer_group = b'test_rebalance_callbacks'
             consumer_a = self.client.topics[self.topic_name].get_balanced_consumer(
-                b'test_consume_earliest', zookeeper_connect=self.kafka.zookeeper,
+                consumer_group,
+                zookeeper_connect=self.kafka.zookeeper,
                 auto_offset_reset=OffsetType.EARLIEST,
                 post_rebalance_callback=on_rebalance,
                 use_rdkafka=self.USE_RDKAFKA)
             consumer_b = self.client.topics[self.topic_name].get_balanced_consumer(
-                b'test_consume_earliest', zookeeper_connect=self.kafka.zookeeper,
+                consumer_group,
+                zookeeper_connect=self.kafka.zookeeper,
                 auto_offset_reset=OffsetType.EARLIEST,
                 use_rdkafka=self.USE_RDKAFKA)
-            time.sleep(3)
-            with consumer_a._rebalancing_lock:
-                self.assertTrue(self.assigned_called)
-                for _, offset in iteritems(consumer_a.held_offsets):
-                    self.assertEqual(offset, self.offset_reset)
+            self.wait_for_rebalancing(consumer_a, consumer_b)
+            self.assertTrue(self.assigned_called)
+            for _, offset in iteritems(consumer_a.held_offsets):
+                self.assertEqual(offset, self.offset_reset)
         finally:
             try:
                 consumer_a.stop()
@@ -328,6 +322,8 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
                 break
             else:
                 time.sleep(.2)
+            # check for failed consumers (there'd be no point waiting anymore)
+            [cons._raise_worker_exceptions() for cons in balanced_consumers]
         else:
             raise AssertionError("Rebalancing failed")
 
