@@ -1,13 +1,17 @@
 from __future__ import print_function
+
 import argparse
 import calendar
 import datetime as dt
+import sys
 import time
 
 import tabulate
 
 import pykafka
+from pykafka.common import OffsetType
 from pykafka.protocol import PartitionOffsetCommitRequest
+from pykafka.utils.compat import PY3
 
 #
 # Helper Functions
@@ -60,6 +64,42 @@ def fetch_consumer_lag(client, topic, consumer_group):
 #
 # Commands
 #
+
+def consume_to_file(client, args):
+    """Dump messages from a topic to a file or stdout.
+
+    :param client: KafkaClient connected to the cluster.
+    :type client:  :class:`pykafka.KafkaClient`
+    :param topic:  Name of the topic.
+    :type topic:  :class:`str`
+    :param offset: Offset to reset to. Can be earliest, latest or a datetime.
+        Using a datetime will reset the offset to the latest message published
+        *before* the datetime.
+    :type offset: :class:`pykafka.common.OffsetType` or
+        :class:`datetime.datetime`
+    """
+    # Don't auto-create topics.
+    if args.topic not in client.topics:
+        raise ValueError('Topic {} does not exist.'.format(args.topic))
+    topic = client.topics[args.topic]
+    consumer = topic.get_balanced_consumer(args.consumer_group,
+                                           consumer_timeout_ms=100,
+                                           rebalance_max_retries=30,
+                                           auto_offset_reset=OffsetType.LATEST,
+                                           reset_offset_on_start=True,
+                                           auto_commit_enable=True,
+                                           auto_commit_interval_ms=3 * 1000)
+    num_consumed = 0
+    while num_consumed < args.limit:
+        msg = consumer.consume()
+        if not msg or not msg.value:
+            continue
+        # Coming from Kafka, this is utf-8.
+        msg = msg.value.decode('utf-8', errors='replace') + u'\n'
+        args.outfile.write(msg if PY3 else msg.encode('utf-8'))
+        num_consumed += 1
+    args.outfile.close()
+
 
 def desc_topic(client, args):
     """Print detailed information about a topic.
@@ -206,6 +246,13 @@ def _add_consumer_group(parser):
                         help='Consumer group name.')
 
 
+def _add_limit(parser):
+    """Add limit option to arg parser."""
+    parser.add_argument('-l', '--limit',
+                        help='Number of messages to consume '
+                             '(default: %(default)s)',
+                        type=int, default=10)
+
 def _add_offset(parser):
     """Add offset to arg parser."""
     parser.add_argument('offset',
@@ -213,6 +260,12 @@ def _add_offset(parser):
                         type=str,
                         help='Offset to fetch. Can be EARLIEST, LATEST, or a '
                              'datetime in the format YYYY-MM-DDTHH:MM:SS.')
+
+def _add_outfile(parser):
+    """ Add outfile option to arg parser."""
+    parser.add_argument('-o', '--outfile',
+                        help='output file (defaults to stdout)',
+                        type=argparse.FileType('w'), default=sys.stdout)
 
 
 def _add_topic(parser):
@@ -234,6 +287,16 @@ def _get_arg_parser():
                              '[default: localhost:9092]')
 
     subparsers = output.add_subparsers(help='Commands', dest='command')
+
+    # Consume to File
+    parser = subparsers.add_parser(
+        'consume_topic',
+        help='Dump messages for a topic to a file or stdout.')
+    parser.set_defaults(func=consume_to_file)
+    _add_topic(parser)
+    _add_consumer_group(parser)
+    _add_limit(parser)
+    _add_outfile(parser)
 
     # Desc Topic
     parser = subparsers.add_parser(
@@ -284,8 +347,11 @@ def _get_arg_parser():
 def main():
     parser = _get_arg_parser()
     args = parser.parse_args()
-    client = pykafka.KafkaClient(hosts=args.host)
-    args.func(client, args)
+    if args.command:
+        client = pykafka.KafkaClient(hosts=args.host)
+        args.func(client, args)
+    else:
+        parser.print_help()
 
 
 if __name__ == '__main__':
