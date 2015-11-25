@@ -7,7 +7,6 @@ import sys
 import time
 
 import tabulate
-from kazoo.client import KazooClient
 
 import pykafka
 from pykafka.common import OffsetType
@@ -77,17 +76,13 @@ def consume_topic(client, args):
     # Don't auto-create topics.
     if args.topic not in client.topics:
         raise ValueError('Topic {} does not exist.'.format(args.topic))
-    zk = KazooClient(hosts=args.zookeeper)
-    zk.start()
     topic = client.topics[args.topic]
-    consumer = topic.get_balanced_consumer(args.consumer_group,
-                                           consumer_timeout_ms=100,
-                                           rebalance_max_retries=30,
-                                           auto_offset_reset=OffsetType.LATEST,
-                                           reset_offset_on_start=True,
-                                           auto_commit_enable=True,
-                                           auto_commit_interval_ms=3000,
-                                           zookeeper=zk)
+    consumer = topic.get_simple_consumer(args.consumer_group,
+                                         consumer_timeout_ms=100,
+                                         auto_offset_reset=OffsetType.LATEST,
+                                         reset_offset_on_start=True,
+                                         auto_commit_enable=True,
+                                         auto_commit_interval_ms=3000)
     num_consumed = 0
     while num_consumed < args.limit:
         msg = consumer.consume()
@@ -251,7 +246,8 @@ def _add_consumer_group(parser):
     """Add consumer_group to arg parser."""
     parser.add_argument('consumer_group',
                         metavar='CONSUMER_GROUP',
-                        help='Consumer group name.')
+                        help='Consumer group name.',
+                        type=_encode_utf8)
 
 
 def _add_limit(parser):
@@ -283,11 +279,6 @@ def _add_topic(parser):
                         help='Topic name.',
                         type=_encode_utf8)
 
-def _add_zookeeper(parser):
-    """Add zookeeper to arg parser."""
-    parser.add_argument('-z', '--zookeeper',
-                        metavar='ZOOKEEPER',
-                        help='URL of ZooKeeper to use for balanced consumer.')
 
 def _get_arg_parser():
     output = argparse.ArgumentParser(description='Tools for Kafka.')
@@ -311,7 +302,6 @@ def _get_arg_parser():
     _add_consumer_group(parser)
     _add_limit(parser)
     _add_outfile(parser)
-    _add_zookeeper(parser)
 
     # Desc Topic
     parser = subparsers.add_parser(
