@@ -415,7 +415,7 @@ class SimpleConsumer(object):
 
             try:
                 response = self._offset_manager.commit_consumer_group_offsets(
-                    self._consumer_group, 1, b'pykafka', reqs)
+                    self._consumer_group, -1, b'pykafka', reqs)
             except (SocketDisconnectedError, IOError):
                 log.error("Error committing offsets for topic %s "
                           "(SocketDisconnectedError)",
