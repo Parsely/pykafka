@@ -103,7 +103,8 @@ class KafkaConnection(object):
     def flush(self):
         """Delete all topics."""
         for topic in self.list_topics():
-            self.delete_topic(topic)
+            if not topic.startswith(b'__'):  # leave internal topics alone
+                self.delete_topic(topic)
 
     def list_topics(self):
         """Use kafka-topics.sh to get topic information."""
