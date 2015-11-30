@@ -9,13 +9,21 @@ addons:
 matrix:
   include:
     - python: 2.7
-      env: TOXENV=py27 BROKERS=localhost:9092,localhost:9093,localhost:9094 ZOOKEEPER=localhost:2181 KAFKA_BIN=/home/travis/kafka-bin
+      env: TOXENV=py27 BROKERS=localhost:9092,localhost:9093,localhost:9094 ZOOKEEPER=localhost:2181 KAFKA_BIN=/home/travis/kafka-bin KAFKA_VERSION=0.8.2.1
     - python: 3.4
-      env: TOXENV=py34 BROKERS=localhost:9092,localhost:9093,localhost:9094 ZOOKEEPER=localhost:2181 KAFKA_BIN=/home/travis/kafka-bin
+      env: TOXENV=py34 BROKERS=localhost:9092,localhost:9093,localhost:9094 ZOOKEEPER=localhost:2181 KAFKA_BIN=/home/travis/kafka-bin KAFKA_VERSION=0.8.2.1
     - python: 3.5
-      env: TOXENV=py35 BROKERS=localhost:9092,localhost:9093,localhost:9094 ZOOKEEPER=localhost:2181 KAFKA_BIN=/home/travis/kafka-bin
+      env: TOXENV=py35 BROKERS=localhost:9092,localhost:9093,localhost:9094 ZOOKEEPER=localhost:2181 KAFKA_BIN=/home/travis/kafka-bin KAFKA_VERSION=0.8.2.1
     - python: pypy
-      env: TOXENV=pypy BROKERS=localhost:9092,localhost:9093,localhost:9094 ZOOKEEPER=localhost:2181 KAFKA_BIN=/home/travis/kafka-bin
+      env: TOXENV=pypy BROKERS=localhost:9092,localhost:9093,localhost:9094 ZOOKEEPER=localhost:2181 KAFKA_BIN=/home/travis/kafka-bin KAFKA_VERSION=0.8.2.1
+    - python: 2.7
+      env: TOXENV=py27 BROKERS=localhost:9092,localhost:9093,localhost:9094 ZOOKEEPER=localhost:2181 KAFKA_BIN=/home/travis/kafka-bin KAFKA_VERSION=0.9.0.0
+    - python: 3.4
+      env: TOXENV=py34 BROKERS=localhost:9092,localhost:9093,localhost:9094 ZOOKEEPER=localhost:2181 KAFKA_BIN=/home/travis/kafka-bin KAFKA_VERSION=0.9.0.0
+    - python: 3.5
+      env: TOXENV=py35 BROKERS=localhost:9092,localhost:9093,localhost:9094 ZOOKEEPER=localhost:2181 KAFKA_BIN=/home/travis/kafka-bin KAFKA_VERSION=0.9.0.0
+    - python: pypy
+      env: TOXENV=pypy BROKERS=localhost:9092,localhost:9093,localhost:9094 ZOOKEEPER=localhost:2181 KAFKA_BIN=/home/travis/kafka-bin KAFKA_VERSION=0.9.0.0
 
 notifications:
   email:
@@ -34,7 +42,7 @@ before_script:
     - export LIBRARY_PATH=$HOME/lib:$LIBRARY_PATH
     - export LD_LIBRARY_PATH=$HOME/lib:$LD_LIBRARY_PATH
     - export CFLAGS="-coverage"
-    - "python -m pykafka.test.kafka_instance 3 --download-dir /home/travis/kafka-bin &"
+    - "python -m pykafka.test.kafka_instance 3 --kafka-version $KAFKA_VERSION --download-dir /home/travis/kafka-bin &"
     - "sleep 10"
 
 script:
