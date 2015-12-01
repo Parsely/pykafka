@@ -37,7 +37,6 @@ class KafkaClient(object):
                  hosts='127.0.0.1:9092',
                  socket_timeout_ms=30 * 1000,
                  offsets_channel_socket_timeout_ms=10 * 1000,
-                 ignore_rdkafka=False,
                  use_greenlets=False,
                  exclude_internal_topics=True,
                  source_address=''):
@@ -56,8 +55,6 @@ class KafkaClient(object):
             milliseconds) when reading responses for offset commit and
             offset fetch requests.
         :type offsets_channel_socket_timeout_ms: int
-        :param ignore_rdkafka: Don't use rdkafka, even if installed.
-        :type ignore_rdkafka: bool
         :param use_greenlets: Whether to perform parallel operations on greenlets
             instead of OS threads
         :type use_greenlets: bool
@@ -72,7 +69,6 @@ class KafkaClient(object):
         self._socket_timeout_ms = socket_timeout_ms
         self._offsets_channel_socket_timeout_ms = offsets_channel_socket_timeout_ms
         self._handler = GEventHandler() if use_greenlets else ThreadingHandler()
-        self._use_rdkafka = rd_kafka and not ignore_rdkafka
         self.cluster = Cluster(
             self._seed_hosts,
             self._handler,
