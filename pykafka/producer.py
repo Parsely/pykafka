@@ -38,7 +38,7 @@ from .exceptions import (
 )
 from .partitioners import random_partitioner
 from .protocol import Message, ProduceRequest
-from .utils.compat import iteritems, range, itervalues, Queue
+from .utils.compat import iteritems, range, itervalues
 
 log = logging.getLogger(__name__)
 
@@ -143,7 +143,7 @@ class Producer(object):
         self._worker_exception = None
         self._worker_trace_logged = False
         self._owned_brokers = None
-        self._delivery_reports = (_DeliveryReportQueue()
+        self._delivery_reports = (_DeliveryReportQueue(self._cluster.handler)
                                   if delivery_reports or self._synchronous
                                   else _DeliveryReportNone())
         self._running = False
@@ -523,8 +523,8 @@ class OwnedBroker(object):
 
 class _DeliveryReportQueue(threading.local):
     """Helper that instantiates a new report queue on every calling thread"""
-    def __init__(self):
-        self.queue = Queue()
+    def __init__(self, handler):
+        self.queue = handler.Queue()
 
     @staticmethod
     def put(msg, exc=None):
