@@ -100,6 +100,7 @@ class TestBalancedConsumer(unittest2.TestCase):
 class BalancedConsumerIntegrationTests(unittest2.TestCase):
     maxDiff = None
     USE_RDKAFKA = False
+    USE_GEVENT = False
 
     @classmethod
     def setUpClass(cls):
@@ -107,7 +108,7 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
         cls.topic_name = b'test-data'
         cls.n_partitions = 3
         cls.kafka.create_topic(cls.topic_name, cls.n_partitions, 2)
-        cls.client = KafkaClient(cls.kafka.brokers)
+        cls.client = KafkaClient(cls.kafka.brokers, use_greenlets=cls.USE_GEVENT)
         cls.prod = cls.client.topics[cls.topic_name].get_producer(
             min_queued_messages=1
         )
@@ -321,11 +322,15 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
                     and sum(n_parts) == self.n_partitions):
                 break
             else:
-                time.sleep(.2)
+                balanced_consumers[0]._cluster.handler.sleep(.2)
             # check for failed consumers (there'd be no point waiting anymore)
             [cons._raise_worker_exceptions() for cons in balanced_consumers]
         else:
             raise AssertionError("Rebalancing failed")
+
+
+class BalancedConsumerGEventIntegrationTests(BalancedConsumerIntegrationTests):
+    USE_GEVENT = True
 
 
 if __name__ == "__main__":

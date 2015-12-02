@@ -28,12 +28,14 @@ from uuid import uuid4
 import weakref
 
 from kazoo.client import KazooClient
+from kazoo.handlers.gevent import SequentialGeventHandler
 from kazoo.exceptions import NoNodeException, NodeExistsError
 from kazoo.recipe.watchers import ChildrenWatch
 
 from .common import OffsetType
 from .exceptions import (KafkaException, PartitionOwnedError,
                          ConsumerStoppedException, NoPartitionsForConsumerException)
+import handlers
 from .simpleconsumer import SimpleConsumer
 from .utils.compat import range, get_bytes, itervalues, iteritems
 try:
@@ -343,7 +345,10 @@ class BalancedConsumer(object):
         :param timeout: Connection timeout (in milliseconds)
         :type timeout: int
         """
-        self._zookeeper = KazooClient(zookeeper_connect, timeout=timeout / 1000)
+        kazoo_kwargs = {'timeout': timeout / 1000}
+        if isinstance(self._cluster.handler, handlers.GEventHandler):
+            kazoo_kwargs['handler'] = SequentialGeventHandler()
+        self._zookeeper = KazooClient(zookeeper_connect, **kazoo_kwargs)
         self._zookeeper.start()
 
     def _setup_internal_consumer(self, partitions=None, start=True):
