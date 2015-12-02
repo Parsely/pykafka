@@ -13,6 +13,7 @@ from pykafka.utils.compat import range, iteritems
 class TestSimpleConsumer(unittest2.TestCase):
     maxDiff = None
     USE_RDKAFKA = False
+    USE_GEVENT = False
 
     @classmethod
     def setUpClass(cls):
@@ -191,6 +192,10 @@ class TestSimpleConsumer(unittest2.TestCase):
                               in iteritems(consumer.topic.latest_available_offsets())}
             current_offsets = {p_id: res.offset for p_id, res in consumer.fetch_offsets()}
             self.assertEqual(current_offsets, latest_offsets)
+
+
+class TestGEventSimpleConsumer(TestSimpleConsumer):
+    USE_GEVENT = True
 
 
 class TestOwnedPartition(unittest2.TestCase):

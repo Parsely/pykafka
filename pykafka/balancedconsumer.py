@@ -35,7 +35,7 @@ from kazoo.recipe.watchers import ChildrenWatch
 from .common import OffsetType
 from .exceptions import (KafkaException, PartitionOwnedError,
                          ConsumerStoppedException, NoPartitionsForConsumerException)
-import handlers
+from .handlers import GEventHandler
 from .simpleconsumer import SimpleConsumer
 from .utils.compat import range, get_bytes, itervalues, iteritems
 try:
@@ -346,7 +346,7 @@ class BalancedConsumer(object):
         :type timeout: int
         """
         kazoo_kwargs = {'timeout': timeout / 1000}
-        if isinstance(self._cluster.handler, handlers.GEventHandler):
+        if isinstance(self._cluster.handler, GEventHandler):
             kazoo_kwargs['handler'] = SequentialGeventHandler()
         self._zookeeper = KazooClient(zookeeper_connect, **kazoo_kwargs)
         self._zookeeper.start()
