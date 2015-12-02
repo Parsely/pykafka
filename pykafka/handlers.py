@@ -24,11 +24,12 @@ import gevent
 import gevent.event
 import gevent.lock
 import gevent.queue
+import gevent.coros
 import logging
 import threading
 import time
 
-from .utils.compat import Queue, Empty
+from .utils.compat import Queue, Empty, Semaphore
 
 log = logging.getLogger(__name__)
 
@@ -82,6 +83,7 @@ class ThreadingHandler(Handler):
     Lock = threading.Lock
     # turn off RLock's super annoying default logging
     RLock = functools.partial(threading.RLock, verbose=False)
+    Semaphore = Semaphore
 
     def sleep(self, seconds=0):
         time.sleep(seconds)
@@ -99,6 +101,7 @@ class GEventHandler(Handler):
     Event = gevent.event.Event
     Lock = gevent.lock.RLock  # fixme
     RLock = gevent.lock.RLock
+    Semaphore = gevent.coros.Semaphore
 
     def sleep(self, seconds=0):
         gevent.sleep(seconds)

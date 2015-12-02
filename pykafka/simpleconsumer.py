@@ -28,7 +28,7 @@ from collections import defaultdict
 import weakref
 
 from .common import OffsetType
-from .utils.compat import (Semaphore, Queue, Empty, iteritems, itervalues,
+from .utils.compat import (Queue, Empty, iteritems, itervalues,
                            range, iterkeys)
 from .exceptions import (OffsetOutOfRangeError, UnknownTopicOrPartition,
                          OffsetMetadataTooLarge, OffsetsLoadInProgress,
@@ -152,7 +152,7 @@ class SimpleConsumer(object):
 
         # incremented for any message arrival from any partition
         # the initial value is 0 (no messages waiting)
-        self._messages_arrived = Semaphore(value=0)
+        self._messages_arrived = self._cluster.handler.Semaphore(value=0)
 
         self._auto_commit_enable = auto_commit_enable
         self._auto_commit_interval_ms = auto_commit_interval_ms
