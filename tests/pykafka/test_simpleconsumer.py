@@ -48,10 +48,19 @@ class TestSimpleConsumer(unittest2.TestCase):
             consumer.stop()
 
     def test_consume(self):
-        with self._get_simple_consumer() as consumer:
-            messages = [consumer.consume() for _ in range(self.total_msgs)]
-            self.assertEquals(len(messages), self.total_msgs)
-            self.assertTrue(None not in messages)
+        """Test consuming all messages in topic"""
+        # This uses a fairly long timeout to allow the test to pass on an
+        # oversubscribed test cluster
+        with self._get_simple_consumer(consumer_timeout_ms=30000) as consumer:
+            count = 0
+            for msg in consumer:
+                self.assertIsNotNone(msg.value)
+                count += 1
+                if count == self.total_msgs:
+                    # We don't want to wait for StopIteration, given the long
+                    # timeout set above
+                    break
+            self.assertEquals(count, self.total_msgs)
 
     @staticmethod
     def _convert_offsets(offset_responses):
