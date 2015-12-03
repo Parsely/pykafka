@@ -182,6 +182,8 @@ class BalancedConsumer(object):
         :type use_rdkafka: bool
         """
         self._cluster = cluster
+        if not isinstance(consumer_group, bytes):
+            raise TypeError("consumer_group must be a bytes object")
         self._consumer_group = consumer_group
         self._topic = topic
 
