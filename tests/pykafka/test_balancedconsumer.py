@@ -1,9 +1,11 @@
+import gevent
 import math
 import mock
 import time
 import unittest2
 
 from kazoo.client import KazooClient
+from kazoo.handlers.gevent import SequentialGeventHandler
 
 from pykafka import KafkaClient
 from pykafka.balancedconsumer import BalancedConsumer, OffsetType
@@ -118,6 +120,11 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
     @classmethod
     def tearDownClass(cls):
         stop_cluster(cls.kafka)
+
+    def get_zk(self):
+        if not self.USE_GEVENT:
+            return KazooClient(self.kafka.zookeeper)
+        return KazooClient(self.kafka.zookeeper, handler=SequentialGeventHandler())
 
     def test_rebalance_callbacks(self):
         def on_rebalance(cns, old_partition_offsets, new_partition_offsets):
@@ -272,7 +279,7 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
 
         See also github issue #204.
         """
-        zk = KazooClient(self.kafka.zookeeper)
+        zk = self.get_zk()
         zk.start()
         try:
             topic = self.client.topics[self.topic_name]
