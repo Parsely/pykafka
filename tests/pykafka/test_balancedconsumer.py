@@ -1,4 +1,3 @@
-import gevent
 import math
 import mock
 import time
@@ -289,7 +288,8 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
                                                    zookeeper=zk,
                                                    use_rdkafka=self.USE_RDKAFKA)
             self.assertTrue(consumer._check_held_partitions())
-            zk.stop()  # expires session, dropping all our nodes
+            with consumer._rebalancing_lock:
+                zk.stop()  # expires session, dropping all our nodes
 
             # Start a second consumer on a different zk connection
             other_consumer = topic.get_balanced_consumer(
