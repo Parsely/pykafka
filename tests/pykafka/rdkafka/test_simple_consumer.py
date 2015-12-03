@@ -1,10 +1,8 @@
-from contextlib import contextmanager
 import platform
 
 import pytest
 
 from tests.pykafka import test_simpleconsumer, test_balancedconsumer
-from pykafka.rdkafka import RdKafkaSimpleConsumer
 from pykafka.utils.compat import range
 
 
@@ -61,6 +59,13 @@ class TestRdKafkaSimpleConsumer(test_simpleconsumer.TestSimpleConsumer):
                 del latest_offs[msg.partition_id]
 
 
+@pytest.mark.skipif(platform.python_implementation() == "PyPy",
+                    reason="Unresolved crashes which I cannot reproduce "
+                           "locally (TODO: track this down).")
+class TestRdKafkaGEventSimpleConsumer(TestRdKafkaSimpleConsumer):
+    USE_GEVENT = True
+
+
 def _latest_partition_offsets_by_reading(consumer, n_reads):
     """Obtain message offsets from consumer, return grouped by partition"""
     latest_offs = {}
@@ -75,3 +80,9 @@ def _latest_partition_offsets_by_reading(consumer, n_reads):
 class RdkBalancedConsumerIntegrationTests(
         test_balancedconsumer.BalancedConsumerIntegrationTests):
     USE_RDKAFKA = True
+
+
+@pytest.mark.skipif(platform.python_implementation() == "PyPy",
+                    reason="Unresolved crashes")
+class RdkGEventBalancedConsumerIntegrationTests(RdkBalancedConsumerIntegrationTests):
+    USE_GEVENT = True
