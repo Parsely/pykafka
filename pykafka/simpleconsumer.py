@@ -133,7 +133,7 @@ class SimpleConsumer(object):
         :type reset_offset_on_start: bool
         """
         self._cluster = cluster
-        if not isinstance(consumer_group, bytes):
+        if not (isinstance(consumer_group, bytes) or consumer_group is None):
             raise TypeError("consumer_group must be a bytes object")
         self._consumer_group = consumer_group
         self._topic = topic
