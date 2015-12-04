@@ -13,7 +13,7 @@ from pykafka.utils.compat import range, iterkeys, iteritems
 
 
 def buildMockConsumer(num_partitions=10, num_participants=1, timeout=2000):
-    consumer_group = 'testgroup'
+    consumer_group = b'testgroup'
     topic = mock.Mock()
     topic.name = 'testtopic'
     topic.partitions = {}
