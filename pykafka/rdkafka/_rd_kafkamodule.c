@@ -965,7 +965,7 @@ Consumer_consume(RdkHandle *self, PyObject *args)
 #else
         const char *format = "{s:s#,s:s#,s:l,s:L}";
 #endif
-        PyObject *kwargs = Py_BuildValue(
+        kwargs = Py_BuildValue(
             format,
             "value", rkmessage->payload, rkmessage->len,
             "partition_key", rkmessage->key, rkmessage->key_len,
