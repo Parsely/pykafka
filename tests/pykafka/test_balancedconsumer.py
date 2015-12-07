@@ -271,6 +271,7 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
 
         See also github issue #204.
         """
+        check_partitions = lambda c: c._get_held_partitions() == c._partitions
         zk = KazooClient(self.kafka.zookeeper)
         zk.start()
         try:
@@ -280,7 +281,7 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
             consumer = topic.get_balanced_consumer(consumer_group,
                                                    zookeeper=zk,
                                                    use_rdkafka=self.USE_RDKAFKA)
-            self.assertTrue(consumer._check_held_partitions())
+            self.assertTrue(check_partitions(consumer))
             zk.stop()  # expires session, dropping all our nodes
 
             # Start a second consumer on a different zk connection
@@ -294,12 +295,12 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
             # consumer:
             with consumer._rebalancing_lock:
                 zk.start()
-                self.assertFalse(consumer._check_held_partitions())
+                self.assertFalse(check_partitions(consumer))
 
             # Finally, confirm that _rebalance() resolves the discrepancy:
             self.wait_for_rebalancing(consumer, other_consumer)
-            self.assertTrue(consumer._check_held_partitions())
-            self.assertTrue(other_consumer._check_held_partitions())
+            self.assertTrue(check_partitions(consumer))
+            self.assertTrue(check_partitions(other_consumer))
         finally:
             try:
                 consumer.stop()

@@ -255,27 +255,6 @@ class BalancedConsumer(object):
                           "".join(traceback.format_tb(tb)))
             raise ex
 
-    def _setup_checker_worker(self):
-        """Start the zookeeper partition checker thread"""
-        self = weakref.proxy(self)
-
-        def checker():
-            while True:
-                try:
-                    if not self._running:
-                        break
-                    time.sleep(120)
-                    if not self._check_held_partitions():
-                        self._rebalance()
-                except Exception as e:
-                    if not isinstance(e, ReferenceError):
-                        # surface all exceptions to the main thread
-                        self._worker_exception = sys.exc_info()
-                    break
-            log.debug("Checker thread exiting")
-        log.debug("Starting checker thread")
-        return self._cluster.handler.spawn(checker)
-
     @property
     def partitions(self):
         return self._consumer.partitions if self._consumer else dict()
@@ -304,7 +283,6 @@ class BalancedConsumer(object):
             self._running = True
             self._set_watches()
             self._rebalance()
-            self._setup_checker_worker()
         except Exception:
             log.error("Stopping consumer in response to error")
             self.stop()
@@ -644,21 +622,6 @@ class BalancedConsumer(object):
             except NoNodeException:
                 pass  # disappeared between ``get_children`` and ``get``
         return set(self._topic.partitions[_id] for _id in zk_partition_ids)
-
-    def _check_held_partitions(self):
-        """Double-check held partitions against zookeeper
-
-        True if the partitions held by this consumer are the ones that
-        zookeeper thinks it's holding, else False.
-        """
-        log.info("Checking held partitions against ZooKeeper")
-        zk_partitions = self._get_held_partitions()
-        if zk_partitions != self._partitions:
-            log.warning("Internal partition registry doesn't match ZooKeeper!")
-            log.debug("Internal partition ids: %s\nZooKeeper partition ids: %s",
-                      self._partitions, zk_partitions)
-            return False
-        return True
 
     @_catch_thread_exception
     def _brokers_changed(self, brokers):
