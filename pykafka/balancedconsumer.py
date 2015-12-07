@@ -623,21 +623,6 @@ class BalancedConsumer(object):
                 pass  # disappeared between ``get_children`` and ``get``
         return set(self._topic.partitions[_id] for _id in zk_partition_ids)
 
-    def _check_held_partitions(self):
-        """Double-check held partitions against zookeeper
-
-        True if the partitions held by this consumer are the ones that
-        zookeeper thinks it's holding, else False.
-        """
-        log.info("Checking held partitions against ZooKeeper")
-        zk_partitions = self._get_held_partitions()
-        if zk_partitions != self._partitions:
-            log.warning("Internal partition registry doesn't match ZooKeeper!")
-            log.debug("Internal partition ids: %s\nZooKeeper partition ids: %s",
-                      self._partitions, zk_partitions)
-            return False
-        return True
-
     @_catch_thread_exception
     def _brokers_changed(self, brokers):
         if not self._running:
