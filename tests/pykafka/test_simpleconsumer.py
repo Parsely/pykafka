@@ -26,10 +26,13 @@ class TestSimpleConsumer(unittest2.TestCase):
         # sending more than one batch:
         batch = 300
         cls.total_msgs = 3 * batch
+        cls.client = KafkaClient(cls.kafka.brokers)
+        cls.prod = cls.client.topics[cls.topic_name].get_producer(
+            min_queued_messages=1
+        )
         for _ in range(3):
-            cls.kafka.produce_messages(
-                cls.topic_name,
-                ('msg {i}'.format(i=i) for i in range(batch)))
+            for i in range(batch):
+                cls.prod.produce('msg {i}'.format(i=i).encode())
 
         cls.client = KafkaClient(cls.kafka.brokers)
 
