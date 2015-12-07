@@ -255,27 +255,6 @@ class BalancedConsumer(object):
                           "".join(traceback.format_tb(tb)))
             raise ex
 
-    def _setup_checker_worker(self):
-        """Start the zookeeper partition checker thread"""
-        self = weakref.proxy(self)
-
-        def checker():
-            while True:
-                try:
-                    if not self._running:
-                        break
-                    time.sleep(120)
-                    if not self._check_held_partitions():
-                        self._rebalance()
-                except Exception as e:
-                    if not isinstance(e, ReferenceError):
-                        # surface all exceptions to the main thread
-                        self._worker_exception = sys.exc_info()
-                    break
-            log.debug("Checker thread exiting")
-        log.debug("Starting checker thread")
-        return self._cluster.handler.spawn(checker)
-
     @property
     def partitions(self):
         return self._consumer.partitions if self._consumer else dict()
@@ -304,7 +283,6 @@ class BalancedConsumer(object):
             self._running = True
             self._set_watches()
             self._rebalance()
-            self._setup_checker_worker()
         except Exception:
             log.error("Stopping consumer in response to error")
             self.stop()
