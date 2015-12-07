@@ -20,19 +20,13 @@ class TestSimpleConsumer(unittest2.TestCase):
         cls.topic_name = uuid4().hex.encode()
         cls.kafka.create_topic(cls.topic_name, 3, 2)
 
-        # It turns out that the underlying producer used by KafkaInstance will
-        # write all messages in a batch to a single partition, though not the
-        # same partition every time.  We try to attain some spread here by
-        # sending more than one batch:
-        batch = 300
-        cls.total_msgs = 3 * batch
+        cls.total_msgs = 1000
         cls.client = KafkaClient(cls.kafka.brokers)
         cls.prod = cls.client.topics[cls.topic_name].get_producer(
             min_queued_messages=1
         )
-        for _ in range(3):
-            for i in range(batch):
-                cls.prod.produce('msg {i}'.format(i=i).encode())
+        for i in range(cls.total_msgs):
+            cls.prod.produce('msg {i}'.format(i=i).encode())
 
         cls.client = KafkaClient(cls.kafka.brokers)
 
