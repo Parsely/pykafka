@@ -2,6 +2,7 @@ import math
 import mock
 import time
 import unittest2
+from uuid import uuid4
 
 from kazoo.client import KazooClient
 
@@ -104,7 +105,7 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.kafka = get_cluster()
-        cls.topic_name = b'test-data'
+        cls.topic_name = uuid4().hex.encode()
         cls.n_partitions = 3
         cls.kafka.create_topic(cls.topic_name, cls.n_partitions, 2)
         cls.client = KafkaClient(cls.kafka.brokers)

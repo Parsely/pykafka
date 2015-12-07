@@ -103,7 +103,8 @@ class KafkaConnection(object):
     def flush(self):
         """Delete all topics."""
         for topic in self.list_topics():
-            self.delete_topic(topic)
+            if not topic.startswith(b'__'):  # leave internal topics alone
+                self.delete_topic(topic)
 
     def list_topics(self):
         """Use kafka-topics.sh to get topic information."""
@@ -347,6 +348,8 @@ if __name__ == '__main__':
                         help='Download destination for Kafka')
     parser.add_argument('--kafka-version', type=str, default='0.8.2.1',
                         help='Kafka version to download')
+    parser.add_argument('--scala-version', type=str, default='2.10',
+                        help='Scala version for kafka build')
     args = parser.parse_args()
 
     _exiting = False
@@ -358,6 +361,7 @@ if __name__ == '__main__':
 
     cluster = KafkaInstance(num_instances=args.num_brokers,
                             kafka_version=args.kafka_version,
+                            scala_version=args.scala_version,
                             bin_dir=args.download_dir)
     print('Cluster started.')
     print('Brokers: {brokers}'.format(brokers=cluster.brokers))
