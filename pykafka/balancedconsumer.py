@@ -715,4 +715,6 @@ class BalancedConsumer(object):
         Uses the offset commit/fetch API
         """
         self._raise_worker_exceptions()
+        if not self._consumer:
+            raise KafkaException("Cannot commit offsets - consumer not started")
         return self._consumer.commit_offsets()
