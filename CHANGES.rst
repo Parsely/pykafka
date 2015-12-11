@@ -1,6 +1,34 @@
 Changelog
 =========
 
+2.1.1 (2015-12-11)
+------------------
+
+`Compare 2.1.1`_
+
+.. _Compare 2.1.1: https://github.com/Parsely/pykafka/compare/2.1.0...e5c320d60246f98afda458b7c7c43dc2c428de46
+
+Features
+********
+
+* Improved unicode-related error reporting in several components
+* Removed the ZooKeeper checker thread from the `BalancedConsumer`
+* Added a test consumer CLI to `kafka_tools`
+
+
+Bug Fixes
+*********
+
+* Fixed a memory leak in the rdkafka-based consumer
+* Fixed offset committing to work against Kafka 0.9
+* Improved the reliability of the Kafka test harness
+
+Miscellaneous
+*************
+
+* Simplified the Travis test matrix to handle testing against multiple Kafka versions
+
+
 2.1.0 (2015-11-25)
 ------------------
 
