@@ -50,6 +50,9 @@ class TopicDict(dict):
         return [self[key] for key in self]
 
     def __getitem__(self, key):
+        if not isinstance(key, bytes):
+            raise TypeError("TopicDict.__getitem__ accepts a bytes object, but it "
+                            "got '%s'", type(key))
         if self._should_exclude_topic(key):
             raise KeyError("You have configured KafkaClient/Cluster to hide "
                            "double-underscored, internal topics")
