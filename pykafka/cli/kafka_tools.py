@@ -77,7 +77,7 @@ def consume_topic(client, args):
     if args.topic not in client.topics:
         raise ValueError('Topic {} does not exist.'.format(args.topic))
     topic = client.topics[args.topic]
-    consumer = topic.get_simple_consumer(args.consumer_group,
+    consumer = topic.get_simple_consumer("pykafka_cli",
                                          consumer_timeout_ms=100,
                                          auto_offset_reset=OffsetType.LATEST,
                                          reset_offset_on_start=True,
@@ -299,7 +299,6 @@ def _get_arg_parser():
         help='Dump messages for a topic to a file or stdout.')
     parser.set_defaults(func=consume_topic)
     _add_topic(parser)
-    _add_consumer_group(parser)
     _add_limit(parser)
     _add_outfile(parser)
 
