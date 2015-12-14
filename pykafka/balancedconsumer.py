@@ -32,8 +32,7 @@ from kazoo.exceptions import NoNodeException, NodeExistsError
 from kazoo.recipe.watchers import ChildrenWatch
 
 from .common import OffsetType
-from .exceptions import (KafkaException, PartitionOwnedError,
-                         ConsumerStoppedException, NoPartitionsForConsumerException)
+from .exceptions import KafkaException, PartitionOwnedError, ConsumerStoppedException
 from .simpleconsumer import SimpleConsumer
 from .utils.compat import range, get_bytes, itervalues, iteritems
 try:
@@ -683,9 +682,9 @@ class BalancedConsumer(object):
                 return False
             disp = (time.time() - self._last_message_time) * 1000.0
             return disp > self._consumer_timeout_ms
-        if not self._partitions:
-            raise NoPartitionsForConsumerException()
         message = None
+        if self._consumer is None:
+            return
         self._last_message_time = time.time()
         while message is None and not consumer_timed_out():
             self._raise_worker_exceptions()
