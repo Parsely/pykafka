@@ -530,9 +530,8 @@ class BalancedConsumer(object):
 
                     new_partitions = self._decide_partitions(participants)
                     if not new_partitions:
-                        log.warning("No partitions assigned to consumer %s - stopping",
+                        log.warning("No partitions assigned to consumer %s",
                                     self._consumer_id)
-                        break
 
                     # Update zk with any changes:
                     # Note that we explicitly fetch our set of held partitions
