@@ -511,7 +511,6 @@ class BalancedConsumer(object):
             self.commit_offsets()
         # this is necessary because we can't stop() while the lock is held
         # (it's not an RLock)
-        should_stop = False
         with self._rebalancing_lock:
             if not self._running:
                 raise ConsumerStoppedException
@@ -531,7 +530,6 @@ class BalancedConsumer(object):
 
                     new_partitions = self._decide_partitions(participants)
                     if not new_partitions:
-                        should_stop = True
                         log.warning("No partitions assigned to consumer %s - stopping",
                                     self._consumer_id)
                         break
@@ -571,8 +569,6 @@ class BalancedConsumer(object):
                         raise
                     log.info('Unable to acquire partition %s. Retrying', ex.partition)
                     time.sleep(i * (self._rebalance_backoff_ms / 1000))
-        if should_stop:
-            self.stop()
 
     def _path_from_partition(self, p):
         """Given a partition, return its path in zookeeper.
