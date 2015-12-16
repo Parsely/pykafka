@@ -263,10 +263,10 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
             use_rdkafka=self.USE_RDKAFKA)
         consumer._decide_partitions = lambda p: set()
         consumer.start()
-        self.assertFalse(consumer._running)
         res = consumer.consume()
         self.assertEqual(res, None)
         self.assertTrue(consumer._running)
+        # check that stop() succeeds (cf #313 and #392)
         consumer.stop()
 
     def test_zk_conn_lost(self):
