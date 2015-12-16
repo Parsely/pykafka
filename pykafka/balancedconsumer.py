@@ -678,16 +678,14 @@ class BalancedConsumer(object):
             disp = (time.time() - self._last_message_time) * 1000.0
             return disp > self._consumer_timeout_ms
         message = None
-        if self._consumer is None:
-            return
         self._last_message_time = time.time()
         while message is None and not consumer_timed_out():
             self._raise_worker_exceptions()
             try:
                 message = self._consumer.consume(block=block)
-            except ConsumerStoppedException:
+            except (ConsumerStoppedException, AttributeError):
                 if not self._running:
-                    raise
+                    raise ConsumerStoppedException
                 continue
             if message:
                 self._last_message_time = time.time()
