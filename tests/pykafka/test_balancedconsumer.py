@@ -8,7 +8,7 @@ from kazoo.client import KazooClient
 
 from pykafka import KafkaClient
 from pykafka.balancedconsumer import BalancedConsumer, OffsetType
-from pykafka.exceptions import NoPartitionsForConsumerException, ConsumerStoppedException
+from pykafka.exceptions import ConsumerStoppedException
 from pykafka.test.utils import get_cluster, stop_cluster
 from pykafka.utils.compat import range, iterkeys, iteritems
 
@@ -255,17 +255,20 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
         consumer.stop()
 
     def test_no_partitions(self):
-        """Ensure a consumer assigned no partitions immediately exits"""
+        """Ensure a consumer assigned no partitions doesn't fail"""
         consumer = self.client.topics[self.topic_name].get_balanced_consumer(
             b'test_no_partitions',
             zookeeper_connect=self.kafka.zookeeper,
             auto_start=False,
+            consumer_timeout_ms=50,
             use_rdkafka=self.USE_RDKAFKA)
         consumer._decide_partitions = lambda p: set()
         consumer.start()
-        self.assertFalse(consumer._running)
-        with self.assertRaises(NoPartitionsForConsumerException):
-            consumer.consume()
+        res = consumer.consume()
+        self.assertEqual(res, None)
+        self.assertTrue(consumer._running)
+        # check that stop() succeeds (cf #313 and #392)
+        consumer.stop()
 
     def test_zk_conn_lost(self):
         """Check we restore zookeeper nodes correctly after connection loss

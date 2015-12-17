@@ -32,8 +32,7 @@ from kazoo.exceptions import NoNodeException, NodeExistsError
 from kazoo.recipe.watchers import ChildrenWatch
 
 from .common import OffsetType
-from .exceptions import (KafkaException, PartitionOwnedError,
-                         ConsumerStoppedException, NoPartitionsForConsumerException)
+from .exceptions import KafkaException, PartitionOwnedError, ConsumerStoppedException
 from .simpleconsumer import SimpleConsumer
 from .utils.compat import range, get_bytes, itervalues, iteritems
 try:
@@ -512,7 +511,6 @@ class BalancedConsumer(object):
             self.commit_offsets()
         # this is necessary because we can't stop() while the lock is held
         # (it's not an RLock)
-        should_stop = False
         with self._rebalancing_lock:
             if not self._running:
                 raise ConsumerStoppedException
@@ -532,10 +530,8 @@ class BalancedConsumer(object):
 
                     new_partitions = self._decide_partitions(participants)
                     if not new_partitions:
-                        should_stop = True
-                        log.warning("No partitions assigned to consumer %s - stopping",
+                        log.warning("No partitions assigned to consumer %s",
                                     self._consumer_id)
-                        break
 
                     # Update zk with any changes:
                     # Note that we explicitly fetch our set of held partitions
@@ -572,8 +568,6 @@ class BalancedConsumer(object):
                         raise
                     log.info('Unable to acquire partition %s. Retrying', ex.partition)
                     time.sleep(i * (self._rebalance_backoff_ms / 1000))
-        if should_stop:
-            self.stop()
 
     def _path_from_partition(self, p):
         """Given a partition, return its path in zookeeper.
@@ -683,17 +677,15 @@ class BalancedConsumer(object):
                 return False
             disp = (time.time() - self._last_message_time) * 1000.0
             return disp > self._consumer_timeout_ms
-        if not self._partitions:
-            raise NoPartitionsForConsumerException()
         message = None
         self._last_message_time = time.time()
         while message is None and not consumer_timed_out():
             self._raise_worker_exceptions()
             try:
                 message = self._consumer.consume(block=block)
-            except ConsumerStoppedException:
+            except (ConsumerStoppedException, AttributeError):
                 if not self._running:
-                    raise
+                    raise ConsumerStoppedException
                 continue
             if message:
                 self._last_message_time = time.time()
