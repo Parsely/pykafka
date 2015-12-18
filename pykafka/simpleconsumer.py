@@ -720,7 +720,7 @@ class OwnedPartition(object):
         self.partition = partition
         self._messages = Queue()
         self._messages_arrived = semaphore
-        self.last_offset_consumed = 0
+        self.last_offset_consumed = -1
         self.next_offset = 0
         self.fetch_lock = threading.RLock()
 
@@ -816,10 +816,10 @@ class OwnedPartition(object):
         :type messages: Iterable of :class:`pykafka.common.Message`
         """
         for message in messages:
-            if message.offset < self.last_offset_consumed:
+            if message.offset != self.next_offset:
                 log.debug("Skipping enqueue for offset (%s) "
-                          "less than last_offset_consumed (%s)",
-                          message.offset, self.last_offset_consumed)
+                          "not equal to next_offset (%s)",
+                          message.offset, self.next_offset)
                 continue
             message.partition = self.partition
             if message.partition_id != self.partition.id:
