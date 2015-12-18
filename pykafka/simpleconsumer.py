@@ -816,10 +816,10 @@ class OwnedPartition(object):
         :type messages: Iterable of :class:`pykafka.common.Message`
         """
         for message in messages:
-            if message.offset <= self.last_offset_consumed:
+            if message.offset != self.next_offset:
                 log.debug("Skipping enqueue for offset (%s) "
-                          "less than last_offset_consumed (%s)",
-                          message.offset, self.last_offset_consumed)
+                          "not equal to next_offset (%s)",
+                          message.offset, self.next_offset)
                 continue
             message.partition = self.partition
             if message.partition_id != self.partition.id:
