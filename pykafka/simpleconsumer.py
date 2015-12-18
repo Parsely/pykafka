@@ -417,7 +417,7 @@ class SimpleConsumer(object):
                 response = self._offset_manager.commit_consumer_group_offsets(
                     self._consumer_group, -1, b'pykafka', reqs)
             except (SocketDisconnectedError, IOError):
-                log.error("Error committing offsets for topic %s "
+                log.error("Error committing offsets for topic '%s' "
                           "(SocketDisconnectedError)",
                           self._topic.name)
                 if i >= self._offsets_commit_max_retries - 1:
@@ -431,7 +431,7 @@ class SimpleConsumer(object):
                 partitions_by_id=self._partitions_by_id)
             if len(parts_by_error) == 1 and 0 in parts_by_error:
                 break
-            log.error("Error committing offsets for topic %s (errors: %s)",
+            log.error("Error committing offsets for topic '%s' (errors: %s)",
                       self._topic.name,
                       {ERROR_CODES[err]: [op.partition.id for op, _ in parts]
                        for err, parts in iteritems(parts_by_error)})
@@ -506,7 +506,7 @@ class SimpleConsumer(object):
                                       for op, r in parts_by_error.get(0, [])])
             if len(parts_by_error) == 1 and 0 in parts_by_error:
                 return success_responses
-            log.error("Error fetching offsets for topic %s (errors: %s)",
+            log.error("Error fetching offsets for topic '%s' (errors: %s)",
                       self._topic.name,
                       {ERROR_CODES[err]: [op.partition.id for op, _ in parts]
                        for err, parts in iteritems(parts_by_error)})
@@ -620,7 +620,7 @@ class SimpleConsumer(object):
                     list(map(owned_partition_offsets.pop, successful))
                 if not parts_by_error:
                     continue
-                log.error("Error resetting offsets for topic %s (errors: %s)",
+                log.error("Error resetting offsets for topic '%s' (errors: %s)",
                           self._topic.name,
                           {ERROR_CODES[err]: [op.partition.id for op, _ in parts]
                            for err, parts in iteritems(parts_by_error)})

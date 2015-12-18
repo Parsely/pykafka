@@ -514,7 +514,7 @@ class BalancedConsumer(object):
         with self._rebalancing_lock:
             if not self._running:
                 raise ConsumerStoppedException
-            log.info('Rebalancing consumer %s for topic %s.' % (
+            log.info('Rebalancing consumer "%s" for topic "%s".' % (
                 self._consumer_id, self._topic.name)
             )
 
