@@ -816,7 +816,7 @@ class OwnedPartition(object):
         :type messages: Iterable of :class:`pykafka.common.Message`
         """
         for message in messages:
-            if message.offset < self.last_offset_consumed:
+            if message.offset <= self.last_offset_consumed:
                 log.debug("Skipping enqueue for offset (%s) "
                           "less than last_offset_consumed (%s)",
                           message.offset, self.last_offset_consumed)
