@@ -201,13 +201,15 @@ class TestSimpleConsumer(unittest2.TestCase):
 
 class TestOwnedPartition(unittest2.TestCase):
     def test_partition_saves_offset(self):
+        offset = 20
         msgval = "test"
         partition = mock.MagicMock()
         op = OwnedPartition(partition)
+        op.next_offset = offset
 
         message = mock.Mock()
         message.value = msgval
-        message.offset = 20
+        message.offset = offset
 
         op.enqueue_messages([message])
         self.assertEqual(op.message_count, 1)
