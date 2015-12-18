@@ -720,7 +720,7 @@ class OwnedPartition(object):
         self.partition = partition
         self._messages = Queue()
         self._messages_arrived = semaphore
-        self.last_offset_consumed = 0
+        self.last_offset_consumed = -1
         self.next_offset = 0
         self.fetch_lock = threading.RLock()
 
