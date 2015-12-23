@@ -244,6 +244,8 @@ class Producer(object):
         :param partition_key: The key to use when deciding which partition to send this
             message to
         :type partition_key: bytes
+        :return: The :class:`pykafka.protocol.Message` instance that was
+            added to the internal message queue
         """
         if not (isinstance(partition_key, bytes) or partition_key is None):
             raise TypeError("Producer.produce accepts a bytes object as partition_key, "
@@ -270,6 +272,7 @@ class Producer(object):
             if exc is not None:
                 raise exc
         self._raise_worker_exceptions()
+        return msg
 
     def get_delivery_report(self, block=True, timeout=None):
         """Fetch delivery reports for messages produced on the current thread
