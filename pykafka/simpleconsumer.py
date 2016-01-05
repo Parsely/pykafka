@@ -31,7 +31,7 @@ from .common import OffsetType
 from .utils.compat import (Semaphore, Queue, Empty, iteritems, itervalues,
                            range, iterkeys)
 from .exceptions import (OffsetOutOfRangeError, UnknownTopicOrPartition,
-                         OffsetMetadataTooLarge, OffsetsLoadInProgress,
+                         OffsetMetadataTooLarge, GroupLoadInProgress,
                          NotCoordinatorForConsumer, SocketDisconnectedError,
                          ConsumerStoppedException, KafkaException,
                          NotLeaderForPartition, OffsetRequestFailedError,
@@ -261,7 +261,7 @@ class SimpleConsumer(object):
             NotLeaderForPartition.ERROR_CODE: _handle_NotLeaderForPartition,
             OffsetMetadataTooLarge.ERROR_CODE: lambda p: raise_error(OffsetMetadataTooLarge),
             NotCoordinatorForConsumer.ERROR_CODE: _handle_NotCoordinatorForConsumer,
-            OffsetsLoadInProgress.ERROR_CODE: lambda p: raise_error(OffsetsLoadInProgress)
+            GroupLoadInProgress.ERROR_CODE: lambda p: raise_error(GroupLoadInProgress)
         }
 
     def _discover_offset_manager(self):
@@ -516,7 +516,7 @@ class SimpleConsumer(object):
 
             # retry only specific error responses
             to_retry = []
-            to_retry.extend(parts_by_error.get(OffsetsLoadInProgress.ERROR_CODE, []))
+            to_retry.extend(parts_by_error.get(GroupLoadInProgress.ERROR_CODE, []))
             to_retry.extend(parts_by_error.get(NotCoordinatorForConsumer.ERROR_CODE, []))
             reqs = [p.build_offset_fetch_request() for p, _ in to_retry]
 
