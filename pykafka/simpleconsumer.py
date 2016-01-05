@@ -255,13 +255,16 @@ class SimpleConsumer(object):
             log.info("Updating cluster in response to NotLeaderForPartition")
             self._update()
 
+        def _handle_GroupLoadInProgress(parts):
+            log.info("Continuing in response to GroupLoadInProgress")
+
         return {
             UnknownTopicOrPartition.ERROR_CODE: lambda p: raise_error(UnknownTopicOrPartition),
             OffsetOutOfRangeError.ERROR_CODE: _handle_OffsetOutOfRangeError,
             NotLeaderForPartition.ERROR_CODE: _handle_NotLeaderForPartition,
             OffsetMetadataTooLarge.ERROR_CODE: lambda p: raise_error(OffsetMetadataTooLarge),
             NotCoordinatorForConsumer.ERROR_CODE: _handle_NotCoordinatorForConsumer,
-            GroupLoadInProgress.ERROR_CODE: lambda p: raise_error(GroupLoadInProgress)
+            GroupLoadInProgress.ERROR_CODE: _handle_GroupLoadInProgress
         }
 
     def _discover_offset_manager(self):
