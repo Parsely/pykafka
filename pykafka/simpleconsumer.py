@@ -260,7 +260,8 @@ class SimpleConsumer(object):
             OffsetOutOfRangeError.ERROR_CODE: _handle_OffsetOutOfRangeError,
             NotLeaderForPartition.ERROR_CODE: _handle_NotLeaderForPartition,
             OffsetMetadataTooLarge.ERROR_CODE: lambda p: raise_error(OffsetMetadataTooLarge),
-            NotCoordinatorForConsumer.ERROR_CODE: _handle_NotCoordinatorForConsumer
+            NotCoordinatorForConsumer.ERROR_CODE: _handle_NotCoordinatorForConsumer,
+            OffsetsLoadInProgress.ERROR_CODE: lambda p: raise_error(OffsetsLoadInProgress)
         }
 
     def _discover_offset_manager(self):
