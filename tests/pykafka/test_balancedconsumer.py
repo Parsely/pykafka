@@ -2,6 +2,7 @@ import math
 import mock
 import time
 import unittest2
+import pytest
 from uuid import uuid4
 
 from kazoo.client import KazooClient
@@ -146,6 +147,37 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
             self.assertTrue(self.assigned_called)
             for _, offset in iteritems(consumer_a.held_offsets):
                 self.assertEqual(offset, self.offset_reset)
+        finally:
+            try:
+                consumer_a.stop()
+                consumer_b.stop()
+            except:
+                pass
+
+    def test_rebalance_callbacks_surfaces_errors(self):
+        def on_rebalance(cns, old_partition_offsets, new_partition_offsets):
+            raise ValueError("BAD CALLBACK")
+
+        self.assigned_called = False
+        self.offset_reset = 50
+        try:
+            consumer_group = b'test_rebalance_callbacks_error'
+            consumer_a = self.client.topics[self.topic_name].get_balanced_consumer(
+                consumer_group,
+                zookeeper_connect=self.kafka.zookeeper,
+                auto_offset_reset=OffsetType.EARLIEST,
+                post_rebalance_callback=on_rebalance,
+                use_rdkafka=self.USE_RDKAFKA)
+            consumer_b = self.client.topics[self.topic_name].get_balanced_consumer(
+                consumer_group,
+                zookeeper_connect=self.kafka.zookeeper,
+                auto_offset_reset=OffsetType.EARLIEST,
+                use_rdkafka=self.USE_RDKAFKA)
+
+            with pytest.raises(ValueError) as ex:
+                self.wait_for_rebalancing(consumer_a, consumer_b)
+                assert 'BAD CALLBACK' in str(ex.value)
+
         finally:
             try:
                 consumer_a.stop()

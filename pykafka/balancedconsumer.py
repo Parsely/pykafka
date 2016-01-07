@@ -551,8 +551,14 @@ class BalancedConsumer(object):
                             old_offsets = (self._consumer.held_offsets
                                            if self._consumer else dict())
                             new_offsets = cns.held_offsets
-                            reset_offsets = self._post_rebalance_callback(
-                                self, old_offsets, new_offsets)
+                            try:
+                                reset_offsets = self._post_rebalance_callback(
+                                    self, old_offsets, new_offsets)
+                            except Exception as ex:
+                                log.exception("post rebalance callback threw an exception")
+                                self._worker_exception = sys.exc_info()
+                                break
+
                             if reset_offsets:
                                 cns.reset_offsets(partition_offsets=[
                                     (cns.partitions[id_], offset) for
