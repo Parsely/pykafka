@@ -35,7 +35,7 @@ from .exceptions import (OffsetOutOfRangeError, UnknownTopicOrPartition,
                          NotCoordinatorForConsumer, SocketDisconnectedError,
                          ConsumerStoppedException, KafkaException,
                          NotLeaderForPartition, OffsetRequestFailedError,
-                         ERROR_CODES)
+                         RequestTimedOut, ERROR_CODES)
 from .protocol import (PartitionFetchRequest, PartitionOffsetCommitRequest,
                        PartitionOffsetFetchRequest, PartitionOffsetRequest)
 from .utils.error_handlers import (handle_partition_responses, raise_error,
@@ -247,6 +247,9 @@ class SimpleConsumer(object):
                                    for owned_partition, pres in parts]
             )
 
+        def _handle_RequestTimedOut(parts):
+            log.info("Continuing in response to RequestTimedOut")
+
         def _handle_NotCoordinatorForConsumer(parts):
             log.info("Updating cluster in response to NotCoordinatorForConsumer")
             self._update()
@@ -264,6 +267,7 @@ class SimpleConsumer(object):
             NotLeaderForPartition.ERROR_CODE: _handle_NotLeaderForPartition,
             OffsetMetadataTooLarge.ERROR_CODE: lambda p: raise_error(OffsetMetadataTooLarge),
             NotCoordinatorForConsumer.ERROR_CODE: _handle_NotCoordinatorForConsumer,
+            RequestTimedOut.ERROR_CODE: _handle_RequestTimedOut,
             GroupLoadInProgress.ERROR_CODE: _handle_GroupLoadInProgress
         }
 
