@@ -248,8 +248,9 @@ class Cluster(object):
                     return response
         else:  # try seed hosts
             metadata = None
-            broker_connects = [broker_str.split(":")
-                               for broker_str in self._seed_hosts.split(',')]
+            broker_connects = [
+                [broker_str.split(":")[0], broker_str.split(":")[1].split("/")[0]]
+                for broker_str in self._seed_hosts.split(',')]
             metadata = self._request_metadata(broker_connects, topics)
             if metadata is not None:
                 return metadata
