@@ -6,7 +6,7 @@ Changelog
 
 `Compare 2.1.2`_
 
-.. _Compare 2.1.2: https://github.com/Parsely/pykafka/compare/2.1.1...dbc1d96d73c7ef3b4d8574d071269a6e1fa39133
+.. _Compare 2.1.2: https://github.com/Parsely/pykafka/compare/2.1.1...70cce0fb59f4d0f6a4e50bb7521d2edb9c1e66fa
 
 Features
 ********
