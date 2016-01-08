@@ -1,6 +1,27 @@
 Changelog
 =========
 
+2.1.2 (2016-1-8)
+------------------
+
+`Compare 2.1.2`_
+
+.. _Compare 2.1.2: https://github.com/Parsely/pykafka/compare/2.1.1...
+
+Features
+********
+
+* Allowed consumers to run with no partitions
+
+Bug Fixes
+*********
+
+* Fixed a bug causing consumers to hold outdated partition sets
+* Handled some previously uncaught error codes in `SimpleConsumer`
+* Fixed an off-by-one bug in message set fetching
+* Made `consume()` stricter about message ordering and duplication
+
+
 2.1.1 (2015-12-11)
 ------------------
 
