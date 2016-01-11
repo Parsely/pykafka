@@ -259,7 +259,15 @@ class Cluster(object):
             zookeeper = KazooClient(self._seed_hosts,
                                     timeout=self._socket_timeout_ms / 1000)
             try:
-                zookeeper.start()
+                # This math is necessary due to a nested timeout in KazooClient.
+                # KazooClient will attempt to retry its connections only until the
+                # start() timeout is reached. Each of those retries will timeout as
+                # indicated by the KazooClient kwarg. We do a number of timeouts of
+                # self._socket_timeout_ms equal to the number of hosts. This provides
+                # the same retrying behavior that pykafka uses above when treating this
+                # host string as a list of kafka brokers.
+                zookeeper.start(
+                    timeout=(len(broker_connects) * self._socket_timeout_ms) / 1000)
             except Exception as e:
                 log.error('Unable to connect to ZooKeeper instance %s', self._seed_hosts)
                 log.exception(e)
