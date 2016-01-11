@@ -163,8 +163,8 @@ class Message(Message, Serializable):
         "partition_id",
         "partition",
         "produce_attempt",
-        "delivery_report_q",
-        ]
+        "delivery_report_q"
+    ]
 
     def __init__(self,
                  value,
