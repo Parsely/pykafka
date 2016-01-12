@@ -256,5 +256,25 @@ class TestOffsetCommitFetchAPI(unittest2.TestCase):
         self.assertEqual(response.topics[b'emmett.dummy'][0].offset, 1)
 
 
+class TestGroupMembershipAPI(unittest2.TestCase):
+    maxDiff = None
+
+    def test_consumer_group_protocol_metadata(self):
+        meta = protocol.ConsumerGroupProtocolMetadata()
+        msg = meta.get_bytes()
+        self.assertEqual(
+            msg,
+            bytearray(b'\x00\x01\x00\x00\x00\x01\x00\ndummytopic\x00\x00\x00\x0ctestuserdata')
+        )
+
+    def test_join_group_request(self):
+        req = protocol.JoinGroupRequest(b'testmember')
+        msg = req.get_bytes()
+        self.assertEqual(
+            msg,
+            bytearray(b'\x00\x00\x00z\x00\x0b\x00\x01\x00\x00\x00\x00\x00\x07pykafka\x00\ndummygroup\x00\x00u0\x00\ntestmember\x00\x08consumer\x00\x00\x00\x01\x00\x17dummyassignmentstrategy\x00\x00\x00"\x00\x01\x00\x00\x00\x01\x00\ndummytopic\x00\x00\x00\x0ctestuserdata')
+        )
+
+
 if __name__ == '__main__':
     unittest2.main()

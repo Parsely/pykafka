@@ -1188,3 +1188,120 @@ class OffsetFetchResponse(Response):
                                                     partition[2],
                                                     partition[3])
                 self.topics[topic_name][partition[0]] = pres
+
+
+###
+# Group Membership API
+###
+class ConsumerGroupProtocolMetadata(object):
+    """
+    Protocol specification::
+
+    ProtocolMetadata => Version Subscription UserData
+        Version => int16
+        Subscription => [Topic]
+            Topic => string
+        UserData => bytes
+    """
+    def __init__(self):
+        self.version = 1
+        self.topic_names = [b"dummytopic"]
+        self.user_data = b"testuserdata"
+
+    def __len__(self):
+        # version + len(topic names)
+        size = 2 + 4
+        for topic_name in self.topic_names:
+            # len(topic_name) + topic_name
+            size += 2 + len(topic_name)
+        # len(user data) + user data
+        size += 4 + len(self.user_data)
+        return size
+
+    def get_bytes(self):
+        output = bytearray(len(self))
+        offset = 0
+        fmt = '!hi'
+        struct.pack_into(fmt, output, offset, self.version, len(self.topic_names))
+        offset += struct.calcsize(fmt)
+        for topic_name in self.topic_names:
+            fmt = '!h%ds' % len(topic_name)
+            struct.pack_into(fmt, output, offset, len(topic_name), topic_name)
+            offset += struct.calcsize(fmt)
+        fmt = '!i%ds' % len(self.user_data)
+        struct.pack_into(fmt, output, offset, len(self.user_data), self.user_data)
+        offset += struct.calcsize(fmt)
+        return output
+
+
+GroupMembershipProtocol = namedtuple(
+    'GroupMembershipProtocol', ['protocol_type', 'protocol_name', 'metadata']
+)
+
+
+ConsumerGroupProtocol = GroupMembershipProtocol("consumer", "dummyassignmentstrategy",
+                                                ConsumerGroupProtocolMetadata())
+
+
+class JoinGroupRequest(Request):
+    """A group join request
+
+    Specification::
+
+    JoinGroupRequest => GroupId SessionTimeout MemberId ProtocolType GroupProtocols
+        GroupId => string
+        SessionTimeout => int32
+        MemberId => string
+        ProtocolType => string
+        GroupProtocols => [ProtocolName ProtocolMetadata]
+            ProtocolName => string
+            ProtocolMetadata => bytes
+    """
+    def __init__(self, member_id, session_timeout=30000):
+        """Create a new group join request"""
+        self.protocol = ConsumerGroupProtocol
+        self.group_id = "dummygroup"
+        self.session_timeout = session_timeout
+        self.member_id = member_id
+        self.protocol_type = self.protocol.protocol_type
+        self.group_protocols = [(self.protocol.protocol_name,
+                                 self.protocol.metadata.get_bytes())]
+
+    def __len__(self):
+        """Length of the serialized message, in bytes"""
+        # Header + group id + session timeout
+        size = self.HEADER_LEN + 2 + len(self.group_id) + 4
+        # + member id + protocol type + len(group protocols)
+        size += 2 + len(self.member_id) + 2 + len(self.protocol_type) + 4
+        # metadata tuples
+        for name, metadata in self.group_protocols:
+            size += 2 + len(name) + 4 + len(metadata)
+        return size
+
+    @property
+    def API_KEY(self):
+        """API_KEY for this request, from the Kafka docs"""
+        return 11
+
+    def get_bytes(self):
+        """Serialize the message
+
+        :returns: Serialized message
+        :rtype: :class:`bytearray`
+        """
+        output = bytearray(len(self))
+        self._write_header(output, api_version=1)
+        offset = self.HEADER_LEN
+        fmt = '!h%dsih%dsh%dsi' % (len(self.group_id), len(self.member_id),
+                                   len(self.protocol_type))
+        struct.pack_into(fmt, output, offset, len(self.group_id), self.group_id,
+                         self.session_timeout, len(self.member_id), self.member_id,
+                         len(self.protocol_type), self.protocol_type,
+                         len(self.group_protocols))
+        offset += struct.calcsize(fmt)
+        for protocol_name, protocol_metadata in self.group_protocols:
+            fmt = '!h%dsi%ds' % (len(protocol_name), len(protocol_metadata))
+            struct.pack_into(fmt, output, offset, len(protocol_name), protocol_name,
+                             len(protocol_metadata), bytes(protocol_metadata))
+            offset += struct.calcsize(fmt)
+        return output
