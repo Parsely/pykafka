@@ -222,8 +222,8 @@ class Cluster(object):
         :type broker_connects: Iterable of two-element sequences of the format
             (broker_host, broker_port)
         """
-        try:
-            for host, port in broker_connects:
+        for host, port in broker_connects:
+            try:
                 broker = Broker(-1, host, int(port), self._handler,
                                 self._socket_timeout_ms,
                                 self._offsets_channel_socket_timeout_ms,
@@ -233,9 +233,9 @@ class Cluster(object):
                 response = broker.request_metadata(topics)
                 if response is not None:
                     return response
-        except Exception as e:
-            log.error('Unable to connect to broker %s:%s', host, port)
-            log.exception(e)
+            except Exception as e:
+                log.error('Unable to connect to broker %s:%s. Continuing.', host, port)
+                log.exception(e)
 
     def _get_metadata(self, topics=None):
         """Get fresh cluster metadata from a broker."""
@@ -256,9 +256,18 @@ class Cluster(object):
                 return metadata
 
             # try treating seed_hosts as a zookeeper host list
-            zookeeper = KazooClient(self._seed_hosts, timeout=self._socket_timeout_ms)
+            zookeeper = KazooClient(self._seed_hosts,
+                                    timeout=self._socket_timeout_ms / 1000)
             try:
-                zookeeper.start()
+                # This math is necessary due to a nested timeout in KazooClient.
+                # KazooClient will attempt to retry its connections only until the
+                # start() timeout is reached. Each of those retries will timeout as
+                # indicated by the KazooClient kwarg. We do a number of timeouts of
+                # self._socket_timeout_ms equal to the number of hosts. This provides
+                # the same retrying behavior that pykafka uses above when treating this
+                # host string as a list of kafka brokers.
+                zookeeper.start(
+                    timeout=(len(broker_connects) * self._socket_timeout_ms) / 1000)
             except Exception as e:
                 log.error('Unable to connect to ZooKeeper instance %s', self._seed_hosts)
                 log.exception(e)
