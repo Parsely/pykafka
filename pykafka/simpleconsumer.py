@@ -538,7 +538,7 @@ class SimpleConsumer(object):
             and `timestamp_or_offset` is EITHER the timestamp of the message
             whose offset the partition should have OR the new offset the
             partition should have
-        :type partition_offsets: Iterable of
+        :type partition_offsets: Sequence of tuples of the form
             (:class:`pykafka.partition.Partition`, int)
 
         NOTE: If an instance of `timestamp_or_offset` is treated by kafka as
