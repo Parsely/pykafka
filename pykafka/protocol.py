@@ -1265,7 +1265,7 @@ class JoinGroupRequest(Request):
         self.member_id = member_id
         self.protocol_type = self.protocol.protocol_type
         self.group_protocols = [(self.protocol.protocol_name,
-                                 self.protocol.metadata.get_bytes())]
+                                 bytes(self.protocol.metadata.get_bytes()))]
 
     def __len__(self):
         """Length of the serialized message, in bytes"""
@@ -1302,6 +1302,150 @@ class JoinGroupRequest(Request):
         for protocol_name, protocol_metadata in self.group_protocols:
             fmt = '!h%dsi%ds' % (len(protocol_name), len(protocol_metadata))
             struct.pack_into(fmt, output, offset, len(protocol_name), protocol_name,
-                             len(protocol_metadata), bytes(protocol_metadata))
+                             len(protocol_metadata), protocol_metadata)
+            offset += struct.calcsize(fmt)
+        return output
+
+
+class JoinGroupResponse(Response):
+    """A group join response
+
+    Specification::
+
+    JoinGroupResponse => ErrorCode GenerationId GroupProtocol LeaderId MemberId Members
+        ErrorCode => int16
+        GenerationId => int32
+        GroupProtocol => string
+        LeaderId => string
+        MemberId => string
+        Members => [MemberId MemberMetadata]
+            MemberId => string
+            MemberMetadata => bytes
+    """
+    def __init__(self, buff):
+        """Deserialize into a new Response
+
+        :param buff: Serialized message
+        :type buff: :class:`bytearray`
+        """
+        fmt = 'hiSSS[SS ]'
+        response = struct_helpers.unpack_from(fmt, buff, 0)
+
+        error_code = response[0]
+        if error_code != 0:
+            self.raise_error(error_code, response)
+        self.generation_id = response[1]
+        self.group_protocol = response[2]
+        self.leader_id = response[3]
+        self.member_id = response[4]
+        # TODO - parse metadata bytestring into ConsumerGroupProtocolMetadata?
+        self.members = {_id: meta for _id, meta in iteritems(response[5])}
+
+
+class MemberAssignment(object):
+    """
+    Protocol specification::
+
+    MemberAssignment => Version PartitionAssignment
+        Version => int16
+        PartitionAssignment => [Topic [Partition]]
+            Topic => string
+            Partition => int32
+        UserData => bytes
+    """
+    def __init__(self, partition_assignment):
+        self.version = 1
+        self.partition_assignment = {
+            topic.name: [partition.id for partition in partition_assignment[topic]]
+            for topic in partition_assignment}
+        self.user_data = b"testuserdata"
+
+    def __len__(self):
+        # version + len(partition assignment)
+        size = 2 + 4
+        for topic_name, partitions in self.partition_assignment:
+            # len(topic_name) + topic_name
+            size += 2 + len(topic_name)
+            size += 4 * len(partitions)
+        # len(user data) + user data
+        size += 4 + len(self.user_data)
+        return size
+
+    def get_bytes(self):
+        output = bytearray(len(self))
+        offset = 0
+        fmt = '!hi'
+        struct.pack_into(fmt, output, offset, self.version, len(self.partition_assignment))
+        offset += struct.calcsize(fmt)
+        for topic_name, partitions in iteritems(self.partition_assignment):
+            fmt = '!h%ds' % len(topic_name)
+            struct.pack_into(fmt, output, offset, len(topic_name), topic_name)
+            offset += struct.calcsize(fmt)
+            for partition_id in partitions:
+                fmt = '!i'
+                struct.pack_into(fmt, output, offset, partition_id)
+                offset += struct.calcsize(fmt)
+        fmt = '!i%ds' % len(self.user_data)
+        struct.pack_into(fmt, output, offset, len(self.user_data), self.user_data)
+        offset += struct.calcsize(fmt)
+        return output
+
+
+class SyncGroupRequest(Request):
+    """A group sync request
+
+    Specification::
+
+    SyncGroupRequest => GroupId GenerationId MemberId GroupAssignment
+        GroupId => string
+        GenerationId => int32
+        MemberId => string
+        GroupAssignment => [MemberId MemberAssignment]
+            MemberId => string
+            MemberAssignment => bytes
+    """
+    def __init__(self, generation_id, member_id, group_assignment):
+        """Create a new group join request"""
+        self.group_id = "dummygroup"
+        self.generation_id = generation_id
+        self.member_id = member_id
+        self.group_assignment = group_assignment
+
+    def __len__(self):
+        """Length of the serialized message, in bytes"""
+        # Header + len(group id) + group id + generation id
+        size = self.HEADER_LEN + 2 + len(self.group_id) + 4
+        # + len(member id) + member id + len(group assignment)
+        size += 2 + len(self.member_id) + 4
+        # group assignment tuples
+        for member_id, member_assignment in self.group_assignment:
+            # + len(member id) + member id + len(member assignment) + member assignment
+            size += 2 + len(member_id) + 4 + len(member_assignment)
+        return size
+
+    @property
+    def API_KEY(self):
+        """API_KEY for this request, from the Kafka docs"""
+        return 14
+
+    def get_bytes(self):
+        """Serialize the message
+
+        :returns: Serialized message
+        :rtype: :class:`bytearray`
+        """
+        output = bytearray(len(self))
+        self._write_header(output, api_version=1)
+        offset = self.HEADER_LEN
+        fmt = '!h%dsih%dsi' % (len(self.group_id), len(self.member_id))
+        struct.pack_into(fmt, output, offset, len(self.group_id), self.group_id,
+                         self.generation_id, len(self.member_id), self.member_id,
+                         len(self.group_assignment))
+        offset += struct.calcsize(fmt)
+        for member_id, member_assignment in self.group_assignment:
+            assignment_bytes = bytes(member_assignment.get_bytes())
+            fmt = '!h%dsi%ds' % (len(member_id), len(assignment_bytes))
+            struct.pack_into(fmt, output, offset, len(member_id), member_id,
+                             len(assignment_bytes), assignment_bytes)
             offset += struct.calcsize(fmt)
         return output
