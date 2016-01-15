@@ -1257,10 +1257,10 @@ class JoinGroupRequest(Request):
             ProtocolName => string
             ProtocolMetadata => bytes
     """
-    def __init__(self, member_id, session_timeout=30000):
+    def __init__(self, group_id, member_id=b'', session_timeout=30000):
         """Create a new group join request"""
         self.protocol = ConsumerGroupProtocol
-        self.group_id = "dummygroup"
+        self.group_id = group_id
         self.session_timeout = session_timeout
         self.member_id = member_id
         self.protocol_type = self.protocol.protocol_type

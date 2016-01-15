@@ -268,7 +268,7 @@ class TestGroupMembershipAPI(unittest2.TestCase):
         )
 
     def test_join_group_request(self):
-        req = protocol.JoinGroupRequest(b'testmember')
+        req = protocol.JoinGroupRequest(b'dummygroup', member_id=b'testmember')
         msg = req.get_bytes()
         self.assertEqual(
             msg,

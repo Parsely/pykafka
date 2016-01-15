@@ -24,11 +24,9 @@ from .connection import BrokerConnection
 from .exceptions import LeaderNotAvailable, SocketDisconnectedError
 from .handlers import RequestHandler
 from .protocol import (
-    FetchRequest, FetchResponse, OffsetRequest,
-    OffsetResponse, MetadataRequest, MetadataResponse,
-    OffsetCommitRequest, OffsetCommitResponse,
-    OffsetFetchRequest, OffsetFetchResponse,
-    ProduceResponse)
+    FetchRequest, FetchResponse, OffsetRequest, OffsetResponse, MetadataRequest,
+    MetadataResponse, OffsetCommitRequest, OffsetCommitResponse, OffsetFetchRequest,
+    OffsetFetchResponse, ProduceResponse, JoinGroupRequest, JoinGroupResponse)
 from .utils.compat import range, iteritems
 
 log = logging.getLogger(__name__)
@@ -348,3 +346,11 @@ class Broker(object):
             self.connect_offsets_channel()
         req = OffsetFetchRequest(consumer_group, partition_requests=preqs)
         return self._offsets_channel_req_handler.request(req).get(OffsetFetchResponse)
+
+    ##########################
+    #  Group Membership API  #
+    ##########################
+
+    def join_managed_consumer_group(self, consumer_group):
+        future = self._req_handler.request(JoinGroupRequest(self._consumer_group))
+        return future.get(JoinGroupResponse)
