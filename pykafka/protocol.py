@@ -1353,12 +1353,23 @@ class MemberAssignment(object):
             Partition => int32
         UserData => bytes
     """
-    def __init__(self, partition_assignment):
-        self.version = 1
+    def __init__(self, partition_assignment, version=1, user_data=b""):
+        self.version = version
         self.partition_assignment = {
-            topic.name: [partition.id for partition in partition_assignment[topic]]
+            topic: [partition for partition in partition_assignment[topic]]
             for topic in partition_assignment}
-        self.user_data = b"testuserdata"
+        self.user_data = user_data
+
+    @classmethod
+    def from_bytestring(cls, buff):
+        fmt = 'h [S [i ] ] S'
+        response = struct_helpers.unpack_from(fmt, buff, 0)
+
+        version = response[0]
+        partition_assignment = {topic: partitions
+                                for topic, partitions in iteritems(response[1])}
+        user_data = response[2]
+        return cls(partition_assignment, version=version, user_data=user_data)
 
     def __len__(self):
         # version + len(partition assignment)
@@ -1449,3 +1460,27 @@ class SyncGroupRequest(Request):
                              len(assignment_bytes), assignment_bytes)
             offset += struct.calcsize(fmt)
         return output
+
+
+class SyncGroupResponse(Response):
+    """A group sync response
+
+    Specification::
+
+    SyncGroupResponse => ErrorCode MemberAssignment
+        ErrorCode => int16
+        MemberAssignment => bytes
+    """
+    def __init__(self, buff):
+        """Deserialize into a new Response
+
+        :param buff: Serialized message
+        :type buff: :class:`bytearray`
+        """
+        fmt = 'hS'
+        response = struct_helpers.unpack_from(fmt, buff, 0)
+
+        error_code = response[0]
+        if error_code != 0:
+            self.raise_error(error_code, response)
+        self.member_assignment = MemberAssignment.from_bytestring(response[1])
