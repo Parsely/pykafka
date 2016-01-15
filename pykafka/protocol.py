@@ -49,7 +49,7 @@ __all__ = [
     "OffsetRequest", "OffsetResponse", "OffsetCommitRequest",
     "FetchRequest", "FetchResponse", "PartitionFetchRequest",
     "OffsetCommitResponse", "OffsetFetchRequest", "OffsetFetchResponse",
-    "PartitionOffsetRequest", "ConsumerMetadataRequest",
+    "PartitionOffsetRequest", "GroupCoordinatorRequest",
     "ConsumerMetadataResponse", "PartitionOffsetCommitRequest",
     "PartitionOffsetFetchRequest",
     "Request", "Response", "Message", "MessageSet"
@@ -866,16 +866,16 @@ class OffsetResponse(Response):
                     partition[2], partition[1])
 
 
-class ConsumerMetadataRequest(Request):
+class GroupCoordinatorRequest(Request):
     """A consumer metadata request
 
     Specification::
 
-        ConsumerMetadataRequest => ConsumerGroup
+        GroupCoordinatorRequest => ConsumerGroup
             ConsumerGroup => string
     """
     def __init__(self, consumer_group):
-        """Create a new consumer metadata request"""
+        """Create a new group coordinator request"""
         self.consumer_group = consumer_group
 
     def __len__(self):
@@ -902,12 +902,12 @@ class ConsumerMetadataRequest(Request):
         return output
 
 
-class ConsumerMetadataResponse(Response):
-    """A consumer metadata response
+class GroupCoordinatorResponse(Response):
+    """A group coordinator response
 
     Specification::
 
-        ConsumerMetadataResponse => ErrorCode CoordinatorId CoordinatorHost CoordinatorPort
+        GroupCoordinatorResponse => ErrorCode CoordinatorId CoordinatorHost CoordinatorPort
             ErrorCode => int16
             CoordinatorId => int32
             CoordinatorHost => string

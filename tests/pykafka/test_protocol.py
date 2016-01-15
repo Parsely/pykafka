@@ -207,7 +207,7 @@ class TestOffsetCommitFetchAPI(unittest2.TestCase):
     maxDiff = None
 
     def test_consumer_metadata_request(self):
-        req = protocol.ConsumerMetadataRequest(b'test')
+        req = protocol.GroupCoordinatorRequest(b'test')
         msg = req.get_bytes()
         self.assertEqual(
             msg,
