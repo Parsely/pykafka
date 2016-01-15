@@ -169,7 +169,7 @@ class SimpleConsumer(object):
         self._worker_trace_logged = False
         self._update_lock = self._cluster.handler.Lock()
 
-        self._discover_offset_manager()
+        self._discover_group_coordinator()
 
         if partitions is not None:
             self._partitions = {p: OwnedPartition(p, self._cluster.handler,
@@ -219,7 +219,7 @@ class SimpleConsumer(object):
         with self._update_lock:
             self._cluster.update()
             self._setup_partitions_by_leader()
-            self._discover_offset_manager()
+            self._discover_group_coordinator()
 
     def start(self):
         """Begin communicating with Kafka, including setting up worker threads
@@ -281,13 +281,13 @@ class SimpleConsumer(object):
             GroupLoadInProgress.ERROR_CODE: _handle_GroupLoadInProgress
         }
 
-    def _discover_offset_manager(self):
-        """Set the offset manager for this consumer.
+    def _discover_group_coordinator(self):
+        """Set the group coordinator for this consumer.
 
         If a consumer group is not supplied to __init__, this method does nothing
         """
         if self._consumer_group is not None:
-            self._offset_manager = self._cluster.get_group_coordinator(self._consumer_group)
+            self._group_coordinator = self._cluster.get_group_coordinator(self._consumer_group)
 
     @property
     def topic(self):
@@ -426,14 +426,14 @@ class SimpleConsumer(object):
 
         reqs = [p.build_offset_commit_request() for p in self._partitions.values()]
         log.debug("Committing offsets for %d partitions to broker id %s", len(reqs),
-                  self._offset_manager.id)
+                  self._group_coordinator.id)
         for i in range(self._offsets_commit_max_retries):
             if i > 0:
                 log.debug("Retrying")
             self._cluster.handler.sleep(i * (self._offsets_channel_backoff_ms / 1000))
 
             try:
-                response = self._offset_manager.commit_consumer_group_offsets(
+                response = self._group_coordinator.commit_consumer_group_offsets(
                     self._consumer_group, -1, b'pykafka', reqs)
             except (SocketDisconnectedError, IOError):
                 log.error("Error committing offsets for topic '%s' "
@@ -509,13 +509,13 @@ class SimpleConsumer(object):
         success_responses = []
 
         log.debug("Fetching offsets for %d partitions from broker id %s", len(reqs),
-                  self._offset_manager.id)
+                  self._group_coordinator.id)
 
         for i in range(self._offsets_fetch_max_retries):
             if i > 0:
                 log.debug("Retrying offset fetch")
 
-            res = self._offset_manager.fetch_consumer_group_offsets(self._consumer_group, reqs)
+            res = self._group_coordinator.fetch_consumer_group_offsets(self._consumer_group, reqs)
             parts_by_error = handle_partition_responses(
                 self._default_error_handlers,
                 response=res,
