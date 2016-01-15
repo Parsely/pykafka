@@ -1417,7 +1417,7 @@ class SyncGroupRequest(Request):
     """
     def __init__(self, generation_id, member_id, group_assignment):
         """Create a new group join request"""
-        self.group_id = "dummygroup"
+        self.group_id = b"dummygroup"
         self.generation_id = generation_id
         self.member_id = member_id
         self.group_assignment = group_assignment
@@ -1484,3 +1484,135 @@ class SyncGroupResponse(Response):
         if error_code != 0:
             self.raise_error(error_code, response)
         self.member_assignment = MemberAssignment.from_bytestring(response[1])
+
+
+class HeartbeatRequest(Request):
+    """A group heartbeat request
+
+    Specification::
+
+    HeartbeatRequest => GroupId GenerationId MemberId
+        GroupId => string
+        GenerationId => int32
+        MemberId => string
+    """
+    def __init__(self, group_id, generation_id, member_id):
+        """Create a new group join request"""
+        self.group_id = group_id
+        self.generation_id = generation_id
+        self.member_id = member_id
+
+    def __len__(self):
+        """Length of the serialized message, in bytes"""
+        # Header + len(group id) + group id + generation id
+        size = self.HEADER_LEN + 2 + len(self.group_id) + 4
+        # + len(member id) + member id
+        size += 2 + len(self.member_id)
+        return size
+
+    @property
+    def API_KEY(self):
+        """API_KEY for this request, from the Kafka docs"""
+        return 12
+
+    def get_bytes(self):
+        """Serialize the message
+
+        :returns: Serialized message
+        :rtype: :class:`bytearray`
+        """
+        output = bytearray(len(self))
+        self._write_header(output, api_version=1)
+        offset = self.HEADER_LEN
+        fmt = '!h%dsih%ds' % (len(self.group_id), len(self.member_id))
+        struct.pack_into(fmt, output, offset, len(self.group_id), self.group_id,
+                         self.generation_id, len(self.member_id), self.member_id)
+        offset += struct.calcsize(fmt)
+        return output
+
+
+class HeartbeatResponse(Response):
+    """A group heartbeat response
+
+    Specification::
+
+    HeartbeatResponse => ErrorCode
+        ErrorCode => int16
+    """
+    def __init__(self, buff):
+        """Deserialize into a new Response
+
+        :param buff: Serialized message
+        :type buff: :class:`bytearray`
+        """
+        fmt = 'h'
+        response = struct_helpers.unpack_from(fmt, buff, 0)
+
+        error_code = response[0]
+        if error_code != 0:
+            self.raise_error(error_code, response)
+
+
+class LeaveGroupRequest(Request):
+    """A group exit request
+
+    Specification::
+
+    LeaveGroupRequest => GroupId MemberId
+        GroupId => string
+        MemberId => string
+    """
+    def __init__(self, group_id, member_id):
+        """Create a new group join request"""
+        self.group_id = group_id
+        self.member_id = member_id
+
+    def __len__(self):
+        """Length of the serialized message, in bytes"""
+        # Header + len(group id) + group id
+        size = self.HEADER_LEN + 2 + len(self.group_id)
+        # + len(member id) + member id
+        size += 2 + len(self.member_id)
+        return size
+
+    @property
+    def API_KEY(self):
+        """API_KEY for this request, from the Kafka docs"""
+        return 13
+
+    def get_bytes(self):
+        """Serialize the message
+
+        :returns: Serialized message
+        :rtype: :class:`bytearray`
+        """
+        output = bytearray(len(self))
+        self._write_header(output, api_version=1)
+        offset = self.HEADER_LEN
+        fmt = '!h%dsh%ds' % (len(self.group_id), len(self.member_id))
+        struct.pack_into(fmt, output, offset, len(self.group_id), self.group_id,
+                         len(self.member_id), self.member_id)
+        offset += struct.calcsize(fmt)
+        return output
+
+
+class LeaveGroupResponse(Response):
+    """A group exit response
+
+    Specification::
+
+    LeaveGroupResponse => ErrorCode
+        ErrorCode => int16
+    """
+    def __init__(self, buff):
+        """Deserialize into a new Response
+
+        :param buff: Serialized message
+        :type buff: :class:`bytearray`
+        """
+        fmt = 'h'
+        response = struct_helpers.unpack_from(fmt, buff, 0)
+
+        error_code = response[0]
+        if error_code != 0:
+            self.raise_error(error_code, response)
