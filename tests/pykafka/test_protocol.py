@@ -275,6 +275,30 @@ class TestGroupMembershipAPI(unittest2.TestCase):
             bytearray(b'\x00\x00\x00z\x00\x0b\x00\x01\x00\x00\x00\x00\x00\x07pykafka\x00\ndummygroup\x00\x00u0\x00\ntestmember\x00\x08consumer\x00\x00\x00\x01\x00\x17dummyassignmentstrategy\x00\x00\x00"\x00\x01\x00\x00\x00\x01\x00\ndummytopic\x00\x00\x00\x0ctestuserdata')
         )
 
+    def test_member_assignment_construction(self):
+        assignment = protocol.MemberAssignment([(b"mytopic1", [3, 5, 7, 9]),
+                                                (b"mytopic2", [2, 4, 6, 8])])
+        msg = assignment.get_bytes()
+        self.assertEqual(
+            msg,
+      bytearray(b'\x00\x01\x00\x00\x00\x02\x00\x08mytopic1\x00\x00\x00\x03\x00\x00\x00\x05\x00\x00\x00\x07\x00\x00\x00\t\x00\x08mytopic2\x00\x00\x00\x02\x00\x00\x00\x04\x00\x00\x00\x06\x00\x00\x00\x08\x00\x00\x00\x00')
+        )
+
+    def test_sync_group_request(self):
+        req = protocol.SyncGroupRequest(
+            b'dummygroup', 1, b'testmember1',
+            [
+                ('testmember1', protocol.MemberAssignment([(b"mytopic1", [3, 5, 7, 9]),
+                                                           (b"mytopic2", [3, 5, 7, 9])])),
+                ('testmember2', protocol.MemberAssignment([(b"mytopic1", [2, 4, 6, 8]),
+                                                           (b"mytopic2", [2, 4, 6, 8])]))
+            ])
+        msg = req.get_bytes()
+        self.assertEqual(
+            msg,
+      bytearray(b'\x00\x00\x00\xd0\x00\x0e\x00\x01\x00\x00\x00\x00\x00\x07pykafka\x00\ndummygroup\x00\x00\x00\x01\x00\x0btestmember1\x00\x00\x00\x02\x00\x0btestmember1\x00\x00\x00>\x00\x01\x00\x00\x00\x02\x00\x08mytopic1\x00\x00\x00\x03\x00\x00\x00\x05\x00\x00\x00\x07\x00\x00\x00\t\x00\x08mytopic2\x00\x00\x00\x03\x00\x00\x00\x05\x00\x00\x00\x07\x00\x00\x00\t\x00\x00\x00\x00\x00\x0btestmember2\x00\x00\x00>\x00\x01\x00\x00\x00\x02\x00\x08mytopic1\x00\x00\x00\x02\x00\x00\x00\x04\x00\x00\x00\x06\x00\x00\x00\x08\x00\x08mytopic2\x00\x00\x00\x02\x00\x00\x00\x04\x00\x00\x00\x06\x00\x00\x00\x08\x00\x00\x00\x00')
+        )
+
 
 if __name__ == '__main__':
     unittest2.main()

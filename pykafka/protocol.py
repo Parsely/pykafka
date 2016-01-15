@@ -1355,9 +1355,7 @@ class MemberAssignment(object):
     """
     def __init__(self, partition_assignment, version=1, user_data=b""):
         self.version = version
-        self.partition_assignment = {
-            topic: [partition for partition in partition_assignment[topic]]
-            for topic in partition_assignment}
+        self.partition_assignment = partition_assignment
         self.user_data = user_data
 
     @classmethod
@@ -1366,8 +1364,7 @@ class MemberAssignment(object):
         response = struct_helpers.unpack_from(fmt, buff, 0)
 
         version = response[0]
-        partition_assignment = {topic: partitions
-                                for topic, partitions in iteritems(response[1])}
+        partition_assignment = response[1]
         user_data = response[2]
         return cls(partition_assignment, version=version, user_data=user_data)
 
@@ -1388,7 +1385,7 @@ class MemberAssignment(object):
         fmt = '!hi'
         struct.pack_into(fmt, output, offset, self.version, len(self.partition_assignment))
         offset += struct.calcsize(fmt)
-        for topic_name, partitions in iteritems(self.partition_assignment):
+        for topic_name, partitions in self.partition_assignment:
             fmt = '!h%ds' % len(topic_name)
             struct.pack_into(fmt, output, offset, len(topic_name), topic_name)
             offset += struct.calcsize(fmt)
@@ -1415,9 +1412,9 @@ class SyncGroupRequest(Request):
             MemberId => string
             MemberAssignment => bytes
     """
-    def __init__(self, generation_id, member_id, group_assignment):
+    def __init__(self, group_id, generation_id, member_id, group_assignment):
         """Create a new group join request"""
-        self.group_id = b"dummygroup"
+        self.group_id = group_id
         self.generation_id = generation_id
         self.member_id = member_id
         self.group_assignment = group_assignment
