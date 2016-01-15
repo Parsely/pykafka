@@ -20,6 +20,8 @@ __all__ = ["ManagedBalancedConsumer"]
 import logging
 
 from .common import OffsetType
+from .protocol import MemberAssignment
+from .utils.compat import iteritems
 
 log = logging.getLogger(__name__)
 
@@ -64,6 +66,7 @@ class ManagedBalancedConsumer(object):
 
         self._consumer = None
         self._consumer_id = None
+        self._is_group_leader = False
 
         self._discover_group_coordinator()
         self._join_group()
@@ -77,3 +80,17 @@ class ManagedBalancedConsumer(object):
 
     def _join_group(self):
         res = self._group_coordinator.join_managed_consumer_group(self._consumer_group)
+        self._generation_id = res.generation_id
+        self._consumer_id = res.member_id
+        if len(res.members) > 0:
+            self._is_group_leader = True
+        group_assignment = []
+        for member_id, metadata in iteritems(res.members):
+            partitions = self._decide_partitions(member_id, metadata)
+            group_assignment.append(
+                (member_id, MemberAssignment([(self._topic.name, [partitions])])))
+        res = self._group_coordinator.sync_group(self._consumer_group,
+                                                 self._generation_id,
+                                                 self._consumer_id,
+                                                 group_assignment)
+        self._setup_internal_consumer(res.member_assignment.partition_assignment)

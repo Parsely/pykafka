@@ -26,7 +26,8 @@ from .handlers import RequestHandler
 from .protocol import (
     FetchRequest, FetchResponse, OffsetRequest, OffsetResponse, MetadataRequest,
     MetadataResponse, OffsetCommitRequest, OffsetCommitResponse, OffsetFetchRequest,
-    OffsetFetchResponse, ProduceResponse, JoinGroupRequest, JoinGroupResponse)
+    OffsetFetchResponse, ProduceResponse, JoinGroupRequest, JoinGroupResponse,
+    SyncGroupRequest, SyncGroupResponse)
 from .utils.compat import range, iteritems
 
 log = logging.getLogger(__name__)
@@ -352,5 +353,10 @@ class Broker(object):
     ##########################
 
     def join_managed_consumer_group(self, consumer_group):
-        future = self._req_handler.request(JoinGroupRequest(self._consumer_group))
+        future = self._req_handler.request(JoinGroupRequest(consumer_group))
         return future.get(JoinGroupResponse)
+
+    def sync_group(self, consumer_group, generation_id, member_id, group_assignment):
+        future = self._req_handler.request(
+            SyncGroupRequest(consumer_group, generation_id, member_id, group_assignment))
+        return future.get(SyncGroupResponse)
