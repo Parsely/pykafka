@@ -32,7 +32,7 @@ from .exceptions import (ERROR_CODES,
                          NoBrokersAvailableError,
                          SocketDisconnectedError,
                          LeaderNotAvailable)
-from .protocol import GroupCoordinatorRequest, ConsumerMetadataResponse
+from .protocol import GroupCoordinatorRequest, GroupCoordinatorResponse
 from .topic import Topic
 from .utils.compat import iteritems, range
 
@@ -388,7 +388,7 @@ class Cluster(object):
             req = GroupCoordinatorRequest(consumer_group)
             future = broker.handler.request(req)
             try:
-                res = future.get(ConsumerMetadataResponse)
+                res = future.get(GroupCoordinatorResponse)
             except ConsumerCoordinatorNotAvailable:
                 log.error('Error discovering offset manager.')
                 if i == self._max_connection_retries - 1:
