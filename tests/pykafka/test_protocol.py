@@ -275,6 +275,19 @@ class TestGroupMembershipAPI(unittest2.TestCase):
             bytearray(b'\x00\x00\x00z\x00\x0b\x00\x01\x00\x00\x00\x00\x00\x07pykafka\x00\ndummygroup\x00\x00u0\x00\ntestmember\x00\x08consumer\x00\x00\x00\x01\x00\x17dummyassignmentstrategy\x00\x00\x00"\x00\x01\x00\x00\x00\x01\x00\ndummytopic\x00\x00\x00\x0ctestuserdata')
         )
 
+    def test_join_group_response(self):
+        response = protocol.JoinGroupResponse(
+            bytearray('\x00\x00\x00\x00\x00\x01\x00\x17dummyassignmentstrategy\x00,pykafka-b2361322-674c-4e26-9194-305962636e57\x00,pykafka-b2361322-674c-4e26-9194-305962636e57\x00\x00\x00\x01\x00,pykafka-b2361322-674c-4e26-9194-305962636e57\x00\x00\x00"\x00\x00\x00\x00\x00\x01\x00\ndummytopic\x00\x00\x00\x0ctestuserdata\x00\x00\x00\x00')
+        )
+        self.assertEqual(response.generation_id, 0)
+        self.assertEqual(response.group_protocol, 'dummyassignmentstrategy')
+        self.assertEqual(response.leader_id,
+                         'pykafka-b2361322-674c-4e26-9194-305962636e57')
+        self.assertEqual(response.member_id,
+                         'pykafka-b2361322-674c-4e26-9194-305962636e57')
+        self.assertEqual(response.members,
+                         {'pykafka-b2361322-674c-4e26-9194-305962636e57': ''})
+
     def test_member_assignment_construction(self):
         assignment = protocol.MemberAssignment([(b"mytopic1", [3, 5, 7, 9]),
                                                 (b"mytopic2", [2, 4, 6, 8])])
