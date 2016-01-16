@@ -1257,7 +1257,7 @@ class JoinGroupRequest(Request):
             ProtocolName => string
             ProtocolMetadata => bytes
     """
-    def __init__(self, group_id, member_id=b'', session_timeout=30000):
+    def __init__(self, group_id, member_id=b'', session_timeout=10000):
         """Create a new group join request"""
         self.protocol = ConsumerGroupProtocol
         self.group_id = group_id
@@ -1339,7 +1339,7 @@ class JoinGroupResponse(Response):
         self.leader_id = response[3]
         self.member_id = response[4]
         # TODO - parse metadata bytestring into ConsumerGroupProtocolMetadata?
-        self.members = {_id: meta for _id, meta in iteritems(response[5])}
+        self.members = {_id: meta for _id, meta in response[5]}
 
 
 class MemberAssignment(object):
