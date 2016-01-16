@@ -1290,7 +1290,7 @@ class JoinGroupRequest(Request):
         :rtype: :class:`bytearray`
         """
         output = bytearray(len(self))
-        self._write_header(output, api_version=1)
+        self._write_header(output)
         offset = self.HEADER_LEN
         fmt = '!h%dsih%dsh%dsi' % (len(self.group_id), len(self.member_id),
                                    len(self.protocol_type))
@@ -1443,7 +1443,7 @@ class SyncGroupRequest(Request):
         :rtype: :class:`bytearray`
         """
         output = bytearray(len(self))
-        self._write_header(output, api_version=1)
+        self._write_header(output)
         offset = self.HEADER_LEN
         fmt = '!h%dsih%dsi' % (len(self.group_id), len(self.member_id))
         struct.pack_into(fmt, output, offset, len(self.group_id), self.group_id,
@@ -1519,7 +1519,7 @@ class HeartbeatRequest(Request):
         :rtype: :class:`bytearray`
         """
         output = bytearray(len(self))
-        self._write_header(output, api_version=1)
+        self._write_header(output)
         offset = self.HEADER_LEN
         fmt = '!h%dsih%ds' % (len(self.group_id), len(self.member_id))
         struct.pack_into(fmt, output, offset, len(self.group_id), self.group_id,
@@ -1584,7 +1584,7 @@ class LeaveGroupRequest(Request):
         :rtype: :class:`bytearray`
         """
         output = bytearray(len(self))
-        self._write_header(output, api_version=1)
+        self._write_header(output)
         offset = self.HEADER_LEN
         fmt = '!h%dsh%ds' % (len(self.group_id), len(self.member_id))
         struct.pack_into(fmt, output, offset, len(self.group_id), self.group_id,
