@@ -1360,6 +1360,8 @@ class MemberAssignment(object):
 
     @classmethod
     def from_bytestring(cls, buff):
+        if len(buff) == 0:
+            return cls([])
         fmt = 'h [S [i ] ] S'
         response = struct_helpers.unpack_from(fmt, buff, 0)
 

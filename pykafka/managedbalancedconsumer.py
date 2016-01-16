@@ -88,9 +88,12 @@ class ManagedBalancedConsumer(object):
         for member_id, metadata in iteritems(res.members):
             partitions = self._decide_partitions(member_id, metadata)
             group_assignment.append(
-                (member_id, MemberAssignment([(self._topic.name, [partitions])])))
+                (member_id, MemberAssignment([(self._topic.name, partitions)])))
         res = self._group_coordinator.sync_group(self._consumer_group,
                                                  self._generation_id,
                                                  self._consumer_id,
                                                  group_assignment)
         self._setup_internal_consumer(res.member_assignment.partition_assignment)
+
+    def _decide_partitions(self, member_id, metadata):
+        return [1, 2, 3, 4, 5]
