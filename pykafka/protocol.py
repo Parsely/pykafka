@@ -50,7 +50,7 @@ __all__ = [
     "FetchRequest", "FetchResponse", "PartitionFetchRequest",
     "OffsetCommitResponse", "OffsetFetchRequest", "OffsetFetchResponse",
     "PartitionOffsetRequest", "GroupCoordinatorRequest",
-    "ConsumerMetadataResponse", "PartitionOffsetCommitRequest",
+    "GroupCoordinatorResponse", "PartitionOffsetCommitRequest",
     "PartitionOffsetFetchRequest",
     "Request", "Response", "Message", "MessageSet"
 ]
