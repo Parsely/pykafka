@@ -1204,7 +1204,7 @@ class ConsumerGroupProtocolMetadata(object):
         UserData => bytes
     """
     def __init__(self):
-        self.version = 1
+        self.version = 0
         self.topic_names = [b"dummytopic"]
         self.user_data = b"testuserdata"
 
