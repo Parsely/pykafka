@@ -19,7 +19,6 @@ limitations under the License.
 __all__ = ["ResponseFuture", "Handler", "ThreadingHandler", "RequestHandler"]
 
 from collections import namedtuple
-import functools
 import logging
 import threading
 
@@ -76,8 +75,15 @@ class ThreadingHandler(Handler):
     Queue = Queue
     Event = threading.Event
     Lock = threading.Lock
-    # turn off RLock's super annoying default logging
-    RLock = functools.partial(threading.RLock, verbose=False)
+
+    # turn off RLock's super annoying default logging if possible
+    def RLock(*args, **kwargs):
+        kwargs['verbose'] = False
+        try:
+            return threading.RLock(*args, **kwargs)
+        except TypeError:
+            kwargs.pop('verbose')
+            return threading.RLock(*args, **kwargs)
 
     def spawn(self, target, *args, **kwargs):
         t = threading.Thread(target=target, *args, **kwargs)
