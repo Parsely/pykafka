@@ -17,16 +17,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 __all__ = ["ManagedBalancedConsumer"]
+import itertools
 import logging
 
+from .balancedconsumer import BalancedConsumer
 from .common import OffsetType
 from .protocol import MemberAssignment
-from .utils.compat import iteritems
+from .utils.compat import iteritems, itervalues
 
 log = logging.getLogger(__name__)
 
 
-class ManagedBalancedConsumer(object):
+class ManagedBalancedConsumer(BalancedConsumer):
     def __init__(self,
                  topic,
                  cluster,
@@ -62,6 +64,8 @@ class ManagedBalancedConsumer(object):
         self._offsets_commit_max_retries = offsets_commit_max_retries
         self._auto_offset_reset = auto_offset_reset
         self._reset_offset_on_start = reset_offset_on_start
+        self._use_rdkafka = False
+        self._worker_exception = None
         self._running = False
 
         self._consumer = None
@@ -71,9 +75,6 @@ class ManagedBalancedConsumer(object):
         self._discover_group_coordinator()
         self._join_group()
 
-        if auto_start is True:
-            self.start()
-
     def _discover_group_coordinator(self):
         """Set the group coordinator for this consumer."""
         self._group_coordinator = self._cluster.get_group_coordinator(self._consumer_group)
@@ -82,18 +83,49 @@ class ManagedBalancedConsumer(object):
         res = self._group_coordinator.join_managed_consumer_group(self._consumer_group)
         self._generation_id = res.generation_id
         self._consumer_id = res.member_id
+        all_members = []
         if len(res.members) > 0:
             self._is_group_leader = True
-        group_assignment = []
+            all_members = [member_id for member_id, _ in iteritems(res.members)]
+        group_assignments = []
+        leader_assignment = None
         for member_id, metadata in iteritems(res.members):
-            partitions = self._decide_partitions(member_id, metadata)
-            group_assignment.append(
-                (member_id, MemberAssignment([(self._topic.name, partitions)])))
+            partitions = self._decide_partitions(all_members, member_id)
+            assignment = (self._topic.name, [p.id for p in partitions])
+            if member_id == self._consumer_id and self._is_group_leader:
+                leader_assignment = assignment
+            group_assignments.append((member_id, MemberAssignment([assignment])))
         res = self._group_coordinator.sync_group(self._consumer_group,
                                                  self._generation_id,
                                                  self._consumer_id,
-                                                 group_assignment)
-        self._setup_internal_consumer(res.member_assignment.partition_assignment)
+                                                 group_assignments)
+        if self._is_group_leader:
+            assignment = leader_assignment[1]
+        else:
+            assignment = res.member_assignment.partition_assignment[1]
+        self._setup_internal_consumer(
+            partitions=[p for p in itervalues(self._topic.partitions)
+                        if p.id in assignment])
 
-    def _decide_partitions(self, member_id, metadata):
-        return [1, 2, 3, 4, 5]
+    def _decide_partitions(self, participants, member_id):
+        # Freeze and sort partitions so we always have the same results
+        p_to_str = lambda p: '-'.join([str(p.topic.name), str(p.leader.id), str(p.id)])
+        all_parts = self._topic.partitions.values()
+        all_parts = sorted(all_parts, key=p_to_str)
+
+        # get start point, # of partitions, and remainder
+        participants = sorted(participants)  # just make sure it's sorted.
+        idx = participants.index(member_id)
+        parts_per_consumer = len(all_parts) // len(participants)
+        remainder_ppc = len(all_parts) % len(participants)
+
+        start = parts_per_consumer * idx + min(idx, remainder_ppc)
+        num_parts = parts_per_consumer + (0 if (idx + 1 > remainder_ppc) else 1)
+
+        # assign partitions from i*N to (i+1)*N - 1 to consumer Ci
+        new_partitions = itertools.islice(all_parts, start, start + num_parts)
+        new_partitions = set(new_partitions)
+        log.info('Balancing %i participants for %i partitions.\nOwning %i partitions.',
+                 len(participants), len(all_parts), len(new_partitions))
+        log.debug('My partitions: %s', [p_to_str(p) for p in new_partitions])
+        return new_partitions
