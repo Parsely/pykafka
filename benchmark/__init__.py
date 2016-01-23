@@ -69,15 +69,16 @@ def benchmark_producer(kafka_conn,
                        num_iterations,
                        msg_size_bytes):
     """Benchmark Producer, yielding (parameters, results) tuples"""
+    # Write a few messages just to make sure topic is ready to go
+    topic_name = mk_topic(kafka_conn,
+                          num_partitions,
+                          msg_size_bytes=msg_size_bytes,
+                          max_num_msgs=10)
+
     parent_conn, child_conn = multiprocessing.Pipe()
     for use_rdkafka, rnd in itertools.product((True, False), range(NUM_ROUNDS)):
         init_kwargs = dict(use_rdkafka=use_rdkafka, linger_ms=100)
 
-        # Write a few messages just to make sure topic is ready to go
-        topic_name = mk_topic(kafka_conn,
-                              num_partitions,
-                              msg_size_bytes=msg_size_bytes,
-                              max_num_msgs=10)
         try:
             proc = multiprocessing.Process(
                     target=benchmark_producer_subp,
@@ -94,7 +95,8 @@ def benchmark_producer(kafka_conn,
         except:
             output = dict(traceback=traceback.format_exc())
         finally:
-            kafka_conn.delete_topic(topic_name)
+            # Disabled because it may affect subsequent run:
+            pass  #kafka_conn.delete_topic(topic_name)
         yield init_kwargs, output
 
 
@@ -184,7 +186,8 @@ def benchmark_consumer(kafka_conn,
                     output = dict(traceback=traceback.format_exc())
                 yield init_kwargs, output
     finally:
-        kafka_conn.delete_topic(topic_name)
+        # Disabled because it may affect subsequent run
+        pass  #kafka_conn.delete_topic(topic_name)
 
 
 def benchmark_consumer_subp(connection,
@@ -229,6 +232,7 @@ def mk_topic(kafka_conn,
     """
     topic_name = uuid4().hex.encode()
     kafka_conn.create_topic(topic_name, num_partitions, replication_factor)
+    time.sleep(10.)  # allow cluster time to settle
 
     client = KafkaClient(kafka_conn.brokers)
     topic = client.topics[topic_name]
