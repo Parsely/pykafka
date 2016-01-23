@@ -236,7 +236,9 @@ def mk_topic(kafka_conn,
     topic = client.topics[topic_name]
     if msg_size_bytes is not None:
         n_msgs = min(msg_sum_bytes // msg_size_bytes, max_num_msgs)
-        with topic.get_producer() as prod:
+        # These init args work around issues #424 and #425:
+        with topic.get_producer(use_rdkafka=True,
+                                max_queued_messages=n_msgs) as prod:
             for _ in xrange(n_msgs):
                 prod.produce(msg_size_bytes * b" ")
     return topic_name
