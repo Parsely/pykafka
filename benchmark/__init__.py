@@ -95,6 +95,7 @@ def benchmark_producer(kafka_conn,
             output = dict(traceback=traceback.format_exc())
         finally:
             kafka_conn.delete_topic(topic_name)
+            time.sleep(5.)  # allow cluster time to settle
         yield init_kwargs, output
 
 
@@ -185,6 +186,7 @@ def benchmark_consumer(kafka_conn,
                 yield init_kwargs, output
     finally:
         kafka_conn.delete_topic(topic_name)
+        time.sleep(5.)  # allow cluster time to settle
 
 
 def benchmark_consumer_subp(connection,
