@@ -31,6 +31,12 @@ log = logging.getLogger(__name__)
 class KafkaClient(object):
     """
     A high-level pythonic client for Kafka
+
+    NOTE: `KafkaClient` holds weak references to `Topic` instances via
+    :class:`pykafka.cluster.TopicDict`. To perform operations directly on these topics,
+    such as examining their partition lists, client code must hold a strong reference to
+    the topics it cares about. If client code doesn't need to examine `Topic` instances
+    directly, no strong references are necessary.
     """
     def __init__(self,
                  hosts='127.0.0.1:9092',
