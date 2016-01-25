@@ -57,32 +57,3 @@ class TestRdKafkaSimpleConsumer(test_simpleconsumer.TestSimpleConsumer):
                 expected_offset = latest_offs[msg.partition_id] + 1
                 self.assertEquals(msg.offset, expected_offset)
                 del latest_offs[msg.partition_id]
-
-
-@pytest.mark.skipif(platform.python_implementation() == "PyPy",
-                    reason="Unresolved crashes which I cannot reproduce "
-                           "locally (TODO: track this down).")
-class TestRdKafkaGEventSimpleConsumer(TestRdKafkaSimpleConsumer):
-    USE_GEVENT = True
-
-
-def _latest_partition_offsets_by_reading(consumer, n_reads):
-    """Obtain message offsets from consumer, return grouped by partition"""
-    latest_offs = {}
-    for _ in range(n_reads):
-        msg = consumer.consume()
-        latest_offs[msg.partition_id] = msg.offset
-    return latest_offs
-
-
-@pytest.mark.skipif(platform.python_implementation() == "PyPy",
-                    reason="Unresolved crashes")
-class RdkBalancedConsumerIntegrationTests(
-        test_balancedconsumer.BalancedConsumerIntegrationTests):
-    USE_RDKAFKA = True
-
-
-@pytest.mark.skipif(platform.python_implementation() == "PyPy",
-                    reason="Unresolved crashes")
-class RdkGEventBalancedConsumerIntegrationTests(RdkBalancedConsumerIntegrationTests):
-    USE_GEVENT = True

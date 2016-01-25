@@ -31,11 +31,3 @@ class TestRdKafkaProducer(test_producer.ProducerIntegrationTests):
         own connection recovery.)
         """
         super(TestRdKafkaProducer, self).test_recover_disconnected()
-
-
-@pytest.mark.skipif(platform.python_implementation() == "PyPy",
-                    reason="We pass PyObject pointers as msg_opaques for "
-                           "delivery callbacks, which is unsafe on PyPy.")
-class TestRdKafkaGEventProducer(TestRdKafkaProducer):
-    USE_RDKAFKA = True
-    USE_GEVENT = True
