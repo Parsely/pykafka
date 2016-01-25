@@ -1,5 +1,7 @@
 from __future__ import division
 
+import platform
+import pytest
 import time
 import unittest2
 from uuid import uuid4
@@ -176,6 +178,8 @@ class ProducerIntegrationTests(unittest2.TestCase):
         self.assertEqual(b"", self.consumer.consume().value)
 
 
+@pytest.mark.skipif(platform.python_implementation() == "PyPy",
+                    reason="Unresolved crashes")
 class TestGEventProducer(ProducerIntegrationTests):
     USE_GEVENT = True
 

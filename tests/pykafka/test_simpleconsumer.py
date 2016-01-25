@@ -1,5 +1,7 @@
 from contextlib import contextmanager
 import mock
+import platform
+import pytest
 import time
 import unittest2
 from uuid import uuid4
@@ -200,6 +202,8 @@ class TestSimpleConsumer(unittest2.TestCase):
             self.assertEqual(current_offsets, latest_offsets)
 
 
+@pytest.mark.skipif(platform.python_implementation() == "PyPy",
+                    reason="Unresolved crashes")
 class TestGEventSimpleConsumer(TestSimpleConsumer):
     USE_GEVENT = True
 
