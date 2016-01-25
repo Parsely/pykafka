@@ -31,11 +31,11 @@ from .common import OffsetType
 from .utils.compat import (Queue, Empty, iteritems, itervalues,
                            range, iterkeys)
 from .exceptions import (OffsetOutOfRangeError, UnknownTopicOrPartition,
-                         OffsetMetadataTooLarge, OffsetsLoadInProgress,
+                         OffsetMetadataTooLarge, GroupLoadInProgress,
                          NotCoordinatorForConsumer, SocketDisconnectedError,
                          ConsumerStoppedException, KafkaException,
                          NotLeaderForPartition, OffsetRequestFailedError,
-                         ERROR_CODES)
+                         RequestTimedOut, ERROR_CODES)
 from .protocol import (PartitionFetchRequest, PartitionOffsetCommitRequest,
                        PartitionOffsetFetchRequest, PartitionOffsetRequest)
 from .utils.error_handlers import (handle_partition_responses, raise_error,
@@ -133,6 +133,8 @@ class SimpleConsumer(object):
         :type reset_offset_on_start: bool
         """
         self._cluster = cluster
+        if not (isinstance(consumer_group, bytes) or consumer_group is None):
+            raise TypeError("consumer_group must be a bytes object")
         self._consumer_group = consumer_group
         self._topic = topic
         self._fetch_message_max_bytes = fetch_message_max_bytes
@@ -245,6 +247,9 @@ class SimpleConsumer(object):
                                    for owned_partition, pres in parts]
             )
 
+        def _handle_RequestTimedOut(parts):
+            log.info("Continuing in response to RequestTimedOut")
+
         def _handle_NotCoordinatorForConsumer(parts):
             log.info("Updating cluster in response to NotCoordinatorForConsumer")
             self._update()
@@ -253,12 +258,17 @@ class SimpleConsumer(object):
             log.info("Updating cluster in response to NotLeaderForPartition")
             self._update()
 
+        def _handle_GroupLoadInProgress(parts):
+            log.info("Continuing in response to GroupLoadInProgress")
+
         return {
             UnknownTopicOrPartition.ERROR_CODE: lambda p: raise_error(UnknownTopicOrPartition),
             OffsetOutOfRangeError.ERROR_CODE: _handle_OffsetOutOfRangeError,
             NotLeaderForPartition.ERROR_CODE: _handle_NotLeaderForPartition,
             OffsetMetadataTooLarge.ERROR_CODE: lambda p: raise_error(OffsetMetadataTooLarge),
-            NotCoordinatorForConsumer.ERROR_CODE: _handle_NotCoordinatorForConsumer
+            NotCoordinatorForConsumer.ERROR_CODE: _handle_NotCoordinatorForConsumer,
+            RequestTimedOut.ERROR_CODE: _handle_RequestTimedOut,
+            GroupLoadInProgress.ERROR_CODE: _handle_GroupLoadInProgress
         }
 
     def _discover_offset_manager(self):
@@ -324,8 +334,8 @@ class SimpleConsumer(object):
     def _setup_fetch_workers(self):
         """Start the fetcher threads"""
         # NB this gets overridden in rdkafka.RdKafkaSimpleConsumer
-
         self = weakref.proxy(self)
+
         def fetcher():
             while True:
                 try:
@@ -414,9 +424,9 @@ class SimpleConsumer(object):
 
             try:
                 response = self._offset_manager.commit_consumer_group_offsets(
-                    self._consumer_group, 1, b'pykafka', reqs)
+                    self._consumer_group, -1, b'pykafka', reqs)
             except (SocketDisconnectedError, IOError):
-                log.error("Error committing offsets for topic %s "
+                log.error("Error committing offsets for topic '%s' "
                           "(SocketDisconnectedError)",
                           self._topic.name)
                 if i >= self._offsets_commit_max_retries - 1:
@@ -430,7 +440,7 @@ class SimpleConsumer(object):
                 partitions_by_id=self._partitions_by_id)
             if len(parts_by_error) == 1 and 0 in parts_by_error:
                 break
-            log.error("Error committing offsets for topic %s (errors: %s)",
+            log.error("Error committing offsets for topic '%s' (errors: %s)",
                       self._topic.name,
                       {ERROR_CODES[err]: [op.partition.id for op, _ in parts]
                        for err, parts in iteritems(parts_by_error)})
@@ -505,7 +515,7 @@ class SimpleConsumer(object):
                                       for op, r in parts_by_error.get(0, [])])
             if len(parts_by_error) == 1 and 0 in parts_by_error:
                 return success_responses
-            log.error("Error fetching offsets for topic %s (errors: %s)",
+            log.error("Error fetching offsets for topic '%s' (errors: %s)",
                       self._topic.name,
                       {ERROR_CODES[err]: [op.partition.id for op, _ in parts]
                        for err, parts in iteritems(parts_by_error)})
@@ -514,7 +524,7 @@ class SimpleConsumer(object):
 
             # retry only specific error responses
             to_retry = []
-            to_retry.extend(parts_by_error.get(OffsetsLoadInProgress.ERROR_CODE, []))
+            to_retry.extend(parts_by_error.get(GroupLoadInProgress.ERROR_CODE, []))
             to_retry.extend(parts_by_error.get(NotCoordinatorForConsumer.ERROR_CODE, []))
             reqs = [p.build_offset_fetch_request() for p, _ in to_retry]
 
@@ -529,7 +539,7 @@ class SimpleConsumer(object):
             and `timestamp_or_offset` is EITHER the timestamp of the message
             whose offset the partition should have OR the new offset the
             partition should have
-        :type partition_offsets: Iterable of
+        :type partition_offsets: Sequence of tuples of the form
             (:class:`pykafka.partition.Partition`, int)
 
         NOTE: If an instance of `timestamp_or_offset` is treated by kafka as
@@ -619,7 +629,7 @@ class SimpleConsumer(object):
                     list(map(owned_partition_offsets.pop, successful))
                 if not parts_by_error:
                     continue
-                log.error("Error resetting offsets for topic %s (errors: %s)",
+                log.error("Error resetting offsets for topic '%s' (errors: %s)",
                           self._topic.name,
                           {ERROR_CODES[err]: [op.partition.id for op, _ in parts]
                            for err, parts in iteritems(parts_by_error)})
@@ -719,7 +729,7 @@ class OwnedPartition(object):
         self.partition = partition
         self._messages = Queue()
         self._messages_arrived = semaphore
-        self.last_offset_consumed = 0
+        self.last_offset_consumed = -1
         self.next_offset = 0
         self.fetch_lock = threading.RLock()
 
@@ -815,10 +825,10 @@ class OwnedPartition(object):
         :type messages: Iterable of :class:`pykafka.common.Message`
         """
         for message in messages:
-            if message.offset < self.last_offset_consumed:
+            if message.offset != self.next_offset:
                 log.debug("Skipping enqueue for offset (%s) "
-                          "less than last_offset_consumed (%s)",
-                          message.offset, self.last_offset_consumed)
+                          "not equal to next_offset (%s)",
+                          message.offset, self.next_offset)
                 continue
             message.partition = self.partition
             if message.partition_id != self.partition.id:

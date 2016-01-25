@@ -50,6 +50,9 @@ class TopicDict(dict):
         return [self[key] for key in self]
 
     def __getitem__(self, key):
+        if not isinstance(key, bytes):
+            raise TypeError("TopicDict.__getitem__ accepts a bytes object, but it "
+                            "got '%s'", type(key))
         if self._should_exclude_topic(key):
             raise KeyError("You have configured KafkaClient/Cluster to hide "
                            "double-underscored, internal topics")
@@ -219,8 +222,8 @@ class Cluster(object):
         :type broker_connects: Iterable of two-element sequences of the format
             (broker_host, broker_port)
         """
-        try:
-            for host, port in broker_connects:
+        for host, port in broker_connects:
+            try:
                 broker = Broker(-1, host, int(port), self._handler,
                                 self._socket_timeout_ms,
                                 self._offsets_channel_socket_timeout_ms,
@@ -230,9 +233,9 @@ class Cluster(object):
                 response = broker.request_metadata(topics)
                 if response is not None:
                     return response
-        except Exception as e:
-            log.error('Unable to connect to broker %s:%s', host, port)
-            log.exception(e)
+            except Exception as e:
+                log.error('Unable to connect to broker %s:%s. Continuing.', host, port)
+                log.exception(e)
 
     def _get_metadata(self, topics=None):
         """Get fresh cluster metadata from a broker."""
@@ -245,16 +248,26 @@ class Cluster(object):
                     return response
         else:  # try seed hosts
             metadata = None
-            broker_connects = [broker_str.split(":")
-                               for broker_str in self._seed_hosts.split(',')]
+            broker_connects = [
+                [broker_str.split(":")[0], broker_str.split(":")[1].split("/")[0]]
+                for broker_str in self._seed_hosts.split(',')]
             metadata = self._request_metadata(broker_connects, topics)
             if metadata is not None:
                 return metadata
 
             # try treating seed_hosts as a zookeeper host list
-            zookeeper = KazooClient(self._seed_hosts, timeout=self._socket_timeout_ms)
+            zookeeper = KazooClient(self._seed_hosts,
+                                    timeout=self._socket_timeout_ms / 1000)
             try:
-                zookeeper.start()
+                # This math is necessary due to a nested timeout in KazooClient.
+                # KazooClient will attempt to retry its connections only until the
+                # start() timeout is reached. Each of those retries will timeout as
+                # indicated by the KazooClient kwarg. We do a number of timeouts of
+                # self._socket_timeout_ms equal to the number of hosts. This provides
+                # the same retrying behavior that pykafka uses above when treating this
+                # host string as a list of kafka brokers.
+                zookeeper.start(
+                    timeout=(len(broker_connects) * self._socket_timeout_ms) / 1000)
             except Exception as e:
                 log.error('Unable to connect to ZooKeeper instance %s', self._seed_hosts)
                 log.exception(e)
@@ -361,6 +374,8 @@ class Cluster(object):
                 log.error("Socket disconnected during offset manager "
                           "discovery. This can happen when using PyKafka "
                           "with a Kafka version lower than 0.8.2.")
+                if i == MAX_RETRIES - 1:
+                    raise
                 self.update()
             else:
                 coordinator = self.brokers.get(res.coordinator_id, None)

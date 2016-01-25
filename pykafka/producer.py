@@ -244,8 +244,11 @@ class Producer(object):
             message to
         :type partition_key: bytes
         """
+        if not (isinstance(partition_key, bytes) or partition_key is None):
+            raise TypeError("Producer.produce accepts a bytes object as partition_key, "
+                            "but it got '%s'", type(partition_key))
         if not (isinstance(message, bytes) or message is None):
-            raise TypeError("Producer.produce accepts a bytes object, but it "
+            raise TypeError("Producer.produce accepts a bytes object as message, but it "
                             "got '%s'", type(message))
         if not self._running:
             raise ProducerStoppedException()

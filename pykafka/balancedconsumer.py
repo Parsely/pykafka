@@ -33,8 +33,7 @@ from kazoo.exceptions import NoNodeException, NodeExistsError
 from kazoo.recipe.watchers import ChildrenWatch
 
 from .common import OffsetType
-from .exceptions import (KafkaException, PartitionOwnedError,
-                         ConsumerStoppedException, NoPartitionsForConsumerException)
+from .exceptions import KafkaException, PartitionOwnedError, ConsumerStoppedException
 from .handlers import GEventHandler
 from .simpleconsumer import SimpleConsumer
 from .utils.compat import range, get_bytes, itervalues, iteritems
@@ -184,6 +183,8 @@ class BalancedConsumer(object):
         :type use_rdkafka: bool
         """
         self._cluster = cluster
+        if not isinstance(consumer_group, bytes):
+            raise TypeError("consumer_group must be a bytes object")
         self._consumer_group = consumer_group
         self._topic = topic
 
@@ -255,27 +256,6 @@ class BalancedConsumer(object):
                           "".join(traceback.format_tb(tb)))
             raise ex
 
-    def _setup_checker_worker(self):
-        """Start the zookeeper partition checker thread"""
-        self = weakref.proxy(self)
-
-        def checker():
-            while True:
-                try:
-                    if not self._running:
-                        break
-                    self._cluster.handler.sleep(120)
-                    if not self._check_held_partitions():
-                        self._rebalance()
-                except Exception as e:
-                    if not isinstance(e, ReferenceError):
-                        # surface all exceptions to the main thread
-                        self._worker_exception = sys.exc_info()
-                    break
-            log.debug("Checker thread exiting")
-        log.debug("Starting checker thread")
-        return self._cluster.handler.spawn(checker)
-
     @property
     def partitions(self):
         return self._consumer.partitions if self._consumer else dict()
@@ -304,9 +284,8 @@ class BalancedConsumer(object):
             self._running = True
             self._set_watches()
             self._rebalance()
-            self._setup_checker_worker()
         except Exception:
-            log.error("Stopping consumer in response to error")
+            log.exception("Stopping consumer in response to error")
             self.stop()
 
     def stop(self):
@@ -537,11 +516,10 @@ class BalancedConsumer(object):
             self.commit_offsets()
         # this is necessary because we can't stop() while the lock is held
         # (it's not an RLock)
-        should_stop = False
         with self._rebalancing_lock:
             if not self._running:
                 raise ConsumerStoppedException
-            log.info('Rebalancing consumer %s for topic %s.' % (
+            log.info('Rebalancing consumer "%s" for topic "%s".' % (
                 self._consumer_id, self._topic.name)
             )
 
@@ -557,10 +535,8 @@ class BalancedConsumer(object):
 
                     new_partitions = self._decide_partitions(participants)
                     if not new_partitions:
-                        should_stop = True
-                        log.warning("No partitions assigned to consumer %s - stopping",
+                        log.warning("No partitions assigned to consumer %s",
                                     self._consumer_id)
-                        break
 
                     # Update zk with any changes:
                     # Note that we explicitly fetch our set of held partitions
@@ -580,8 +556,14 @@ class BalancedConsumer(object):
                             old_offsets = (self._consumer.held_offsets
                                            if self._consumer else dict())
                             new_offsets = cns.held_offsets
-                            reset_offsets = self._post_rebalance_callback(
-                                self, old_offsets, new_offsets)
+                            try:
+                                reset_offsets = self._post_rebalance_callback(
+                                    self, old_offsets, new_offsets)
+                            except Exception as ex:
+                                log.exception("post rebalance callback threw an exception")
+                                self._worker_exception = sys.exc_info()
+                                break
+
                             if reset_offsets:
                                 cns.reset_offsets(partition_offsets=[
                                     (cns.partitions[id_], offset) for
@@ -597,8 +579,6 @@ class BalancedConsumer(object):
                         raise
                     log.info('Unable to acquire partition %s. Retrying', ex.partition)
                     self._cluster.handler.sleep(i * (self._rebalance_backoff_ms / 1000))
-        if should_stop:
-            self.stop()
 
     def _path_from_partition(self, p):
         """Given a partition, return its path in zookeeper.
@@ -648,21 +628,6 @@ class BalancedConsumer(object):
                 pass  # disappeared between ``get_children`` and ``get``
         return set(self._topic.partitions[_id] for _id in zk_partition_ids)
 
-    def _check_held_partitions(self):
-        """Double-check held partitions against zookeeper
-
-        True if the partitions held by this consumer are the ones that
-        zookeeper thinks it's holding, else False.
-        """
-        log.info("Checking held partitions against ZooKeeper")
-        zk_partitions = self._get_held_partitions()
-        if zk_partitions != self._partitions:
-            log.warning("Internal partition registry doesn't match ZooKeeper!")
-            log.debug("Internal partition ids: %s\nZooKeeper partition ids: %s",
-                      self._partitions, zk_partitions)
-            return False
-        return True
-
     @_catch_thread_exception
     def _brokers_changed(self, brokers):
         if not self._running:
@@ -697,13 +662,23 @@ class BalancedConsumer(object):
         """Reset offsets for the specified partitions
 
         Issue an OffsetRequest for each partition and set the appropriate
-        returned offset in the OwnedPartition
+        returned offset in the consumer's internal offset counter.
 
-        :param partition_offsets: (`partition`, `offset`) pairs to reset
-            where `partition` is the partition for which to reset the offset
-            and `offset` is the new offset the partition should have
-        :type partition_offsets: Iterable of
+        :param partition_offsets: (`partition`, `timestamp_or_offset`) pairs to
+            reset where `partition` is the partition for which to reset the offset
+            and `timestamp_or_offset` is EITHER the timestamp of the message
+            whose offset the partition should have OR the new offset the
+            partition should have
+        :type partition_offsets: Sequence of tuples of the form
             (:class:`pykafka.partition.Partition`, int)
+
+        NOTE: If an instance of `timestamp_or_offset` is treated by kafka as
+        an invalid offset timestamp, this function directly sets the consumer's
+        internal offset counter for that partition to that instance of
+        `timestamp_or_offset`. On the next fetch request, the consumer attempts
+        to fetch messages starting from that offset. See the following link
+        for more information on what kafka treats as a valid offset timestamp:
+        https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol#AGuideToTheKafkaProtocol-OffsetRequest
         """
         self._raise_worker_exceptions()
         if not self._consumer:
@@ -723,17 +698,15 @@ class BalancedConsumer(object):
                 return False
             disp = (time.time() - self._last_message_time) * 1000.0
             return disp > self._consumer_timeout_ms
-        if not self._partitions:
-            raise NoPartitionsForConsumerException()
         message = None
         self._last_message_time = time.time()
         while message is None and not consumer_timed_out():
             self._raise_worker_exceptions()
             try:
                 message = self._consumer.consume(block=block)
-            except ConsumerStoppedException:
+            except (ConsumerStoppedException, AttributeError):
                 if not self._running:
-                    raise
+                    raise ConsumerStoppedException
                 continue
             if message:
                 self._last_message_time = time.time()
@@ -755,4 +728,6 @@ class BalancedConsumer(object):
         Uses the offset commit/fetch API
         """
         self._raise_worker_exceptions()
+        if not self._consumer:
+            raise KafkaException("Cannot commit offsets - consumer not started")
         return self._consumer.commit_offsets()

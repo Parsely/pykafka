@@ -1,13 +1,17 @@
 from __future__ import print_function
+
 import argparse
 import calendar
 import datetime as dt
+import sys
 import time
 
 import tabulate
 
 import pykafka
+from pykafka.common import OffsetType
 from pykafka.protocol import PartitionOffsetCommitRequest
+from pykafka.utils.compat import PY3
 
 #
 # Helper Functions
@@ -60,6 +64,36 @@ def fetch_consumer_lag(client, topic, consumer_group):
 #
 # Commands
 #
+
+def consume_topic(client, args):
+    """Dump messages from a topic to a file or stdout.
+
+    :param client: KafkaClient connected to the cluster.
+    :type client:  :class:`pykafka.KafkaClient`
+    :param topic:  Name of the topic.
+    :type topic:  :class:`str`
+    """
+    # Don't auto-create topics.
+    if args.topic not in client.topics:
+        raise ValueError('Topic {} does not exist.'.format(args.topic))
+    topic = client.topics[args.topic]
+    consumer = topic.get_simple_consumer("pykafka_cli",
+                                         consumer_timeout_ms=100,
+                                         auto_offset_reset=OffsetType.LATEST,
+                                         reset_offset_on_start=True,
+                                         auto_commit_enable=True,
+                                         auto_commit_interval_ms=3000)
+    num_consumed = 0
+    while num_consumed < args.limit:
+        msg = consumer.consume()
+        if not msg or not msg.value:
+            continue
+        # Coming from Kafka, this is utf-8.
+        msg = msg.value.decode('utf-8', errors='replace') + u'\n'
+        args.outfile.write(msg if PY3 else msg.encode('utf-8'))
+        num_consumed += 1
+    args.outfile.close()
+
 
 def desc_topic(client, args):
     """Print detailed information about a topic.
@@ -151,7 +185,7 @@ def print_topics(client, args):
     print(tabulate.tabulate(
         [(t.name,
           len(t.partitions),
-          len(t.partitions.values()[0].replicas) - 1)
+          len(list(t.partitions.values())[0].replicas) - 1)
          for t in client.topics.values()],
         headers=['Topic', 'Partitions', 'Replication'],
         numalign='center',
@@ -199,12 +233,29 @@ def reset_offsets(client, args):
     )
 
 
+def _encode_utf8(string):
+    """Converts argument to UTF-8-encoded bytes.
+
+    Used to make dict lookups work in Python 3 because topics and things are
+    bytes.
+    """
+    return string.encode('utf-8', errors='replace')
+
+
 def _add_consumer_group(parser):
     """Add consumer_group to arg parser."""
     parser.add_argument('consumer_group',
                         metavar='CONSUMER_GROUP',
-                        help='Consumer group name.')
+                        help='Consumer group name.',
+                        type=_encode_utf8)
 
+
+def _add_limit(parser):
+    """Add limit option to arg parser."""
+    parser.add_argument('-l', '--limit',
+                        help='Number of messages to consume '
+                             '(default: %(default)s)',
+                        type=int, default=10)
 
 def _add_offset(parser):
     """Add offset to arg parser."""
@@ -214,12 +265,19 @@ def _add_offset(parser):
                         help='Offset to fetch. Can be EARLIEST, LATEST, or a '
                              'datetime in the format YYYY-MM-DDTHH:MM:SS.')
 
+def _add_outfile(parser):
+    """ Add outfile option to arg parser."""
+    parser.add_argument('-o', '--outfile',
+                        help='output file (defaults to stdout)',
+                        type=argparse.FileType('w'), default=sys.stdout)
+
 
 def _add_topic(parser):
     """Add topic to arg parser."""
     parser.add_argument('topic',
                         metavar='TOPIC',
-                        help='Topic name.')
+                        help='Topic name.',
+                        type=_encode_utf8)
 
 
 def _get_arg_parser():
@@ -234,6 +292,15 @@ def _get_arg_parser():
                              '[default: localhost:9092]')
 
     subparsers = output.add_subparsers(help='Commands', dest='command')
+
+    # Consume to File
+    parser = subparsers.add_parser(
+        'consume_topic',
+        help='Dump messages for a topic to a file or stdout.')
+    parser.set_defaults(func=consume_topic)
+    _add_topic(parser)
+    _add_limit(parser)
+    _add_outfile(parser)
 
     # Desc Topic
     parser = subparsers.add_parser(
@@ -284,8 +351,11 @@ def _get_arg_parser():
 def main():
     parser = _get_arg_parser()
     args = parser.parse_args()
-    client = pykafka.KafkaClient(hosts=args.host)
-    args.func(client, args)
+    if args.command:
+        client = pykafka.KafkaClient(hosts=args.host)
+        args.func(client, args)
+    else:
+        parser.print_help()
 
 
 if __name__ == '__main__':
