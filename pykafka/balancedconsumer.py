@@ -283,7 +283,7 @@ class BalancedConsumer(object):
             self._set_watches()
             self._rebalance()
         except Exception:
-            log.error("Stopping consumer in response to error")
+            log.exception("Stopping consumer in response to error")
             self.stop()
 
     def stop(self):
