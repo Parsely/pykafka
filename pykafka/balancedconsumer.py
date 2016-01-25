@@ -211,6 +211,8 @@ class BalancedConsumer(object):
 
         if not rdkafka and use_rdkafka:
             raise ImportError("use_rdkafka requires rdkafka to be installed")
+        if isinstance(self._cluster.handler, GEventHandler) and use_rdkafka:
+            raise ImportError("use_rdkafka cannot be used with gevent")
         self._use_rdkafka = rdkafka and use_rdkafka
 
         self._rebalancing_lock = cluster.handler.Lock()

@@ -23,6 +23,7 @@ from collections import defaultdict
 from .balancedconsumer import BalancedConsumer
 from .common import OffsetType
 from .exceptions import LeaderNotAvailable
+from .handlers import GEventHandler
 from .partition import Partition
 from .producer import Producer
 from .protocol import PartitionOffsetRequest
@@ -84,6 +85,8 @@ class Topic(object):
         """
         if not rdkafka and use_rdkafka:
             raise ImportError("use_rdkafka requires rdkafka to be installed")
+        if isinstance(self._cluster.handler, GEventHandler) and use_rdkafka:
+            raise ImportError("use_rdkafka cannot be used with gevent")
         Cls = rdkafka.RdKafkaProducer if rdkafka and use_rdkafka else Producer
         return Cls(self._cluster, self, **kwargs)
 
@@ -172,6 +175,8 @@ class Topic(object):
         """
         if not rdkafka and use_rdkafka:
             raise ImportError("use_rdkafka requires rdkafka to be installed")
+        if isinstance(self._cluster.handler, GEventHandler) and use_rdkafka:
+            raise ImportError("use_rdkafka cannot be used with gevent")
         Cls = (rdkafka.RdKafkaSimpleConsumer
                if rdkafka and use_rdkafka else SimpleConsumer)
         return Cls(self,
