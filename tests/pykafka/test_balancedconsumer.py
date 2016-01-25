@@ -1,8 +1,9 @@
 import math
 import mock
+import platform
+import pytest
 import time
 import unittest2
-import pytest
 from uuid import uuid4
 
 from kazoo.client import KazooClient
@@ -373,6 +374,8 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
             raise AssertionError("Rebalancing failed")
 
 
+@pytest.mark.skipif(platform.python_implementation() == "PyPy",
+                    reason="Unresolved crashes")
 class BalancedConsumerGEventIntegrationTests(BalancedConsumerIntegrationTests):
     USE_GEVENT = True
 
