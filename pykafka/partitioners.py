@@ -20,6 +20,8 @@ __all__ = ["random_partitioner", "BasePartitioner", "HashingPartitioner",
            "hashing_partitioner"]
 import random
 
+import mmh3
+
 
 def random_partitioner(partitions, key):
     """Returns a random partition out of all of the available partitions."""
@@ -50,7 +52,7 @@ class HashingPartitioner(BasePartitioner):
     until all brokers have accepted a write to that topic and have declared how
     many partitions that they are actually serving.
     """
-    def __init__(self, hash_func=hash):
+    def __init__(self, hash_func=mmh3.hash):
         """
         :param hash_func: hash function (defaults to :func:`hash`), should return
             an `int`. If hash randomization (Python 2.7) is enabled, a custom
