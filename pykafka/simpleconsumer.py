@@ -21,6 +21,7 @@ __all__ = ["SimpleConsumer"]
 import itertools
 import logging
 import sys
+import threading
 import time
 import traceback
 from collections import defaultdict
@@ -717,7 +718,7 @@ class OwnedPartition(object):
     Used to keep track of offsets and the internal message queue.
     """
 
-    def __init__(self, partition, handler, semaphore):
+    def __init__(self, partition, handler=None, semaphore=None):
         """
         :param partition: The partition to hold
         :type partition: :class:`pykafka.partition.Partition`
@@ -733,7 +734,7 @@ class OwnedPartition(object):
         self._messages_arrived = semaphore
         self.last_offset_consumed = -1
         self.next_offset = 0
-        self.fetch_lock = handler.RLock()
+        self.fetch_lock = handler.RLock() if handler is not None else threading.RLock()
 
     @property
     def message_count(self):
