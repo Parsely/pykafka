@@ -1,8 +1,33 @@
 Changelog
 =========
 
+2.2.0 (2016-1-26)
+----------------
+
+`Compare 2.2.0`_
+
+.. _Compare 2.2.0: https://github.com/Parsely/pykafka/compare/2.1.2...
+
+Minor Version Features
+**********************
+
+* Added support for gevent-based concurrency in pure cpython
+* Allowed ZooKeeper hosts to be specified directly to KafkaClient instead of
+  being treated as a fallback
+
+
+Bug Fixes
+*********
+
+* Fixed a bug causing `RLock`-related crashes in Python 3
+* Used the more stable sha1 hash function as the default for
+  `hashing_partitioner`
+* Fixed a bug in the meaning of `linger_ms` in the producer
+
+
+
 2.1.2 (2016-1-8)
-------------------
+----------------
 
 `Compare 2.1.2`_
 
