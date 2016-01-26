@@ -89,10 +89,10 @@ class ThreadingHandler(Handler):
     def RLock(*args, **kwargs):
         kwargs['verbose'] = False
         try:
-            return threading.RLock(*args, **kwargs)
+            return threading.RLock(*args[1:], **kwargs)
         except TypeError:
             kwargs.pop('verbose')
-            return threading.RLock(*args, **kwargs)
+            return threading.RLock(*args[1:], **kwargs)
 
     def spawn(self, target, *args, **kwargs):
         t = threading.Thread(target=target, *args, **kwargs)
