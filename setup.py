@@ -33,7 +33,7 @@ def get_version():
 
 install_requires = [
     'kazoo',
-    'tabulate',
+    'tabulate'
 ]
 
 lint_requires = [
