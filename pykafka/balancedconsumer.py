@@ -28,11 +28,13 @@ from uuid import uuid4
 import weakref
 
 from kazoo.client import KazooClient
+from kazoo.handlers.gevent import SequentialGeventHandler
 from kazoo.exceptions import NoNodeException, NodeExistsError
 from kazoo.recipe.watchers import ChildrenWatch
 
 from .common import OffsetType
 from .exceptions import KafkaException, PartitionOwnedError, ConsumerStoppedException
+from .handlers import GEventHandler
 from .simpleconsumer import SimpleConsumer
 from .utils.compat import range, get_bytes, itervalues, iteritems
 try:
@@ -209,6 +211,8 @@ class BalancedConsumer(object):
 
         if not rdkafka and use_rdkafka:
             raise ImportError("use_rdkafka requires rdkafka to be installed")
+        if isinstance(self._cluster.handler, GEventHandler) and use_rdkafka:
+            raise ImportError("use_rdkafka cannot be used with gevent")
         self._use_rdkafka = rdkafka and use_rdkafka
 
         self._rebalancing_lock = cluster.handler.Lock()
@@ -322,7 +326,10 @@ class BalancedConsumer(object):
         :param timeout: Connection timeout (in milliseconds)
         :type timeout: int
         """
-        self._zookeeper = KazooClient(zookeeper_connect, timeout=timeout / 1000)
+        kazoo_kwargs = {'timeout': timeout / 1000}
+        if isinstance(self._cluster.handler, GEventHandler):
+            kazoo_kwargs['handler'] = SequentialGeventHandler()
+        self._zookeeper = KazooClient(zookeeper_connect, **kazoo_kwargs)
         self._zookeeper.start()
 
     def _setup_internal_consumer(self, partitions=None, start=True):
@@ -573,7 +580,7 @@ class BalancedConsumer(object):
                                     ex.partition, i)
                         raise
                     log.info('Unable to acquire partition %s. Retrying', ex.partition)
-                    time.sleep(i * (self._rebalance_backoff_ms / 1000))
+                    self._cluster.handler.sleep(i * (self._rebalance_backoff_ms / 1000))
 
     def _path_from_partition(self, p):
         """Given a partition, return its path in zookeeper.

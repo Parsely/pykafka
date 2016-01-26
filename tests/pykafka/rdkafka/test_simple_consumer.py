@@ -1,10 +1,8 @@
-from contextlib import contextmanager
 import platform
 
 import pytest
 
 from tests.pykafka import test_simpleconsumer, test_balancedconsumer
-from pykafka.rdkafka import RdKafkaSimpleConsumer
 from pykafka.utils.compat import range
 
 

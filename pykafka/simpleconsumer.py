@@ -28,7 +28,7 @@ from collections import defaultdict
 import weakref
 
 from .common import OffsetType
-from .utils.compat import (Semaphore, Queue, Empty, iteritems, itervalues,
+from .utils.compat import (Queue, Empty, iteritems, itervalues,
                            range, iterkeys)
 from .exceptions import (OffsetOutOfRangeError, UnknownTopicOrPartition,
                          OffsetMetadataTooLarge, GroupLoadInProgress,
@@ -154,7 +154,7 @@ class SimpleConsumer(object):
 
         # incremented for any message arrival from any partition
         # the initial value is 0 (no messages waiting)
-        self._messages_arrived = Semaphore(value=0)
+        self._messages_arrived = self._cluster.handler.Semaphore(value=0)
 
         self._auto_commit_enable = auto_commit_enable
         self._auto_commit_interval_ms = auto_commit_interval_ms
@@ -320,7 +320,7 @@ class SimpleConsumer(object):
                         break
                     if self._auto_commit_enable:
                         self._auto_commit()
-                    time.sleep(self._auto_commit_interval_ms / 1000)
+                    self._cluster.handler.sleep(self._auto_commit_interval_ms / 1000)
                 except ReferenceError:
                     break
                 except Exception:
@@ -342,7 +342,7 @@ class SimpleConsumer(object):
                     if not self._running:
                         break
                     self.fetch()
-                    time.sleep(.0001)
+                    self._cluster.handler.sleep(.0001)
                 except ReferenceError:
                     break
                 except Exception:
@@ -377,6 +377,7 @@ class SimpleConsumer(object):
 
         while True:
             self._raise_worker_exceptions()
+            self._cluster.handler.sleep()
             if self._messages_arrived.acquire(blocking=block, timeout=timeout):
                 # by passing through this semaphore, we know that at
                 # least one message is waiting in some queue.
@@ -419,7 +420,7 @@ class SimpleConsumer(object):
         for i in range(self._offsets_commit_max_retries):
             if i > 0:
                 log.debug("Retrying")
-            time.sleep(i * (self._offsets_channel_backoff_ms / 1000))
+            self._cluster.handler.sleep(i * (self._offsets_channel_backoff_ms / 1000))
 
             try:
                 response = self._offset_manager.commit_consumer_group_offsets(
@@ -519,7 +520,7 @@ class SimpleConsumer(object):
                       {ERROR_CODES[err]: [op.partition.id for op, _ in parts]
                        for err, parts in iteritems(parts_by_error)})
 
-            time.sleep(i * (self._offsets_channel_backoff_ms / 1000))
+            self._cluster.handler.sleep(i * (self._offsets_channel_backoff_ms / 1000))
 
             # retry only specific error responses
             to_retry = []
@@ -633,7 +634,7 @@ class SimpleConsumer(object):
                           {ERROR_CODES[err]: [op.partition.id for op, _ in parts]
                            for err, parts in iteritems(parts_by_error)})
 
-                time.sleep(i * (self._offsets_channel_backoff_ms / 1000))
+                self._cluster.handler.sleep(i * (self._offsets_channel_backoff_ms / 1000))
 
                 for errcode, owned_partitions in iteritems(parts_by_error):
                     if errcode != 0:

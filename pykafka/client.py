@@ -19,6 +19,7 @@ limitations under the License.
 
 __all__ = ["KafkaClient"]
 
+from .handlers import ThreadingHandler, GEventHandler
 import logging
 
 from .cluster import Cluster
@@ -43,6 +44,7 @@ class KafkaClient(object):
                  zookeeper_hosts=None,
                  socket_timeout_ms=30 * 1000,
                  offsets_channel_socket_timeout_ms=10 * 1000,
+                 use_greenlets=False,
                  exclude_internal_topics=True,
                  source_address=''):
         """Create a connection to a Kafka cluster.
@@ -62,6 +64,9 @@ class KafkaClient(object):
             milliseconds) when reading responses for offset commit and
             offset fetch requests.
         :type offsets_channel_socket_timeout_ms: int
+        :param use_greenlets: Whether to perform parallel operations on greenlets
+            instead of OS threads
+        :type use_greenlets: bool
         :param exclude_internal_topics: Whether messages from internal topics
             (specifically, the offsets topic) should be exposed to the consumer.
         :type exclude_internal_topics: bool
@@ -72,7 +77,7 @@ class KafkaClient(object):
         self._source_address = source_address
         self._socket_timeout_ms = socket_timeout_ms
         self._offsets_channel_socket_timeout_ms = offsets_channel_socket_timeout_ms
-        self._handler = ThreadingHandler()
+        self._handler = GEventHandler() if use_greenlets else ThreadingHandler()
         self.cluster = Cluster(
             hosts,
             self._handler,

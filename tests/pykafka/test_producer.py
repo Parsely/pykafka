@@ -1,5 +1,7 @@
 from __future__ import division
 
+import platform
+import pytest
 import time
 import unittest2
 from uuid import uuid4
@@ -14,13 +16,14 @@ from pykafka.test.utils import get_cluster, stop_cluster
 class ProducerIntegrationTests(unittest2.TestCase):
     maxDiff = None
     USE_RDKAFKA = False
+    USE_GEVENT = False
 
     @classmethod
     def setUpClass(cls):
         cls.kafka = get_cluster()
         cls.topic_name = b'test-data'
         cls.kafka.create_topic(cls.topic_name, 3, 2)
-        cls.client = KafkaClient(cls.kafka.brokers)
+        cls.client = KafkaClient(cls.kafka.brokers, use_greenlets=cls.USE_GEVENT)
         cls.consumer = cls.client.topics[cls.topic_name].get_simple_consumer(
             consumer_timeout_ms=1000)
 
@@ -173,6 +176,12 @@ class ProducerIntegrationTests(unittest2.TestCase):
         self.assertIsNone(self.consumer.consume().value)
         prod.produce(b"")  # empty string should be distinguished from None
         self.assertEqual(b"", self.consumer.consume().value)
+
+
+@pytest.mark.skipif(platform.python_implementation() == "PyPy",
+                    reason="Unresolved crashes")
+class TestGEventProducer(ProducerIntegrationTests):
+    USE_GEVENT = True
 
 
 if __name__ == "__main__":

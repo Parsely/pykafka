@@ -22,7 +22,6 @@ from collections import deque
 import logging
 import sys
 import threading
-import time
 import traceback
 import weakref
 
@@ -39,7 +38,7 @@ from .exceptions import (
 )
 from .partitioners import random_partitioner
 from .protocol import Message, ProduceRequest
-from .utils.compat import iteritems, range, itervalues, Queue
+from .utils.compat import iteritems, range, itervalues
 
 log = logging.getLogger(__name__)
 
@@ -144,7 +143,7 @@ class Producer(object):
         self._worker_exception = None
         self._worker_trace_logged = False
         self._owned_brokers = None
-        self._delivery_reports = (_DeliveryReportQueue()
+        self._delivery_reports = (_DeliveryReportQueue(self._cluster.handler)
                                   if delivery_reports or self._synchronous
                                   else _DeliveryReportNone())
         self._running = False
@@ -270,6 +269,7 @@ class Producer(object):
             if exc is not None:
                 raise exc
         self._raise_worker_exceptions()
+        self._cluster.handler.sleep()
 
     def get_delivery_report(self, block=True, timeout=None):
         """Fetch delivery reports for messages produced on the current thread
@@ -371,7 +371,7 @@ class Producer(object):
             ]
 
         if to_retry:
-            time.sleep(self._retry_backoff_ms / 1000)
+            self._cluster.handler.sleep(self._retry_backoff_ms / 1000)
             owned_broker.increment_messages_pending(-1 * len(to_retry))
             for mset, exc in to_retry:
                 # XXX arguably, we should try to check these non_recoverables
@@ -394,7 +394,7 @@ class Producer(object):
         """
         log.info("Blocking until all messages are sent")
         while any(q.message_is_pending() for q in itervalues(self._owned_brokers)):
-            time.sleep(.3)
+            self._cluster.handler.sleep(.3)
             self._raise_worker_exceptions()
 
 
@@ -527,8 +527,8 @@ class OwnedBroker(object):
 
 class _DeliveryReportQueue(threading.local):
     """Helper that instantiates a new report queue on every calling thread"""
-    def __init__(self):
-        self.queue = Queue()
+    def __init__(self, handler):
+        self.queue = handler.Queue()
 
     @staticmethod
     def put(msg, exc=None):

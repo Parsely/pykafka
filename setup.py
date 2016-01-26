@@ -33,13 +33,15 @@ def get_version():
 
 install_requires = [
     'kazoo',
-    'tabulate'
+    'tabulate',
+    'gevent==1.1b6'
 ]
 
 lint_requires = [
     'pep8',
     'pyflakes'
 ]
+
 
 def read_lines(fname):
     with open(os.path.join(os.path.dirname(__file__), fname)) as f:
@@ -126,7 +128,7 @@ def run_setup(with_rdkafka=True):
         entry_points={
             'console_scripts': [
                 'kafka-tools = pykafka.cli.kafka_tools:main',
-                ]
+            ]
         },
         install_requires=install_requires,
         tests_require=tests_require,
@@ -144,19 +146,19 @@ def run_setup(with_rdkafka=True):
         test_suite='nose.collector',
         include_package_data=True,
         classifiers=[
-                "Development Status :: 5 - Production/Stable",
-                "Intended Audience :: Developers",
-                "License :: OSI Approved :: Apache Software License",
-                "Programming Language :: Python",
-                "Programming Language :: Python :: 2",
-                "Programming Language :: Python :: 2.7",
-                "Programming Language :: Python :: 3",
-                "Programming Language :: Python :: 3.4",
-                "Programming Language :: Python :: 3.5",
-                "Topic :: Database",
-                "Topic :: Database :: Front-Ends",
-                "Topic :: Software Development :: Libraries :: Python Modules",
-            ]
+            "Development Status :: 5 - Production/Stable",
+            "Intended Audience :: Developers",
+            "License :: OSI Approved :: Apache Software License",
+            "Programming Language :: Python",
+            "Programming Language :: Python :: 2",
+            "Programming Language :: Python :: 2.7",
+            "Programming Language :: Python :: 3",
+            "Programming Language :: Python :: 3.4",
+            "Programming Language :: Python :: 3.5",
+            "Topic :: Database",
+            "Topic :: Database :: Front-Ends",
+            "Topic :: Software Development :: Libraries :: Python Modules",
+        ]
     )
 
 try:

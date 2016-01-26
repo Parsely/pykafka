@@ -1,11 +1,13 @@
 import math
 import mock
+import platform
+import pytest
 import time
 import unittest2
-import pytest
 from uuid import uuid4
 
 from kazoo.client import KazooClient
+from kazoo.handlers.gevent import SequentialGeventHandler
 
 from pykafka import KafkaClient
 from pykafka.balancedconsumer import BalancedConsumer, OffsetType
@@ -102,6 +104,7 @@ class TestBalancedConsumer(unittest2.TestCase):
 class BalancedConsumerIntegrationTests(unittest2.TestCase):
     maxDiff = None
     USE_RDKAFKA = False
+    USE_GEVENT = False
 
     @classmethod
     def setUpClass(cls):
@@ -109,7 +112,7 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
         cls.topic_name = uuid4().hex.encode()
         cls.n_partitions = 3
         cls.kafka.create_topic(cls.topic_name, cls.n_partitions, 2)
-        cls.client = KafkaClient(cls.kafka.brokers)
+        cls.client = KafkaClient(cls.kafka.brokers, use_greenlets=cls.USE_GEVENT)
         cls.prod = cls.client.topics[cls.topic_name].get_producer(
             min_queued_messages=1
         )
@@ -119,6 +122,11 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
     @classmethod
     def tearDownClass(cls):
         stop_cluster(cls.kafka)
+
+    def get_zk(self):
+        if not self.USE_GEVENT:
+            return KazooClient(self.kafka.zookeeper)
+        return KazooClient(self.kafka.zookeeper, handler=SequentialGeventHandler())
 
     def test_rebalance_callbacks(self):
         def on_rebalance(cns, old_partition_offsets, new_partition_offsets):
@@ -308,7 +316,7 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
         See also github issue #204.
         """
         check_partitions = lambda c: c._get_held_partitions() == c._partitions
-        zk = KazooClient(self.kafka.zookeeper)
+        zk = self.get_zk()
         zk.start()
         try:
             topic = self.client.topics[self.topic_name]
@@ -318,7 +326,8 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
                                                    zookeeper=zk,
                                                    use_rdkafka=self.USE_RDKAFKA)
             self.assertTrue(check_partitions(consumer))
-            zk.stop()  # expires session, dropping all our nodes
+            with consumer._rebalancing_lock:
+                zk.stop()  # expires session, dropping all our nodes
 
             # Start a second consumer on a different zk connection
             other_consumer = topic.get_balanced_consumer(
@@ -358,11 +367,17 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
                     and sum(n_parts) == self.n_partitions):
                 break
             else:
-                time.sleep(.2)
+                balanced_consumers[0]._cluster.handler.sleep(.2)
             # check for failed consumers (there'd be no point waiting anymore)
             [cons._raise_worker_exceptions() for cons in balanced_consumers]
         else:
             raise AssertionError("Rebalancing failed")
+
+
+@pytest.mark.skipif(platform.python_implementation() == "PyPy",
+                    reason="Unresolved crashes")
+class BalancedConsumerGEventIntegrationTests(BalancedConsumerIntegrationTests):
+    USE_GEVENT = True
 
 
 if __name__ == "__main__":
