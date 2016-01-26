@@ -59,12 +59,17 @@ class ClusterIntegrationTests(unittest.TestCase):
     def test_zk_connect(self):
         """Clusters started with broker lists and zk connect strings should get same brokers"""
         zk_client = KafkaClient(zookeeper_hosts=self.kafka.zookeeper)
+        # backward compatibility
+        zk_fallback_client = KafkaClient(hosts=self.kafka.zookeeper)
         kafka_client = KafkaClient(hosts=self.kafka.brokers)
         zk_brokers = ["{}:{}".format(b.host, b.port)
                       for b in itervalues(zk_client.brokers)]
+        zk_fallback_brokers = ["{}:{}".format(b.host, b.port)
+                               for b in itervalues(zk_fallback_client.brokers)]
         kafka_brokers = ["{}:{}".format(b.host, b.port)
                          for b in itervalues(kafka_client.brokers)]
         self.assertEqual(zk_brokers, kafka_brokers)
+        self.assertEqual(zk_brokers, zk_fallback_brokers)
 
 if __name__ == "__main__":
     unittest.main()
