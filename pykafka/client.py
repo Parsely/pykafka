@@ -40,6 +40,7 @@ class KafkaClient(object):
     """
     def __init__(self,
                  hosts='127.0.0.1:9092',
+                 zookeeper_hosts=None,
                  socket_timeout_ms=30 * 1000,
                  offsets_channel_socket_timeout_ms=10 * 1000,
                  exclude_internal_topics=True,
@@ -49,9 +50,11 @@ class KafkaClient(object):
         Documentation for source_address can be found at
         https://docs.python.org/2/library/socket.html#socket.create_connection
 
-        :param hosts: Comma-separated list of kafka hosts to used to connect. Also
-            accepts a KazooClient connect string.
+        :param hosts: Comma-separated list of kafka hosts to which to connect.
         :type hosts: bytes
+        :param zookeeper_hosts: KazooClient-formatted string of ZooKeeper hosts to which
+            to connect. If not `None`, this argument takes precedence over `hosts`
+        :type zookeeper_hosts: bytes
         :param socket_timeout_ms: The socket timeout (in milliseconds) for
             network requests
         :type socket_timeout_ms: int
@@ -65,18 +68,19 @@ class KafkaClient(object):
         :param source_address: The source address for socket connections
         :type source_address: str `'host:port'`
         """
-        self._seed_hosts = hosts
+        self._seed_hosts = zookeeper_hosts if zookeeper_hosts is not None else hosts
         self._source_address = source_address
         self._socket_timeout_ms = socket_timeout_ms
         self._offsets_channel_socket_timeout_ms = offsets_channel_socket_timeout_ms
         self._handler = ThreadingHandler()
         self.cluster = Cluster(
-            self._seed_hosts,
+            hosts,
             self._handler,
             socket_timeout_ms=self._socket_timeout_ms,
             offsets_channel_socket_timeout_ms=self._offsets_channel_socket_timeout_ms,
             exclude_internal_topics=exclude_internal_topics,
-            source_address=self._source_address
+            source_address=self._source_address,
+            zookeeper_hosts=zookeeper_hosts
         )
         self.brokers = self.cluster.brokers
         self.topics = self.cluster.topics

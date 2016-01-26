@@ -155,12 +155,15 @@ class Cluster(object):
                  socket_timeout_ms=30 * 1000,
                  offsets_channel_socket_timeout_ms=10 * 1000,
                  exclude_internal_topics=True,
-                 source_address=''):
+                 source_address='',
+                 zookeeper_hosts=None):
         """Create a new Cluster instance.
 
-        :param hosts: Comma-separated list of kafka hosts to used to connect. Also
-            accepts a KazooClient connect string
+        :param hosts: Comma-separated list of kafka hosts to which to connect.
         :type hosts: bytes
+        :param zookeeper_hosts: KazooClient-formatted string of ZooKeeper hosts to which
+            to connect. If not `None`, this argument takes precedence over `hosts`
+        :type zookeeper_hosts: bytes
         :param handler: The concurrency handler for network requests.
         :type handler: :class:`pykafka.handlers.Handler`
         :param socket_timeout_ms: The socket timeout (in milliseconds) for
@@ -176,7 +179,7 @@ class Cluster(object):
         :param source_address: The source address for socket connections
         :type source_address: str `'host:port'`
         """
-        self._seed_hosts = hosts
+        self._seed_hosts = zookeeper_hosts if zookeeper_hosts is not None else hosts
         self._socket_timeout_ms = socket_timeout_ms
         self._offsets_channel_socket_timeout_ms = offsets_channel_socket_timeout_ms
         self._handler = handler
@@ -185,7 +188,7 @@ class Cluster(object):
         self._source_address = source_address
         self._source_host = self._source_address.split(':')[0]
         self._source_port = 0
-        self._zookeeper_connect = None
+        self._zookeeper_connect = zookeeper_hosts
         if ':' in self._source_address:
             self._source_port = int(self._source_address.split(':')[1])
         self.update()
@@ -247,48 +250,50 @@ class Cluster(object):
                 if response is not None:
                     return response
         else:  # try seed hosts
-            metadata = None
             broker_connects = [
                 [broker_str.split(":")[0], broker_str.split(":")[1].split("/")[0]]
                 for broker_str in self._seed_hosts.split(',')]
-            metadata = self._request_metadata(broker_connects, topics)
-            if metadata is not None:
-                return metadata
-
-            # try treating seed_hosts as a zookeeper host list
-            zookeeper = KazooClient(self._seed_hosts,
-                                    timeout=self._socket_timeout_ms / 1000)
-            try:
-                # This math is necessary due to a nested timeout in KazooClient.
-                # KazooClient will attempt to retry its connections only until the
-                # start() timeout is reached. Each of those retries will timeout as
-                # indicated by the KazooClient kwarg. We do a number of timeouts of
-                # self._socket_timeout_ms equal to the number of hosts. This provides
-                # the same retrying behavior that pykafka uses above when treating this
-                # host string as a list of kafka brokers.
-                zookeeper.start(
-                    timeout=(len(broker_connects) * self._socket_timeout_ms) / 1000)
-            except Exception as e:
-                log.error('Unable to connect to ZooKeeper instance %s', self._seed_hosts)
-                log.exception(e)
-            else:
+            if self._zookeeper_connect is not None:
+                zookeeper = KazooClient(self._zookeeper_connect,
+                                        timeout=self._socket_timeout_ms / 1000)
                 try:
-                    # get a list of connect strings from zookeeper
-                    brokers_path = "/brokers/ids/"
-                    broker_ids = zookeeper.get_children(brokers_path)
-                    broker_connects = []
-                    for broker_id in broker_ids:
-                        broker_json, _ = zookeeper.get("{}{}".format(brokers_path, broker_id))
-                        broker_info = json.loads(broker_json.decode("utf-8"))
-                        broker_connects.append((broker_info['host'], broker_info['port']))
-                    zookeeper.stop()
+                    # This math is necessary due to a nested timeout in KazooClient.
+                    # KazooClient will attempt to retry its connections only until the
+                    # start() timeout is reached. Each of those retries will timeout as
+                    # indicated by the KazooClient kwarg. We do a number of timeouts of
+                    # self._socket_timeout_ms equal to the number of hosts. This provides
+                    # the same retrying behavior that pykafka uses above when treating
+                    # this host string as a list of kafka brokers.
+                    zookeeper.start(
+                        timeout=(len(broker_connects) * self._socket_timeout_ms) / 1000)
                 except Exception as e:
-                    log.error('Unable to fetch broker info from ZooKeeper')
+                    log.error('Unable to connect to ZooKeeper instance %s',
+                              self._zookeeper_connect)
                     log.exception(e)
+                else:
+                    try:
+                        # get a list of connect strings from zookeeper
+                        brokers_path = "/brokers/ids/"
+                        broker_ids = zookeeper.get_children(brokers_path)
+                        broker_connects = []
+                        for broker_id in broker_ids:
+                            broker_json, _ = zookeeper.get("{}{}".format(brokers_path,
+                                                                         broker_id))
+                            broker_info = json.loads(broker_json.decode("utf-8"))
+                            broker_connects.append((broker_info['host'],
+                                                    broker_info['port']))
+                        zookeeper.stop()
+                    except Exception as e:
+                        log.error('Unable to fetch broker info from ZooKeeper')
+                        log.exception(e)
 
+                    metadata = self._request_metadata(broker_connects, topics)
+                    if metadata is not None:
+                        return metadata
+            else:
+                metadata = None
                 metadata = self._request_metadata(broker_connects, topics)
                 if metadata is not None:
-                    self._zookeeper_connect = self._seed_hosts
                     return metadata
 
         # Couldn't connect anywhere. Raise an error.
