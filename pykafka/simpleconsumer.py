@@ -21,8 +21,8 @@ __all__ = ["SimpleConsumer"]
 import itertools
 import logging
 import sys
-import time
 import threading
+import time
 import traceback
 from collections import defaultdict
 import weakref
@@ -166,11 +166,13 @@ class SimpleConsumer(object):
         self._discover_offset_manager()
 
         if partitions is not None:
-            self._partitions = {p: OwnedPartition(p, self._messages_arrived)
+            self._partitions = {p: OwnedPartition(p, self._cluster.handler,
+                                                  self._messages_arrived)
                                 for p in partitions}
         else:
             self._partitions = {topic.partitions[k]:
-                                OwnedPartition(p, self._messages_arrived)
+                                OwnedPartition(p, self._cluster.handler,
+                                               self._messages_arrived)
                                 for k, p in iteritems(topic.partitions)}
         self._partitions_by_id = {p.partition.id: p
                                   for p in itervalues(self._partitions)}
@@ -716,12 +718,13 @@ class OwnedPartition(object):
     Used to keep track of offsets and the internal message queue.
     """
 
-    def __init__(self,
-                 partition,
-                 semaphore=None):
+    def __init__(self, partition, handler=None, semaphore=None):
         """
         :param partition: The partition to hold
         :type partition: :class:`pykafka.partition.Partition`
+        :param handler: The :class:`pykafka.handlers.Handler` instance to use
+            to generate a lock
+        type handler: :class:`pykafka.handler.Handler`
         :param semaphore: A Semaphore that counts available messages and
             facilitates non-busy blocking
         :type semaphore: :class:`pykafka.utils.compat.Semaphore`
@@ -731,7 +734,7 @@ class OwnedPartition(object):
         self._messages_arrived = semaphore
         self.last_offset_consumed = -1
         self.next_offset = 0
-        self.fetch_lock = threading.RLock()
+        self.fetch_lock = handler.RLock() if handler is not None else threading.RLock()
 
     @property
     def message_count(self):
