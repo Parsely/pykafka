@@ -349,11 +349,12 @@ class Producer(object):
                     if presponse.err == NotLeaderForPartition.ERROR_CODE:
                         # Update cluster metadata to get new leader
                         self._update()
-                    info = "Produce request for {}/{} to {}:{} failed.".format(
+                    info = "Produce request for {}/{} to {}:{} failed with error code {}.".format(
                         topic,
                         partition,
                         owned_broker.broker.host,
-                        owned_broker.broker.port)
+                        owned_broker.broker.port,
+                        presponse.err)
                     log.warning(info)
                     exc = ERROR_CODES[presponse.err](info)
                     to_retry.extend(
