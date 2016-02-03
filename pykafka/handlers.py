@@ -23,7 +23,7 @@ import gevent
 import gevent.event
 import gevent.lock
 import gevent.queue
-import gevent.coros
+import gevent.lock
 import logging
 import threading
 import time
@@ -107,7 +107,7 @@ class GEventHandler(Handler):
     Event = gevent.event.Event
     Lock = gevent.lock.RLock  # fixme
     RLock = gevent.lock.RLock
-    Semaphore = gevent.coros.Semaphore
+    Semaphore = gevent.lock.Semaphore
 
     def sleep(self, seconds=0):
         gevent.sleep(seconds)
