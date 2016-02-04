@@ -1,5 +1,10 @@
 language: python
 sudo: false
+cache:
+  directories:
+    - $HOME/.cache/pip
+    - $HOME/kafka-bin
+    - $HOME/.ccache
 python:
     - "2.7"
     - "3.4"
@@ -7,9 +12,10 @@ python:
     - "pypy"
 env:
   global:
+      - PATH="/usr/lib/ccache:$PATH"
       - BROKERS=localhost:9092,localhost:9093,localhost:9094
       - ZOOKEEPER=localhost:2181
-      - KAFKA_BIN=/home/travis/kafka-bin
+      - KAFKA_BIN="$HOME/kafka-bin"
   matrix:
       - KAFKA_VERSION=0.8.2.1
       - KAFKA_VERSION=0.9.0.0
@@ -46,14 +52,14 @@ install:
     - wget https://github.com/edenhill/librdkafka/archive/0.8.6.tar.gz
     - tar -xzf 0.8.6.tar.gz
     - cd librdkafka-0.8.6/ && ./configure --prefix=$HOME
-    - make && make install && cd -
+    - make -j 2 && make -j 2 install && cd -
 
 before_script:
     - export C_INCLUDE_PATH=$HOME/include:$C_INCLUDE_PATH
     - export LIBRARY_PATH=$HOME/lib:$LIBRARY_PATH
     - export LD_LIBRARY_PATH=$HOME/lib:$LD_LIBRARY_PATH
     - export CFLAGS="-coverage"
-    - "python -m pykafka.test.kafka_instance 3 --kafka-version $KAFKA_VERSION --download-dir /home/travis/kafka-bin &"
+    - "python -m pykafka.test.kafka_instance 3 --kafka-version $KAFKA_VERSION --download-dir $KAFKA_BIN &"
     - "sleep 10"
 
 script:
