@@ -3,6 +3,7 @@ sudo: false
 cache:
   directories:
     - $HOME/.cache/pip
+    - $HOME/kafka-bin
 python:
     - "2.7"
     - "3.4"
