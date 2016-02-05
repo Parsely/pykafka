@@ -17,6 +17,7 @@ limitations under the License.
 import re
 import sys
 import os
+import platform
 
 from distutils.command.build_ext import build_ext
 from distutils.errors import CCompilerError, DistutilsExecError, DistutilsPlatformError
@@ -24,6 +25,11 @@ from setuptools import setup, find_packages
 from setuptools.command.test import test as TestCommand
 from setuptools.extension import Extension
 
+if sys.version_info < (2, 7):
+    raise Exception('pykafka requires Python 2.7 or higher.')
+
+python_implementation = platform.python_implementation()
+cpython = python_implementation == 'CPython'
 
 # Get version without importing, which avoids dependency issues
 def get_version():
@@ -162,6 +168,8 @@ def run_setup(with_rdkafka=True):
     )
 
 try:
+    if not cpython:
+        raise ve_build_ext.BuildFailed("librdkafka is not supported under %s" % python_implementation)
     run_setup()
 except ve_build_ext.BuildFailed as exc:
     print(15 * "-")
