@@ -295,6 +295,7 @@ class Cluster(object):
         except Exception as e:
             log.error('Unable to connect to ZooKeeper instance %s', zk_connect)
             log.exception(e)
+            return []
         else:
             try:
                 # get a list of connect strings from zookeeper
@@ -313,6 +314,7 @@ class Cluster(object):
             except Exception as e:
                 log.error('Unable to fetch broker info from ZooKeeper')
                 log.exception(e)
+                return []
 
     def _update_brokers(self, broker_metadata):
         """Update brokers with fresh metadata.
