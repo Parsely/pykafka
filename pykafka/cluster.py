@@ -29,6 +29,7 @@ from kazoo.client import KazooClient
 from .broker import Broker
 from .exceptions import (ERROR_CODES,
                          ConsumerCoordinatorNotAvailable,
+                         NoBrokersAvailableError,
                          SocketDisconnectedError,
                          LeaderNotAvailable)
 from .protocol import ConsumerMetadataRequest, ConsumerMetadataResponse
@@ -271,7 +272,7 @@ class Cluster(object):
                     return metadata
 
         # Couldn't connect anywhere. Raise an error.
-        raise RuntimeError(
+        raise NoBrokersAvailableError(
             'Unable to connect to a broker to fetch metadata. See logs.')
 
     def _get_brokers_from_zookeeper(self, zk_connect):

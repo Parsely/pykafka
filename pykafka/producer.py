@@ -31,6 +31,7 @@ from .exceptions import (
     KafkaException,
     InvalidMessageSize,
     MessageSizeTooLarge,
+    NoBrokersAvailableError,
     NotLeaderForPartition,
     ProducerQueueFullError,
     ProducerStoppedException,
@@ -364,7 +365,10 @@ class Producer(object):
             log.warning('Broker %s:%s disconnected. Retrying.',
                         owned_broker.broker.host,
                         owned_broker.broker.port)
-            self._update()
+            try:
+                self._update()
+            except NoBrokersAvailableError:
+                log.warning("No brokers available")
             to_retry = [
                 (mset, exc)
                 for topic, partitions in iteritems(req.msets)
