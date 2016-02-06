@@ -1,12 +1,20 @@
+import platform
 from contextlib import contextmanager
 import unittest2
 
 from pykafka.exceptions import RdKafkaStoppedException, RdKafkaException
-from pykafka.rdkafka import _rd_kafka
+try:
+    from pykafka.rdkafka import _rd_kafka
+    RDKAFKA = True
+except ImportError:
+    RDKAFKA = False # C extension not built
 from pykafka.test.utils import get_cluster, stop_cluster
 from pykafka.utils.compat import get_bytes
+import pytest
 
-
+@pytest.mark.skipif(platform.python_implementation() == "PyPy",
+                    reason="librdkafka is not supported with PyPy.")
+@pytest.mark.skipif(not RDKAFKA, reason="C extension for librdkafka not built.")
 class TestRdKafkaConsumer(unittest2.TestCase):
     @classmethod
     def setUpClass(cls):
