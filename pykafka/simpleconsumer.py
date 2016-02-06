@@ -530,6 +530,9 @@ class SimpleConsumer(object):
             to_retry.extend(parts_by_error.get(NotCoordinatorForConsumer.ERROR_CODE, []))
             reqs = [p.build_offset_fetch_request() for p, _ in to_retry]
 
+        if parts_by_error.get(GroupLoadInProgress.ERROR_CODE, []):
+            raise GroupLoadInProgress()
+
     def reset_offsets(self, partition_offsets=None):
         """Reset offsets for the specified partitions
 
