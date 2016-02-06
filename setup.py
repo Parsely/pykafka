@@ -29,7 +29,7 @@ if sys.version_info < (2, 7):
     raise Exception('pykafka requires Python 2.7 or higher.')
 
 python_implementation = platform.python_implementation()
-cpython = python_implementation == 'CPython'
+is_cpython = python_implementation == 'CPython'
 
 # Get version without importing, which avoids dependency issues
 def get_version():
@@ -174,7 +174,7 @@ def run_setup(with_rdkafka=True):
     )
 
 try:
-    if not cpython:
+    if not is_cpython:
         raise ve_build_ext.UnsupportedPlatform(python_implementation)
     run_setup()
 except ve_build_ext.BuildFailed as exc:
