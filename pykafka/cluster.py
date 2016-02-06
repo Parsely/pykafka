@@ -61,13 +61,13 @@ class TopicDict(dict):
             return topic_ref()
         else:
             # Topic exists, but needs to be instantiated locally
-            for i in range(self._cluster._max_connection_retries):
+            for i in range(self._cluster()._max_connection_retries):
                 meta = self._cluster()._get_metadata([key])
                 try:
                     topic = Topic(self._cluster(), meta.topics[key])
                 except LeaderNotAvailable:
                     log.warning("LeaderNotAvailable encountered during Topic creation")
-                    if i == self._cluster._max_connection_retries - 1:
+                    if i == self._cluster()._max_connection_retries - 1:
                         raise
                 else:
                     self[key] = weakref.ref(topic)
