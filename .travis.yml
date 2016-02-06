@@ -17,7 +17,7 @@ env:
       - ZOOKEEPER=localhost:2181
       - KAFKA_BIN="$HOME/kafka-bin"
   matrix:
-      - KAFKA_VERSION=0.8.2.1
+      - KAFKA_VERSION=0.8.2.2
       - KAFKA_VERSION=0.9.0.0
 
 addons:
