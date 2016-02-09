@@ -93,6 +93,8 @@ class Topic(object):
     def get_sync_producer(self, **kwargs):
         """Create a :class:`pykafka.producer.Producer` for this topic.
 
+        The created `Producer` instance will have `sync=True`.
+
         For a description of all available `kwargs`, see the Producer docstring.
         """
         return Producer(self._cluster, self, sync=True, **kwargs)
