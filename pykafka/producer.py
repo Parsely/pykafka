@@ -78,7 +78,11 @@ class Producer(object):
         :param compression: The type of compression to use.
         :type compression: :class:`pykafka.common.CompressionType`
         :param max_retries: How many times to attempt to produce a given batch of
-            messages before raising an error.
+            messages before raising an error. Allowing retries will potentially change
+            the ordering of records because if two records are sent to a single partition,
+            and the first fails and is retried but the second succeeds, then the second
+            record may appear first. If you want to completely disallow message
+            reordering, use `sync=True`.
         :type max_retries: int
         :param retry_backoff_ms: The amount of time (in milliseconds) to
             back off during produce request retries.
