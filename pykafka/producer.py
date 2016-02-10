@@ -23,6 +23,7 @@ import logging
 import sys
 import threading
 import traceback
+from Queue import Empty
 import weakref
 
 from .common import CompressionType
@@ -265,12 +266,18 @@ class Producer(object):
         self._produce(msg)
 
         if self._synchronous:
-            reported_msg, exc = self.get_delivery_report()
+            while True:
+                self._cluster.handler.sleep()
+                try:
+                    reported_msg, exc = self.get_delivery_report(timeout=1)
+                    break
+                except Empty:
+                    self._raise_worker_exceptions()
+                    continue
             assert reported_msg is msg
             if exc is not None:
                 raise exc
-        self._raise_worker_exceptions()
-        self._cluster.handler.sleep()
+            self._cluster.handler.sleep()
 
     def get_delivery_report(self, block=True, timeout=None):
         """Fetch delivery reports for messages produced on the current thread
@@ -279,6 +286,11 @@ class Producer(object):
         (for successful deliveries) or `Exception` (for failed deliveries).
         This interface is only available if you enabled `delivery_reports` on
         init (and you did not use `sync=True`)
+
+        :param block: Whether to block on dequeueing a delivery report
+        :type block: bool
+        :param timeout: How long (in seconds) to block before returning None
+        ;type timeout: int
         """
         try:
             return self._delivery_reports.queue.get(block, timeout)
