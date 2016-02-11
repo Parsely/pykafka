@@ -228,16 +228,28 @@ class TestOwnedPartition(unittest2.TestCase):
         self.assertNotEqual(ret_message, None)
         self.assertEqual(ret_message.value, msgval)
 
-    def test_partition_rejects_old_message(self):
+    def test_partition_rejects_old_message_after_initial(self):
         last_offset = 400
-        op = OwnedPartition(None)
-        op.last_offset_consumed = last_offset
+        message1 = mock.Mock()
+        message1.value = "first-test"
+        message1.partition_id = 0
+        message1.offset = last_offset
 
-        message = mock.Mock()
-        message.value = "test"
-        message.offset = 20
+        partition = mock.MagicMock()
+        partition.id = 0
+        op = OwnedPartition(partition)
+        op.enqueue_messages([message1])
+        self.assertEqual(op.message_count, 1)
+        consumed_msg = op.consume()
+        self.assertEqual(op.message_count, 0)
+        self.assertEqual(op.last_offset_consumed, last_offset)
 
-        op.enqueue_messages([message])
+        message2 = mock.Mock()
+        message2.value = "test"
+        message2.partition_id = 0
+        message2.offset = 20
+
+        op.enqueue_messages([message2])
         self.assertEqual(op.message_count, 0)
         op.consume()
         self.assertEqual(op.last_offset_consumed, last_offset)
