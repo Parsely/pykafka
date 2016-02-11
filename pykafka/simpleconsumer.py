@@ -734,6 +734,7 @@ class OwnedPartition(object):
         self._messages_arrived = semaphore
         self.last_offset_consumed = -1
         self.next_offset = 0
+        self._consumed_first_msg = False
         self.fetch_lock = handler.RLock() if handler is not None else threading.RLock()
 
     @property
@@ -828,6 +829,16 @@ class OwnedPartition(object):
         :type messages: Iterable of :class:`pykafka.common.Message`
         """
         for message in messages:
+            # HAck to deal with compacted topic not returning earliest offset
+            # correctly
+            if not self._consumed_first_msg and message.offset != self.next_offset:
+                log.info("Detected compacted topic. "
+                          "Setting earliest offest to (%s) "
+                          "not equal to next_offset (%s)",
+                          message.offset, self.next_offset)
+                self.next_offset = message.offset
+                self._consumed_first_msg = True
+
             if message.offset != self.next_offset:
                 log.debug("Skipping enqueue for offset (%s) "
                           "not equal to next_offset (%s)",
