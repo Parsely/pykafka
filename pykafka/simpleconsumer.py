@@ -839,7 +839,8 @@ class OwnedPartition(object):
                 self.next_offset = message.offset
                 self._consumed_first_msg = True
 
-            if message.offset != self.next_offset:
+            # enforce ordering of messages
+            if message.offset < self.next_offset:
                 log.debug("Skipping enqueue for offset (%s) "
                           "not equal to next_offset (%s)",
                           message.offset, self.next_offset)
