@@ -524,11 +524,11 @@ class SimpleConsumer(object):
 
             self._cluster.handler.sleep(i * (self._offsets_channel_backoff_ms / 1000))
 
-            # retry only specific error responses
-            to_retry = []
-            to_retry.extend(parts_by_error.get(GroupLoadInProgress.ERROR_CODE, []))
-            to_retry.extend(parts_by_error.get(NotCoordinatorForConsumer.ERROR_CODE, []))
+            to_retry = [pair for err in itervalues(parts_by_error) for pair in err]
             reqs = [p.build_offset_fetch_request() for p, _ in to_retry]
+
+        if len(parts_by_error) > 1:
+            raise KafkaException(parts_by_error)
 
     def reset_offsets(self, partition_offsets=None):
         """Reset offsets for the specified partitions
