@@ -23,7 +23,6 @@ import logging
 import sys
 import threading
 import traceback
-from Queue import Empty
 import weakref
 
 from .common import CompressionType
@@ -40,7 +39,7 @@ from .exceptions import (
 )
 from .partitioners import random_partitioner
 from .protocol import Message, ProduceRequest
-from .utils.compat import iteritems, range, itervalues
+from .utils.compat import iteritems, range, itervalues, Empty
 
 log = logging.getLogger(__name__)
 
