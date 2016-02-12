@@ -193,4 +193,6 @@ class RequestHandler(object):
                     shared.requests.task_done()
             log.info("RequestHandler worker: exiting cleanly")
 
-        return self.handler.spawn(worker)
+        return self.handler.spawn(worker, name="pykafka.RequestHandler.worker for {}:{}".format(
+                                            self.shared.connection.host,
+                                            self.shared.connection.port))

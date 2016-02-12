@@ -231,13 +231,31 @@ class Producer(object):
                     self, partition.leader)
         return queued_messages
 
-    def stop(self):
-        """Mark the producer as stopped"""
-        self._running = False
+    def _stop_owned_brokers(self):
         self._wait_all()
         if self._owned_brokers is not None:
             for owned_broker in self._owned_brokers.values():
                 owned_broker.stop()
+
+    def stop(self, wait=True):
+        """Mark the producer as stopped, and wait until all messages to be sent
+
+        :param wait: whether we should wait until all messages to be sent or not
+        :type wait: bool
+        """
+        def get_queue_readers():
+            return [qr for qr in threading.enumerate() if qr.name.find('pykafka.OwnedBroker.queue_reader') == 0]
+
+        while wait and self._running:
+            self._stop_owned_brokers()
+            readers = get_queue_readers()
+            if len(readers):
+                for reader in readers:
+                    reader.join()
+            else:
+                break
+
+        self._running = False
 
     def produce(self, message, partition_key=None):
         """Produce a message.
@@ -448,7 +466,8 @@ class OwnedBroker(object):
             log.info("Worker exited for broker %s:%s", self.broker.host,
                      self.broker.port)
         log.info("Starting new produce worker for broker %s", broker.id)
-        self.producer._cluster.handler.spawn(queue_reader)
+        self.producer._cluster.handler.spawn(queue_reader,
+                                             name="pykafka.OwnedBroker.queue_reader for broker %d" % self.broker.id)
 
     def stop(self):
         self.running = False
