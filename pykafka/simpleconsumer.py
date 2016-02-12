@@ -66,7 +66,8 @@ class SimpleConsumer(object):
                  auto_offset_reset=OffsetType.EARLIEST,
                  consumer_timeout_ms=-1,
                  auto_start=True,
-                 reset_offset_on_start=False):
+                 reset_offset_on_start=False,
+                 compacted_topic=False):
         """Create a SimpleConsumer.
 
         Settings and default values are taken from the Scala
@@ -131,6 +132,10 @@ class SimpleConsumer(object):
             internal offset counter to `self._auto_offset_reset` and commit that
             offset immediately upon starting up
         :type reset_offset_on_start: bool
+        :param compacted_topic: Set to read from a compacted topic. Forces
+            consumer to use less stringent ordering logic when because compacted
+            topics do not provide offsets in stict incrementing order.
+        :type compacted_topic: bool
         """
         self._cluster = cluster
         if not (isinstance(consumer_group, bytes) or consumer_group is None):
@@ -151,6 +156,7 @@ class SimpleConsumer(object):
         self._offsets_reset_max_retries = offsets_commit_max_retries
         self._auto_start = auto_start
         self._reset_offset_on_start = reset_offset_on_start
+        self._compacted_topic = compacted_topic
 
         # incremented for any message arrival from any partition
         # the initial value is 0 (no messages waiting)
@@ -167,12 +173,14 @@ class SimpleConsumer(object):
 
         if partitions is not None:
             self._partitions = {p: OwnedPartition(p, self._cluster.handler,
-                                                  self._messages_arrived)
+                                                  self._messages_arrived,
+                                                  self._compacted_topic)
                                 for p in partitions}
         else:
             self._partitions = {topic.partitions[k]:
                                 OwnedPartition(p, self._cluster.handler,
-                                               self._messages_arrived)
+                                               self._messages_arrived,
+                                               self._compacted_topic)
                                 for k, p in iteritems(topic.partitions)}
         self._partitions_by_id = {p.partition.id: p
                                   for p in itervalues(self._partitions)}
@@ -718,7 +726,7 @@ class OwnedPartition(object):
     Used to keep track of offsets and the internal message queue.
     """
 
-    def __init__(self, partition, handler=None, semaphore=None):
+    def __init__(self, partition, handler=None, semaphore=None, compacted_topic=False):
         """
         :param partition: The partition to hold
         :type partition: :class:`pykafka.partition.Partition`
@@ -728,13 +736,17 @@ class OwnedPartition(object):
         :param semaphore: A Semaphore that counts available messages and
             facilitates non-busy blocking
         :type semaphore: :class:`pykafka.utils.compat.Semaphore`
+        :param compacted_topic: Set to read from a compacted topic. Forces
+            consumer to use less stringent ordering logic when because compacted
+            topics do not provide offsets in stict incrementing order.
+        :type compacted_topic: bool
         """
         self.partition = partition
         self._messages = Queue()
         self._messages_arrived = semaphore
+        self._compacted_topic = compacted_topic
         self.last_offset_consumed = -1
         self.next_offset = 0
-        self._consumed_first_msg = False
         self.fetch_lock = handler.RLock() if handler is not None else threading.RLock()
 
     @property
@@ -829,22 +841,18 @@ class OwnedPartition(object):
         :type messages: Iterable of :class:`pykafka.common.Message`
         """
         for message in messages:
-            # HAck to deal with compacted topic not returning earliest offset
-            # correctly
-            if not self._consumed_first_msg and message.offset != self.next_offset:
-                log.info("Detected compacted topic. "
-                          "Setting earliest offest to (%s) "
-                          "not equal to next_offset (%s)",
-                          message.offset, self.next_offset)
-                self.next_offset = message.offset
-                self._consumed_first_msg = True
-
             # enforce ordering of messages
-            if message.offset < self.next_offset:
+            if self._compacted_topic and message.offset < self.next_offset:
                 log.debug("Skipping enqueue for offset (%s) "
                           "not equal to next_offset (%s)",
                           message.offset, self.next_offset)
                 continue
+            elif not self._compacted_topic and message.offset != self.next_offset:
+                log.debug("Skipping enqueue for offset (%s) "
+                          "not equal to next_offset (%s)",
+                          message.offset, self.next_offset)
+                continue
+
             message.partition = self.partition
             if message.partition_id != self.partition.id:
                 log.error("Partition %s enqueued a message meant for partition %s",
