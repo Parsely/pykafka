@@ -156,7 +156,7 @@ class SimpleConsumer(object):
         self._offsets_reset_max_retries = offsets_commit_max_retries
         self._auto_start = auto_start
         self._reset_offset_on_start = reset_offset_on_start
-        self._compacted_topic = compacted_topic
+        self._is_compacted_topic = compacted_topic
 
         # incremented for any message arrival from any partition
         # the initial value is 0 (no messages waiting)
@@ -174,13 +174,13 @@ class SimpleConsumer(object):
         if partitions is not None:
             self._partitions = {p: OwnedPartition(p, self._cluster.handler,
                                                   self._messages_arrived,
-                                                  self._compacted_topic)
+                                                  self._is_compacted_topic)
                                 for p in partitions}
         else:
             self._partitions = {topic.partitions[k]:
                                 OwnedPartition(p, self._cluster.handler,
                                                self._messages_arrived,
-                                               self._compacted_topic)
+                                               self._is_compacted_topic)
                                 for k, p in iteritems(topic.partitions)}
         self._partitions_by_id = {p.partition.id: p
                                   for p in itervalues(self._partitions)}
@@ -744,7 +744,7 @@ class OwnedPartition(object):
         self.partition = partition
         self._messages = Queue()
         self._messages_arrived = semaphore
-        self._compacted_topic = compacted_topic
+        self._is_compacted_topic = compacted_topic
         self.last_offset_consumed = -1
         self.next_offset = 0
         self.fetch_lock = handler.RLock() if handler is not None else threading.RLock()
@@ -842,12 +842,8 @@ class OwnedPartition(object):
         """
         for message in messages:
             # enforce ordering of messages
-            if self._compacted_topic and message.offset < self.next_offset:
-                log.debug("Skipping enqueue for offset (%s) "
-                          "not equal to next_offset (%s)",
-                          message.offset, self.next_offset)
-                continue
-            elif not self._compacted_topic and message.offset != self.next_offset:
+            if (self._is_compacted_topic and message.offset < self.next_offset) or \
+                (not self._is_compacted_topic and message.offset != self.next_offset):
                 log.debug("Skipping enqueue for offset (%s) "
                           "not equal to next_offset (%s)",
                           message.offset, self.next_offset)

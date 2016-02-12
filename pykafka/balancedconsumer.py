@@ -213,7 +213,7 @@ class BalancedConsumer(object):
         self._running = False
         self._worker_exception = None
         self._worker_trace_logged = False
-        self._compacted_topic = compacted_topic
+        self._is_compacted_topic = compacted_topic
 
         if not rdkafka and use_rdkafka:
             raise ImportError("use_rdkafka requires rdkafka to be installed")
@@ -378,7 +378,7 @@ class BalancedConsumer(object):
             auto_offset_reset=self._auto_offset_reset,
             reset_offset_on_start=reset_offset_on_start,
             auto_start=start,
-            compacted_topic=self._compacted_topic
+            compacted_topic=self._is_compacted_topic
         )
 
     def _decide_partitions(self, participants):
