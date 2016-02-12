@@ -90,7 +90,8 @@ class BalancedConsumer(object):
                  auto_start=True,
                  reset_offset_on_start=False,
                  post_rebalance_callback=None,
-                 use_rdkafka=False):
+                 use_rdkafka=False,
+                 compacted_topic=False):
         """Create a BalancedConsumer instance
 
         :param topic: The topic this consumer should consume
@@ -181,6 +182,10 @@ class BalancedConsumer(object):
         :type post_rebalance_callback: function
         :param use_rdkafka: Use librdkafka-backed consumer if available
         :type use_rdkafka: bool
+        :param compacted_topic: Set to read from a compacted topic. Forces
+            consumer to use less stringent ordering logic when because compacted
+            topics do not provide offsets in stict incrementing order.
+        :type compacted_topic: bool
         """
         self._cluster = cluster
         if not isinstance(consumer_group, bytes):
@@ -208,6 +213,7 @@ class BalancedConsumer(object):
         self._running = False
         self._worker_exception = None
         self._worker_trace_logged = False
+        self._compacted_topic = compacted_topic
 
         if not rdkafka and use_rdkafka:
             raise ImportError("use_rdkafka requires rdkafka to be installed")
@@ -371,7 +377,8 @@ class BalancedConsumer(object):
             offsets_commit_max_retries=self._offsets_commit_max_retries,
             auto_offset_reset=self._auto_offset_reset,
             reset_offset_on_start=reset_offset_on_start,
-            auto_start=start
+            auto_start=start,
+            compacted_topic=self._compacted_topic
         )
 
     def _decide_partitions(self, participants):
