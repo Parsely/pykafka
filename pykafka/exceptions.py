@@ -23,6 +23,12 @@ class KafkaException(Exception):
     pass
 
 
+class NoBrokersAvailableError(KafkaException):
+    """Indicates that no brokers were available to the cluster's metadata update attempts
+    """
+    pass
+
+
 class SocketDisconnectedError(KafkaException):
     """Indicates that the socket connecting this client to a kafka broker has
         become disconnected

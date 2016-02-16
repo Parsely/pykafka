@@ -31,6 +31,7 @@ from .exceptions import (
     KafkaException,
     InvalidMessageSize,
     MessageSizeTooLarge,
+    NoBrokersAvailableError,
     NotLeaderForPartition,
     ProducerQueueFullError,
     ProducerStoppedException,
@@ -38,7 +39,7 @@ from .exceptions import (
 )
 from .partitioners import random_partitioner
 from .protocol import Message, ProduceRequest
-from .utils.compat import iteritems, range, itervalues
+from .utils.compat import iteritems, range, itervalues, Empty
 
 log = logging.getLogger(__name__)
 
@@ -268,12 +269,18 @@ class Producer(object):
         self._produce(msg)
 
         if self._synchronous:
-            reported_msg, exc = self.get_delivery_report()
+            while True:
+                self._cluster.handler.sleep()
+                try:
+                    reported_msg, exc = self.get_delivery_report(timeout=1)
+                    break
+                except Empty:
+                    self._raise_worker_exceptions()
+                    continue
             assert reported_msg is msg
             if exc is not None:
                 raise exc
-        self._raise_worker_exceptions()
-        self._cluster.handler.sleep()
+            self._cluster.handler.sleep()
 
     def get_delivery_report(self, block=True, timeout=None):
         """Fetch delivery reports for messages produced on the current thread
@@ -282,6 +289,11 @@ class Producer(object):
         (for successful deliveries) or `Exception` (for failed deliveries).
         This interface is only available if you enabled `delivery_reports` on
         init (and you did not use `sync=True`)
+
+        :param block: Whether to block on dequeueing a delivery report
+        :type block: bool
+        :param timeout: How long (in seconds) to block before returning None
+        ;type timeout: int
         """
         try:
             return self._delivery_reports.queue.get(block, timeout)
@@ -368,7 +380,10 @@ class Producer(object):
             log.warning('Broker %s:%s disconnected. Retrying.',
                         owned_broker.broker.host,
                         owned_broker.broker.port)
-            self._update()
+            try:
+                self._update()
+            except NoBrokersAvailableError:
+                log.warning("No brokers available")
             to_retry = [
                 (mset, exc)
                 for topic, partitions in iteritems(req.msets)
