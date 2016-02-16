@@ -44,7 +44,8 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
                  auto_offset_reset=OffsetType.EARLIEST,
                  consumer_timeout_ms=-1,
                  auto_start=True,
-                 reset_offset_on_start=False):
+                 reset_offset_on_start=False,
+                 compacted_topic=False):
         callargs = {k: v for k, v in vars().items()
                          if k not in ("self", "__class__")}
         self._rdk_consumer = None
