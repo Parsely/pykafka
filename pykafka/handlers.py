@@ -81,6 +81,7 @@ class ThreadingHandler(Handler):
     Event = threading.Event
     Lock = threading.Lock
     Semaphore = Semaphore
+    _maxCount = 0
 
     def sleep(self, seconds=0):
         time.sleep(seconds)
@@ -95,9 +96,12 @@ class ThreadingHandler(Handler):
             return threading.RLock(*args[1:], **kwargs)
 
     def spawn(self, target, *args, **kwargs):
+        if 'name' in kwargs:
+            kwargs['name'] = "{}: {}".format(ThreadingHandler._maxCount, kwargs['name'])
         t = threading.Thread(target=target, *args, **kwargs)
         t.daemon = True
         t.start()
+        ThreadingHandler._maxCount += 1
         return t
 
 
@@ -113,6 +117,9 @@ class GEventHandler(Handler):
         gevent.sleep(seconds)
 
     def spawn(self, target, *args, **kwargs):
+        # Greenlets don't support naming
+        if 'name' in kwargs:
+            kwargs.pop('name')
         t = gevent.spawn(target, *args, **kwargs)
         return t
 
