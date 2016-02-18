@@ -410,6 +410,7 @@ class Cluster(object):
     def update(self):
         """Update known brokers and topics."""
         for i in range(self._max_connection_retries):
+            log.debug("Updating cluster, attempt {}/{}".format(i+1, self._max_connection_retries))
             metadata = self._get_metadata()
             if len(metadata.brokers) == 0 and len(metadata.topics) == 0:
                 log.warning('No broker metadata found. If this is a fresh cluster, '

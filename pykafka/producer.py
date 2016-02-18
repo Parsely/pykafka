@@ -328,6 +328,7 @@ class Producer(object):
             required_acks=self._required_acks,
             timeout=self._ack_timeout_ms
         )
+        req.delivered = 0
         for msg in message_batch:
             req.add_message(msg, self._topic.name, msg.partition_id)
         log.debug("Sending %d messages to broker %d",
@@ -344,6 +345,7 @@ class Producer(object):
 
         def mark_as_delivered(message_batch):
             owned_broker.increment_messages_pending(-1 * len(message_batch))
+            req.delivered += len(message_batch)
             for msg in message_batch:
                 self._delivery_reports.put(msg)
 
@@ -390,6 +392,9 @@ class Producer(object):
                 for p_id, mset in iteritems(partitions)
             ]
 
+        log.debug("Successfully sent {}/{} messages to broker {}".format(
+            req.delivered, len(message_batch), owned_broker.broker.id))
+
         if to_retry:
             self._cluster.handler.sleep(self._retry_backoff_ms / 1000)
             owned_broker.increment_messages_pending(-1 * len(to_retry))
@@ -402,6 +407,7 @@ class Producer(object):
                 for msg in mset.messages:
                     if (non_recoverable or msg.produce_attempt >= self._max_retries):
                         self._delivery_reports.put(msg, exc)
+                        log.info("Message not delivered!! %r" % exc)
                     else:
                         msg.produce_attempt += 1
                         self._produce(msg)
