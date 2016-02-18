@@ -328,6 +328,7 @@ class Producer(object):
             required_acks=self._required_acks,
             timeout=self._ack_timeout_ms
         )
+        req.delivered = 0
         for msg in message_batch:
             req.add_message(msg, self._topic.name, msg.partition_id)
         log.debug("Sending %d messages to broker %d",
@@ -344,10 +345,10 @@ class Producer(object):
 
         def mark_as_delivered(message_batch):
             owned_broker.increment_messages_pending(-1 * len(message_batch))
+            req.delivered += len(message_batch)
             for msg in message_batch:
                 self._delivery_reports.put(msg)
 
-        delivered = 0
         try:
             response = owned_broker.broker.produce_messages(req)
             if self._required_acks == 0:  # and thus, `response` is None
@@ -362,7 +363,6 @@ class Producer(object):
                 for partition, presponse in iteritems(partitions):
                     if presponse.err == 0:
                         mark_as_delivered(req.msets[topic][partition].messages)
-                        delivered += len(req.msets[topic][partition].messages)
                         continue  # All's well
                     if presponse.err == NotLeaderForPartition.ERROR_CODE:
                         # Update cluster metadata to get new leader
@@ -392,7 +392,8 @@ class Producer(object):
                 for p_id, mset in iteritems(partitions)
             ]
 
-        log.debug("Successfully sent %d messages to broker %d", delivered, owned_broker.broker.id)
+        log.debug("Successfully sent {}/{} messages to broker {}".format(
+            req.delivered, len(message_batch), owned_broker.broker.id))
 
         if to_retry:
             self._cluster.handler.sleep(self._retry_backoff_ms / 1000)
