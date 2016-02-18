@@ -238,7 +238,9 @@ class Producer(object):
                 owned_broker.stop()
 
     def get_queue_readers(self):
-            return [owned_broker._queue_reader_worker for owned_broker in self._owned_brokers.values() if owned_broker.running]
+        if not self._owned_brokers:
+            return []
+        return [owned_broker._queue_reader_worker for owned_broker in self._owned_brokers.values() if owned_broker.running]
 
     def stop(self, wait=True):
         """Mark the producer as stopped, and wait until all messages to be sent
