@@ -137,7 +137,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
             start = time.time()
             producer.produce(uuid4().bytes)
             producer.produce(uuid4().bytes)
-        self.assertEqual(int(time.time() - start), int(linger))
+        self.assertTrue(int(time.time() - start) > int(linger))
         self.consumer.consume()
         self.consumer.consume()
 

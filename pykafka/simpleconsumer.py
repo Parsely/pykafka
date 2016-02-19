@@ -331,7 +331,7 @@ class SimpleConsumer(object):
                     break
             log.debug("Autocommitter thread exiting")
         log.debug("Starting autocommitter thread")
-        return self._cluster.handler.spawn(autocommitter)
+        return self._cluster.handler.spawn(autocommitter, name="pykafka.SimpleConsumer.autocommiter")
 
     def _setup_fetch_workers(self):
         """Start the fetcher threads"""
@@ -353,7 +353,7 @@ class SimpleConsumer(object):
                     break
             log.debug("Fetcher thread exiting")
         log.info("Starting %s fetcher threads", self._num_consumer_fetchers)
-        return [self._cluster.handler.spawn(fetcher)
+        return [self._cluster.handler.spawn(fetcher, name="pykafka.SimpleConsumer.fetcher")
                 for i in range(self._num_consumer_fetchers)]
 
     def __iter__(self):
