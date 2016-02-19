@@ -1,6 +1,27 @@
 Changelog
 =========
 
+2.2.1 (2016-2-19)
+----------------
+
+`Compare 2.2.1`_
+
+.. _Compare 2.2.1: https://github.com/Parsely/pykafka/compare/2.2.0...
+
+Bug Fixes
+*********
+
+* Fixed Travis issues related to PyPy testing
+* Fixed deprecated dependency on gevent.coros
+* Enabled caching in Travis for pip, librdkafka, and kafka installations
+* Fixed a crash during metadata updating related to zookeeper fallback
+* Unified connection retry logic in `Cluster`
+* Raised an exception if consumer offset reset fails after maximum retries
+* Fixed a bug allowing `get_delivery_report` to indefinitely block `produce()`
+* Fixed a bug causing producers to drop `to_retry` messages on `stop()`
+* Added retry logic to offset limit fetching
+
+
 2.2.0 (2016-1-26)
 ----------------
 
