@@ -237,12 +237,7 @@ class Producer(object):
             for owned_broker in self._owned_brokers.values():
                 owned_broker.stop()
 
-    def get_queue_readers(self):
-        if not self._owned_brokers:
-            return []
-        return [owned_broker._queue_reader_worker for owned_broker in self._owned_brokers.values() if owned_broker.running]
-
-    def stop(self, wait=True):
+    def stop(self):
         """Mark the producer as stopped, and wait until all messages to be sent
 
         The join here works because new queue readers are spawned during the execution of the old ones i.e:
@@ -250,12 +245,14 @@ class Producer(object):
         NotLeaderForPartition.ERROR_CODE it updates the cluster, sets up owned brokers thus starting new queue reader
         threads. Because of this when we call self.get_queue_readers, we get the newly created queue readers, and so try
         to stop and join them etc ... until they all stop without encountering problems in producer._send_request
-
-        :param wait: whether we should wait until all messages to be sent or not
-        :type wait: bool
         """
-        while wait and self._running:
-            queue_readers = self.get_queue_readers()
+        def get_queue_readers():
+            if not self._owned_brokers:
+                return []
+            return [owned_broker._queue_reader_worker for owned_broker in self._owned_brokers.values() if owned_broker.running]
+
+        while self._running:
+            queue_readers = get_queue_readers()
             self._stop_owned_brokers()
             if len(queue_readers) == 0:
                 self._running = False

@@ -81,7 +81,7 @@ class ThreadingHandler(Handler):
     Event = threading.Event
     Lock = threading.Lock
     Semaphore = Semaphore
-    _maxCount = 0
+    _workers_spawned = 0
 
     def sleep(self, seconds=0):
         time.sleep(seconds)
@@ -97,11 +97,11 @@ class ThreadingHandler(Handler):
 
     def spawn(self, target, *args, **kwargs):
         if 'name' in kwargs:
-            kwargs['name'] = "{}: {}".format(ThreadingHandler._maxCount, kwargs['name'])
+            kwargs['name'] = "{}: {}".format(ThreadingHandler._workers_spawned, kwargs['name'])
         t = threading.Thread(target=target, *args, **kwargs)
         t.daemon = True
         t.start()
-        ThreadingHandler._maxCount += 1
+        ThreadingHandler._workers_spawned += 1
         return t
 
 
