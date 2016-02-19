@@ -171,7 +171,7 @@ class Topic(object):
         """Return a SimpleConsumer of this topic
 
         :param consumer_group: The name of the consumer group to join
-        :type consumer_group: str
+        :type consumer_group: bytes
         :param use_rdkafka: Use librdkafka-backed consumer if available
         :type use_rdkafka: bool
         """
@@ -190,7 +190,7 @@ class Topic(object):
         """Return a BalancedConsumer of this topic
 
         :param consumer_group: The name of the consumer group to join
-        :type consumer_group: str
+        :type consumer_group: bytes
         """
         if "zookeeper_connect" not in kwargs and \
                 self._cluster._zookeeper_connect is not None:
