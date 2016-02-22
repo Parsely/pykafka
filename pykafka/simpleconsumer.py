@@ -133,7 +133,7 @@ class SimpleConsumer(object):
             offset immediately upon starting up
         :type reset_offset_on_start: bool
         :param compacted_topic: Set to read from a compacted topic. Forces
-            consumer to use less stringent ordering logic when because compacted
+            consumer to use less stringent message ordering logic because compacted
             topics do not provide offsets in stict incrementing order.
         :type compacted_topic: bool
         """

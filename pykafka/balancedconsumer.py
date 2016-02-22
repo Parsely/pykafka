@@ -183,7 +183,7 @@ class BalancedConsumer(object):
         :param use_rdkafka: Use librdkafka-backed consumer if available
         :type use_rdkafka: bool
         :param compacted_topic: Set to read from a compacted topic. Forces
-            consumer to use less stringent ordering logic when because compacted
+            consumer to use less stringent message ordering logic because compacted
             topics do not provide offsets in stict incrementing order.
         :type compacted_topic: bool
         """
