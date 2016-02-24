@@ -244,7 +244,8 @@ class BalancedConsumer(object):
 
     def __del__(self):
         log.debug("Finalising {}".format(self))
-        self.stop()
+        if self._running:
+            self.stop()
 
     def __repr__(self):
         return "<{module}.{name} at {id_} (consumer_group={group})>".format(
