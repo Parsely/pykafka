@@ -67,7 +67,9 @@ class SimpleConsumer(object):
                  consumer_timeout_ms=-1,
                  auto_start=True,
                  reset_offset_on_start=False,
-                 compacted_topic=False):
+                 compacted_topic=False,
+                 generation_id=-1,
+                 consumer_id=None):
         """Create a SimpleConsumer.
 
         Settings and default values are taken from the Scala
@@ -136,6 +138,11 @@ class SimpleConsumer(object):
             consumer to use less stringent message ordering logic because compacted
             topics do not provide offsets in stict incrementing order.
         :type compacted_topic: bool
+        :param generation_id: The generation id with which to make group requests
+        :type generation_id: int
+        :param consumer_id: The identifying string to use for this consumer on group
+            requests
+        :type consumer_id: str
         """
         self._cluster = cluster
         if not (isinstance(consumer_group, bytes) or consumer_group is None):
@@ -157,6 +164,8 @@ class SimpleConsumer(object):
         self._auto_start = auto_start
         self._reset_offset_on_start = reset_offset_on_start
         self._is_compacted_topic = compacted_topic
+        self._generation_id = generation_id
+        self._consumer_id = consumer_id
 
         # incremented for any message arrival from any partition
         # the initial value is 0 (no messages waiting)
@@ -434,7 +443,7 @@ class SimpleConsumer(object):
 
             try:
                 response = self._group_coordinator.commit_consumer_group_offsets(
-                    self._consumer_group, -1, b'pykafka', reqs)
+                    self._consumer_group, self._generation_id, self._consumer_id, reqs)
             except (SocketDisconnectedError, IOError):
                 log.error("Error committing offsets for topic '%s' "
                           "(SocketDisconnectedError)",

@@ -45,7 +45,8 @@ class ManagedBalancedConsumer(BalancedConsumer):
                  auto_offset_reset=OffsetType.EARLIEST,
                  consumer_timeout_ms=-1,
                  auto_start=True,
-                 reset_offset_on_start=False):
+                 reset_offset_on_start=False,
+                 compacted_topic=True):
         self._cluster = cluster
         if not isinstance(consumer_group, bytes):
             raise TypeError("consumer_group must be a bytes object")
@@ -64,6 +65,7 @@ class ManagedBalancedConsumer(BalancedConsumer):
         self._offsets_commit_max_retries = offsets_commit_max_retries
         self._auto_offset_reset = auto_offset_reset
         self._reset_offset_on_start = reset_offset_on_start
+        self._is_compacted_topic = compacted_topic
         self._use_rdkafka = False
         self._worker_exception = None
         self._running = False

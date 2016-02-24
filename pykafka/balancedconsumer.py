@@ -210,6 +210,7 @@ class BalancedConsumer(object):
         self._zookeeper_connection_timeout_ms = zookeeper_connection_timeout_ms
         self._reset_offset_on_start = reset_offset_on_start
         self._post_rebalance_callback = post_rebalance_callback
+        self._generation_id = -1
         self._running = False
         self._worker_exception = None
         self._worker_trace_logged = False
@@ -378,7 +379,9 @@ class BalancedConsumer(object):
             auto_offset_reset=self._auto_offset_reset,
             reset_offset_on_start=reset_offset_on_start,
             auto_start=start,
-            compacted_topic=self._is_compacted_topic
+            compacted_topic=self._is_compacted_topic,
+            generation_id=self._generation_id,
+            consumer_id=self._consumer_id
         )
 
     def _decide_partitions(self, participants):
