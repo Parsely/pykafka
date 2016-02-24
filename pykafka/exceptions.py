@@ -173,6 +173,27 @@ class NotCoordinatorForConsumer(ProtocolClientError):
     ERROR_CODE = 16
 
 
+class IllegalGeneration(ProtocolClientError):
+    """Returned from group membership requests (such as heartbeats) when the generation
+        id provided in the request is not the current generation
+    """
+    ERROR_CODE = 22
+
+
+class UnknownMemberId(ProtocolClientError):
+    """Returned from group requests (offset commits/fetches, heartbeats, etc) when the
+        memberId is not in the current generation.
+    """
+    ERROR_CODE = 25
+
+
+class RebalanceInProgress(ProtocolClientError):
+    """Returned in heartbeat requests when the coordinator has begun rebalancing the
+        group. This indicates to the client that it should rejoin the group.
+    """
+    ERROR_CODE = 27
+
+
 ERROR_CODES = dict(
     (exc.ERROR_CODE, exc)
     for exc in (UnknownError,
@@ -187,7 +208,10 @@ ERROR_CODES = dict(
                 OffsetMetadataTooLarge,
                 GroupLoadInProgress,
                 ConsumerCoordinatorNotAvailable,
-                NotCoordinatorForConsumer)
+                NotCoordinatorForConsumer,
+                IllegalGeneration,
+                UnknownMemberId,
+                RebalanceInProgress)
 )
 
 

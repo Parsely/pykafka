@@ -1257,7 +1257,7 @@ class JoinGroupRequest(Request):
             ProtocolName => string
             ProtocolMetadata => bytes
     """
-    def __init__(self, group_id, member_id=b'', session_timeout=10000):
+    def __init__(self, group_id, member_id, session_timeout=30000):
         """Create a new group join request"""
         self.protocol = ConsumerGroupProtocol
         self.group_id = group_id
@@ -1546,10 +1546,7 @@ class HeartbeatResponse(Response):
         """
         fmt = 'h'
         response = struct_helpers.unpack_from(fmt, buff, 0)
-
-        error_code = response[0]
-        if error_code != 0:
-            self.raise_error(error_code, response)
+        self.error_code = response[0]
 
 
 class LeaveGroupRequest(Request):

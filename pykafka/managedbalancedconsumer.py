@@ -19,9 +19,12 @@ limitations under the License.
 __all__ = ["ManagedBalancedConsumer"]
 import itertools
 import logging
+import sys
+import weakref
 
 from .balancedconsumer import BalancedConsumer
 from .common import OffsetType
+from .exceptions import IllegalGeneration, RebalanceInProgress, UnknownMemberId
 from .protocol import MemberAssignment
 from .utils.compat import iteritems, itervalues
 
@@ -46,7 +49,8 @@ class ManagedBalancedConsumer(BalancedConsumer):
                  consumer_timeout_ms=-1,
                  auto_start=True,
                  reset_offset_on_start=False,
-                 compacted_topic=True):
+                 compacted_topic=True,
+                 heartbeat_interval_ms=3000):
         self._cluster = cluster
         if not isinstance(consumer_group, bytes):
             raise TypeError("consumer_group must be a bytes object")
@@ -66,27 +70,68 @@ class ManagedBalancedConsumer(BalancedConsumer):
         self._auto_offset_reset = auto_offset_reset
         self._reset_offset_on_start = reset_offset_on_start
         self._is_compacted_topic = compacted_topic
+        self._heartbeat_interval_ms = heartbeat_interval_ms
         self._use_rdkafka = False
-        self._worker_exception = None
-        self._running = False
+        self._running = True
 
         self._consumer = None
-        self._consumer_id = None
+        self._consumer_id = b''
         self._is_group_leader = False
+        self._worker_trace_logged = False
+        self._worker_exception = None
 
         self._discover_group_coordinator()
         self._join_group()
+        self._setup_heartbeat_worker()
 
     def _discover_group_coordinator(self):
         """Set the group coordinator for this consumer."""
-        self._group_coordinator = self._cluster.get_group_coordinator(self._consumer_group)
+        self._group_coordinator = self._cluster.get_group_coordinator(
+            self._consumer_group)
+
+    def _setup_heartbeat_worker(self):
+        """Start the heartbeat worker"""
+        self = weakref.proxy(self)
+
+        def fetcher():
+            while True:
+                try:
+                    if not self._running:
+                        break
+                    self._send_heartbeat()
+                    self._cluster.handler.sleep(self._heartbeat_interval_ms / 1000)
+                except ReferenceError:
+                    break
+                except Exception:
+                    # surface all exceptions to the main thread
+                    self._worker_exception = sys.exc_info()
+                    break
+            log.debug("Heartbeat worker exiting")
+        log.info("Starting heartbeat worker")
+        return self._cluster.handler.spawn(
+            fetcher, name="pykafka.ManagedBalancedConsumer.heartbeats")
+
+    def _send_heartbeat(self):
+        res = self._group_coordinator.group_heartbeat(
+            self._consumer_group,
+            self._generation_id,
+            self._consumer_id
+        )
+        log.debug(res.error_code)
+        if res.error_code == IllegalGeneration.ERROR_CODE:
+            self._join_group()
+        elif res.error_code == RebalanceInProgress.ERROR_CODE:
+            self._join_group()
+        elif res.error_code == UnknownMemberId.ERROR_CODE:
+            self._join_group()
 
     def _join_group(self):
-        res = self._group_coordinator.join_managed_consumer_group(self._consumer_group)
+        res = self._group_coordinator.join_managed_consumer_group(
+            self._consumer_group, self._consumer_id)
         self._generation_id = res.generation_id
         self._consumer_id = res.member_id
         all_members = []
-        if len(res.members) > 0:
+        if len(res.members) > 1:
             self._is_group_leader = True
             all_members = [member_id for member_id, _ in iteritems(res.members)]
         group_assignments = []
