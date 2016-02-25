@@ -159,14 +159,14 @@ class GroupLoadInProgress(ProtocolClientError):
     ERROR_CODE = 14
 
 
-class ConsumerCoordinatorNotAvailable(ProtocolClientError):
+class GroupCoordinatorNotAvailable(ProtocolClientError):
     """The broker returns this error code for consumer metadata requests or
         offset commit requests if the offsets topic has not yet been created.
     """
     ERROR_CODE = 15
 
 
-class NotCoordinatorForConsumer(ProtocolClientError):
+class NotCoordinatorForGroup(ProtocolClientError):
     """The broker returns this error code if it receives an offset fetch or
         commit request for a consumer group that it is not a coordinator for.
     """
@@ -194,6 +194,13 @@ class RebalanceInProgress(ProtocolClientError):
     ERROR_CODE = 27
 
 
+class GroupAuthorizationFailed(ProtocolClientError):
+    """Returned by the broker when the client is not authorized to access a particular
+    groupId.
+    """
+    ERROR_CODE = 30
+
+
 ERROR_CODES = dict(
     (exc.ERROR_CODE, exc)
     for exc in (UnknownError,
@@ -207,11 +214,12 @@ ERROR_CODES = dict(
                 MessageSizeTooLarge,
                 OffsetMetadataTooLarge,
                 GroupLoadInProgress,
-                ConsumerCoordinatorNotAvailable,
-                NotCoordinatorForConsumer,
+                GroupCoordinatorNotAvailable,
+                NotCoordinatorForGroup,
                 IllegalGeneration,
                 UnknownMemberId,
-                RebalanceInProgress)
+                RebalanceInProgress,
+                GroupAuthorizationFailed)
 )
 
 

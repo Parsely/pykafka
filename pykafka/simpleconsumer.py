@@ -32,7 +32,7 @@ from .utils.compat import (Queue, Empty, iteritems, itervalues,
                            range, iterkeys)
 from .exceptions import (OffsetOutOfRangeError, UnknownTopicOrPartition,
                          OffsetMetadataTooLarge, GroupLoadInProgress,
-                         NotCoordinatorForConsumer, SocketDisconnectedError,
+                         NotCoordinatorForGroup, SocketDisconnectedError,
                          ConsumerStoppedException, KafkaException,
                          NotLeaderForPartition, OffsetRequestFailedError,
                          RequestTimedOut, ERROR_CODES)
@@ -269,8 +269,8 @@ class SimpleConsumer(object):
         def _handle_RequestTimedOut(parts):
             log.info("Continuing in response to RequestTimedOut")
 
-        def _handle_NotCoordinatorForConsumer(parts):
-            log.info("Updating cluster in response to NotCoordinatorForConsumer")
+        def _handle_NotCoordinatorForGroup(parts):
+            log.info("Updating cluster in response to NotCoordinatorForGroup")
             self._update()
 
         def _handle_NotLeaderForPartition(parts):
@@ -285,7 +285,7 @@ class SimpleConsumer(object):
             OffsetOutOfRangeError.ERROR_CODE: _handle_OffsetOutOfRangeError,
             NotLeaderForPartition.ERROR_CODE: _handle_NotLeaderForPartition,
             OffsetMetadataTooLarge.ERROR_CODE: lambda p: raise_error(OffsetMetadataTooLarge),
-            NotCoordinatorForConsumer.ERROR_CODE: _handle_NotCoordinatorForConsumer,
+            NotCoordinatorForGroup.ERROR_CODE: _handle_NotCoordinatorForGroup,
             RequestTimedOut.ERROR_CODE: _handle_RequestTimedOut,
             GroupLoadInProgress.ERROR_CODE: _handle_GroupLoadInProgress
         }

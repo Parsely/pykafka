@@ -23,7 +23,9 @@ import weakref
 
 from .balancedconsumer import BalancedConsumer
 from .common import OffsetType
-from .exceptions import (IllegalGeneration, RebalanceInProgress, UnknownMemberId)
+from .exceptions import (IllegalGeneration, RebalanceInProgress, UnknownMemberId,
+                         NotCoordinatorForGroup, GroupCoordinatorNotAvailable,
+                         GroupAuthorizationFailed)
 from .protocol import MemberAssignment
 from .utils.compat import itervalues, iterkeys
 
@@ -243,12 +245,20 @@ class ManagedBalancedConsumer(BalancedConsumer):
             self._generation_id,
             self._consumer_id
         )
-        if res.error_code == IllegalGeneration.ERROR_CODE:
-            self._rebalance()
-        elif res.error_code == RebalanceInProgress.ERROR_CODE:
-            self._rebalance()
-        elif res.error_code == UnknownMemberId.ERROR_CODE:
-            self._rebalance()
+        if res.error_code == 0:
+            return
+        log.info("Error code %d encountered on heartbeat." % res.error_code)
+        if res.error_code in (IllegalGeneration.ERROR_CODE,
+                              RebalanceInProgress.ERROR_CODE,
+                              UnknownMemberId.ERROR_CODE):
+            pass
+        elif res.error_code in (GroupCoordinatorNotAvailable.ERROR_CODE,
+                                NotCoordinatorForGroup.ERROR_CODE):
+            self._group_coordinator = self._cluster.get_group_coordinator(
+                self._consumer_group)
+        elif res.error_code == GroupAuthorizationFailed.ERROR_CODE:
+            raise GroupAuthorizationFailed()
+        self._rebalance()
 
     def _decide_partitions(self, participants, consumer_id=None):
         """Decide which partitions belong to this consumer
