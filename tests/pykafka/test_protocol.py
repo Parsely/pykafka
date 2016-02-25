@@ -312,6 +312,15 @@ class TestGroupMembershipAPI(unittest2.TestCase):
       bytearray(b'\x00\x00\x00\xd8\x00\x0e\x00\x00\x00\x00\x00\x00\x00\x07pykafka\x00\ndummygroup\x00\x00\x00\x01\x00\x0btestmember1\x00\x00\x00\x02\x00\x0btestmember1\x00\x00\x00B\x00\x01\x00\x00\x00\x02\x00\x08mytopic1\x00\x00\x00\x04\x00\x00\x00\x03\x00\x00\x00\x05\x00\x00\x00\x07\x00\x00\x00\t\x00\x08mytopic2\x00\x00\x00\x04\x00\x00\x00\x03\x00\x00\x00\x05\x00\x00\x00\x07\x00\x00\x00\t\x00\x0btestmember2\x00\x00\x00B\x00\x01\x00\x00\x00\x02\x00\x08mytopic1\x00\x00\x00\x04\x00\x00\x00\x02\x00\x00\x00\x04\x00\x00\x00\x06\x00\x00\x00\x08\x00\x08mytopic2\x00\x00\x00\x04\x00\x00\x00\x02\x00\x00\x00\x04\x00\x00\x00\x06\x00\x00\x00\x08')
         )
 
+    def test_sync_group_response(self):
+        response = protocol.SyncGroupResponse(
+            bytearray('\x00\x00\x00\x00\x00H\x00\x01\x00\x00\x00\x01\x00\x14testtopic_replicated\x00\x00\x00\n\x00\x00\x00\x06\x00\x00\x00\x07\x00\x00\x00\x08\x00\x00\x00\t\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x02\x00\x00\x00\x03\x00\x00\x00\x04\x00\x00\x00\x05,pyk')
+        )
+        self.assertEqual(response.error_code, 0)
+        expected_assignment = [('testtopic_replicated', [6, 7, 8, 9, 0, 1, 2, 3, 4, 5])]
+        self.assertEqual(response.member_assignment.partition_assignment,
+                         expected_assignment)
+
     def test_heartbeat_request(self):
         req = protocol.HeartbeatRequest(b'dummygroup', 1, b'testmember')
         msg = req.get_bytes()
@@ -320,6 +329,10 @@ class TestGroupMembershipAPI(unittest2.TestCase):
             bytearray(b'\x00\x00\x00-\x00\x0c\x00\x00\x00\x00\x00\x00\x00\x07pykafka\x00\ndummygroup\x00\x00\x00\x01\x00\ntestmember')
         )
 
+    def test_heartbeat_response(self):
+        response = protocol.HeartbeatResponse(bytearray('\x00\x00\x00\x01\x00\x14'))
+        self.assertEqual(response.error_code, 0)
+
     def test_leave_group_request(self):
         req = protocol.LeaveGroupRequest(b'dummygroup', b'testmember')
         msg = req.get_bytes()
@@ -327,6 +340,10 @@ class TestGroupMembershipAPI(unittest2.TestCase):
             msg,
             bytearray(b'\x00\x00\x00)\x00\r\x00\x00\x00\x00\x00\x00\x00\x07pykafka\x00\ndummygroup\x00\ntestmember')
         )
+
+    def test_leave_group_response(self):
+        response = protocol.LeaveGroupResponse(bytearray('\x00\x00\x00\x01\x00\x14'))
+        self.assertEqual(response.error_code, 0)
 
 
 if __name__ == '__main__':
