@@ -17,7 +17,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 __all__ = ["ManagedBalancedConsumer"]
-import itertools
 import logging
 import sys
 import weakref
@@ -137,7 +136,7 @@ class ManagedBalancedConsumer(BalancedConsumer):
         group_assignments = []
         leader_assignment = None
         for member_id, metadata in iteritems(res.members):
-            partitions = self._decide_partitions(all_members, member_id)
+            partitions = self._decide_partitions(all_members, consumer_id=member_id)
             assignment = (self._topic.name, [p.id for p in partitions])
             if member_id == self._consumer_id and self._is_group_leader:
                 leader_assignment = assignment
@@ -154,29 +153,6 @@ class ManagedBalancedConsumer(BalancedConsumer):
             partitions=[p for p in itervalues(self._topic.partitions)
                         if p.id in assignment])
         self._raise_worker_exceptions()
-
-    def _decide_partitions(self, participants, member_id):
-        # Freeze and sort partitions so we always have the same results
-        p_to_str = lambda p: '-'.join([str(p.topic.name), str(p.leader.id), str(p.id)])
-        all_parts = self._topic.partitions.values()
-        all_parts = sorted(all_parts, key=p_to_str)
-
-        # get start point, # of partitions, and remainder
-        participants = sorted(participants)  # just make sure it's sorted.
-        idx = participants.index(member_id)
-        parts_per_consumer = len(all_parts) // len(participants)
-        remainder_ppc = len(all_parts) % len(participants)
-
-        start = parts_per_consumer * idx + min(idx, remainder_ppc)
-        num_parts = parts_per_consumer + (0 if (idx + 1 > remainder_ppc) else 1)
-
-        # assign partitions from i*N to (i+1)*N - 1 to consumer Ci
-        new_partitions = itertools.islice(all_parts, start, start + num_parts)
-        new_partitions = set(new_partitions)
-        log.info('Balancing %i participants for %i partitions.\nOwning %i partitions.',
-                 len(participants), len(all_parts), len(new_partitions))
-        log.debug('My partitions: %s', [p_to_str(p) for p in new_partitions])
-        return new_partitions
 
     def stop(self):
         self._running = False

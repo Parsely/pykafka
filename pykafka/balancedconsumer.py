@@ -384,7 +384,7 @@ class BalancedConsumer(object):
             consumer_id=self._consumer_id
         )
 
-    def _decide_partitions(self, participants):
+    def _decide_partitions(self, participants, consumer_id=None):
         """Decide which partitions belong to this consumer.
 
         Uses the consumer rebalancing algorithm described here
@@ -398,6 +398,8 @@ class BalancedConsumer(object):
         :param participants: Sorted list of ids of all other consumers in this
             consumer group.
         :type participants: Iterable of `bytes`
+        :param consumer_id: The ID of the consumer for which to generate a partition
+            assignment. Defaults to `self._consumer_id`
         """
         # Freeze and sort partitions so we always have the same results
         p_to_str = lambda p: '-'.join([str(p.topic.name), str(p.leader.id), str(p.id)])
@@ -406,7 +408,7 @@ class BalancedConsumer(object):
 
         # get start point, # of partitions, and remainder
         participants = sorted(participants)  # just make sure it's sorted.
-        idx = participants.index(self._consumer_id)
+        idx = participants.index(consumer_id or self._consumer_id)
         parts_per_consumer = len(all_parts) // len(participants)
         remainder_ppc = len(all_parts) % len(participants)
 
