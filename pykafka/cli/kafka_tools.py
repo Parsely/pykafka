@@ -49,7 +49,7 @@ def fetch_consumer_lag(client, topic, consumer_group):
     :type client:  :class:`pykafka.KafkaClient`
     :param topic:  Name of the topic.
     :type topic:  :class:`pykafka.topic.Topic`
-    :param consumer_group: Name of the consumer group to reset offsets for.
+    :param consumer_group: Name of the consumer group to read lag for.
     :type consumer_groups: :class:`str`
     :returns: dict of {partition_id: (latest_offset, consumer_offset)}
     """
