@@ -28,7 +28,7 @@ from kazoo.client import KazooClient
 
 from .broker import Broker
 from .exceptions import (ERROR_CODES,
-                         ConsumerCoordinatorNotAvailable,
+                         GroupCoordinatorNotAvailable,
                          NoBrokersAvailableError,
                          SocketDisconnectedError,
                          LeaderNotAvailable)
@@ -389,7 +389,7 @@ class Cluster(object):
             future = broker.handler.request(req)
             try:
                 res = future.get(GroupCoordinatorResponse)
-            except ConsumerCoordinatorNotAvailable:
+            except GroupCoordinatorNotAvailable:
                 log.error('Error discovering offset manager.')
                 if i == self._max_connection_retries - 1:
                     raise
