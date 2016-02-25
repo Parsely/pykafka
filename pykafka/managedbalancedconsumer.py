@@ -181,7 +181,6 @@ class ManagedBalancedConsumer(BalancedConsumer):
             raise ImportError("use_rdkafka is not available for {}".format(
                 self.__class__.__name__))
         self._use_rdkafka = use_rdkafka
-        self._running = True
 
         self._rebalancing_lock = cluster.handler.Lock()
         self._consumer = None
@@ -217,6 +216,7 @@ class ManagedBalancedConsumer(BalancedConsumer):
     def start(self):
         """Start this consumer. Must be called before consume() if `auto_start=False`."""
         try:
+            self._running = True
             self._group_coordinator = self._cluster.get_group_coordinator(
                 self._consumer_group)
             self._rebalance()
@@ -263,7 +263,8 @@ class ManagedBalancedConsumer(BalancedConsumer):
     def _update_member_assignment(self):
         """Join a managed consumer group and start consuming assigned partitions
 
-        Equivalent to `pykafka.balancedconsumer.BalancedConsumer._rebalance`,
+        Equivalent to
+        `pykafka.balancedconsumer.BalancedConsumer._update_member_assignment`,
         but uses the Kafka 0.9 Group Membership API instead of ZooKeeper to manage
         group state
         """
