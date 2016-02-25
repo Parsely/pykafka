@@ -149,10 +149,11 @@ class ManagedBalancedConsumer(BalancedConsumer):
         if self._is_group_leader:
             assignment = leader_assignment[1]
         else:
-            assignment = res.member_assignment.partition_assignment[1]
+            assignment = res.member_assignment.partition_assignment[0][1]
         self._setup_internal_consumer(
             partitions=[p for p in itervalues(self._topic.partitions)
                         if p.id in assignment])
+        self._raise_worker_exceptions()
 
     def _decide_partitions(self, participants, member_id):
         # Freeze and sort partitions so we always have the same results
