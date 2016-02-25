@@ -1488,7 +1488,7 @@ class HeartbeatRequest(Request):
         MemberId => string
     """
     def __init__(self, group_id, generation_id, member_id):
-        """Create a new group join request"""
+        """Create a new heartbeat request"""
         self.group_id = group_id
         self.generation_id = generation_id
         self.member_id = member_id
