@@ -448,7 +448,8 @@ class SimpleConsumer(object):
                 self._default_error_handlers,
                 response=response,
                 partitions_by_id=self._partitions_by_id)
-            if len(parts_by_error) == 1 and 0 in parts_by_error:
+            if (len(parts_by_error) == 1 and 0 in parts_by_error) or \
+                    len(parts_by_error) == 0:
                 break
             log.error("Error committing offsets for topic '%s' (errors: %s)",
                       self._topic.name,
