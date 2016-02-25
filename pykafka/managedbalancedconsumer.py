@@ -25,7 +25,7 @@ from .balancedconsumer import BalancedConsumer
 from .common import OffsetType
 from .exceptions import IllegalGeneration, RebalanceInProgress, UnknownMemberId
 from .protocol import MemberAssignment
-from .utils.compat import iteritems, itervalues
+from .utils.compat import itervalues, iterkeys
 
 log = logging.getLogger(__name__)
 
@@ -50,6 +50,10 @@ class ManagedBalancedConsumer(BalancedConsumer):
                  reset_offset_on_start=False,
                  compacted_topic=True,
                  heartbeat_interval_ms=3000):
+        """A self-balancing consumer that uses Kafka 0.9's Group Membership API
+
+        Implements the Group Management API semantics for Kafka 0.9 compatibility
+        """
         self._cluster = cluster
         if not isinstance(consumer_group, bytes):
             raise TypeError("consumer_group must be a bytes object")
@@ -75,7 +79,6 @@ class ManagedBalancedConsumer(BalancedConsumer):
 
         self._consumer = None
         self._consumer_id = b''
-        self._is_group_leader = False
         self._worker_trace_logged = False
         self._worker_exception = None
 
@@ -120,34 +123,53 @@ class ManagedBalancedConsumer(BalancedConsumer):
         elif res.error_code == UnknownMemberId.ERROR_CODE:
             self._join_group()
 
+    def _decide_partitions(self, participants, consumer_id=None):
+        """Decide which partitions belong to this consumer
+
+        Thin formatting wrapper around
+        `pykafka.balancedconsumer.BalancedConsumer._decide_partitions`
+        """
+        parts = super(ManagedBalancedConsumer, self)._decide_partitions(
+            participants, consumer_id=consumer_id)
+        return [p.id for p in parts]
+
     def _join_group(self):
-        res = self._group_coordinator.join_managed_consumer_group(
+        """Join a managed consumer group
+
+        Equivalent to `pykafka.balancedconsumer.BalancedConsumer._rebalance`,
+        but uses the Kafka 0.9 Group Membership API instead of ZooKeeper to manage
+        group state
+        """
+        # send the initial JoinGroupRequest. Assigns a member id and tells the coordinator
+        # about this consumer.
+        join_result = self._group_coordinator.join_managed_consumer_group(
             self._consumer_group, self._consumer_id)
-        self._generation_id = res.generation_id
-        self._consumer_id = res.member_id
-        all_members = []
-        if res.leader_id == self._consumer_id:
-            self._is_group_leader = True
-            all_members = [member_id for member_id, _ in iteritems(res.members)]
-        group_assignments = []
-        leader_assignment = None
-        for member_id, metadata in iteritems(res.members):
-            partitions = self._decide_partitions(all_members, consumer_id=member_id)
-            assignment = (self._topic.name, [p.id for p in partitions])
-            if member_id == self._consumer_id and self._is_group_leader:
-                leader_assignment = assignment
-            group_assignments.append((member_id, MemberAssignment([assignment])))
-        res = self._group_coordinator.sync_group(self._consumer_group,
-                                                 self._generation_id,
-                                                 self._consumer_id,
-                                                 group_assignments)
-        if self._is_group_leader:
-            assignment = leader_assignment[1]
-        else:
-            assignment = res.member_assignment.partition_assignment[0][1]
-        self._setup_internal_consumer(
-            partitions=[p for p in itervalues(self._topic.partitions)
-                        if p.id in assignment])
+        self._generation_id = join_result.generation_id
+        self._consumer_id = join_result.member_id
+
+        # generate partition assignments for each group member
+        # if this consumer is not the leader, join_result.members will be empty
+        group_assignments = [
+            MemberAssignment([
+                (self._topic.name,
+                 self._decide_partitions(iterkeys(join_result.members),
+                                         consumer_id=member_id))
+            ], member_id=member_id) for member_id in join_result.members]
+
+        # perform the SyncGroupRequest. If this consumer is the group leader, this request
+        # informs the other members of the group of their partition assignments.
+        # This request is also used to fetch the partition assignment for this consumer
+        # The group leader *could* tell itself its own assignment instead of using the
+        # result of this request, but it does the latter to ensure consistency.
+        sync_result = self._group_coordinator.sync_group(self._consumer_group,
+                                                         self._generation_id,
+                                                         self._consumer_id,
+                                                         group_assignments)
+        my_partition_ids = sync_result.member_assignment.partition_assignment[0][1]
+        # set up a SimpleConsumer consuming the returned partitions
+        my_partitions = [p for p in itervalues(self._topic.partitions)
+                         if p.id in my_partition_ids]
+        self._setup_internal_consumer(partitions=my_partitions)
         self._raise_worker_exceptions()
 
     def stop(self):
