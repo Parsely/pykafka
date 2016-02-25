@@ -177,3 +177,10 @@ class ManagedBalancedConsumer(BalancedConsumer):
                  len(participants), len(all_parts), len(new_partitions))
         log.debug('My partitions: %s', [p_to_str(p) for p in new_partitions])
         return new_partitions
+
+    def stop(self):
+        self._running = False
+        if self._consumer is not None:
+            self._consumer.stop()
+        self._group_coordinator.leave_managed_consumer_group(self._consumer_group,
+                                                             self._consumer_id)
