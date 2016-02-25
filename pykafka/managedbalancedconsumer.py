@@ -23,7 +23,8 @@ import weakref
 
 from .balancedconsumer import BalancedConsumer
 from .common import OffsetType
-from .exceptions import IllegalGeneration, RebalanceInProgress, UnknownMemberId
+from .exceptions import (IllegalGeneration, RebalanceInProgress, UnknownMemberId,
+                         ConsumerStoppedException)
 from .protocol import MemberAssignment
 from .utils.compat import itervalues, iterkeys
 
@@ -175,35 +176,48 @@ class ManagedBalancedConsumer(BalancedConsumer):
             self.commit_offsets()
 
         with self._rebalancing_lock:
-            # send the initial JoinGroupRequest. Assigns a member id and tells the
-            # coordinator about this consumer.
-            join_result = self._group_coordinator.join_managed_consumer_group(
-                self._consumer_group, self._consumer_id)
-            self._generation_id = join_result.generation_id
-            self._consumer_id = join_result.member_id
+            if not self._running:
+                raise ConsumerStoppedException
+            log.info('Rebalancing consumer "%s" for topic "%s".' % (
+                self._consumer_id, self._topic.name))
+            for i in range(self._rebalance_max_retries):
+                try:
+                    # send the initial JoinGroupRequest. Assigns a member id and tells the
+                    # coordinator about this consumer.
+                    join_result = self._group_coordinator.join_managed_consumer_group(
+                        self._consumer_group, self._consumer_id)
+                    self._generation_id = join_result.generation_id
+                    self._consumer_id = join_result.member_id
 
-            # generate partition assignments for each group member
-            # if this consumer is not the leader, join_result.members will be empty
-            group_assignments = [
-                MemberAssignment([
-                    (self._topic.name,
-                     self._decide_partitions(iterkeys(join_result.members),
-                                             consumer_id=member_id))
-                ], member_id=member_id) for member_id in join_result.members]
+                    # generate partition assignments for each group member
+                    # if this is not the leader, join_result.members will be empty
+                    group_assignments = [
+                        MemberAssignment([
+                            (self._topic.name,
+                             self._decide_partitions(iterkeys(join_result.members),
+                                                     consumer_id=member_id))
+                        ], member_id=member_id) for member_id in join_result.members]
 
-            # perform the SyncGroupRequest. If this consumer is the group leader, This
-            # request informs the other members of the group of their partition
-            # assignments. This request is also used to fetch the partition assignment
-            # for this consumer. The group leader *could* tell itself its own assignment
-            # instead of using the result of this request, but it does the latter to
-            # ensure consistency.
-            sync_result = self._group_coordinator.sync_group(self._consumer_group,
-                                                             self._generation_id,
-                                                             self._consumer_id,
-                                                             group_assignments)
-            my_partition_ids = sync_result.member_assignment.partition_assignment[0][1]
-            # set up a SimpleConsumer consuming the returned partitions
-            my_partitions = [p for p in itervalues(self._topic.partitions)
-                             if p.id in my_partition_ids]
-            self._setup_internal_consumer(partitions=my_partitions)
+                    # perform the SyncGroupRequest. If this consumer is the group leader,
+                    # This request informs the other members of the group of their
+                    # partition assignments. This request is also used to fetch The
+                    # partition assignment for this consumer. The group leader *could*
+                    # tell itself its own assignment instead of using the result of this
+                    # request, but it does the latter to ensure consistency.
+                    sync_result = self._group_coordinator.sync_group(self._consumer_group,
+                                                                     self._generation_id,
+                                                                     self._consumer_id,
+                                                                     group_assignments)
+                    assignment = sync_result.member_assignment.partition_assignment
+                    # set up a SimpleConsumer consuming the returned partitions
+                    my_partitions = [p for p in itervalues(self._topic.partitions)
+                                     if p.id in assignment[0][1]]
+                    self._setup_internal_consumer(partitions=my_partitions)
+                    break
+                except Exception:
+                    if i == self._rebalance_max_retries - 1:
+                        log.warning('Failed to rebalance s after %d retries.', i)
+                        raise
+                    log.info('Unable to complete rebalancing. Retrying')
+                    self._cluster.handler.sleep(i * (self._rebalance_backoff_ms / 1000))
         self._raise_worker_exceptions()
