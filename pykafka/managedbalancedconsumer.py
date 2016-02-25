@@ -131,7 +131,7 @@ class ManagedBalancedConsumer(BalancedConsumer):
         self._generation_id = res.generation_id
         self._consumer_id = res.member_id
         all_members = []
-        if len(res.members) > 1:
+        if res.leader_id == self._consumer_id:
             self._is_group_leader = True
             all_members = [member_id for member_id, _ in iteritems(res.members)]
         group_assignments = []

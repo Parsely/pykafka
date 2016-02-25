@@ -1328,7 +1328,7 @@ class JoinGroupResponse(Response):
         :param buff: Serialized message
         :type buff: :class:`bytearray`
         """
-        fmt = 'hiSSS[SS ]'
+        fmt = 'hiSSS[SY ]'
         response = struct_helpers.unpack_from(fmt, buff, 0)
 
         error_code = response[0]
@@ -1353,51 +1353,46 @@ class MemberAssignment(object):
             Partition => int32
         UserData => bytes
     """
-    def __init__(self, partition_assignment, version=1, user_data=b""):
+    def __init__(self, partition_assignment, version=1):
         self.version = version
         self.partition_assignment = partition_assignment
-        self.user_data = user_data
 
     @classmethod
     def from_bytestring(cls, buff):
         if len(buff) == 0:
-            return cls([])
-        fmt = 'h [S [i ] ] S'
+            return cls(tuple())
+        fmt = 'h [S [i ] ]'
         response = struct_helpers.unpack_from(fmt, buff, 0)
 
         version = response[0]
         partition_assignment = response[1]
-        user_data = response[2]
-        return cls(partition_assignment, version=version, user_data=user_data)
+        return cls(partition_assignment, version=version)
 
     def __len__(self):
         # version + len(partition assignment)
         size = 2 + 4
         for topic_name, partitions in self.partition_assignment:
-            # len(topic_name) + topic_name
-            size += 2 + len(topic_name)
+            # len(topic_name) + topic_name + len(partitions)
+            size += 2 + len(topic_name) + 4
             size += 4 * len(partitions)
-        # len(user data) + user data
-        size += 4 + len(self.user_data)
         return size
 
     def get_bytes(self):
         output = bytearray(len(self))
         offset = 0
         fmt = '!hi'
-        struct.pack_into(fmt, output, offset, self.version, len(self.partition_assignment))
+        struct.pack_into(fmt, output, offset, self.version,
+                         len(self.partition_assignment))
         offset += struct.calcsize(fmt)
         for topic_name, partitions in self.partition_assignment:
-            fmt = '!h%ds' % len(topic_name)
-            struct.pack_into(fmt, output, offset, len(topic_name), topic_name)
+            fmt = '!h%dsi' % len(topic_name)
+            struct.pack_into(fmt, output, offset, len(topic_name), topic_name,
+                             len(partitions))
             offset += struct.calcsize(fmt)
             for partition_id in partitions:
                 fmt = '!i'
                 struct.pack_into(fmt, output, offset, partition_id)
                 offset += struct.calcsize(fmt)
-        fmt = '!i%ds' % len(self.user_data)
-        struct.pack_into(fmt, output, offset, len(self.user_data), self.user_data)
-        offset += struct.calcsize(fmt)
         return output
 
 
@@ -1476,12 +1471,9 @@ class SyncGroupResponse(Response):
         :param buff: Serialized message
         :type buff: :class:`bytearray`
         """
-        fmt = 'hS'
+        fmt = 'hY'
         response = struct_helpers.unpack_from(fmt, buff, 0)
-
-        error_code = response[0]
-        if error_code != 0:
-            self.raise_error(error_code, response)
+        self.error_code = response[0]
         self.member_assignment = MemberAssignment.from_bytestring(response[1])
 
 
