@@ -311,7 +311,8 @@ class SimpleConsumer(object):
     def __del__(self):
         """Stop consumption and workers when object is deleted"""
         log.debug("Finalising {}".format(self))
-        self.stop()
+        if self._running:
+            self.stop()
 
     def stop(self):
         """Flag all running workers for deletion."""
