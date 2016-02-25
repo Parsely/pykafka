@@ -79,14 +79,10 @@ class ManagedBalancedConsumer(BalancedConsumer):
         self._worker_trace_logged = False
         self._worker_exception = None
 
-        self._discover_group_coordinator()
-        self._join_group()
-        self._setup_heartbeat_worker()
-
-    def _discover_group_coordinator(self):
-        """Set the group coordinator for this consumer."""
         self._group_coordinator = self._cluster.get_group_coordinator(
             self._consumer_group)
+        self._join_group()
+        self._setup_heartbeat_worker()
 
     def _setup_heartbeat_worker(self):
         """Start the heartbeat worker"""
