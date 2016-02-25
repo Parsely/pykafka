@@ -46,13 +46,20 @@ class ManagedBalancedConsumer(BalancedConsumer):
                  offsets_commit_max_retries=5,
                  auto_offset_reset=OffsetType.EARLIEST,
                  consumer_timeout_ms=-1,
+                 rebalance_max_retries=5,
+                 rebalance_backoff_ms=2 * 1000,
                  auto_start=True,
                  reset_offset_on_start=False,
+                 post_rebalance_callback=None,
                  compacted_topic=True,
                  heartbeat_interval_ms=3000):
         """A self-balancing consumer that uses Kafka 0.9's Group Membership API
 
         Implements the Group Management API semantics for Kafka 0.9 compatibility
+
+        This class overrides the functionality of
+        :class:`pykafka.balancedconsumer.BalancedConsumer` that deals with ZooKeeper and
+        inherits other functionality directly.
         """
         self._cluster = cluster
         if not isinstance(consumer_group, bytes):
@@ -72,6 +79,9 @@ class ManagedBalancedConsumer(BalancedConsumer):
         self._offsets_commit_max_retries = offsets_commit_max_retries
         self._auto_offset_reset = auto_offset_reset
         self._reset_offset_on_start = reset_offset_on_start
+        self._rebalance_max_retries = rebalance_max_retries
+        self._rebalance_backoff_ms = rebalance_backoff_ms
+        self._post_rebalance_callback = post_rebalance_callback
         self._is_compacted_topic = compacted_topic
         self._heartbeat_interval_ms = heartbeat_interval_ms
         self._use_rdkafka = False
@@ -83,10 +93,8 @@ class ManagedBalancedConsumer(BalancedConsumer):
         self._worker_trace_logged = False
         self._worker_exception = None
 
-        self._group_coordinator = self._cluster.get_group_coordinator(
-            self._consumer_group)
-        self._join_group()
-        self._setup_heartbeat_worker()
+        if auto_start is True:
+            self.start()
 
     def _setup_heartbeat_worker(self):
         """Start the heartbeat worker"""
@@ -110,18 +118,41 @@ class ManagedBalancedConsumer(BalancedConsumer):
         return self._cluster.handler.spawn(
             fetcher, name="pykafka.ManagedBalancedConsumer.heartbeats")
 
+    def start(self):
+        """Start this consumer. Must be called before consume() if `auto_start=False`."""
+        try:
+            self._group_coordinator = self._cluster.get_group_coordinator(
+                self._consumer_group)
+            self._rebalance()
+            self._setup_heartbeat_worker()
+        except Exception:
+            log.exception("Stopping consumer in response to error")
+            self.stop()
+
+    def stop(self):
+        """Stop this consumer
+
+        Should be called as part of a graceful shutdown
+        """
+        self._running = False
+        if self._consumer is not None:
+            self._consumer.stop()
+        self._group_coordinator.leave_managed_consumer_group(self._consumer_group,
+                                                             self._consumer_id)
+
     def _send_heartbeat(self):
+        """Send a heartbeat request to the group coordinator and react to the response"""
         res = self._group_coordinator.group_heartbeat(
             self._consumer_group,
             self._generation_id,
             self._consumer_id
         )
         if res.error_code == IllegalGeneration.ERROR_CODE:
-            self._join_group()
+            self._rebalance()
         elif res.error_code == RebalanceInProgress.ERROR_CODE:
-            self._join_group()
+            self._rebalance()
         elif res.error_code == UnknownMemberId.ERROR_CODE:
-            self._join_group()
+            self._rebalance()
 
     def _decide_partitions(self, participants, consumer_id=None):
         """Decide which partitions belong to this consumer
@@ -133,8 +164,8 @@ class ManagedBalancedConsumer(BalancedConsumer):
             participants, consumer_id=consumer_id)
         return [p.id for p in parts]
 
-    def _join_group(self):
-        """Join a managed consumer group
+    def _rebalance(self):
+        """Join a managed consumer group and start consuming assigned partitions
 
         Equivalent to `pykafka.balancedconsumer.BalancedConsumer._rebalance`,
         but uses the Kafka 0.9 Group Membership API instead of ZooKeeper to manage
@@ -176,10 +207,3 @@ class ManagedBalancedConsumer(BalancedConsumer):
                              if p.id in my_partition_ids]
             self._setup_internal_consumer(partitions=my_partitions)
         self._raise_worker_exceptions()
-
-    def stop(self):
-        self._running = False
-        if self._consumer is not None:
-            self._consumer.stop()
-        self._group_coordinator.leave_managed_consumer_group(self._consumer_group,
-                                                             self._consumer_id)

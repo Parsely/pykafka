@@ -283,7 +283,7 @@ class BalancedConsumer(object):
         return self._consumer.held_offsets
 
     def start(self):
-        """Open connections and join a cluster."""
+        """Open connections and join a consumer group."""
         try:
             if self._zookeeper is None:
                 self._setup_zookeeper(self._zookeeper_connect,
@@ -341,7 +341,27 @@ class BalancedConsumer(object):
 
     def _setup_internal_consumer(self, partitions=None, start=True):
         """Instantiate an internal SimpleConsumer instance"""
-        self._consumer = self._get_internal_consumer(partitions=partitions, start=start)
+        # Only re-create internal consumer if something changed.
+        if partitions != self._partitions:
+            cns = self._get_internal_consumer(partitions=list(partitions), start=start)
+            if self._post_rebalance_callback is not None:
+                old_offsets = (self._consumer.held_offsets
+                               if self._consumer else dict())
+                new_offsets = cns.held_offsets
+                try:
+                    reset_offsets = self._post_rebalance_callback(
+                        self, old_offsets, new_offsets)
+                except Exception:
+                    log.exception("post rebalance callback threw an exception")
+                    self._worker_exception = sys.exc_info()
+                    return False
+
+                if reset_offsets:
+                    cns.reset_offsets(partition_offsets=[
+                        (cns.partitions[id_], offset) for
+                        (id_, offset) in iteritems(reset_offsets)])
+            self._consumer = cns
+        return True
 
     def _get_internal_consumer(self, partitions=None, start=True):
         """Instantiate a SimpleConsumer for internal use.
@@ -562,29 +582,8 @@ class BalancedConsumer(object):
                     current_zk_parts = self._get_held_partitions()
                     self._remove_partitions(current_zk_parts - new_partitions)
                     self._add_partitions(new_partitions - current_zk_parts)
-
-                    # Only re-create internal consumer if something changed.
-                    if new_partitions != self._partitions:
-                        cns = self._get_internal_consumer(list(new_partitions))
-                        if self._post_rebalance_callback is not None:
-                            old_offsets = (self._consumer.held_offsets
-                                           if self._consumer else dict())
-                            new_offsets = cns.held_offsets
-                            try:
-                                reset_offsets = self._post_rebalance_callback(
-                                    self, old_offsets, new_offsets)
-                            except Exception as ex:
-                                log.exception("post rebalance callback threw an exception")
-                                self._worker_exception = sys.exc_info()
-                                break
-
-                            if reset_offsets:
-                                cns.reset_offsets(partition_offsets=[
-                                    (cns.partitions[id_], offset) for
-                                    (id_, offset) in iteritems(reset_offsets)])
-                        self._consumer = cns
-
-                    log.info('Rebalancing Complete.')
+                    if self._setup_internal_consumer(new_partitions):
+                        log.info('Rebalancing Complete.')
                     break
                 except PartitionOwnedError as ex:
                     if i == self._rebalance_max_retries - 1:
