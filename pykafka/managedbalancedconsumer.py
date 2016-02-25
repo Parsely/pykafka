@@ -241,10 +241,7 @@ class ManagedBalancedConsumer(BalancedConsumer):
     def _send_heartbeat(self):
         """Send a heartbeat request to the group coordinator and react to the response"""
         res = self._group_coordinator.group_heartbeat(
-            self._consumer_group,
-            self._generation_id,
-            self._consumer_id
-        )
+            self._consumer_group, self._generation_id, self._consumer_id)
         if res.error_code == 0:
             return
         log.info("Error code %d encountered on heartbeat." % res.error_code)
