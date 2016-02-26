@@ -40,7 +40,8 @@ class BrokerConnection(object):
                  port,
                  buffer_size=1024 * 1024,
                  source_host='',
-                 source_port=0):
+                 source_port=0,
+                 ssl_wrap_socket=None):
         """Initialize a socket connection to Kafka.
 
         :param host: The host to which to connect
@@ -56,6 +57,11 @@ class BrokerConnection(object):
         :param source_port: The port portion of the source address for
             the socket connection
         :type source_port: int
+        :param ssl_wrap_socket: Function such as `ssl.SSLContext.wrap_socket()`
+            or `ssl.wrap_socket()`.  It will be invoked with its `socket`
+            argument only; use `functools.partial` to bind other arguments.
+            Note that if this is not `None`, `host/port` is expected to be an
+            ssl-enabled rather than a plaintext endpoint
         """
         self._buff = bytearray(buffer_size)
         self.host = host
@@ -63,6 +69,7 @@ class BrokerConnection(object):
         self._socket = None
         self.source_host = source_host
         self.source_port = source_port
+        self._wrap_socket = ssl_wrap_socket or (lambda x: x)
 
     def __del__(self):
         """Close this connection when the object is deleted."""
@@ -76,11 +83,11 @@ class BrokerConnection(object):
     def connect(self, timeout):
         """Connect to the broker."""
         log.debug("Connecting to %s:%s", self.host, self.port)
-        self._socket = socket.create_connection(
+        self._socket = self._wrap_socket(socket.create_connection(
             (self.host, self.port),
             timeout / 1000,
             (self.source_host, self.source_port)
-        )
+        ))
         if self._socket is not None:
             log.debug("Successfully connected to %s:%s", self.host, self.port)
 

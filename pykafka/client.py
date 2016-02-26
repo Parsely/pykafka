@@ -46,7 +46,8 @@ class KafkaClient(object):
                  offsets_channel_socket_timeout_ms=10 * 1000,
                  use_greenlets=False,
                  exclude_internal_topics=True,
-                 source_address=''):
+                 source_address='',
+                 ssl_wrap_socket=None):
         """Create a connection to a Kafka cluster.
 
         Documentation for source_address can be found at
@@ -72,6 +73,11 @@ class KafkaClient(object):
         :type exclude_internal_topics: bool
         :param source_address: The source address for socket connections
         :type source_address: str `'host:port'`
+        :param ssl_wrap_socket: Function such as `ssl.SSLContext.wrap_socket()`
+            or `ssl.wrap_socket()`.  It will be invoked with its `socket`
+            argument only; use `functools.partial` to bind other arguments.
+            Note that if this is not `None`, `hosts` is expected to be a list
+            of ssl-enabled rather than plaintext cluster endpoints
         """
         self._seed_hosts = zookeeper_hosts if zookeeper_hosts is not None else hosts
         self._source_address = source_address
@@ -85,8 +91,8 @@ class KafkaClient(object):
             offsets_channel_socket_timeout_ms=self._offsets_channel_socket_timeout_ms,
             exclude_internal_topics=exclude_internal_topics,
             source_address=self._source_address,
-            zookeeper_hosts=zookeeper_hosts
-        )
+            zookeeper_hosts=zookeeper_hosts,
+            ssl_wrap_socket=ssl_wrap_socket)
         self.brokers = self.cluster.brokers
         self.topics = self.cluster.topics
 

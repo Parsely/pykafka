@@ -48,7 +48,8 @@ class Broker(object):
                  offsets_channel_socket_timeout_ms,
                  buffer_size=1024 * 1024,
                  source_host='',
-                 source_port=0):
+                 source_port=0,
+                 ssl_wrap_socket=None):
         """Create a Broker instance.
 
         :param id_: The id number of this broker
@@ -83,6 +84,7 @@ class Broker(object):
         self._port = port
         self._source_host = source_host
         self._source_port = source_port
+        self._ssl_wrap_socket = ssl_wrap_socket
         self._handler = handler
         self._req_handler = None
         self._offsets_channel_req_handler = None
@@ -109,7 +111,8 @@ class Broker(object):
                       offsets_channel_socket_timeout_ms,
                       buffer_size=64 * 1024,
                       source_host='',
-                      source_port=0):
+                      source_port=0,
+                      ssl_wrap_socket=None):
         """Create a Broker using BrokerMetadata
 
         :param metadata: Metadata that describes the broker.
@@ -137,7 +140,8 @@ class Broker(object):
                    offsets_channel_socket_timeout_ms,
                    buffer_size=buffer_size,
                    source_host=source_host,
-                   source_port=source_port)
+                   source_port=source_port,
+                   ssl_wrap_socket=ssl_wrap_socket)
 
     @property
     def connected(self):
@@ -196,7 +200,8 @@ class Broker(object):
         self._connection = BrokerConnection(self.host, self.port,
                                             buffer_size=self._buffer_size,
                                             source_host=self._source_host,
-                                            source_port=self._source_port)
+                                            source_port=self._source_port,
+                                            ssl_wrap_socket=self._ssl_wrap_socket)
         self._connection.connect(self._socket_timeout_ms)
         self._req_handler = RequestHandler(self._handler, self._connection)
         self._req_handler.start()
@@ -209,8 +214,11 @@ class Broker(object):
         channel
         """
         self._offsets_channel_connection = BrokerConnection(
-            self.host, self.port, buffer_size=self._buffer_size,
-            source_host=self._source_host, source_port=self._source_port)
+            self.host, self.port,
+            buffer_size=self._buffer_size,
+            source_host=self._source_host,
+            source_port=self._source_port,
+            ssl_wrap_socket=self._ssl_wrap_socket)
         self._offsets_channel_connection.connect(self._offsets_channel_socket_timeout_ms)
         self._offsets_channel_req_handler = RequestHandler(
             self._handler, self._offsets_channel_connection
