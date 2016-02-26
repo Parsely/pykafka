@@ -341,6 +341,8 @@ class BalancedConsumer(object):
 
     def _setup_internal_consumer(self, partitions=None, start=True):
         """Instantiate an internal SimpleConsumer instance"""
+        if partitions is None:
+            partitions = []
         # Only re-create internal consumer if something changed.
         if partitions != self._partitions:
             cns = self._get_internal_consumer(partitions=list(partitions), start=start)

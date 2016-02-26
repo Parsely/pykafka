@@ -215,7 +215,7 @@ class TestOffsetCommitFetchAPI(unittest2.TestCase):
         )
 
     def test_consumer_metadata_response(self):
-        response = protocol.ConsumerMetadataResponse(
+        response = protocol.GroupCoordinatorResponse(
             buffer(b'\x00\x00\x00\x00\x00\x00\x00\remmett-debian\x00\x00#\x84')
         )
         self.assertEqual(response.coordinator_id, 0)
@@ -301,10 +301,10 @@ class TestGroupMembershipAPI(unittest2.TestCase):
         req = protocol.SyncGroupRequest(
             b'dummygroup', 1, b'testmember1',
             [
-                ('testmember1', protocol.MemberAssignment([(b"mytopic1", [3, 5, 7, 9]),
-                                                           (b"mytopic2", [3, 5, 7, 9])])),
-                ('testmember2', protocol.MemberAssignment([(b"mytopic1", [2, 4, 6, 8]),
-                                                           (b"mytopic2", [2, 4, 6, 8])]))
+                protocol.MemberAssignment([(b"mytopic1", [3, 5, 7, 9]),
+                                           (b"mytopic2", [3, 5, 7, 9])], member_id="a"),
+                protocol.MemberAssignment([(b"mytopic1", [2, 4, 6, 8]),
+                                           (b"mytopic2", [2, 4, 6, 8])], member_id="b")
             ])
         msg = req.get_bytes()
         self.assertEqual(
