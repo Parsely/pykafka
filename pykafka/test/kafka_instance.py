@@ -38,7 +38,7 @@ log = logging.getLogger(__name__)
 _kafka_properties = """
 # Configurable settings
 broker.id={broker_id}
-port={port}
+{port_config}
 zookeeper.connect={zk_connstr}
 log.dirs={data_dir}
 
@@ -54,6 +54,15 @@ log.segment.bytes=1073741824
 log.cleaner.enable=false
 zookeeper.connection.timeout.ms=6000
 delete.topic.enable=true
+"""
+
+_kafka_ssl_properties = """
+listeners=PLAINTEXT://localhost:{port},SSL://localhost:{ssl_port}
+ssl.keystore.location={keystore_path}
+ssl.keystore.password={store_pass}
+ssl.key.password={store_pass}
+ssl.truststore.location={truststore_path}
+ssl.truststore.password={store_pass}
 """
 
 _zookeeper_properties = """
@@ -144,6 +153,7 @@ class KafkaInstance(ManagedInstance):
         self._processes = []
         self.zookeeper = None
         self.brokers = None
+        self.certs = None
         # TODO: Need a better name so multiple can run at once.
         #       other ManagedInstances use things like 'name-port'
         ManagedInstance.__init__(self, name, use_gevent=use_gevent)
@@ -221,9 +231,11 @@ class KafkaInstance(ManagedInstance):
         zk_port = self._start_zookeeper()
         self.zookeeper = 'localhost:{port}'.format(port=zk_port)
 
-        broker_ports = self._start_brokers()
+        broker_ports, broker_ssl_ports = self._start_brokers()
         self.brokers = ','.join('localhost:{port}'.format(port=port)
                                for port in broker_ports)
+        self.brokers_ssl = ','.join('localhost:{port}'.format(port=port)
+                                    for port in broker_ssl_ports)
 
         # Process is started when the port isn't free anymore
         all_ports = [zk_port] + broker_ports
@@ -257,17 +269,34 @@ class KafkaInstance(ManagedInstance):
         self._broker_procs = []
         ports = self._port_generator(9092)
         used_ports = []
+        used_ssl_ports = []
         for i in range(self._num_instances):
             port = next(ports)
             used_ports.append(port)
             log.info('Starting Kafka on port %i.', port)
+
+            if self._kafka_version >= "0.9":
+                if self.certs is None:
+                    # TODO continue gracefully if openssl or other tools are
+                    # not available
+                    self.certs = CertManager(self._bin_dir)
+                ssl_port = next(ports)
+                used_ssl_ports.append(ssl_port)
+                port_config = _kafka_ssl_properties.format(
+                    port=port,
+                    ssl_port=ssl_port,
+                    keystore_path=self.certs.keystore,
+                    truststore_path=self.certs.truststore,
+                    store_pass=self.certs.broker_pass)
+            else:
+                port_config = "port={}".format(port)
 
             conf = os.path.join(self._conf_dir,
                                 'kafka_{instance}.properties'.format(instance=i))
             with open(conf, 'w') as f:
                 f.write(_kafka_properties.format(
                     broker_id=i,
-                    port=port,
+                    port_config=port_config,
                     zk_connstr=self.zookeeper,
                     data_dir=self._data_dir + '_{instance}'.format(instance=i),
                 ))
@@ -280,7 +309,7 @@ class KafkaInstance(ManagedInstance):
                 stdout=open(logfile, 'w'),
                 use_gevent=self.use_gevent
             ))
-        return used_ports
+        return used_ports, used_ssl_ports
 
     def _start_zookeeper(self):
         port = next(self._port_generator(2181))
@@ -334,6 +363,133 @@ class KafkaInstance(ManagedInstance):
     def produce_messages(self, topic_name, messages):
         """Produce some messages to a topic."""
         return self.connection.produce_messages(topic_name, messages)
+
+
+class CertManager(object):
+    """Helper that generates key pairs/stores for brokers and clients
+
+    NB: intended only for test suite purposes.  For instance, currently the
+    same cert is shared between all brokers, and another between all clients,
+    even between different instances of CertManager.  And for another, this
+    class freely discloses passwords for its keys: they're purely here to
+    test if the configuration with passwords works
+    """
+
+    def __init__(self, root_dir):
+        # It would be more elegant to use a tempdir here, but that would make
+        # it difficult for KafkaConnection to find the CA cert for an already
+        # running cluster, and so we just use a fixed location:
+        self._dir = os.path.join(root_dir, "test-certs")
+
+        self.validity_days = '10000'
+
+        self.root_cert = os.path.join(self._dir, "root.cert")
+        self.root_key = os.path.join(self._dir, "root.key")
+        self.root_pass = "NfXI63pmNqbHF4tq"
+
+        self.truststore = os.path.join(self._dir, "broker.truststore.jks")
+        self.keystore = os.path.join(self._dir, "broker.keystore.jks")
+        self.broker_pass = "JJQqPLUV1ZIFD6ny"
+
+        self.client_cert = os.path.join(self._dir, "client.cert")
+        self.client_key = os.path.join(self._dir, "client.key")
+        self.client_pass = "dWJTxlilbJcH1Wgn"
+
+        if not os.path.exists(self.root_cert):
+            try:
+                os.makedirs(self._dir)
+            except OSError:
+                pass
+            self._gen_root_cert()
+            self._gen_broker_truststore()
+            self._gen_broker_keystore()
+            self._gen_client_cert()
+
+    def _gen_root_cert(self):
+        """Generate root certificate"""
+        cmd = ['openssl', 'req',
+               '-x509',
+               '-newkey', 'rsa:2048',
+               '-subj', '/CN=ca.example.com',
+               '-days', self.validity_days,
+               '-out', self.root_cert,
+               '-keyout', self.root_key,
+               '-passout', 'env:ROOT_PASS']
+        return subprocess.check_call(cmd, env=dict(ROOT_PASS=self.root_pass))
+
+    def _gen_broker_truststore(self):
+        """Generate truststore that trusts self.root_cert"""
+        cmd = ['keytool', '-importcert', '-alias', 'root',
+                                         '-file', self.root_cert,
+                                         '-keystore', self.truststore,
+                                         '-storepass:env', 'BROKER_PASS',
+                                         '-noprompt']
+        env = dict(BROKER_PASS=self.broker_pass)
+        return subprocess.check_call(cmd, env=env)
+
+    def _gen_broker_keystore(self):
+        """Generate broker keypair, signed by self.root_cert"""
+        env = dict(BROKER_PASS=self.broker_pass, ROOT_PASS=self.root_pass)
+        csr_path = os.path.join(self._dir, "broker.csr")
+        cert_path = os.path.join(self._dir, "broker.cert")
+
+        cmd = ['keytool', '-genkeypair', '-alias', 'broker',
+                                         '-dname', 'CN=localhost',
+                                         '-validity', self.validity_days,
+                                         '-keystore', self.keystore,
+                                         '-storepass:env', 'BROKER_PASS',
+                                         '-keypass:env', 'BROKER_PASS',
+                                         '-noprompt']
+        subprocess.check_call(cmd, env=env)
+        cmd = ['keytool', '-certreq', '-alias', 'broker',
+                                      '-file', csr_path,
+                                      '-keystore', self.keystore,
+                                      '-storepass:env', 'BROKER_PASS']
+        subprocess.check_call(cmd, env=env)
+        cmd = ['openssl', 'x509', '-req', '-in', csr_path,
+                                          '-out', cert_path,
+                                          '-days', self.validity_days,
+                                          '-CA', self.root_cert,
+                                          '-CAkey', self.root_key,
+                                          '-CAcreateserial',
+                                          '-passin', 'env:ROOT_PASS']
+        subprocess.check_call(cmd, env=env)
+        cmd = ['keytool', '-importcert', '-alias', 'root',
+                                         '-file', self.root_cert,
+                                         '-keystore', self.keystore,
+                                         '-storepass:env', 'BROKER_PASS',
+                                         '-noprompt']
+        subprocess.check_call(cmd, env=env)
+        cmd = ['keytool', '-importcert', '-alias', 'broker',
+                                         '-file', cert_path,
+                                         '-keystore', self.keystore,
+                                         '-storepass:env', 'BROKER_PASS']
+        subprocess.check_call(cmd, env=env)
+
+        os.unlink(csr_path)
+        os.unlink(cert_path)
+
+    def _gen_client_cert(self):
+        """Generate client keypair and sign it"""
+        env = dict(CLIENT_PASS=self.client_pass, ROOT_PASS=self.root_pass)
+        csr_path = os.path.join(self._dir, "client.csr")
+
+        cmd = ['openssl', 'req', '-newkey', 'rsa:2048',
+                                 '-subj', '/CN=localhost',
+                                 '-days', self.validity_days,
+                                 '-out', csr_path,
+                                 '-keyout', self.client_key,
+                                 '-passout', 'env:CLIENT_PASS']
+        subprocess.check_call(cmd, env=env)
+        cmd = ['openssl', 'x509', '-req', '-in', csr_path,
+                                          '-out', self.client_cert,
+                                          '-days', self.validity_days,
+                                          '-CA', self.root_cert,
+                                          '-CAkey', self.root_key,
+                                          '-passin', 'env:ROOT_PASS']
+        subprocess.check_call(cmd, env=env)
+
+        os.unlink(csr_path)
 
 
 if __name__ == '__main__':
