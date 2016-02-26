@@ -180,11 +180,25 @@ class IllegalGeneration(ProtocolClientError):
     ERROR_CODE = 22
 
 
+class InconsistentGroupProtocol(ProtocolClientError):
+    """Returned in join group when the member provides a protocol type or set of protocols
+        which is not compatible with the current group.
+    """
+    ERROR_CODE = 23
+
+
 class UnknownMemberId(ProtocolClientError):
     """Returned from group requests (offset commits/fetches, heartbeats, etc) when the
         memberId is not in the current generation.
     """
     ERROR_CODE = 25
+
+
+class InvalidSessionTimeout(ProtocolClientError):
+    """Returned in join group when the requested session timeout is outside of the allowed
+        range on the broker
+    """
+    ERROR_CODE = 26
 
 
 class RebalanceInProgress(ProtocolClientError):
@@ -217,7 +231,9 @@ ERROR_CODES = dict(
                 GroupCoordinatorNotAvailable,
                 NotCoordinatorForGroup,
                 IllegalGeneration,
+                InconsistentGroupProtocol,
                 UnknownMemberId,
+                InvalidSessionTimeout,
                 RebalanceInProgress,
                 GroupAuthorizationFailed)
 )

@@ -1331,9 +1331,7 @@ class JoinGroupResponse(Response):
         fmt = 'hiSSS[SY ]'
         response = struct_helpers.unpack_from(fmt, buff, 0)
 
-        error_code = response[0]
-        if error_code != 0:
-            self.raise_error(error_code, response)
+        self.error_code = response[0]
         self.generation_id = response[1]
         self.group_protocol = response[2]
         self.leader_id = response[3]

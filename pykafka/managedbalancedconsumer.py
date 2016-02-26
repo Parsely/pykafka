@@ -25,7 +25,8 @@ from .balancedconsumer import BalancedConsumer
 from .common import OffsetType
 from .exceptions import (IllegalGeneration, RebalanceInProgress, UnknownMemberId,
                          NotCoordinatorForGroup, GroupCoordinatorNotAvailable,
-                         GroupAuthorizationFailed)
+                         GroupAuthorizationFailed, ERROR_CODES, GroupLoadInProgress,
+                         InconsistentGroupProtocol, InvalidSessionTimeout)
 from .protocol import MemberAssignment
 from .utils.compat import itervalues, iterkeys
 
@@ -277,21 +278,16 @@ class ManagedBalancedConsumer(BalancedConsumer):
         """
         for i in range(self._rebalance_max_retries):
             try:
-                # send the initial JoinGroupRequest. Assigns a member id and tells the
-                # coordinator about this consumer.
-                join_result = self._group_coordinator.join_managed_consumer_group(
-                    self._consumer_group, self._consumer_id)
-                self._generation_id = join_result.generation_id
-                self._consumer_id = join_result.member_id
+                members = self._join_group()
 
                 # generate partition assignments for each group member
                 # if this is not the leader, join_result.members will be empty
                 group_assignments = [
                     MemberAssignment([
                         (self._topic.name,
-                            self._decide_partitions(iterkeys(join_result.members),
+                            self._decide_partitions(iterkeys(members),
                                                     consumer_id=member_id))
-                    ], member_id=member_id) for member_id in join_result.members]
+                    ], member_id=member_id) for member_id in members]
 
                 # perform the SyncGroupRequest. If this consumer is the group leader,
                 # This request informs the other members of the group of their
@@ -299,19 +295,79 @@ class ManagedBalancedConsumer(BalancedConsumer):
                 # partition assignment for this consumer. The group leader *could*
                 # tell itself its own assignment instead of using the result of this
                 # request, but it does the latter to ensure consistency.
-                sync_result = self._group_coordinator.sync_group(
-                    self._consumer_group, self._generation_id, self._consumer_id,
-                    group_assignments)
-                assignment = sync_result.member_assignment.partition_assignment
+                assignment = self._sync_group(group_assignments)
                 # set up a SimpleConsumer consuming the returned partitions
                 my_partitions = [p for p in itervalues(self._topic.partitions)
                                  if p.id in assignment[0][1]]
                 self._setup_internal_consumer(partitions=my_partitions)
                 break
-            except Exception:
+            except Exception as ex:
                 if i == self._rebalance_max_retries - 1:
                     log.warning('Failed to rebalance s after %d retries.', i)
                     raise
                 log.info('Unable to complete rebalancing. Retrying')
+                log.exception(ex)
                 self._cluster.handler.sleep(i * (self._rebalance_backoff_ms / 1000))
         self._raise_worker_exceptions()
+
+    def _join_group(self):
+        """Send a JoinGroupRequest.
+
+        Assigns a member id and tells the coordinator about this consumer.
+        """
+        log.info("Sending JoinGroupRequest for consumer id '%s'", self._consumer_id)
+        for i in range(self._cluster._max_connection_retries):
+            join_result = self._group_coordinator.join_managed_consumer_group(
+                self._consumer_group, self._consumer_id)
+            if join_result.error_code == 0:
+                break
+            log.info("Error code %d encountered during JoinGroupRequest",
+                     join_result.error_code)
+            if i == self._cluster._max_connection_retries - 1:
+                raise ERROR_CODES[join_result.error_code]
+            if join_result.error_code in (GroupLoadInProgress.ERROR_CODE,):
+                pass
+            elif join_result.error_code in (GroupCoordinatorNotAvailable.ERROR_CODE,
+                                            NotCoordinatorForGroup.ERROR_CODE):
+                self._group_coordinator = self._cluster.get_group_coordinator(
+                    self._consumer_group)
+            elif join_result.error_code in (InconsistentGroupProtocol.ERROR_CODE,
+                                            UnknownMemberId.ERROR_CODE,
+                                            InvalidSessionTimeout.ERROR_CODE,
+                                            GroupAuthorizationFailed.ERROR_CODE):
+                raise ERROR_CODES[join_result.error_code]
+            self._cluster.handler.sleep(i * 2)
+        self._generation_id = join_result.generation_id
+        self._consumer_id = join_result.member_id
+        return join_result.members
+
+    def _sync_group(self, group_assignments):
+        """Send a SyncGroupRequest.
+
+        If this consumer is the group leader, this call informs the other consumers
+        of their partition assignments. For all consumers including the leader, this call
+        is used to fetch partition assignments.
+        """
+        log.info("Sending SyncGroupRequest for consumer id '%s'", self._consumer_id)
+        for i in range(self._cluster._max_connection_retries):
+            sync_result = self._group_coordinator.sync_group(
+                self._consumer_group, self._generation_id, self._consumer_id,
+                group_assignments)
+            if sync_result.error_code == 0:
+                break
+            log.info("Error code %d encountered during SyncGroupRequest",
+                     sync_result.error_code)
+            if i == self._cluster._max_connection_retries - 1:
+                raise ERROR_CODES[sync_result.error_code]
+            if sync_result.error_code in (IllegalGeneration.ERROR_CODE,
+                                          GroupCoordinatorNotAvailable.ERROR_CODE,
+                                          RebalanceInProgress.ERROR_CODE):
+                pass
+            elif sync_result.error_code in (NotCoordinatorForGroup.ERROR_CODE,):
+                self._group_coordinator = self._cluster.get_group_coordinator(
+                    self._consumer_group)
+            elif sync_result.error_code in (UnknownMemberId.ERROR_CODE,
+                                            GroupAuthorizationFailed.ERROR_CODE):
+                raise ERROR_CODES[sync_result.error_code]
+            self._cluster.handler.sleep(i * 2)
+        return sync_result.member_assignment.partition_assignment
