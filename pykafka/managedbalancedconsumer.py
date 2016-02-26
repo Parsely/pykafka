@@ -1,3 +1,4 @@
+from __future__ import division
 """
 Author: Emmett Butler
 """
@@ -28,7 +29,7 @@ from .exceptions import (IllegalGeneration, RebalanceInProgress, UnknownMemberId
                          GroupAuthorizationFailed, ERROR_CODES, GroupLoadInProgress,
                          InconsistentGroupProtocol, InvalidSessionTimeout)
 from .protocol import MemberAssignment
-from .utils.compat import itervalues, iterkeys
+from .utils.compat import iterkeys
 
 log = logging.getLogger(__name__)
 
@@ -289,8 +290,7 @@ class ManagedBalancedConsumer(BalancedConsumer):
                     ], member_id=member_id) for member_id in members]
 
                 assignment = self._sync_group(group_assignments)
-                my_partitions = [p for p in itervalues(self._topic.partitions)
-                                 if p.id in assignment[0][1]]
+                my_partitions = [self._topic.partitions[pid] for pid in assignment[0][1]]
                 self._setup_internal_consumer(partitions=my_partitions)
                 break
             except Exception as ex:

@@ -69,7 +69,7 @@ class SimpleConsumer(object):
                  reset_offset_on_start=False,
                  compacted_topic=False,
                  generation_id=-1,
-                 consumer_id=None):
+                 consumer_id=b''):
         """Create a SimpleConsumer.
 
         Settings and default values are taken from the Scala
@@ -142,7 +142,7 @@ class SimpleConsumer(object):
         :type generation_id: int
         :param consumer_id: The identifying string to use for this consumer on group
             requests
-        :type consumer_id: str
+        :type consumer_id: bytes
         """
         self._cluster = cluster
         if not (isinstance(consumer_group, bytes) or consumer_group is None):
