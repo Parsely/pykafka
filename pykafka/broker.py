@@ -353,20 +353,59 @@ class Broker(object):
     #  Group Membership API  #
     ##########################
 
-    def join_managed_consumer_group(self, consumer_group, member_id):
+    def join_group(self, consumer_group, member_id):
+        """Send a JoinGroupRequest
+
+        :param consumer_group: The name of the consumer group to join
+        :type consumer_group: bytes
+        :param member_id: The ID of the consumer joining the group
+        :type member_id: bytes
+        """
         future = self._req_handler.request(JoinGroupRequest(consumer_group, member_id))
         return future.get(JoinGroupResponse)
 
-    def leave_managed_consumer_group(self, consumer_group, member_id):
+    def leave_group(self, consumer_group, member_id):
+        """Send a LeaveGroupRequest
+
+        :param consumer_group: The name of the consumer group to leave
+        :type consumer_group: bytes
+        :param member_id: The ID of the consumer leaving the group
+        :type member_id: bytes
+        """
         future = self._req_handler.request(LeaveGroupRequest(consumer_group, member_id))
         return future.get(LeaveGroupResponse)
 
     def sync_group(self, consumer_group, generation_id, member_id, group_assignment):
+        """Send a SyncGroupRequest
+
+        :param consumer_group: The name of the consumer group to which this consumer
+            belongs
+        :type consumer_group: bytes
+        :param generation_id: The current generation for the consumer group
+        :type generation_id: int
+        :param member_id: The ID of the consumer syncing
+        :type member_id: bytes
+        :param group_assignment: A sequence of :class:`pykafka.protocol.MemberAssignment`
+            instances indicating the partition assignments for each member of the group.
+            When `sync_group` is called by a member other than the leader of the group,
+            `group_assignment` should be an empty sequence.
+        :type group_assignment: iterable of :class:`pykafka.protocol.MemberAssignment`
+        """
         future = self._req_handler.request(
             SyncGroupRequest(consumer_group, generation_id, member_id, group_assignment))
         return future.get(SyncGroupResponse)
 
-    def group_heartbeat(self, consumer_group, generation_id, member_id):
+    def heartbeat(self, consumer_group, generation_id, member_id):
+        """Send a HeartbeatRequest
+
+        :param consumer_group: The name of the consumer group to which this consumer
+            belongs
+        :type consumer_group: bytes
+        :param generation_id: The current generation for the consumer group
+        :type generation_id: int
+        :param member_id: The ID of the consumer sending this heartbeat
+        :type member_id: bytes
+        """
         future = self._req_handler.request(
             HeartbeatRequest(consumer_group, generation_id, member_id))
         return future.get(HeartbeatResponse)

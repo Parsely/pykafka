@@ -237,12 +237,11 @@ class ManagedBalancedConsumer(BalancedConsumer):
         self._running = False
         if self._consumer is not None:
             self._consumer.stop()
-        self._group_coordinator.leave_managed_consumer_group(self._consumer_group,
-                                                             self._consumer_id)
+        self._group_coordinator.leave_group(self._consumer_group, self._consumer_id)
 
     def _send_heartbeat(self):
         """Send a heartbeat request to the group coordinator and react to the response"""
-        res = self._group_coordinator.group_heartbeat(
+        res = self._group_coordinator.heartbeat(
             self._consumer_group, self._generation_id, self._consumer_id)
         if res.error_code == 0:
             return
@@ -309,7 +308,7 @@ class ManagedBalancedConsumer(BalancedConsumer):
         """
         log.info("Sending JoinGroupRequest for consumer id '%s'", self._consumer_id)
         for i in range(self._cluster._max_connection_retries):
-            join_result = self._group_coordinator.join_managed_consumer_group(
+            join_result = self._group_coordinator.join_group(
                 self._consumer_group, self._consumer_id)
             if join_result.error_code == 0:
                 break
