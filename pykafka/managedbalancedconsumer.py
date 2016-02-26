@@ -279,7 +279,6 @@ class ManagedBalancedConsumer(BalancedConsumer):
         for i in range(self._rebalance_max_retries):
             try:
                 members = self._join_group()
-
                 # generate partition assignments for each group member
                 # if this is not the leader, join_result.members will be empty
                 group_assignments = [
@@ -289,14 +288,7 @@ class ManagedBalancedConsumer(BalancedConsumer):
                                                     consumer_id=member_id))
                     ], member_id=member_id) for member_id in members]
 
-                # perform the SyncGroupRequest. If this consumer is the group leader,
-                # This request informs the other members of the group of their
-                # partition assignments. This request is also used to fetch The
-                # partition assignment for this consumer. The group leader *could*
-                # tell itself its own assignment instead of using the result of this
-                # request, but it does the latter to ensure consistency.
                 assignment = self._sync_group(group_assignments)
-                # set up a SimpleConsumer consuming the returned partitions
                 my_partitions = [p for p in itervalues(self._topic.partitions)
                                  if p.id in assignment[0][1]]
                 self._setup_internal_consumer(partitions=my_partitions)
@@ -347,6 +339,9 @@ class ManagedBalancedConsumer(BalancedConsumer):
         If this consumer is the group leader, this call informs the other consumers
         of their partition assignments. For all consumers including the leader, this call
         is used to fetch partition assignments.
+
+        The group leader *could* tell itself its own assignment instead of using the
+        result of this request, but it does the latter to ensure consistency.
         """
         log.info("Sending SyncGroupRequest for consumer id '%s'", self._consumer_id)
         for i in range(self._cluster._max_connection_retries):
