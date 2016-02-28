@@ -63,7 +63,7 @@ producing messages.
 
     >>> with topic.get_sync_producer() as producer:
     ...     for i in range(4):
-    ...         producer.produce('test message ' + i ** 2)
+    ...         producer.produce('test message ' + str(i ** 2))
 
 The example above would produce to kafka synchronously, that is, the call only
 returns after we have confirmation that the message made it to the cluster.
