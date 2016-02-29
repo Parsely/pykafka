@@ -186,8 +186,10 @@ class ManagedBalancedConsumer(BalancedConsumer):
                 self.__class__.__name__))
         self._use_rdkafka = use_rdkafka
 
+        self._generation_id = -1
         self._rebalancing_lock = cluster.handler.Lock()
         self._consumer = None
+        self._group_coordinator = None
         self._consumer_id = b''
         self._worker_trace_logged = False
         self._worker_exception = None
@@ -258,16 +260,6 @@ class ManagedBalancedConsumer(BalancedConsumer):
             raise GroupAuthorizationFailed()
         self._rebalance()
 
-    def _decide_partitions(self, participants, consumer_id=None):
-        """Decide which partitions belong to this consumer
-
-        Thin formatting wrapper around
-        `pykafka.balancedconsumer.BalancedConsumer._decide_partitions`
-        """
-        parts = super(ManagedBalancedConsumer, self)._decide_partitions(
-            participants, consumer_id=consumer_id)
-        return [p.id for p in parts]
-
     def _update_member_assignment(self):
         """Join a managed consumer group and start consuming assigned partitions
 
@@ -284,13 +276,13 @@ class ManagedBalancedConsumer(BalancedConsumer):
                 group_assignments = [
                     MemberAssignment([
                         (self._topic.name,
-                            self._decide_partitions(iterkeys(members),
-                                                    consumer_id=member_id))
+                         [p.id for p in self._decide_partitions(
+                          iterkeys(members), consumer_id=member_id)])
                     ], member_id=member_id) for member_id in members]
 
                 assignment = self._sync_group(group_assignments)
-                my_partitions = [self._topic.partitions[pid] for pid in assignment[0][1]]
-                self._setup_internal_consumer(partitions=my_partitions)
+                self._setup_internal_consumer(
+                    partitions=[self._topic.partitions[pid] for pid in assignment[0][1]])
                 break
             except Exception as ex:
                 if i == self._rebalance_max_retries - 1:
