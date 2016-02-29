@@ -19,7 +19,7 @@ from pykafka.test.utils import get_cluster, stop_cluster
 from pykafka.utils.compat import range, iterkeys, iteritems
 
 
-kafka_version = pkg_resources.parse_version(os.environ.get("KAFKA_VERSION", "0.8"))
+kafka_version = pkg_resources.parse_version(os.environ.get('KAFKA_VERSION', '0.8'))
 version_09 = pkg_resources.parse_version("0.9.0.0")
 
 
@@ -412,23 +412,44 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
             raise AssertionError("Rebalancing failed")
 
 
-@pytest.mark.skipif(platform.python_implementation() == "PyPy",
-                    reason="Unresolved crashes")
-class BalancedConsumerGEventIntegrationTests(BalancedConsumerIntegrationTests):
+def patch_subclass(parent, condition):
+    def patcher(cls):
+        def build_skipped_method(method, cond=None):
+            if cond is None:
+                cond = False
+
+            @pytest.mark.skipif(cond, reason="")
+            def _wrapper():
+                return method()
+            return _wrapper
+
+        for attr in parent.__dict__:
+            if attr in cls.__dict__:
+                continue
+            if attr.startswith("test_"):
+                setattr(cls, attr, build_skipped_method(parent.__dict__[attr],
+                                                        condition))
+            else:
+                setattr(cls, attr, parent.__dict__[attr])
+        return cls
+    return patcher
+
+
+@patch_subclass(BalancedConsumerIntegrationTests,
+                platform.python_implementation() == "PyPy")
+class BalancedConsumerGEventIntegrationTests(unittest2.TestCase):
     USE_GEVENT = True
 
 
-@pytest.mark.skipif(kafka_version < version_09,
-                    reason="Managed consumer only supported in >=0.9")
-class ManagedBalancedConsumerIntegrationTests(BalancedConsumerIntegrationTests):
+@patch_subclass(BalancedConsumerIntegrationTests, kafka_version < version_09)
+class ManagedBalancedConsumerIntegrationTests(unittest2.TestCase):
     MANAGED_CONSUMER = True
 
 
-@pytest.mark.skipif(platform.python_implementation() == "PyPy",
-                    reason="Unresolved crashes")
-@pytest.mark.skipif(kafka_version < version_09,
-                    reason="Managed consumer only supported in >=0.9")
-class ManagedBalancedConsumerGEventIntegrationTests(BalancedConsumerIntegrationTests):
+@patch_subclass(
+    BalancedConsumerIntegrationTests,
+    platform.python_implementation() == "PyPy" or kafka_version < version_09)
+class ManagedBalancedConsumerGEventIntegrationTests(unittest2.TestCase):
     MANAGED_CONSUMER = True
     USE_GEVENT = True
 
