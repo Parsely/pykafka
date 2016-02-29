@@ -20,6 +20,7 @@ from pykafka.utils.compat import range, iterkeys, iteritems
 
 
 kafka_version = pkg_resources.parse_version(os.environ.get("KAFKA_VERSION", "0.8"))
+version_09 = pkg_resources.parse_version("0.9.0.0")
 
 
 class TestBalancedConsumer(unittest2.TestCase):
@@ -411,7 +412,7 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
             raise AssertionError("Rebalancing failed")
 
 
-@pytest.mark.skipif(kafka_version < (0, 9),
+@pytest.mark.skipif(kafka_version < version_09,
                     reason="Managed consumer only supported in >=0.9")
 class ManagedBalancedConsumerIntegrationTests(BalancedConsumerIntegrationTests):
     MANAGED_CONSUMER = True
@@ -425,7 +426,7 @@ class BalancedConsumerGEventIntegrationTests(BalancedConsumerIntegrationTests):
 
 @pytest.mark.skipif(platform.python_implementation() == "PyPy",
                     reason="Unresolved crashes")
-@pytest.mark.skipif(kafka_version < (0, 9),
+@pytest.mark.skipif(kafka_version < version_09,
                     reason="Managed consumer only supported in >=0.9")
 class ManagedBalancedConsumerGEventIntegrationTests(ManagedBalancedConsumerIntegrationTests):
     USE_GEVENT = True
