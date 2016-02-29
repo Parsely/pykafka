@@ -224,7 +224,7 @@ class BalancedConsumer(object):
 
         self._rebalancing_lock = cluster.handler.Lock()
         self._consumer = None
-        self._consumer_id = "{hostname}:{uuid}".format(
+        self._consumer_id = b"{hostname}:{uuid}".format(
             hostname=socket.gethostname(),
             uuid=uuid4()
         )

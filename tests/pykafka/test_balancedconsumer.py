@@ -412,16 +412,16 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
             raise AssertionError("Rebalancing failed")
 
 
-@pytest.mark.skipif(kafka_version < version_09,
-                    reason="Managed consumer only supported in >=0.9")
-class ManagedBalancedConsumerIntegrationTests(BalancedConsumerIntegrationTests):
-    MANAGED_CONSUMER = True
-
-
 @pytest.mark.skipif(platform.python_implementation() == "PyPy",
                     reason="Unresolved crashes")
 class BalancedConsumerGEventIntegrationTests(BalancedConsumerIntegrationTests):
     USE_GEVENT = True
+
+
+@pytest.mark.skipif(kafka_version < version_09,
+                    reason="Managed consumer only supported in >=0.9")
+class ManagedBalancedConsumerIntegrationTests(BalancedConsumerIntegrationTests):
+    MANAGED_CONSUMER = True
 
 
 @pytest.mark.skipif(platform.python_implementation() == "PyPy",
