@@ -29,7 +29,7 @@ from .protocol import (
     OffsetFetchResponse, ProduceResponse, JoinGroupRequest, JoinGroupResponse,
     SyncGroupRequest, SyncGroupResponse, HeartbeatRequest, HeartbeatResponse,
     LeaveGroupRequest, LeaveGroupResponse)
-from .utils.compat import range, iteritems
+from .utils.compat import range, iteritems, get_bytes
 
 log = logging.getLogger(__name__)
 
@@ -327,7 +327,7 @@ class Broker(object):
         if not self.offsets_channel_connected:
             self.connect_offsets_channel()
         req = OffsetCommitRequest(consumer_group,
-                                  consumer_group_generation_id,
+                                  get_bytes(consumer_group_generation_id),
                                   consumer_id,
                                   partition_requests=preqs)
         return self._offsets_channel_req_handler.request(req).get(OffsetCommitResponse)
