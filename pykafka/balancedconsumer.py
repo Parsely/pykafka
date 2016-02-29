@@ -224,10 +224,10 @@ class BalancedConsumer(object):
 
         self._rebalancing_lock = cluster.handler.Lock()
         self._consumer = None
-        self._consumer_id = b"{hostname}:{uuid}".format(
+        self._consumer_id = get_bytes("{hostname}:{uuid}".format(
             hostname=socket.gethostname(),
             uuid=uuid4()
-        )
+        ))
         self._setting_watches = True
 
         self._topic_path = '/consumers/{group}/owners/{topic}'.format(

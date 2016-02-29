@@ -428,7 +428,8 @@ class ManagedBalancedConsumerIntegrationTests(BalancedConsumerIntegrationTests):
                     reason="Unresolved crashes")
 @pytest.mark.skipif(kafka_version < version_09,
                     reason="Managed consumer only supported in >=0.9")
-class ManagedBalancedConsumerGEventIntegrationTests(ManagedBalancedConsumerIntegrationTests):
+class ManagedBalancedConsumerGEventIntegrationTests(BalancedConsumerIntegrationTests):
+    MANAGED_CONSUMER = True
     USE_GEVENT = True
 
 
