@@ -1,5 +1,7 @@
 import math
 import mock
+import os
+import pkg_resources
 import platform
 import pytest
 import time
@@ -12,35 +14,39 @@ from kazoo.handlers.gevent import SequentialGeventHandler
 from pykafka import KafkaClient
 from pykafka.balancedconsumer import BalancedConsumer, OffsetType
 from pykafka.exceptions import ConsumerStoppedException
+from pykafka.managedbalancedconsumer import ManagedBalancedConsumer
 from pykafka.test.utils import get_cluster, stop_cluster
 from pykafka.utils.compat import range, iterkeys, iteritems
 
 
-def buildMockConsumer(num_partitions=10, num_participants=1, timeout=2000):
-    consumer_group = b'testgroup'
-    topic = mock.Mock()
-    topic.name = 'testtopic'
-    topic.partitions = {}
-    for k in range(num_partitions):
-        part = mock.Mock(name='part-{part}'.format(part=k))
-        part.id = k
-        part.topic = topic
-        part.leader = mock.Mock()
-        part.leader.id = k % num_participants
-        topic.partitions[k] = part
-
-    cluster = mock.MagicMock()
-    zk = mock.MagicMock()
-    return BalancedConsumer(topic, cluster, consumer_group,
-                            zookeeper=zk, auto_start=False, use_rdkafka=False,
-                            consumer_timeout_ms=timeout), topic
+kafka_version = pkg_resources.parse_version(os.environ.get("KAFKA_VERSION", "0.8"))
 
 
 class TestBalancedConsumer(unittest2.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._consumer_timeout = 2000
-        cls._mock_consumer, _ = buildMockConsumer(timeout=cls._consumer_timeout)
+        cls._mock_consumer, _ = TestBalancedConsumer.buildMockConsumer(timeout=cls._consumer_timeout)
+
+    @classmethod
+    def buildMockConsumer(self, num_partitions=10, num_participants=1, timeout=2000):
+        consumer_group = b'testgroup'
+        topic = mock.Mock()
+        topic.name = 'testtopic'
+        topic.partitions = {}
+        for k in range(num_partitions):
+            part = mock.Mock(name='part-{part}'.format(part=k))
+            part.id = k
+            part.topic = topic
+            part.leader = mock.Mock()
+            part.leader.id = k % num_participants
+            topic.partitions[k] = part
+
+        cluster = mock.MagicMock()
+        zk = mock.MagicMock()
+        return BalancedConsumer(topic, cluster, consumer_group,
+                                zookeeper=zk, auto_start=False, use_rdkafka=False,
+                                consumer_timeout_ms=timeout), topic
 
     def test_consume_returns(self):
         """Ensure that consume() returns in the amount of time it's supposed to
@@ -56,7 +62,7 @@ class TestBalancedConsumer(unittest2.TestCase):
         """Ensure that stopping a consumer while consuming from Kafka does not
         end in an infinite loop when timeout is not used.
         """
-        consumer, _ = buildMockConsumer(timeout=-1)
+        consumer, _ = self.buildMockConsumer(timeout=-1)
         consumer._setup_internal_consumer(start=False)
         consumer._consumer._partitions_by_id = {1: "dummy"}
 
@@ -73,8 +79,8 @@ class TestBalancedConsumer(unittest2.TestCase):
             num_partitions = 100 - i
             participants = sorted(['test-debian:{p}'.format(p=p)
                                    for p in range(num_participants)])
-            cns, topic = buildMockConsumer(num_partitions=num_partitions,
-                                           num_participants=num_participants)
+            cns, topic = self.buildMockConsumer(num_partitions=num_partitions,
+                                                num_participants=num_participants)
 
             # Simulate each participant to ensure they're correct
             assigned_parts = []
@@ -101,10 +107,34 @@ class TestBalancedConsumer(unittest2.TestCase):
             self.assertListEqual(assigned_parts, all_partitions)
 
 
+class TestManagedBalancedConsumer(TestBalancedConsumer):
+    @classmethod
+    def buildMockConsumer(self, num_partitions=10, num_participants=1, timeout=2000):
+        consumer_group = b'testgroup'
+        topic = mock.Mock()
+        topic.name = 'testtopic'
+        topic.partitions = {}
+        for k in range(num_partitions):
+            part = mock.Mock(name='part-{part}'.format(part=k))
+            part.id = k
+            part.topic = topic
+            part.leader = mock.Mock()
+            part.leader.id = k % num_participants
+            topic.partitions[k] = part
+
+        cluster = mock.MagicMock()
+        cns = ManagedBalancedConsumer(topic, cluster, consumer_group,
+                                      auto_start=False, use_rdkafka=False,
+                                      consumer_timeout_ms=timeout)
+        cns._group_coordinator = mock.MagicMock()
+        return cns, topic
+
+
 class BalancedConsumerIntegrationTests(unittest2.TestCase):
     maxDiff = None
     USE_RDKAFKA = False
     USE_GEVENT = False
+    MANAGED_CONSUMER = False
 
     @classmethod
     def setUpClass(cls):
@@ -128,6 +158,16 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
             return KazooClient(self.kafka.zookeeper)
         return KazooClient(self.kafka.zookeeper, handler=SequentialGeventHandler())
 
+    def get_balanced_consumer(self, consumer_group, **kwargs):
+        if self.MANAGED_CONSUMER:
+            kwargs.pop("zookeeper", None)
+            kwargs.pop("zookeeper_connect", None)
+        return self.client.topics[self.topic_name].get_balanced_consumer(
+            consumer_group,
+            managed=self.MANAGED_CONSUMER,
+            **kwargs
+        )
+
     def test_rebalance_callbacks(self):
         def on_rebalance(cns, old_partition_offsets, new_partition_offsets):
             self.assertTrue(len(new_partition_offsets) > 0)
@@ -140,13 +180,13 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
         self.offset_reset = 50
         try:
             consumer_group = b'test_rebalance_callbacks'
-            consumer_a = self.client.topics[self.topic_name].get_balanced_consumer(
+            consumer_a = self.get_balanced_consumer(
                 consumer_group,
                 zookeeper_connect=self.kafka.zookeeper,
                 auto_offset_reset=OffsetType.EARLIEST,
                 post_rebalance_callback=on_rebalance,
                 use_rdkafka=self.USE_RDKAFKA)
-            consumer_b = self.client.topics[self.topic_name].get_balanced_consumer(
+            consumer_b = self.get_balanced_consumer(
                 consumer_group,
                 zookeeper_connect=self.kafka.zookeeper,
                 auto_offset_reset=OffsetType.EARLIEST,
@@ -170,13 +210,13 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
         self.offset_reset = 50
         try:
             consumer_group = b'test_rebalance_callbacks_error'
-            consumer_a = self.client.topics[self.topic_name].get_balanced_consumer(
+            consumer_a = self.get_balanced_consumer(
                 consumer_group,
                 zookeeper_connect=self.kafka.zookeeper,
                 auto_offset_reset=OffsetType.EARLIEST,
                 post_rebalance_callback=on_rebalance,
                 use_rdkafka=self.USE_RDKAFKA)
-            consumer_b = self.client.topics[self.topic_name].get_balanced_consumer(
+            consumer_b = self.get_balanced_consumer(
                 consumer_group,
                 zookeeper_connect=self.kafka.zookeeper,
                 auto_offset_reset=OffsetType.EARLIEST,
@@ -195,13 +235,12 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
 
     def test_consume_earliest(self):
         try:
-            topic = self.client.topics[self.topic_name]
-            consumer_a = topic.get_balanced_consumer(
+            consumer_a = self.get_balanced_consumer(
                 b'test_consume_earliest',
                 zookeeper_connect=self.kafka.zookeeper,
                 auto_offset_reset=OffsetType.EARLIEST,
                 use_rdkafka=self.USE_RDKAFKA)
-            consumer_b = topic.get_balanced_consumer(
+            consumer_b = self.get_balanced_consumer(
                 b'test_consume_earliest',
                 zookeeper_connect=self.kafka.zookeeper,
                 auto_offset_reset=OffsetType.EARLIEST,
@@ -233,13 +272,12 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
 
     def test_consume_latest(self):
         try:
-            topic = self.client.topics[self.topic_name]
-            consumer_a = topic.get_balanced_consumer(
+            consumer_a = self.get_balanced_consumer(
                 b'test_consume_latest',
                 zookeeper_connect=self.kafka.zookeeper,
                 auto_offset_reset=OffsetType.LATEST,
                 use_rdkafka=self.USE_RDKAFKA)
-            consumer_b = topic.get_balanced_consumer(
+            consumer_b = self.get_balanced_consumer(
                 b'test_consume_latest',
                 zookeeper_connect=self.kafka.zookeeper,
                 auto_offset_reset=OffsetType.LATEST,
@@ -286,7 +324,7 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
         zk = KazooClient(self.kafka.zookeeper)
         zk.start()
 
-        consumer = self.client.topics[self.topic_name].get_balanced_consumer(
+        consumer = self.get_balanced_consumer(
             b'test_external_kazoo_client',
             zookeeper=zk,
             consumer_timeout_ms=10,
@@ -296,7 +334,7 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
 
     def test_no_partitions(self):
         """Ensure a consumer assigned no partitions doesn't fail"""
-        consumer = self.client.topics[self.topic_name].get_balanced_consumer(
+        consumer = self.get_balanced_consumer(
             b'test_no_partitions',
             zookeeper_connect=self.kafka.zookeeper,
             auto_start=False,
@@ -319,18 +357,17 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
         zk = self.get_zk()
         zk.start()
         try:
-            topic = self.client.topics[self.topic_name]
             consumer_group = b'test_zk_conn_lost'
 
-            consumer = topic.get_balanced_consumer(consumer_group,
-                                                   zookeeper=zk,
-                                                   use_rdkafka=self.USE_RDKAFKA)
+            consumer = self.get_balanced_consumer(consumer_group,
+                                                  zookeeper=zk,
+                                                  use_rdkafka=self.USE_RDKAFKA)
             self.assertTrue(check_partitions(consumer))
             with consumer._rebalancing_lock:
                 zk.stop()  # expires session, dropping all our nodes
 
             # Start a second consumer on a different zk connection
-            other_consumer = topic.get_balanced_consumer(
+            other_consumer = self.get_balanced_consumer(
                 consumer_group, use_rdkafka=self.USE_RDKAFKA)
 
             # Slightly contrived: we'll grab a lock to keep _rebalance() from
@@ -374,9 +411,23 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
             raise AssertionError("Rebalancing failed")
 
 
+@pytest.mark.skipif(kafka_version < (0, 9),
+                    reason="Managed consumer only supported in >=0.9")
+class ManagedBalancedConsumerIntegrationTests(BalancedConsumerIntegrationTests):
+    MANAGED_CONSUMER = True
+
+
 @pytest.mark.skipif(platform.python_implementation() == "PyPy",
                     reason="Unresolved crashes")
 class BalancedConsumerGEventIntegrationTests(BalancedConsumerIntegrationTests):
+    USE_GEVENT = True
+
+
+@pytest.mark.skipif(platform.python_implementation() == "PyPy",
+                    reason="Unresolved crashes")
+@pytest.mark.skipif(kafka_version < (0, 9),
+                    reason="Managed consumer only supported in >=0.9")
+class ManagedBalancedConsumerGEventIntegrationTests(ManagedBalancedConsumerIntegrationTests):
     USE_GEVENT = True
 
 
