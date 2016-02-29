@@ -1239,7 +1239,7 @@ GroupMembershipProtocol = namedtuple(
 )
 
 
-ConsumerGroupProtocol = GroupMembershipProtocol("consumer", "dummyassignmentstrategy",
+ConsumerGroupProtocol = GroupMembershipProtocol(b"consumer", b"pykafkaassignmentstrategy",
                                                 ConsumerGroupProtocolMetadata())
 
 
