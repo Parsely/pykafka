@@ -332,6 +332,7 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
             use_rdkafka=self.USE_RDKAFKA)
         [msg for msg in consumer]
         consumer.stop()
+    test_external_kazoo_client.skip_condition = MANAGED_CONSUMER
 
     def test_no_partitions(self):
         """Ensure a consumer assigned no partitions doesn't fail"""
@@ -349,7 +350,6 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
         # check that stop() succeeds (cf #313 and #392)
         consumer.stop()
 
-    @pytest.mark.skipif(MANAGED_CONSUMER, reason="Managed consumer groups don't use ZK")
     def test_zk_conn_lost(self):
         """Check we restore zookeeper nodes correctly after connection loss
 
@@ -392,6 +392,7 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
                 zk.stop()
             except:
                 pass
+    test_zk_conn_lost.skip_condition = MANAGED_CONSUMER
 
     def wait_for_rebalancing(self, *balanced_consumers):
         """Test helper that loops while rebalancing is ongoing
@@ -437,6 +438,8 @@ def patch_subclass(parent, skip_condition):
         def build_skipped_method(method, cond=None):
             if cond is None:
                 cond = False
+            if hasattr(method, "skip_condition"):
+                cond = cond or method.skip_condition
 
             @pytest.mark.skipif(cond, reason="")
             def _wrapper(self):
