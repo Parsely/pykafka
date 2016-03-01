@@ -349,6 +349,7 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
         # check that stop() succeeds (cf #313 and #392)
         consumer.stop()
 
+    @pytest.mark.skipif(MANAGED_CONSUMER, reason="Managed consumer groups don't use ZK")
     def test_zk_conn_lost(self):
         """Check we restore zookeeper nodes correctly after connection loss
 
