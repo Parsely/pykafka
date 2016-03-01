@@ -308,16 +308,16 @@ class ManagedBalancedConsumer(BalancedConsumer):
                      join_result.error_code)
             if i == self._cluster._max_connection_retries - 1:
                 raise ERROR_CODES[join_result.error_code]
-            if join_result.error_code in (GroupLoadInProgress.ERROR_CODE,
-                                          UnknownMemberId.ERROR_CODE,
-                                          GroupAuthorizationFailed.ERROR_CODE):
+            if join_result.error_code in (GroupLoadInProgress.ERROR_CODE,):
                 pass
             elif join_result.error_code in (GroupCoordinatorNotAvailable.ERROR_CODE,
                                             NotCoordinatorForGroup.ERROR_CODE):
                 self._group_coordinator = self._cluster.get_group_coordinator(
                     self._consumer_group)
             elif join_result.error_code in (InconsistentGroupProtocol.ERROR_CODE,
-                                            InvalidSessionTimeout.ERROR_CODE):
+                                            UnknownMemberId.ERROR_CODE,
+                                            InvalidSessionTimeout.ERROR_CODE,
+                                            GroupAuthorizationFailed.ERROR_CODE):
                 raise ERROR_CODES[join_result.error_code]
             self._cluster.handler.sleep(i * 2)
         self._generation_id = join_result.generation_id
@@ -347,12 +347,13 @@ class ManagedBalancedConsumer(BalancedConsumer):
                 raise ERROR_CODES[sync_result.error_code]
             if sync_result.error_code in (IllegalGeneration.ERROR_CODE,
                                           GroupCoordinatorNotAvailable.ERROR_CODE,
-                                          RebalanceInProgress.ERROR_CODE,
-                                          UnknownMemberId.ERROR_CODE,
-                                          GroupAuthorizationFailed.ERROR_CODE):
+                                          RebalanceInProgress.ERROR_CODE):
                 pass
             elif sync_result.error_code in (NotCoordinatorForGroup.ERROR_CODE,):
                 self._group_coordinator = self._cluster.get_group_coordinator(
                     self._consumer_group)
+            elif sync_result.error_code in (UnknownMemberId.ERROR_CODE,
+                                            GroupAuthorizationFailed.ERROR_CODE):
+                raise ERROR_CODES[sync_result.error_code]
             self._cluster.handler.sleep(i * 2)
         return sync_result.member_assignment.partition_assignment

@@ -35,7 +35,8 @@ from .exceptions import (OffsetOutOfRangeError, UnknownTopicOrPartition,
                          NotCoordinatorForGroup, SocketDisconnectedError,
                          ConsumerStoppedException, KafkaException,
                          NotLeaderForPartition, OffsetRequestFailedError,
-                         RequestTimedOut, UnknownMemberId, ERROR_CODES)
+                         RequestTimedOut, UnknownMemberId, RebalanceInProgress,
+                         ERROR_CODES)
 from .protocol import (PartitionFetchRequest, PartitionOffsetCommitRequest,
                        PartitionOffsetFetchRequest, PartitionOffsetRequest)
 from .utils.error_handlers import (handle_partition_responses, raise_error,
@@ -283,6 +284,9 @@ class SimpleConsumer(object):
         def _handle_UnknownMemberId(parts):
             log.info("Continuing in response to UnknownMemberId")
 
+        def _handle_RebalanceInProgress(parts):
+            log.info("Continuing in response to RebalanceInProgress")
+
         return {
             UnknownTopicOrPartition.ERROR_CODE: lambda p: raise_error(UnknownTopicOrPartition),
             OffsetOutOfRangeError.ERROR_CODE: _handle_OffsetOutOfRangeError,
@@ -291,7 +295,8 @@ class SimpleConsumer(object):
             NotCoordinatorForGroup.ERROR_CODE: _handle_NotCoordinatorForGroup,
             RequestTimedOut.ERROR_CODE: _handle_RequestTimedOut,
             GroupLoadInProgress.ERROR_CODE: _handle_GroupLoadInProgress,
-            UnknownMemberId.ERROR_CODE: _handle_UnknownMemberId
+            UnknownMemberId.ERROR_CODE: _handle_UnknownMemberId,
+            RebalanceInProgress.ERROR_CODE: _handle_RebalanceInProgress
         }
 
     def _discover_group_coordinator(self):
