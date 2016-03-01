@@ -412,15 +412,34 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
             raise AssertionError("Rebalancing failed")
 
 
-def patch_subclass(parent, condition):
+def patch_subclass(parent, skip_condition):
+    """Work around a pytest.mark.skipif bug
+
+    https://github.com/pytest-dev/pytest/issues/568
+
+    The issue causes all subclasses of a TestCase subclass to be skipped if any one
+    of them is skipped.
+
+    This fix circumvents the issue by overriding Python's existing subclassing mechanism.
+    Instead of having `cls` be a subclass of `parent`, this decorator adds each attribute
+    of `parent` to `cls` without using Python inheritance. When appropriate, it also adds
+    a boolean condition under which to skip tests for the decorated class.
+
+    :param parent: The "superclass" from which the decorated class should inherit
+        its non-overridden attributes
+    :type parent: unittest2.TestCase
+    :param skip_condition: A boolean condition that, when True, will cause all tests in
+        the decorated class to be skipped
+    :type skip_condition: bool
+    """
     def patcher(cls):
         def build_skipped_method(method, cond=None):
             if cond is None:
                 cond = False
 
             @pytest.mark.skipif(cond, reason="")
-            def _wrapper():
-                return method()
+            def _wrapper(self):
+                return method(self)
             return _wrapper
 
         for attr in parent.__dict__:
@@ -428,7 +447,7 @@ def patch_subclass(parent, condition):
                 continue
             if attr.startswith("test_"):
                 setattr(cls, attr, build_skipped_method(parent.__dict__[attr],
-                                                        condition))
+                                                        skip_condition))
             else:
                 setattr(cls, attr, parent.__dict__[attr])
         return cls
