@@ -332,7 +332,7 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
             use_rdkafka=self.USE_RDKAFKA)
         [msg for msg in consumer]
         consumer.stop()
-    test_external_kazoo_client.skip_condition = MANAGED_CONSUMER
+    test_external_kazoo_client.skip_condition = lambda cls: cls.MANAGED_CONSUMER
 
     def test_no_partitions(self):
         """Ensure a consumer assigned no partitions doesn't fail"""
@@ -392,7 +392,7 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
                 zk.stop()
             except:
                 pass
-    test_zk_conn_lost.skip_condition = MANAGED_CONSUMER
+    test_zk_conn_lost.skip_condition = lambda cls: cls.MANAGED_CONSUMER
 
     def wait_for_rebalancing(self, *balanced_consumers):
         """Test helper that loops while rebalancing is ongoing
@@ -435,25 +435,28 @@ def patch_subclass(parent, skip_condition):
     :type skip_condition: bool
     """
     def patcher(cls):
-        def build_skipped_method(method, cond=None):
+        def build_skipped_method(method, cls, cond=None):
             if cond is None:
                 cond = False
             if hasattr(method, "skip_condition"):
-                cond = cond or method.skip_condition
+                cond = cond or method.skip_condition(cls)
 
             @pytest.mark.skipif(cond, reason="")
             def _wrapper(self):
                 return method(self)
             return _wrapper
 
+        # two passes required so that skips have access to all class attributes
         for attr in parent.__dict__:
             if attr in cls.__dict__:
                 continue
+            if not attr.startswith("test_"):
+                setattr(cls, attr, parent.__dict__[attr])
+
+        for attr in parent.__dict__:
             if attr.startswith("test_"):
                 setattr(cls, attr, build_skipped_method(parent.__dict__[attr],
-                                                        skip_condition))
-            else:
-                setattr(cls, attr, parent.__dict__[attr])
+                                                        cls, skip_condition))
         return cls
     return patcher
 
