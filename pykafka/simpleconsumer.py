@@ -454,9 +454,9 @@ class SimpleConsumer(object):
                 response = self._group_coordinator.commit_consumer_group_offsets(
                     self._consumer_group, self._generation_id, self._consumer_id, reqs)
             except (SocketDisconnectedError, IOError):
-                log.error("Error committing offsets for topic '%s' "
+                log.error("Error committing offsets for topic '%s' from consumer id '%s'"
                           "(SocketDisconnectedError)",
-                          self._topic.name)
+                          self._topic.name, self._consumer_id)
                 if i >= self._offsets_commit_max_retries - 1:
                     raise
                 self._update()
@@ -469,8 +469,8 @@ class SimpleConsumer(object):
             if (len(parts_by_error) == 1 and 0 in parts_by_error) or \
                     len(parts_by_error) == 0:
                 break
-            log.error("Error committing offsets for topic '%s' (errors: %s)",
-                      self._topic.name,
+            log.error("Error committing offsets for topic '%s' from consumer id '%s'"
+                      "(errors: %s)", self._topic.name, self._consumer_id,
                       {ERROR_CODES[err]: [op.partition.id for op, _ in parts]
                        for err, parts in iteritems(parts_by_error)})
 

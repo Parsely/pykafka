@@ -225,6 +225,7 @@ class ManagedBalancedConsumer(BalancedConsumer):
             self._running = True
             self._group_coordinator = self._cluster.get_group_coordinator(
                 self._consumer_group)
+            log.debug("_rebalance called from _start")
             self._rebalance()
             self._setup_heartbeat_worker()
         except Exception:
@@ -243,6 +244,7 @@ class ManagedBalancedConsumer(BalancedConsumer):
 
     def _send_heartbeat(self):
         """Send a heartbeat request to the group coordinator and react to the response"""
+        log.info("Sending heartbeat from consumer '%s'", self._consumer_id)
         res = self._group_coordinator.heartbeat(
             self._consumer_group, self._generation_id, self._consumer_id)
         if res.error_code == 0:
@@ -258,6 +260,7 @@ class ManagedBalancedConsumer(BalancedConsumer):
                 self._consumer_group)
         elif res.error_code == GroupAuthorizationFailed.ERROR_CODE:
             raise GroupAuthorizationFailed()
+        log.debug("_rebalance called from _send_heartbeat")
         self._rebalance()
 
     def _update_member_assignment(self):
@@ -283,13 +286,14 @@ class ManagedBalancedConsumer(BalancedConsumer):
                 assignment = self._sync_group(group_assignments)
                 self._setup_internal_consumer(
                     partitions=[self._topic.partitions[pid] for pid in assignment[0][1]])
+                log.debug("Successfully rebalanced consumer '%s'", self._consumer_id)
                 break
             except Exception as ex:
                 if i == self._rebalance_max_retries - 1:
                     log.warning('Failed to rebalance s after %d retries.', i)
                     raise
-                log.info('Unable to complete rebalancing. Retrying')
                 log.exception(ex)
+                log.info('Unable to complete rebalancing. Retrying')
                 self._cluster.handler.sleep(i * (self._rebalance_backoff_ms / 1000))
         self._raise_worker_exceptions()
 
@@ -304,8 +308,8 @@ class ManagedBalancedConsumer(BalancedConsumer):
                 self._consumer_group, self._consumer_id)
             if join_result.error_code == 0:
                 break
-            log.info("Error code %d encountered during JoinGroupRequest",
-                     join_result.error_code)
+            log.info("Error code %d encountered during JoinGroupRequest for"
+                     " generation '%s'", join_result.error_code, self._generation_id)
             if i == self._cluster._max_connection_retries - 1:
                 raise ERROR_CODES[join_result.error_code]
             if join_result.error_code in (GroupLoadInProgress.ERROR_CODE,):

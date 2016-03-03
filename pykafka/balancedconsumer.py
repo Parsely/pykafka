@@ -440,8 +440,9 @@ class BalancedConsumer(object):
         # assign partitions from i*N to (i+1)*N - 1 to consumer Ci
         new_partitions = itertools.islice(all_parts, start, start + num_parts)
         new_partitions = set(new_partitions)
-        log.info('Balancing %i participants for %i partitions.\nOwning %i partitions.',
-                 len(participants), len(all_parts), len(new_partitions))
+        log.info('%s: Balancing %i participants for %i partitions. Owning %i partitions.',
+                 self._consumer_id, len(participants), len(all_parts),
+                 len(new_partitions))
         log.debug('My partitions: %s', [p_to_str(p) for p in new_partitions])
         return new_partitions
 
