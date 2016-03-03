@@ -46,6 +46,7 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
                  auto_start=True,
                  reset_offset_on_start=False,
                  compacted_topic=False,
+                 generation_id=b''
                  consumer_id=b''):
         callargs = {k: v for k, v in vars().items()
                          if k not in ("self", "__class__")}
