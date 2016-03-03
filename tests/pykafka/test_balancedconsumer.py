@@ -336,13 +336,17 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
 
     def test_no_partitions(self):
         """Ensure a consumer assigned no partitions doesn't fail"""
+
+        def _decide_dummy(p, consumer_id=None):
+            return set()
         consumer = self.get_balanced_consumer(
             b'test_no_partitions',
             zookeeper_connect=self.kafka.zookeeper,
             auto_start=False,
             consumer_timeout_ms=50,
             use_rdkafka=self.USE_RDKAFKA)
-        consumer._decide_partitions = lambda p: set()
+
+        consumer._decide_partitions = _decide_dummy
         consumer.start()
         res = consumer.consume()
         self.assertEqual(res, None)

@@ -393,6 +393,7 @@ class Broker(object):
         """
         handler = self._get_unique_req_handler(connection_id)
         future = handler.request(JoinGroupRequest(consumer_group, member_id))
+        self._handler.sleep()
         return future.get(JoinGroupResponse)
 
     def leave_group(self, connection_id, consumer_group, member_id):
@@ -451,4 +452,5 @@ class Broker(object):
         handler = self._get_unique_req_handler(connection_id)
         future = handler.request(
             HeartbeatRequest(consumer_group, generation_id, member_id))
+        self._handler.sleep()
         return future.get(HeartbeatResponse)
