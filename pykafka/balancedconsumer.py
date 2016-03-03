@@ -266,7 +266,13 @@ class BalancedConsumer(object):
             raise ex
 
     @property
+    def topic(self):
+        """The topic this consumer consumes"""
+        return self._topic
+
+    @property
     def partitions(self):
+        """A list of the partitions that this consumer consumes"""
         return self._consumer.partitions if self._consumer else dict()
 
     @property
