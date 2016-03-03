@@ -20,6 +20,7 @@ limitations under the License.
 __all__ = ["ManagedBalancedConsumer"]
 import logging
 import sys
+import uuid
 import weakref
 
 from .balancedconsumer import BalancedConsumer
@@ -188,6 +189,10 @@ class ManagedBalancedConsumer(BalancedConsumer):
 
         self._generation_id = -1
         self._rebalancing_lock = cluster.handler.Lock()
+        # ManagedBalancedConsumers in the same process cannot share connections.
+        # This connection hash is passed to self.Broker calls that use the group
+        # membership  API
+        self._connection_id = uuid.uuid4()
         self._consumer = None
         self._group_coordinator = None
         self._consumer_id = b''
@@ -240,13 +245,16 @@ class ManagedBalancedConsumer(BalancedConsumer):
         self._running = False
         if self._consumer is not None:
             self._consumer.stop()
-        self._group_coordinator.leave_group(self._consumer_group, self._consumer_id)
+        self._group_coordinator.leave_group(self._connection_id, self._consumer_group,
+                                            self._consumer_id)
 
     def _send_heartbeat(self):
         """Send a heartbeat request to the group coordinator and react to the response"""
         log.info("Sending heartbeat from consumer '%s'", self._consumer_id)
-        res = self._group_coordinator.heartbeat(
-            self._consumer_group, self._generation_id, self._consumer_id)
+        res = self._group_coordinator.heartbeat(self._connection_id,
+                                                self._consumer_group,
+                                                self._generation_id,
+                                                self._consumer_id)
         if res.error_code == 0:
             return
         log.info("Error code %d encountered on heartbeat." % res.error_code)
@@ -304,8 +312,9 @@ class ManagedBalancedConsumer(BalancedConsumer):
         """
         log.info("Sending JoinGroupRequest for consumer id '%s'", self._consumer_id)
         for i in range(self._cluster._max_connection_retries):
-            join_result = self._group_coordinator.join_group(
-                self._consumer_group, self._consumer_id)
+            join_result = self._group_coordinator.join_group(self._connection_id,
+                                                             self._consumer_group,
+                                                             self._consumer_id)
             if join_result.error_code == 0:
                 break
             log.info("Error code %d encountered during JoinGroupRequest for"
@@ -340,9 +349,11 @@ class ManagedBalancedConsumer(BalancedConsumer):
         """
         log.info("Sending SyncGroupRequest for consumer id '%s'", self._consumer_id)
         for i in range(self._cluster._max_connection_retries):
-            sync_result = self._group_coordinator.sync_group(
-                self._consumer_group, self._generation_id, self._consumer_id,
-                group_assignments)
+            sync_result = self._group_coordinator.sync_group(self._connection_id,
+                                                             self._consumer_group,
+                                                             self._generation_id,
+                                                             self._consumer_id,
+                                                             group_assignments)
             if sync_result.error_code == 0:
                 break
             log.info("Error code %d encountered during SyncGroupRequest",

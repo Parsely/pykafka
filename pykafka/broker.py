@@ -89,6 +89,7 @@ class Broker(object):
         self._socket_timeout_ms = socket_timeout_ms
         self._offsets_channel_socket_timeout_ms = offsets_channel_socket_timeout_ms
         self._buffer_size = buffer_size
+        self._req_handlers = {}
         self.connect()
 
     def __repr__(self):
@@ -216,6 +217,32 @@ class Broker(object):
             self._handler, self._offsets_channel_connection
         )
         self._offsets_channel_req_handler.start()
+
+    def _get_unique_req_handler(self, connection_id):
+        """Return a RequestHandler instance unique to the given connection_id
+
+        In some applications, for example the Group Membership API, requests running
+        in the same process must be interleaved. When both of these requests are
+        using the same RequestHandler instance, the requests are queued and the
+        interleaving semantics are not upheld. This method behaves identically to
+        self._req_handler if there is only one connection_id per KafkaClient.
+        If a single KafkaClient needs to use more than one connection_id, this
+        method maintains a dictionary of connections unique to those ids.
+
+        :param connection_id: The unique identifier of the connection to return
+        :type connection_id: str
+        """
+        if len(self._req_handlers) == 0:
+            self._req_handlers[connection_id] = self._req_handler
+        elif connection_id not in self._req_handlers:
+            conn = BrokerConnection(
+                self.host, self.port, buffer_size=self._buffer_size,
+                source_host=self._source_host, source_port=self._source_port)
+            conn.connect(self._socket_timeout_ms)
+            handler = RequestHandler(self._handler, conn)
+            handler.start()
+            self._req_handlers[connection_id] = handler
+        return self._req_handlers[connection_id]
 
     def fetch_messages(self,
                        partition_requests,
@@ -353,31 +380,42 @@ class Broker(object):
     #  Group Membership API  #
     ##########################
 
-    def join_group(self, consumer_group, member_id):
+    def join_group(self, connection_id, consumer_group, member_id):
         """Send a JoinGroupRequest
 
+        :param connection_id: The unique identifier of the connection on which to make
+            this request
+        :type connection_id: str
         :param consumer_group: The name of the consumer group to join
         :type consumer_group: bytes
         :param member_id: The ID of the consumer joining the group
         :type member_id: bytes
         """
-        future = self._req_handler.request(JoinGroupRequest(consumer_group, member_id))
+        handler = self._get_unique_req_handler(connection_id)
+        future = handler.request(JoinGroupRequest(consumer_group, member_id))
         return future.get(JoinGroupResponse)
 
-    def leave_group(self, consumer_group, member_id):
+    def leave_group(self, connection_id, consumer_group, member_id):
         """Send a LeaveGroupRequest
 
+        :param connection_id: The unique identifier of the connection on which to make
+            this request
+        :type connection_id: str
         :param consumer_group: The name of the consumer group to leave
         :type consumer_group: bytes
         :param member_id: The ID of the consumer leaving the group
         :type member_id: bytes
         """
-        future = self._req_handler.request(LeaveGroupRequest(consumer_group, member_id))
+        handler = self._get_unique_req_handler(connection_id)
+        future = handler.request(LeaveGroupRequest(consumer_group, member_id))
         return future.get(LeaveGroupResponse)
 
-    def sync_group(self, consumer_group, generation_id, member_id, group_assignment):
+    def sync_group(self, connection_id, consumer_group, generation_id, member_id, group_assignment):
         """Send a SyncGroupRequest
 
+        :param connection_id: The unique identifier of the connection on which to make
+            this request
+        :type connection_id: str
         :param consumer_group: The name of the consumer group to which this consumer
             belongs
         :type consumer_group: bytes
@@ -391,13 +429,17 @@ class Broker(object):
             `group_assignment` should be an empty sequence.
         :type group_assignment: iterable of :class:`pykafka.protocol.MemberAssignment`
         """
-        future = self._req_handler.request(
+        handler = self._get_unique_req_handler(connection_id)
+        future = handler.request(
             SyncGroupRequest(consumer_group, generation_id, member_id, group_assignment))
         return future.get(SyncGroupResponse)
 
-    def heartbeat(self, consumer_group, generation_id, member_id):
+    def heartbeat(self, connection_id, consumer_group, generation_id, member_id):
         """Send a HeartbeatRequest
 
+        :param connection_id: The unique identifier of the connection on which to make
+            this request
+        :type connection_id: str
         :param consumer_group: The name of the consumer group to which this consumer
             belongs
         :type consumer_group: bytes
@@ -406,6 +448,7 @@ class Broker(object):
         :param member_id: The ID of the consumer sending this heartbeat
         :type member_id: bytes
         """
-        future = self._req_handler.request(
+        handler = self._get_unique_req_handler(connection_id)
+        future = handler.request(
             HeartbeatRequest(consumer_group, generation_id, member_id))
         return future.get(HeartbeatResponse)
