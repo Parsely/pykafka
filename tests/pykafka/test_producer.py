@@ -5,6 +5,7 @@ import pytest
 import time
 import unittest2
 from uuid import uuid4
+import sys
 
 from pykafka import KafkaClient
 from pykafka.exceptions import MessageSizeTooLarge, ProducerQueueFullError
@@ -179,7 +180,8 @@ class ProducerIntegrationTests(unittest2.TestCase):
         self.assertEqual(b"", self.consumer.consume().value)
 
     def test_async_produce_compression_large_message(self):
-        large_payload = b'a' * 1000000
+        large_payload = b''.join([uuid4().bytes for i in range(50000)])
+        assert sys.getsizeof(large_payload) / 1024 / 1024 < 1.0
 
         prod = self._get_producer(
                 compression=CompressionType.SNAPPY,
@@ -202,6 +204,28 @@ class ProducerIntegrationTests(unittest2.TestCase):
 
         # THIS IS AN ISSUE
         assert isinstance(report[1], MessageSizeTooLarge)
+        self.assertIsNone(report[1])
+
+    def test_async_produce_large_message(self):
+        large_payload = b''.join([uuid4().bytes for i in range(50000)])
+        assert sys.getsizeof(large_payload) / 1024 / 1024 < 1.0
+
+        prod = self._get_producer(delivery_reports=True)
+        prod.produce(large_payload)
+
+        report = prod.get_delivery_report()
+        self.assertEqual(report[0].value, large_payload)
+        self.assertIsNone(report[1])
+
+        message = self.consumer.consume()
+        assert message.value == large_payload
+
+        for i in range(10):
+            prod.produce(large_payload)
+
+        report = prod.get_delivery_report()
+        self.assertEqual(report[0].value, large_payload)
+
         self.assertIsNone(report[1])
 
 @pytest.mark.skipif(platform.python_implementation() == "PyPy",
