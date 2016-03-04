@@ -11,6 +11,7 @@ from pykafka.exceptions import MessageSizeTooLarge, ProducerQueueFullError
 from pykafka.partitioners import hashing_partitioner
 from pykafka.protocol import Message
 from pykafka.test.utils import get_cluster, stop_cluster
+from pykafka.common import CompressionType
 
 
 class ProducerIntegrationTests(unittest2.TestCase):
@@ -177,6 +178,31 @@ class ProducerIntegrationTests(unittest2.TestCase):
         prod.produce(b"")  # empty string should be distinguished from None
         self.assertEqual(b"", self.consumer.consume().value)
 
+    def test_async_produce_compression_large_message(self):
+        large_payload = b'a' * 1000000
+
+        prod = self._get_producer(
+                compression=CompressionType.SNAPPY,
+                delivery_reports=True
+                )
+        prod.produce(large_payload)
+
+        report = prod.get_delivery_report()
+        self.assertEqual(report[0].value, large_payload)
+        self.assertIsNone(report[1])
+
+        message = self.consumer.consume()
+        assert message.value == large_payload
+
+        for i in range(100):
+            prod.produce(large_payload)
+
+        report = prod.get_delivery_report()
+        self.assertEqual(report[0].value, large_payload)
+
+        # THIS IS AN ISSUE
+        assert isinstance(report[1], MessageSizeTooLarge)
+        self.assertIsNone(report[1])
 
 @pytest.mark.skipif(platform.python_implementation() == "PyPy",
                     reason="Unresolved crashes")
