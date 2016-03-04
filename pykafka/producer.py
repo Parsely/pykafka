@@ -67,7 +67,8 @@ class Producer(object):
                  linger_ms=5 * 1000,
                  block_on_queue_full=True,
                  sync=False,
-                 delivery_reports=False):
+                 delivery_reports=False,
+                 producer_exception_callback=None):
         """Instantiate a new AsyncProducer
 
         :param cluster: The cluster to which to connect
@@ -151,6 +152,8 @@ class Producer(object):
         self._delivery_reports = (_DeliveryReportQueue(self._cluster.handler)
                                   if delivery_reports or self._synchronous
                                   else _DeliveryReportNone())
+
+        self._producer_exception_callback = producer_exception_callback
         self._running = False
         self._update_lock = self._cluster.handler.Lock()
         self.start()
@@ -423,6 +426,9 @@ class Producer(object):
             self._cluster.handler.sleep(self._retry_backoff_ms / 1000)
             owned_broker.increment_messages_pending(-1 * len(to_retry))
             for mset, exc in to_retry:
+                if self._producer_exception_callback:
+                    self._producer_exception_callback(mset, exc)
+
                 # XXX arguably, we should try to check these non_recoverables
                 # for individual messages in _produce and raise errors there
                 # right away, rather than failing a whole batch here?
