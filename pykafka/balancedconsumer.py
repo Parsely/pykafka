@@ -36,7 +36,7 @@ from .common import OffsetType
 from .exceptions import KafkaException, PartitionOwnedError, ConsumerStoppedException
 from .handlers import GEventHandler
 from .simpleconsumer import SimpleConsumer
-from .utils.compat import range, get_bytes, itervalues, iteritems
+from .utils.compat import range, get_bytes, itervalues, iteritems, get_string
 try:
     from . import rdkafka
 except ImportError:
@@ -449,7 +449,7 @@ class BalancedConsumer(object):
     def _get_participants(self):
         """Use zookeeper to get the other consumers of this topic.
 
-        :return: A sorted list of the ids of the other consumers of this
+        :return: A sorted list of the ids of other consumers of this
             consumer's topic
         """
         try:
@@ -464,9 +464,9 @@ class BalancedConsumer(object):
             try:
                 topic, stat = self._zookeeper.get("%s/%s" % (self._consumer_id_path, id_))
                 if topic == self._topic.name:
-                    participants.append(id_)
+                    participants.append(get_bytes(id_))
             except NoNodeException:
-                pass  # disappeared between ``get_children`` and ``get``
+                pass  # node disappeared between ``get_children`` and ``get``
         participants = sorted(participants)
         return participants
 
@@ -541,7 +541,8 @@ class BalancedConsumer(object):
         """Path where this consumer should be registered in zookeeper"""
         return '{path}/{id_}'.format(
             path=self._consumer_id_path,
-            id_=self._consumer_id
+            # get_string is necessary to avoid writing literal "b'" to zookeeper
+            id_=get_string(self._consumer_id)
         )
 
     def _update_member_assignment(self):
