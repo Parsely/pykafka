@@ -195,6 +195,7 @@ class Broker(object):
         :class:`pykafka.handlers.RequestHandler` for this broker
         """
         self._connection = BrokerConnection(self.host, self.port,
+                                            self._handler,
                                             buffer_size=self._buffer_size,
                                             source_host=self._source_host,
                                             source_port=self._source_port)
@@ -210,7 +211,8 @@ class Broker(object):
         channel
         """
         self._offsets_channel_connection = BrokerConnection(
-            self.host, self.port, buffer_size=self._buffer_size,
+            self.host, self.port, self._handler,
+            buffer_size=self._buffer_size,
             source_host=self._source_host, source_port=self._source_port)
         self._offsets_channel_connection.connect(self._offsets_channel_socket_timeout_ms)
         self._offsets_channel_req_handler = RequestHandler(
@@ -236,7 +238,7 @@ class Broker(object):
             self._req_handlers[connection_id] = self._req_handler
         elif connection_id not in self._req_handlers:
             conn = BrokerConnection(
-                self.host, self.port, buffer_size=self._buffer_size,
+                self.host, self.port, self._handler, buffer_size=self._buffer_size,
                 source_host=self._source_host, source_port=self._source_port)
             conn.connect(self._socket_timeout_ms)
             handler = RequestHandler(self._handler, conn)
