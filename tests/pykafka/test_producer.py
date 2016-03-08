@@ -320,10 +320,10 @@ class ProducerIntegrationTests(unittest2.TestCase):
 
 
 
-# @pytest.mark.skipif(platform.python_implementation() == "PyPy",
-                    # reason="Unresolved crashes")
-# class TestGEventProducer(ProducerIntegrationTests):
-    # USE_GEVENT = True
+@pytest.mark.skipif(platform.python_implementation() == "PyPy",
+                    reason="Unresolved crashes")
+class TestGEventProducer(ProducerIntegrationTests):
+    USE_GEVENT = True
 
 
 if __name__ == "__main__":
