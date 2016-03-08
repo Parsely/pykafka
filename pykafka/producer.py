@@ -583,8 +583,9 @@ class OwnedBroker(object):
 
                 if peaked_message and peaked_message.value is not None:
                     if len(peaked_message.value) > max_request_size:
-                        exc = MessageSizeTooLarge("Message size larger then max_request_size: %d",
-                                                  max_request_size)
+                        exc = MessageSizeTooLarge(
+                            "Message size larger then max_request_size: {}".format(max_request_size)
+                        )
                         log.warning(exc)
                         # bind the MessageSizeTooLarge error the delivery
                         # report and remove it from the producer queue
