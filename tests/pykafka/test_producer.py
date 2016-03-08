@@ -193,13 +193,22 @@ class ProducerIntegrationTests(unittest2.TestCase):
         partition = producer._topic.partitions[0]
         owned_broker = OwnedBroker(producer, partition.leader, auto_start=False)
 
-        msg = Message(large_payload, partition_id=0)
+        delivery_report_queue = producer._cluster.handler.Queue()
+        msg = Message(
+            large_payload,
+            partition_id=0,
+            delivery_report_q=delivery_report_queue
+        )
+
+
         owned_broker.enqueue(msg)
 
         max_request_size = 1000
         assert max_request_size < len(msg.value)
-        with self.assertRaises(MessageSizeTooLarge):
-            owned_broker.flush(0, max_request_size)
+        owned_broker.flush(0, max_request_size)
+        q_msg, exc = delivery_report_queue.get()
+        assert q_msg is msg
+        assert isinstance(exc, MessageSizeTooLarge)
 
     def test_owned_broker_flush_batching_by_max_request_size(self):
         """Test that producer batches messages into the batches no larger then
@@ -230,7 +239,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
 
     def test_async_produce_compression_large_message(self):
         large_payload = b''.join([uuid4().bytes for i in range(50000)])
-        assert sys.getsizeof(large_payload) / 1024 / 1024 < 1.0
+        assert len(large_payload) / 1024 / 1024 < 1.0
 
         prod = self._get_producer(
                 compression=CompressionType.SNAPPY,
@@ -265,7 +274,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
 
     def test_async_produce_large_message(self):
         large_payload = b''.join([uuid4().bytes for i in range(50000)])
-        assert sys.getsizeof(large_payload) / 1024 / 1024 < 1.0
+        assert len(large_payload) / 1024 / 1024 < 1.0
 
         prod = self._get_producer(delivery_reports=True)
         prod.produce(large_payload)
