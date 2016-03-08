@@ -238,9 +238,16 @@ class Producer(object):
             for broker in brokers:
                 owned_broker = self._owned_brokers.pop(broker)
                 owned_broker.stop()
-                batch = owned_broker.flush(self._linger_ms)
-                if batch:
-                    queued_messages.extend(batch)
+
+                # loop becuase flush is not garentee to empty owned
+                # broker queue
+                while True:
+                    batch = owned_broker.flush(self._linger_ms, self._max_request_size)
+                    if batch:
+                        queued_messages.extend(batch)
+                    else:
+                        break
+
         self._owned_brokers = {}
         for partition in self._topic.partitions.values():
             if partition.leader.id not in self._owned_brokers:
@@ -574,7 +581,7 @@ class OwnedBroker(object):
                 # TODO: Should we optimistically pop and renenqueue vs. peak
                 peaked_message = self.queue[-1]
 
-                if peaked_message.value is not None:
+                if peaked_message and peaked_message.value is not None:
                     if len(peaked_message.value) > max_request_size:
                         raise MessageSizeTooLarge("Message size larger then max_request_size: %d",
                                                   max_request_size)
