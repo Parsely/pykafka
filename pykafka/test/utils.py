@@ -1,3 +1,4 @@
+import time
 import os
 
 from pykafka.test.kafka_instance import KafkaInstance, KafkaConnection
@@ -27,3 +28,15 @@ def stop_cluster(cluster):
         cluster.terminate()
     else:
         cluster.flush()
+
+
+def retry(assertion_callable, retry_time=10, wait_between_tries=0.1, exception_to_retry=AssertionError):
+    """Retry assertion callable in a loop"""
+    start = time.time()
+    while True:
+        try:
+            return assertion_callable()
+        except exception_to_retry as e:
+            if time.time() - start >= retry_time:
+                raise e
+            time.sleep(wait_between_tries)

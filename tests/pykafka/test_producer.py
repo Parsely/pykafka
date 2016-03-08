@@ -11,7 +11,7 @@ from pykafka import KafkaClient
 from pykafka.exceptions import MessageSizeTooLarge, ProducerQueueFullError
 from pykafka.partitioners import hashing_partitioner
 from pykafka.protocol import Message
-from pykafka.test.utils import get_cluster, stop_cluster
+from pykafka.test.utils import get_cluster, stop_cluster, retry
 from pykafka.common import CompressionType
 from pykafka.producer import OwnedBroker
 
@@ -199,7 +199,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
         max_request_size = 1000
         assert max_request_size < len(msg.value)
         with self.assertRaises(MessageSizeTooLarge):
-            owned_broker.flush(0, max_request_size=max_request_size)
+            owned_broker.flush(0, max_request_size)
 
     def test_owned_broker_flush_batching_by_max_request_size(self):
         """Test that producer batches messages into the batches no larger then
@@ -218,15 +218,15 @@ class ProducerIntegrationTests(unittest2.TestCase):
             msg = Message(large_payload, partition_id=0)
             owned_broker.enqueue(msg)
 
-        batch = owned_broker.flush(0)
+        batch = owned_broker.flush(0, producer._max_request_size)
         assert len(batch) < 100
-        assert sum([len(m.value) for m in batch]) < 1048576
+        assert sum([len(m.value) for m in batch]) < producer._max_request_size
 
         # iterate through the rest of the batches and test the same invariant
         while batch:
-            batch = owned_broker.flush(0)
+            batch = owned_broker.flush(0, producer._max_request_size)
             assert len(batch) < 100
-            assert sum([len(m.value) for m in batch]) < 1048576
+            assert sum([len(m.value) for m in batch]) < producer._max_request_size
 
     def test_async_produce_compression_large_message(self):
         large_payload = b''.join([uuid4().bytes for i in range(50000)])
@@ -245,13 +245,14 @@ class ProducerIntegrationTests(unittest2.TestCase):
         message = self.consumer.consume()
         assert message.value == large_payload
 
-        for i in range(100):
+        for i in range(10):
             prod.produce(large_payload)
         prod._wait_all()
 
         report = prod.get_delivery_report()
         self.assertEqual(report[0].value, large_payload)
         self.assertIsNone(report[1])
+        print("FINISHED")
 
         # clenaup and consumer all messages
         msgs = []
@@ -259,7 +260,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
             msg = self.consumer.consume()
             if msg:
                 msgs.append(msg)
-            assert len(msgs) == 101
+            assert len(msgs) == 10
         retry(ensure_all_messages_consumed)
 
     def test_async_produce_large_message(self):
@@ -279,9 +280,9 @@ class ProducerIntegrationTests(unittest2.TestCase):
         for i in range(10):
             prod.produce(large_payload)
         prod._wait_all()
+        print("FINISHED")
 
         report = prod.get_delivery_report()
-
         self.assertEqual(report[0].value, large_payload)
         self.assertIsNone(report[1])
 
@@ -291,20 +292,9 @@ class ProducerIntegrationTests(unittest2.TestCase):
             msg = self.consumer.consume()
             if msg:
                 msgs.append(msg)
-            assert len(msgs) == 11
+            assert len(msgs) == 10
         retry(ensure_all_messages_consumed)
 
-
-
-def retry(assertion_callable, retry_time=10, wait_between_tries=0.1, exception_to_retry=AssertionError):
-    start = time.time()
-    while True:
-        try:
-            return assertion_callable()
-        except exception_to_retry as e:
-            if time.time() - start >= retry_time:
-                raise e
-            time.sleep(wait_between_tries)
 
 
 # @pytest.mark.skipif(platform.python_implementation() == "PyPy",

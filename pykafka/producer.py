@@ -66,7 +66,7 @@ class Producer(object):
                  min_queued_messages=70000,
                  linger_ms=5 * 1000,
                  block_on_queue_full=True,
-                 max_request_size=1048576,
+                 max_request_size=1000012,
                  sync=False,
                  delivery_reports=False,
                  auto_start=True):
@@ -551,7 +551,7 @@ class OwnedBroker(object):
                 if not self.flush_ready.is_set():
                     self.flush_ready.set()
 
-    def flush(self, linger_ms, max_request_size=1048576, release_pending=False):
+    def flush(self, linger_ms, max_request_size, release_pending=False):
         """Pop messages from the end of the queue
 
         :param linger_ms: How long (in milliseconds) to wait for the queue
@@ -574,17 +574,23 @@ class OwnedBroker(object):
                 # TODO: Should we optimistically pop and renenqueue vs. peak
                 peaked_message = self.queue[-1]
 
-                if len(peaked_message.value) > max_request_size:
-                    raise MessageSizeTooLarge("Message size larger then max_request_size: %d",
-                                              max_request_size)
+                if peaked_message.value is not None:
+                    if len(peaked_message.value) > max_request_size:
+                        raise MessageSizeTooLarge("Message size larger then max_request_size: %d",
+                                                  max_request_size)
 
-                # test if adding the message would go over the
-                # max_request_size. if it would, break out of loop
-                if batch_size_in_bytes + len(peaked_message.value) > max_request_size:
-                    break
+                    # test if adding the message would go over the
+                    # max_request_size. if it would, break out of loop
+                    if batch_size_in_bytes + len(peaked_message.value) > max_request_size:
+                        log.debug("max_request_size reached. producing batch")
+                        # if we did not fully empty the queue. reset the
+                        # flush_ready so we send another batch immediately
+                        self.flush_ready.set()
+                        break
 
                 message = self.queue.pop()
-                batch_size_in_bytes += len(message.value)
+                if message.value is not None:
+                    batch_size_in_bytes += len(message.value)
                 batch.append(message)
 
             if release_pending:
