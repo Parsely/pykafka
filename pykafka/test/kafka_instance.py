@@ -132,7 +132,7 @@ class KafkaInstance(ManagedInstance):
     def __init__(self,
                  num_instances=1,
                  kafka_version='0.8.2.1',
-                 scala_version='2.10',
+                 scala_version='2.11',
                  bin_dir='/tmp/kafka-bin',
                  name='kafka',
                  use_gevent=False):
@@ -348,7 +348,7 @@ if __name__ == '__main__':
                         help='Download destination for Kafka')
     parser.add_argument('--kafka-version', type=str, default='0.8.2.1',
                         help='Kafka version to download')
-    parser.add_argument('--scala-version', type=str, default='2.10',
+    parser.add_argument('--scala-version', type=str, default='2.11',
                         help='Scala version for kafka build')
     args = parser.parse_args()
 

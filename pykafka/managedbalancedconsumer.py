@@ -245,8 +245,9 @@ class ManagedBalancedConsumer(BalancedConsumer):
         self._running = False
         if self._consumer is not None:
             self._consumer.stop()
-        self._group_coordinator.leave_group(self._connection_id, self._consumer_group,
-                                            self._consumer_id)
+        if self._group_coordinator is not None:
+            self._group_coordinator.leave_group(self._connection_id, self._consumer_group,
+                                                self._consumer_id)
 
     def _send_heartbeat(self):
         """Send a heartbeat request to the group coordinator and react to the response"""
