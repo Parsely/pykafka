@@ -256,12 +256,17 @@ class ProducerIntegrationTests(unittest2.TestCase):
 
         for i in range(10):
             prod.produce(large_payload)
-        prod._wait_all()
 
-        report = prod.get_delivery_report()
-        self.assertEqual(report[0].value, large_payload)
-        self.assertIsNone(report[1])
-        print("FINISHED")
+        reports = []
+        def ensure_all_messages_produced():
+            report = prod.get_delivery_report()
+            reports.append(report)
+            assert len(reports) == 10
+        retry(ensure_all_messages_produced, retry_time=30, wait_between_tries=1)
+
+        for report in reports:
+            self.assertEqual(report[0].value, large_payload)
+            self.assertIsNone(report[1])
 
         # clenaup and consumer all messages
         msgs = []
@@ -270,9 +275,10 @@ class ProducerIntegrationTests(unittest2.TestCase):
             if msg:
                 msgs.append(msg)
             assert len(msgs) == 10
-        retry(ensure_all_messages_consumed)
+        retry(ensure_all_messages_consumed, retry_time=15)
 
     def test_async_produce_large_message(self):
+
         large_payload = b''.join([uuid4().bytes for i in range(50000)])
         assert len(large_payload) / 1024 / 1024 < 1.0
 
@@ -286,16 +292,24 @@ class ProducerIntegrationTests(unittest2.TestCase):
         message = self.consumer.consume()
         assert message.value == large_payload
 
+        self.consumer.stop()
+
         for i in range(10):
             prod.produce(large_payload)
-        prod._wait_all()
-        print("FINISHED")
 
-        report = prod.get_delivery_report()
-        self.assertEqual(report[0].value, large_payload)
-        self.assertIsNone(report[1])
+        reports = []
+        def ensure_all_messages_produced():
+            report = prod.get_delivery_report()
+            reports.append(report)
+            assert len(reports) == 10
+        retry(ensure_all_messages_produced, retry_time=30, wait_between_tries=1)
+
+        for report in reports:
+            self.assertEqual(report[0].value, large_payload)
+            self.assertIsNone(report[1])
 
         # clenaup and consumer all messages
+        self.consumer.start()
         msgs = []
         def ensure_all_messages_consumed():
             msg = self.consumer.consume()
