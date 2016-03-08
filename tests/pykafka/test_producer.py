@@ -13,6 +13,7 @@ from pykafka.partitioners import hashing_partitioner
 from pykafka.protocol import Message
 from pykafka.test.utils import get_cluster, stop_cluster
 from pykafka.common import CompressionType
+from pykafka.producer import OwnedBroker
 
 
 class ProducerIntegrationTests(unittest2.TestCase):
@@ -179,6 +180,54 @@ class ProducerIntegrationTests(unittest2.TestCase):
         prod.produce(b"")  # empty string should be distinguished from None
         self.assertEqual(b"", self.consumer.consume().value)
 
+    def test_owned_broker_flush_message_larger_then_max_request_size(self):
+        """Test that producer batches messages into the batches no larger then
+        `max_request_size`
+        """
+        large_payload = b''.join([uuid4().bytes for i in range(50000)])
+
+        producer = self._get_producer(
+            auto_start=False
+        )
+        # setup producer but do not start actually sending messages
+        partition = producer._topic.partitions[0]
+        owned_broker = OwnedBroker(producer, partition.leader, auto_start=False)
+
+        msg = Message(large_payload, partition_id=0)
+        owned_broker.enqueue(msg)
+
+        max_request_size = 1000
+        assert max_request_size < len(msg.value)
+        with self.assertRaises(MessageSizeTooLarge):
+            owned_broker.flush(0, max_request_size=max_request_size)
+
+    def test_owned_broker_flush_batching_by_max_request_size(self):
+        """Test that producer batches messages into the batches no larger then
+        `max_request_size`
+        """
+        large_payload = b''.join([uuid4().bytes for i in range(5000)])
+
+        producer = self._get_producer(
+            auto_start=False
+        )
+        # setup producer but do not start actually sending messages
+        partition = producer._topic.partitions[0]
+        owned_broker = OwnedBroker(producer, partition.leader, auto_start=False)
+
+        for i in range(100):
+            msg = Message(large_payload, partition_id=0)
+            owned_broker.enqueue(msg)
+
+        batch = owned_broker.flush(0)
+        assert len(batch) < 100
+        assert sum([len(m.value) for m in batch]) < 1048576
+
+        # iterate through the rest of the batches and test the same invariant
+        while batch:
+            batch = owned_broker.flush(0)
+            assert len(batch) < 100
+            assert sum([len(m.value) for m in batch]) < 1048576
+
     def test_async_produce_compression_large_message(self):
         large_payload = b''.join([uuid4().bytes for i in range(50000)])
         assert sys.getsizeof(large_payload) / 1024 / 1024 < 1.0
@@ -198,13 +247,20 @@ class ProducerIntegrationTests(unittest2.TestCase):
 
         for i in range(100):
             prod.produce(large_payload)
+        prod._wait_all()
 
         report = prod.get_delivery_report()
         self.assertEqual(report[0].value, large_payload)
-
-        # THIS IS AN ISSUE
-        assert isinstance(report[1], MessageSizeTooLarge)
         self.assertIsNone(report[1])
+
+        # clenaup and consumer all messages
+        msgs = []
+        def ensure_all_messages_consumed():
+            msg = self.consumer.consume()
+            if msg:
+                msgs.append(msg)
+            assert len(msgs) == 101
+        retry(ensure_all_messages_consumed)
 
     def test_async_produce_large_message(self):
         large_payload = b''.join([uuid4().bytes for i in range(50000)])
@@ -222,16 +278,39 @@ class ProducerIntegrationTests(unittest2.TestCase):
 
         for i in range(10):
             prod.produce(large_payload)
+        prod._wait_all()
 
         report = prod.get_delivery_report()
-        self.assertEqual(report[0].value, large_payload)
 
+        self.assertEqual(report[0].value, large_payload)
         self.assertIsNone(report[1])
 
-@pytest.mark.skipif(platform.python_implementation() == "PyPy",
-                    reason="Unresolved crashes")
-class TestGEventProducer(ProducerIntegrationTests):
-    USE_GEVENT = True
+        # clenaup and consumer all messages
+        msgs = []
+        def ensure_all_messages_consumed():
+            msg = self.consumer.consume()
+            if msg:
+                msgs.append(msg)
+            assert len(msgs) == 11
+        retry(ensure_all_messages_consumed)
+
+
+
+def retry(assertion_callable, retry_time=10, wait_between_tries=0.1, exception_to_retry=AssertionError):
+    start = time.time()
+    while True:
+        try:
+            return assertion_callable()
+        except exception_to_retry as e:
+            if time.time() - start >= retry_time:
+                raise e
+            time.sleep(wait_between_tries)
+
+
+# @pytest.mark.skipif(platform.python_implementation() == "PyPy",
+                    # reason="Unresolved crashes")
+# class TestGEventProducer(ProducerIntegrationTests):
+    # USE_GEVENT = True
 
 
 if __name__ == "__main__":

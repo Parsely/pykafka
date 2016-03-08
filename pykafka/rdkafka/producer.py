@@ -32,7 +32,8 @@ class RdKafkaProducer(Producer):
                  linger_ms=5 * 1000,
                  block_on_queue_full=True,
                  sync=False,
-                 delivery_reports=False):
+                 delivery_reports=False,
+                 auto_start=True):
         callargs = {k: v for k, v in vars().items()
                          if k not in ("self", "__class__")}
         self._rdk_producer = None
