@@ -583,12 +583,20 @@ class OwnedBroker(object):
 
                 if peaked_message and peaked_message.value is not None:
                     if len(peaked_message.value) > max_request_size:
-                        raise MessageSizeTooLarge("Message size larger then max_request_size: %d",
+                        exc = MessageSizeTooLarge("Message size larger then max_request_size: %d",
                                                   max_request_size)
+                        log.warning(exc)
+                        # bind the MessageSizeTooLarge error the delivery
+                        # report and remove it from the producer queue
+                        message = self.queue.pop()
+                        peaked_message.delivery_report_q.put((message, exc))
+                        # remove from pending message count
+                        self.increment_messages_pending(-1)
+                        break
 
                     # test if adding the message would go over the
                     # max_request_size. if it would, break out of loop
-                    if batch_size_in_bytes + len(peaked_message.value) > max_request_size:
+                    elif batch_size_in_bytes + len(peaked_message.value) > max_request_size:
                         log.debug("max_request_size reached. producing batch")
                         # if we did not fully empty the queue. reset the
                         # flush_ready so we send another batch immediately
