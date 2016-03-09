@@ -103,7 +103,9 @@ class Producer(object):
         :type max_queued_messages: int
         :param min_queued_messages: The minimum number of messages the producer
             can have waiting in a queue before it flushes that queue to its
-            broker (must be greater than 0).
+            broker (must be greater than 0). This paramater can be used to
+            control the number of messages sent in one batch during async
+            production.
         :type min_queued_messages: int
         :param linger_ms: This setting gives the upper bound on the delay for
             batching: once the producer gets min_queued_messages worth of
