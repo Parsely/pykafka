@@ -105,7 +105,8 @@ class Producer(object):
             can have waiting in a queue before it flushes that queue to its
             broker (must be greater than 0). This paramater can be used to
             control the number of messages sent in one batch during async
-            production.
+            production. This parameter is automatically overridden to 1
+            when `sync=True`.
         :type min_queued_messages: int
         :param linger_ms: This setting gives the upper bound on the delay for
             batching: once the producer gets min_queued_messages worth of
@@ -143,7 +144,7 @@ class Producer(object):
         self._required_acks = required_acks
         self._ack_timeout_ms = ack_timeout_ms
         self._max_queued_messages = max_queued_messages
-        self._min_queued_messages = max(1, min_queued_messages)
+        self._min_queued_messages = max(1, min_queued_messages if not sync else 1)
         self._linger_ms = linger_ms
         self._block_on_queue_full = block_on_queue_full
         self._synchronous = sync
