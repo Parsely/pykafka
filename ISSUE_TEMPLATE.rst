@@ -8,6 +8,10 @@ instantiated, including keyword arguments.
 Detailed step-by-step instructions on how to replicate the issue make diagnosing the
 root cause easier. If possible, please include these as well.
 
+When linking to specific lines of code in pykafka or other projects, please use
+github permalinks. You can do this by pressing "y" on any github file view and then
+creating a line link.
+
 
 **PyKafka version**: If using the latest version of pykafka, please paste the commit hash
 **Kafka version**:
