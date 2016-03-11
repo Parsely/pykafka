@@ -48,7 +48,7 @@ install:
           source "$HOME/virtualenvs/pypy-$PYPY_VERSION/bin/activate"
         fi
     - pip install -U pip setuptools
-    - pip install codecov kazoo tox testinstances tox-travis "gevent>=1.1b6,<1.2"
+    - pip install codecov kazoo tox testinstances tox-travis "gevent==1.1"
     - wget https://github.com/edenhill/librdkafka/archive/0.8.6.tar.gz
     - tar -xzf 0.8.6.tar.gz
     - cd librdkafka-0.8.6/ && ./configure --prefix=$HOME
