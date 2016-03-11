@@ -302,12 +302,11 @@ class Producer(object):
                     reported_msg, exc = self.get_delivery_report(timeout=1)
                     break
                 except Empty:
-                    self._raise_worker_exceptions()
                     continue
             assert reported_msg is msg
             if exc is not None:
                 raise exc
-            self._cluster.handler.sleep()
+        self._raise_worker_exceptions()
 
     def get_delivery_report(self, block=True, timeout=None):
         """Fetch delivery reports for messages produced on the current thread
