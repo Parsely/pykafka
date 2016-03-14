@@ -67,8 +67,7 @@ class Producer(object):
                  linger_ms=5 * 1000,
                  block_on_queue_full=True,
                  sync=False,
-                 delivery_reports=False,
-                 log_undelivered_as_error=False):
+                 delivery_reports=False):
         """Instantiate a new AsyncProducer
 
         :param cluster: The cluster to which to connect
@@ -132,10 +131,6 @@ class Producer(object):
             or an `Exception` in case of failed delivery to kafka.
             This setting is ignored when `sync=True`.
         :type delivery_reports: bool
-        :param log_undelivered_as_error: Whether undelivered messacages (after
-            trying out max_retries) are logged as errors (if True) or warnings
-            (if False, default)
-        :type log_undelivered_as_error: bool
         """
         self._cluster = cluster
         self._topic = topic
@@ -159,10 +154,6 @@ class Producer(object):
         self._running = False
         self._update_lock = self._cluster.handler.Lock()
         self.start()
-        if(log_undelivered_as_error):
-            self.log_undelivered = log.error
-        else:
-            self.log_undelivered = log.warning
 
     def __del__(self):
         log.debug("Finalising {}".format(self))
@@ -440,7 +431,7 @@ class Producer(object):
                 for msg in mset.messages:
                     if (non_recoverable or msg.produce_attempt >= self._max_retries):
                         self._delivery_reports.put(msg, exc)
-                        self.log_undelivered("Message not delivered!! %r" % exc)
+                        log.error("Message not delivered!! %r" % exc)
                     else:
                         msg.produce_attempt += 1
                         self._produce(msg)
