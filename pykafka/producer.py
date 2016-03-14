@@ -433,7 +433,7 @@ class Producer(object):
                 for msg in mset.messages:
                     if (non_recoverable or msg.produce_attempt >= self._max_retries):
                         self._delivery_reports.put(msg, exc)
-                        log.info("Message not delivered!! %r" % exc)
+                        log.error("Message not delivered!! %r" % exc)
                     else:
                         msg.produce_attempt += 1
                         self._produce(msg)
