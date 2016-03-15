@@ -188,6 +188,8 @@ class RequestHandler(object):
                     task = shared.requests.get(timeout=1)
                 except Empty:
                     continue
+                except TypeError:  # can happen on interpreter shutdown
+                    break
                 try:
                     shared.connection.request(task.request)
                     if task.future:
