@@ -243,10 +243,9 @@ class Producer(object):
                 # broker queue
                 while True:
                     batch = owned_broker.flush(self._linger_ms, self._max_request_size)
-                    if batch:
-                        queued_messages.extend(batch)
-                    else:
+                    if not batch:
                         break
+                    queued_messages.extend(batch)
 
         self._owned_brokers = {}
         for partition in self._topic.partitions.values():
@@ -493,8 +492,8 @@ class OwnedBroker(object):
     :ivar producer: The producer to which this OwnedBroker instance belongs
     :type producer: :class:`pykafka.producer.AsyncProducer`
     :param auto_start: Whether the OwnedBroker should start flushing all
-    waiting messages and send to with kafka after __init__ is complete. If
-    false, communication can be started with `start()`.
+        waiting messages and send to kafka after __init__ is complete. If
+        false, communication can be started with `start()`.
     :type auto_start: bool
     """
     def __init__(self, producer, broker, auto_start=True):
@@ -578,11 +577,10 @@ class OwnedBroker(object):
             batch = []
             batch_size_in_bytes = 0
             while len(self.queue) > 0:
-                # TODO: Should we optimistically pop and renenqueue vs. peak
-                peaked_message = self.queue[-1]
+                peeked_message = self.queue[-1]
 
-                if peaked_message and peaked_message.value is not None:
-                    if len(peaked_message) > max_request_size:
+                if peeked_message and peeked_message.value is not None:
+                    if len(peeked_message) > max_request_size:
                         exc = MessageSizeTooLarge(
                             "Message size larger then max_request_size: {}".format(max_request_size)
                         )
@@ -590,14 +588,14 @@ class OwnedBroker(object):
                         # bind the MessageSizeTooLarge error the delivery
                         # report and remove it from the producer queue
                         message = self.queue.pop()
-                        peaked_message.delivery_report_q.put((message, exc))
+                        peeked_message.delivery_report_q.put((message, exc))
                         # remove from pending message count
                         self.increment_messages_pending(-1)
                         continue
 
                     # test if adding the message would go over the
                     # max_request_size. if it would, break out of loop
-                    elif batch_size_in_bytes + len(peaked_message) > max_request_size:
+                    elif batch_size_in_bytes + len(peeked_message) > max_request_size:
                         log.debug("max_request_size reached. producing batch")
                         # if we did not fully empty the queue. reset the
                         # flush_ready so we send another batch immediately
@@ -605,8 +603,7 @@ class OwnedBroker(object):
                         break
 
                 message = self.queue.pop()
-                if message.value is not None:
-                    batch_size_in_bytes += len(message)
+                batch_size_in_bytes += len(message)
                 batch.append(message)
 
             if release_pending:

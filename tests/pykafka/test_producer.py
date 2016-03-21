@@ -5,7 +5,6 @@ import pytest
 import time
 import unittest2
 from uuid import uuid4
-import sys
 
 from pykafka import KafkaClient
 from pykafka.exceptions import MessageSizeTooLarge, ProducerQueueFullError
@@ -204,7 +203,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
         owned_broker.enqueue(msg)
 
         max_request_size = 1000
-        assert max_request_size < len(msg.value)
+        assert max_request_size < len(msg)
         owned_broker.flush(0, max_request_size)
         q_msg, exc = delivery_report_queue.get()
         assert q_msg is msg
