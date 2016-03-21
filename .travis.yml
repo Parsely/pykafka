@@ -3,7 +3,6 @@ sudo: false
 cache:
   directories:
     - $HOME/.cache/pip
-    - $HOME/kafka-bin
     - $HOME/.ccache
 python:
     - "2.7"
@@ -18,7 +17,7 @@ env:
       - KAFKA_BIN="$HOME/kafka-bin"
   matrix:
       - KAFKA_VERSION=0.8.2.2
-      - KAFKA_VERSION=0.9.0.0
+      - KAFKA_VERSION=0.9.0.1
 
 addons:
   apt:

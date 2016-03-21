@@ -227,7 +227,7 @@ def reset_offsets(client, args):
             for partition_id, res in offsets.iteritems()]
 
     # Send them to the appropriate broker.
-    broker = client.cluster.get_offset_manager(args.consumer_group)
+    broker = client.cluster.get_group_coordinator(args.consumer_group)
     broker.commit_consumer_group_offsets(
         args.consumer_group, 1, 'kafka-tools', reqs
     )

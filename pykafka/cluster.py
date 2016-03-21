@@ -28,11 +28,11 @@ from kazoo.client import KazooClient
 
 from .broker import Broker
 from .exceptions import (ERROR_CODES,
-                         ConsumerCoordinatorNotAvailable,
+                         GroupCoordinatorNotAvailable,
                          NoBrokersAvailableError,
                          SocketDisconnectedError,
                          LeaderNotAvailable)
-from .protocol import ConsumerMetadataRequest, ConsumerMetadataResponse
+from .protocol import GroupCoordinatorRequest, GroupCoordinatorResponse
 from .topic import Topic
 from .utils.compat import iteritems, range
 
@@ -366,8 +366,8 @@ class Cluster(object):
                 #       needed.
                 raise Exception('Broker host/port change detected! %s', broker)
 
-    def get_offset_manager(self, consumer_group):
-        """Get the broker designated as the offset manager for this consumer group.
+    def get_group_coordinator(self, consumer_group):
+        """Get the broker designated as the group coordinator for this consumer group.
 
         Based on Step 1 at https://cwiki.apache.org/confluence/display/KAFKA/Committing+and+fetching+consumer+offsets+in+Kafka
 
@@ -385,11 +385,11 @@ class Cluster(object):
                 log.debug("Retrying offset manager discovery")
             time.sleep(i * 2)
 
-            req = ConsumerMetadataRequest(consumer_group)
+            req = GroupCoordinatorRequest(consumer_group)
             future = broker.handler.request(req)
             try:
-                res = future.get(ConsumerMetadataResponse)
-            except ConsumerCoordinatorNotAvailable:
+                res = future.get(GroupCoordinatorResponse)
+            except GroupCoordinatorNotAvailable:
                 log.error('Error discovering offset manager.')
                 if i == self._max_connection_retries - 1:
                     raise

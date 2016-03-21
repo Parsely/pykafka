@@ -79,7 +79,7 @@ class TestProduceAPI(unittest2.TestCase):
     def test_partition_error(self):
         # Response has a UnknownTopicOrPartition error for test/0
         response = protocol.ProduceResponse(
-                buffer(b'\x00\x00\x00\x01\x00\x04test\x00\x00\x00\x01\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x02')
+            buffer(b'\x00\x00\x00\x01\x00\x04test\x00\x00\x00\x01\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x02')
         )
         self.assertEqual(response.topics[b'test'][0].err, 3)
 
@@ -207,7 +207,7 @@ class TestOffsetCommitFetchAPI(unittest2.TestCase):
     maxDiff = None
 
     def test_consumer_metadata_request(self):
-        req = protocol.ConsumerMetadataRequest(b'test')
+        req = protocol.GroupCoordinatorRequest(b'test')
         msg = req.get_bytes()
         self.assertEqual(
             msg,
@@ -215,7 +215,7 @@ class TestOffsetCommitFetchAPI(unittest2.TestCase):
         )
 
     def test_consumer_metadata_response(self):
-        response = protocol.ConsumerMetadataResponse(
+        response = protocol.GroupCoordinatorResponse(
             buffer(b'\x00\x00\x00\x00\x00\x00\x00\remmett-debian\x00\x00#\x84')
         )
         self.assertEqual(response.coordinator_id, 0)
@@ -254,6 +254,188 @@ class TestOffsetCommitFetchAPI(unittest2.TestCase):
         )
         self.assertEqual(response.topics[b'emmett.dummy'][0].metadata, b'')
         self.assertEqual(response.topics[b'emmett.dummy'][0].offset, 1)
+
+
+class TestGroupMembershipAPI(unittest2.TestCase):
+    maxDiff = None
+
+    def test_consumer_group_protocol_metadata(self):
+        meta = protocol.ConsumerGroupProtocolMetadata()
+        msg = meta.get_bytes()
+        self.assertEqual(
+            msg,
+            bytearray(
+                b'\x00\x00\x00\x00'  # version
+                b'\x00\x01'  # len(subscription)
+                    b'\x00\n'  # len(topic name)
+                        b'dummytopic'  # topic name
+                    b'\x00\x00\x00\x0c'  # len(userdata)
+                        b'testuserdata')  # userdata
+        )
+
+    def test_join_group_request(self):
+        req = protocol.JoinGroupRequest(b'dummygroup', member_id=b'testmember')
+        msg = req.get_bytes()
+        self.assertEqual(
+            msg,
+            bytearray(
+                b'\x00\x00\x00|\x00\x0b\x00\x00\x00\x00\x00\x00\x00\x07pykafka'  # header
+                b'\x00\n'  # len(groupid)
+                    b'dummygroup'  # groupid
+                b'\x00\x00u0'  # session timeout
+                b'\x00\n'  # len(memberid)
+                    b'testmember'  # memberid
+                b'\x00\x08'  # len(protocol type)
+                    b'consumer'  # protocol type
+                b'\x00\x00\x00\x01'  # len(group protocols)
+                    b'\x00\x19'  # len(protocol name)
+                        b'pykafkaassignmentstrategy'  # protocol name
+                    b'\x00\x00\x00"'  # len(protocol metadata)
+                        b'\x00\x00\x00\x00\x00\x01\x00\ndummytopic\x00\x00\x00\x0ctestuserdata'  # protocol metadata
+            )
+        )
+
+    def test_join_group_response(self):
+        response = protocol.JoinGroupResponse(
+            bytearray(
+                b'\x00\x00'  # error code
+                b'\x00\x00\x00\x01'  # generation id
+                b'\x00\x17'  # len (group protocol)
+                    b'dummyassignmentstrategy'  # group protocol
+                b'\x00,'  # len(leader id)
+                    b'pykafka-b2361322-674c-4e26-9194-305962636e57'  # leader id
+                b'\x00,'  # len(member id)
+                    b'pykafka-b2361322-674c-4e26-9194-305962636e57'  # member id
+                b'\x00\x00\x00\x01'  # leb(members)
+                    b'\x00,'  # len(member id)
+                        b'pykafka-b2361322-674c-4e26-9194-305962636e57'  # member id
+                    b'\x00\x00\x00"'  # len(member metadata)
+                        b'\x00\x00\x00\x00\x00\x01\x00\ndummytopic\x00\x00\x00\x0ctestuserdata\x00\x00\x00\x00'  # member metadata
+            )
+        )
+        self.assertEqual(response.generation_id, 1)
+        self.assertEqual(response.group_protocol, b'dummyassignmentstrategy')
+        self.assertEqual(response.leader_id,
+                         b'pykafka-b2361322-674c-4e26-9194-305962636e57')
+        self.assertEqual(response.member_id,
+                         b'pykafka-b2361322-674c-4e26-9194-305962636e57')
+        self.assertEqual(response.members,
+                         {b'pykafka-b2361322-674c-4e26-9194-305962636e57': b'\x00\x00\x00\x00\x00\x01\x00\ndummytopic\x00\x00\x00\x0ctestuserdata'})
+
+    def test_member_assignment_construction(self):
+        assignment = protocol.MemberAssignment([(b"mytopic1", [3, 5, 7, 9]),
+                                                (b"mytopic2", [2, 4, 6, 8])])
+        msg = assignment.get_bytes()
+        self.assertEqual(
+            msg,
+            bytearray(
+                b'\x00\x01'  # version
+                b'\x00\x00\x00\x02'  # len(partition assignment)
+                    b'\x00\x08'  # len(topic)
+                        b'mytopic1'  # topic
+                    b'\x00\x00\x00\x04'  # len(partitions)
+                        b'\x00\x00\x00\x03'  # partition
+                        b'\x00\x00\x00\x05'  # partition
+                        b'\x00\x00\x00\x07'  # partition
+                        b'\x00\x00\x00\t'  # partition
+                    b'\x00\x08'  # len(topic)
+                        b'mytopic2'  # topic
+                    b'\x00\x00\x00\x04'  # len(partitions)
+                        b'\x00\x00\x00\x02'  # partition
+                        b'\x00\x00\x00\x04'  # partition
+                        b'\x00\x00\x00\x06'  # partition
+                        b'\x00\x00\x00\x08'  # partition
+            )
+        )
+
+    def test_sync_group_request(self):
+        req = protocol.SyncGroupRequest(
+            b'dummygroup', 1, b'testmember1',
+            [
+                protocol.MemberAssignment([(b"mytopic1", [3, 5, 7, 9]),
+                                           (b"mytopic2", [3, 5, 7, 9])], member_id=b"a"),
+                protocol.MemberAssignment([(b"mytopic1", [2, 4, 6, 8]),
+                                           (b"mytopic2", [2, 4, 6, 8])], member_id=b"b")
+            ])
+        msg = req.get_bytes()
+        self.assertEqual(
+            msg,
+            bytearray(
+                b'\x00\x00\x00\xc4\x00\x0e\x00\x00\x00\x00\x00\x00\x00\x07pykafka'  # header
+                b'\x00\n'  # len(group id)
+                    b'dummygroup'  # group id
+                b'\x00\x00\x00\x01'  # generation id
+                b'\x00\x0b'  # len(member id)
+                    b'testmember1'  # member id
+                b'\x00\x00\x00\x02'  # len(group assignment)
+                    b'\x00\x01'  # len(member id)
+                        b'a'  # member id
+                    b'\x00\x00\x00B'  # len(member assignment)
+                        b'\x00\x01\x00\x00\x00\x02\x00\x08mytopic1\x00\x00\x00\x04\x00\x00\x00\x03\x00\x00\x00\x05\x00\x00\x00\x07\x00\x00\x00\t\x00\x08mytopic2\x00\x00\x00\x04\x00\x00\x00\x03\x00\x00\x00\x05\x00\x00\x00\x07\x00\x00\x00\t'  # member assignment
+                    b'\x00\x01'  # len(member id)
+                        b'b'  # member id
+                    b'\x00\x00\x00B'  # len(member assignment)
+                        b'\x00\x01\x00\x00\x00\x02\x00\x08mytopic1\x00\x00\x00\x04\x00\x00\x00\x02\x00\x00\x00\x04\x00\x00\x00\x06\x00\x00\x00\x08\x00\x08mytopic2\x00\x00\x00\x04\x00\x00\x00\x02\x00\x00\x00\x04\x00\x00\x00\x06\x00\x00\x00\x08'  # member assignment
+            )
+        )
+
+    def test_sync_group_response(self):
+        response = protocol.SyncGroupResponse(
+            bytearray(
+                b'\x00\x00'  # error code
+                b'\x00\x00\x00H'  # len(member assignment)
+                    b'\x00\x01\x00\x00\x00\x01\x00\x14testtopic_replicated\x00\x00\x00\n\x00\x00\x00\x06\x00\x00\x00\x07\x00\x00\x00\x08\x00\x00\x00\t\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x02\x00\x00\x00\x03\x00\x00\x00\x04\x00\x00\x00\x05,pyk'  # member assignment
+            )
+        )
+        self.assertEqual(response.error_code, 0)
+        expected_assignment = [(b'testtopic_replicated', [6, 7, 8, 9, 0, 1, 2, 3, 4, 5])]
+        self.assertEqual(response.member_assignment.partition_assignment,
+                         expected_assignment)
+
+    def test_heartbeat_request(self):
+        req = protocol.HeartbeatRequest(b'dummygroup', 1, b'testmember')
+        msg = req.get_bytes()
+        self.assertEqual(
+            msg,
+            bytearray(
+                b'\x00\x00\x00-\x00\x0c\x00\x00\x00\x00\x00\x00\x00\x07pykafka'  # header
+                b'\x00\n'  # len(group id)
+                    b'dummygroup'  # group id
+                b'\x00\x00\x00\x01'  # generation id
+                b'\x00\n'  # len(member id)
+                    b'testmember'  # member id
+            )
+        )
+
+    def test_heartbeat_response(self):
+        response = protocol.HeartbeatResponse(
+            bytearray(
+                b'\x00\x00'  # error code
+            )
+        )
+        self.assertEqual(response.error_code, 0)
+
+    def test_leave_group_request(self):
+        req = protocol.LeaveGroupRequest(b'dummygroup', b'testmember')
+        msg = req.get_bytes()
+        self.assertEqual(
+            msg,
+            bytearray(
+                b'\x00\x00\x00)\x00\r\x00\x00\x00\x00\x00\x00\x00\x07pykafka'  # header
+                b'\x00\n'  # len(group id)
+                    b'dummygroup'  # group id
+                b'\x00\n'  # len(member id)
+                    b'testmember'  # member id
+            )
+        )
+
+    def test_leave_group_response(self):
+        response = protocol.LeaveGroupResponse(
+            bytearray(
+                b'\x00\x00'  # error code
+            )
+        )
+        self.assertEqual(response.error_code, 0)
 
 
 if __name__ == '__main__':

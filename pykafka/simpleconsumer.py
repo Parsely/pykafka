@@ -32,10 +32,11 @@ from .utils.compat import (Queue, Empty, iteritems, itervalues,
                            range, iterkeys)
 from .exceptions import (OffsetOutOfRangeError, UnknownTopicOrPartition,
                          OffsetMetadataTooLarge, GroupLoadInProgress,
-                         NotCoordinatorForConsumer, SocketDisconnectedError,
+                         NotCoordinatorForGroup, SocketDisconnectedError,
                          ConsumerStoppedException, KafkaException,
                          NotLeaderForPartition, OffsetRequestFailedError,
-                         RequestTimedOut, ERROR_CODES)
+                         RequestTimedOut, UnknownMemberId, RebalanceInProgress,
+                         ERROR_CODES)
 from .protocol import (PartitionFetchRequest, PartitionOffsetCommitRequest,
                        PartitionOffsetFetchRequest, PartitionOffsetRequest)
 from .utils.error_handlers import (handle_partition_responses, raise_error,
@@ -67,7 +68,9 @@ class SimpleConsumer(object):
                  consumer_timeout_ms=-1,
                  auto_start=True,
                  reset_offset_on_start=False,
-                 compacted_topic=False):
+                 compacted_topic=False,
+                 generation_id=-1,
+                 consumer_id=b''):
         """Create a SimpleConsumer.
 
         Settings and default values are taken from the Scala
@@ -136,6 +139,11 @@ class SimpleConsumer(object):
             consumer to use less stringent message ordering logic because compacted
             topics do not provide offsets in stict incrementing order.
         :type compacted_topic: bool
+        :param generation_id: The generation id with which to make group requests
+        :type generation_id: int
+        :param consumer_id: The identifying string to use for this consumer on group
+            requests
+        :type consumer_id: bytes
         """
         self._cluster = cluster
         if not (isinstance(consumer_group, bytes) or consumer_group is None):
@@ -157,6 +165,8 @@ class SimpleConsumer(object):
         self._auto_start = auto_start
         self._reset_offset_on_start = reset_offset_on_start
         self._is_compacted_topic = compacted_topic
+        self._generation_id = generation_id
+        self._consumer_id = consumer_id
 
         # incremented for any message arrival from any partition
         # the initial value is 0 (no messages waiting)
@@ -169,7 +179,7 @@ class SimpleConsumer(object):
         self._worker_trace_logged = False
         self._update_lock = self._cluster.handler.Lock()
 
-        self._discover_offset_manager()
+        self._discover_group_coordinator()
 
         if partitions is not None:
             self._partitions = {p: OwnedPartition(p, self._cluster.handler,
@@ -219,7 +229,7 @@ class SimpleConsumer(object):
         with self._update_lock:
             self._cluster.update()
             self._setup_partitions_by_leader()
-            self._discover_offset_manager()
+            self._discover_group_coordinator()
 
     def start(self):
         """Begin communicating with Kafka, including setting up worker threads
@@ -260,8 +270,8 @@ class SimpleConsumer(object):
         def _handle_RequestTimedOut(parts):
             log.info("Continuing in response to RequestTimedOut")
 
-        def _handle_NotCoordinatorForConsumer(parts):
-            log.info("Updating cluster in response to NotCoordinatorForConsumer")
+        def _handle_NotCoordinatorForGroup(parts):
+            log.info("Updating cluster in response to NotCoordinatorForGroup")
             self._update()
 
         def _handle_NotLeaderForPartition(parts):
@@ -271,23 +281,31 @@ class SimpleConsumer(object):
         def _handle_GroupLoadInProgress(parts):
             log.info("Continuing in response to GroupLoadInProgress")
 
+        def _handle_UnknownMemberId(parts):
+            log.info("Continuing in response to UnknownMemberId")
+
+        def _handle_RebalanceInProgress(parts):
+            log.info("Continuing in response to RebalanceInProgress")
+
         return {
             UnknownTopicOrPartition.ERROR_CODE: lambda p: raise_error(UnknownTopicOrPartition),
             OffsetOutOfRangeError.ERROR_CODE: _handle_OffsetOutOfRangeError,
             NotLeaderForPartition.ERROR_CODE: _handle_NotLeaderForPartition,
             OffsetMetadataTooLarge.ERROR_CODE: lambda p: raise_error(OffsetMetadataTooLarge),
-            NotCoordinatorForConsumer.ERROR_CODE: _handle_NotCoordinatorForConsumer,
+            NotCoordinatorForGroup.ERROR_CODE: _handle_NotCoordinatorForGroup,
             RequestTimedOut.ERROR_CODE: _handle_RequestTimedOut,
-            GroupLoadInProgress.ERROR_CODE: _handle_GroupLoadInProgress
+            GroupLoadInProgress.ERROR_CODE: _handle_GroupLoadInProgress,
+            UnknownMemberId.ERROR_CODE: _handle_UnknownMemberId,
+            RebalanceInProgress.ERROR_CODE: _handle_RebalanceInProgress
         }
 
-    def _discover_offset_manager(self):
-        """Set the offset manager for this consumer.
+    def _discover_group_coordinator(self):
+        """Set the group coordinator for this consumer.
 
         If a consumer group is not supplied to __init__, this method does nothing
         """
         if self._consumer_group is not None:
-            self._offset_manager = self._cluster.get_offset_manager(self._consumer_group)
+            self._group_coordinator = self._cluster.get_group_coordinator(self._consumer_group)
 
     @property
     def topic(self):
@@ -427,19 +445,19 @@ class SimpleConsumer(object):
 
         reqs = [p.build_offset_commit_request() for p in self._partitions.values()]
         log.debug("Committing offsets for %d partitions to broker id %s", len(reqs),
-                  self._offset_manager.id)
+                  self._group_coordinator.id)
         for i in range(self._offsets_commit_max_retries):
             if i > 0:
                 log.debug("Retrying")
             self._cluster.handler.sleep(i * (self._offsets_channel_backoff_ms / 1000))
 
             try:
-                response = self._offset_manager.commit_consumer_group_offsets(
-                    self._consumer_group, -1, b'pykafka', reqs)
+                response = self._group_coordinator.commit_consumer_group_offsets(
+                    self._consumer_group, self._generation_id, self._consumer_id, reqs)
             except (SocketDisconnectedError, IOError):
-                log.error("Error committing offsets for topic '%s' "
+                log.error("Error committing offsets for topic '%s' from consumer id '%s'"
                           "(SocketDisconnectedError)",
-                          self._topic.name)
+                          self._topic.name, self._consumer_id)
                 if i >= self._offsets_commit_max_retries - 1:
                     raise
                 self._update()
@@ -452,8 +470,8 @@ class SimpleConsumer(object):
             if (len(parts_by_error) == 1 and 0 in parts_by_error) or \
                     len(parts_by_error) == 0:
                 break
-            log.error("Error committing offsets for topic '%s' (errors: %s)",
-                      self._topic.name,
+            log.error("Error committing offsets for topic '%s' from consumer id '%s'"
+                      "(errors: %s)", self._topic.name, self._consumer_id,
                       {ERROR_CODES[err]: [op.partition.id for op, _ in parts]
                        for err, parts in iteritems(parts_by_error)})
 
@@ -510,13 +528,13 @@ class SimpleConsumer(object):
         success_responses = []
 
         log.debug("Fetching offsets for %d partitions from broker id %s", len(reqs),
-                  self._offset_manager.id)
+                  self._group_coordinator.id)
 
         for i in range(self._offsets_fetch_max_retries):
             if i > 0:
                 log.debug("Retrying offset fetch")
 
-            res = self._offset_manager.fetch_consumer_group_offsets(self._consumer_group, reqs)
+            res = self._group_coordinator.fetch_consumer_group_offsets(self._consumer_group, reqs)
             parts_by_error = handle_partition_responses(
                 self._default_error_handlers,
                 response=res,
