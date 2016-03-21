@@ -256,6 +256,8 @@ class ProducerIntegrationTests(unittest2.TestCase):
         for i in range(10):
             prod.produce(large_payload)
 
+        # use retry logic to loop over delivery reports and ensure we can
+        # produce a group of large messages
         reports = []
         def ensure_all_messages_produced():
             report = prod.get_delivery_report()
@@ -296,6 +298,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
         for i in range(10):
             prod.produce(large_payload)
 
+        # use retry to loop over and consumer all messages produced
         reports = []
         def ensure_all_messages_produced():
             report = prod.get_delivery_report()
