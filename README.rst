@@ -8,7 +8,7 @@ PyKafka
 
 .. image:: http://i.imgur.com/ztYl4lG.jpg
 
-PyKafka is a cluster-aware Kafka 0.8.2 protocol client for Python. It includes Python
+PyKafka is a cluster-aware Kafka>=0.8.2 client for Python. It includes Python
 implementations of Kafka producers and consumers, which are optionally backed
 by a C extension built on `librdkafka`_, and runs under Python 2.7+, Python 3.4+,
 and PyPy.
@@ -27,7 +27,8 @@ You can install PyKafka from PyPI with
 
 Full documentation and usage examples for PyKafka can be found on `readthedocs`_.
 
-You can install PyKafka for local development and testing with
+You can install PyKafka for local development and testing by cloning this repository and
+running
 
 ::
 
@@ -39,13 +40,13 @@ You can install PyKafka for local development and testing with
 Getting Started
 ---------------
 
-Assuming you have a Kafka instance running on localhost, you can use PyKafka
+Assuming you have at least one Kafka instance running on localhost, you can use PyKafka
 to connect to it.
 
 .. sourcecode:: python
 
     >>> from pykafka import KafkaClient
-    >>> client = KafkaClient(hosts="127.0.0.1:9092")
+    >>> client = KafkaClient(hosts="127.0.0.1:9092,127.0.0.1:9093,...")
 
 If the cluster you've connected to has any topics defined on it, you can list
 them with:
@@ -65,10 +66,10 @@ producing messages.
     ...     for i in range(4):
     ...         producer.produce('test message ' + str(i ** 2))
 
-The example above would produce to kafka synchronously, that is, the call only
+The example above would produce to kafka synchronously - the call only
 returns after we have confirmation that the message made it to the cluster.
 
-To achieve higher throughput however, we recommend using the ``Producer`` in
+To achieve higher throughput, we recommend using the ``Producer`` in
 asynchronous mode, so that ``produce()`` calls will return immediately and the
 producer may opt to send messages in larger batches.  You can still obtain
 delivery confirmation for messages, through a queue interface which can be
@@ -81,7 +82,7 @@ enabled by setting ``delivery_reports=True``.  Here's a rough usage example:
     ...     while True:
     ...         count += 1
     ...         producer.produce('test msg', partition_key='{}'.format(count))
-    ...         if count % 10**5 == 0:  # adjust this or bring lots of RAM ;)
+    ...         if count % 10 ** 5 == 0:  # adjust this or bring lots of RAM ;)
     ...             while True:
     ...                 try:
     ...                     msg, exc = producer.get_delivery_report(block=False)
@@ -94,7 +95,7 @@ enabled by setting ``delivery_reports=True``.  Here's a rough usage example:
     ...                 except Queue.Empty:
     ...                     break
 
-Note that the delivery-report queue is thread-local: it will only serve reports
+Note that the delivery report queue is thread-local: it will only serve reports
 for messages which were produced from the current thread.
 
 You can also consume messages from this topic using a `Consumer` instance.
@@ -125,7 +126,9 @@ this, you can use the `BalancedConsumer`.
 You can have as many `BalancedConsumer` instances consuming a topic as that
 topic has partitions. If they are all connected to the same zookeeper instance,
 they will communicate with it to automatically balance the partitions between
-themselves. You can also use the Kafka 0.9 Group Membership API with the `managed`
+themselves.
+
+You can also use the Kafka 0.9 Group Membership API with the `managed`
 keyword argument on `get_balanced_consumer`.
 
 Using the librdkafka extension
@@ -175,7 +178,7 @@ What happened to Samsa?
 
 This project used to be called samsa. It has been renamed PyKafka and has been
 fully overhauled to support Kafka 0.8.2. We chose to target 0.8.2 because the offset
-Commit/Fetch API is stabilized.
+Commit/Fetch API stabilized on that release.
 
 The Samsa `PyPI package`_  will stay up for the foreseeable future and tags for
 previous versions will always be available in this repo.
@@ -186,7 +189,8 @@ PyKafka or kafka-python?
 ------------------------
 
 These are two different projects.
-See `the discussion here <https://github.com/Parsely/pykafka/issues/334>`_.
+See `the discussion here <https://github.com/Parsely/pykafka/issues/334>`_ for comparisons
+between the two projects.
 
 Support
 -------
