@@ -6,7 +6,7 @@ Changelog
 
 `Compare 2.3.0`_
 
-.. _Compare 2.3.0: 
+.. _Compare 2.3.0: https://github.com/Parsely/pykafka/compare/2.2.1...7855fa2beeb08c0f35a343d4f9ba09c725cdd32f
 
 Minor Version Features
 **********************
