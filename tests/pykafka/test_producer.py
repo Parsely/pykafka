@@ -13,7 +13,6 @@ from pykafka.protocol import Message
 from pykafka.test.utils import get_cluster, stop_cluster, retry
 from pykafka.common import CompressionType
 from pykafka.producer import OwnedBroker
-from pykafka.utils.compat import Empty
 
 
 class ProducerIntegrationTests(unittest2.TestCase):
@@ -261,12 +260,8 @@ class ProducerIntegrationTests(unittest2.TestCase):
         # produce a group of large messages
         reports = []
         def ensure_all_messages_produced():
-            try:
-                for i in range(10):
-                    report = prod.get_delivery_report(block=False)
-                    reports.append(report)
-            except Empty:
-                pass
+            report = prod.get_delivery_report()
+            reports.append(report)
             assert len(reports) == 10
         retry(ensure_all_messages_produced, retry_time=30, wait_between_tries=0.5)
 
@@ -298,8 +293,6 @@ class ProducerIntegrationTests(unittest2.TestCase):
         message = self.consumer.consume()
         assert message.value == large_payload
 
-        self.consumer.stop()
-
         for i in range(10):
             prod.produce(large_payload)
 
@@ -307,12 +300,8 @@ class ProducerIntegrationTests(unittest2.TestCase):
         # produce a group of large messages
         reports = []
         def ensure_all_messages_produced():
-            try:
-                for i in range(10):
-                    report = prod.get_delivery_report(block=False)
-                    reports.append(report)
-            except Empty:
-                pass
+            report = prod.get_delivery_report()
+            reports.append(report)
             assert len(reports) == 10
         retry(ensure_all_messages_produced, retry_time=30, wait_between_tries=0.5)
 
@@ -320,7 +309,6 @@ class ProducerIntegrationTests(unittest2.TestCase):
             self.assertEqual(report[0].value, large_payload)
             self.assertIsNone(report[1])
 
-        self.consumer.start()
         # cleanup and consumer all messages
         msgs = []
         def ensure_all_messages_consumed():
