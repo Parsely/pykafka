@@ -10,7 +10,9 @@ from pykafka import KafkaClient
 from pykafka.exceptions import MessageSizeTooLarge, ProducerQueueFullError
 from pykafka.partitioners import hashing_partitioner
 from pykafka.protocol import Message
-from pykafka.test.utils import get_cluster, stop_cluster
+from pykafka.test.utils import get_cluster, stop_cluster, retry
+from pykafka.common import CompressionType
+from pykafka.producer import OwnedBroker
 
 
 class ProducerIntegrationTests(unittest2.TestCase):
@@ -176,6 +178,145 @@ class ProducerIntegrationTests(unittest2.TestCase):
         self.assertIsNone(self.consumer.consume().value)
         prod.produce(b"")  # empty string should be distinguished from None
         self.assertEqual(b"", self.consumer.consume().value)
+
+    def test_owned_broker_flush_message_larger_then_max_request_size(self):
+        """Test that producer batches messages into the batches no larger then
+        `max_request_size`
+        """
+        large_payload = b''.join([uuid4().bytes for i in range(50000)])
+
+        producer = self._get_producer(
+            auto_start=False
+        )
+        # setup producer but do not start actually sending messages
+        partition = producer._topic.partitions[0]
+        owned_broker = OwnedBroker(producer, partition.leader, auto_start=False)
+
+        delivery_report_queue = producer._cluster.handler.Queue()
+        msg = Message(
+            large_payload,
+            partition_id=0,
+            delivery_report_q=delivery_report_queue
+        )
+
+        owned_broker.enqueue(msg)
+
+        max_request_size = 1000
+        assert max_request_size < len(msg)
+        owned_broker.flush(0, max_request_size)
+        q_msg, exc = delivery_report_queue.get()
+        assert q_msg is msg
+        assert isinstance(exc, MessageSizeTooLarge)
+
+    def test_owned_broker_flush_batching_by_max_request_size(self):
+        """Test that producer batches messages into the batches no larger then
+        `max_request_size`
+        """
+        large_payload = b''.join([uuid4().bytes for i in range(5000)])
+
+        producer = self._get_producer(
+            auto_start=False
+        )
+        # setup producer but do not start actually sending messages
+        partition = producer._topic.partitions[0]
+        owned_broker = OwnedBroker(producer, partition.leader, auto_start=False)
+
+        for i in range(100):
+            msg = Message(large_payload, partition_id=0)
+            owned_broker.enqueue(msg)
+
+        batch = owned_broker.flush(0, producer._max_request_size)
+        assert len(batch) < 100
+        assert sum([len(m.value) for m in batch]) < producer._max_request_size
+
+        # iterate through the rest of the batches and test the same invariant
+        while batch:
+            batch = owned_broker.flush(0, producer._max_request_size)
+            assert len(batch) < 100
+            assert sum([len(m.value) for m in batch]) < producer._max_request_size
+
+    def test_async_produce_compression_large_message(self):
+        # TODO: make payload size bigger once pypy snappy compression issue is
+        # fixed
+        large_payload = b''.join([uuid4().bytes for i in range(5)])
+
+        prod = self._get_producer(
+                compression=CompressionType.SNAPPY,
+                delivery_reports=True
+                )
+        prod.produce(large_payload)
+
+        report = prod.get_delivery_report()
+        self.assertEqual(report[0].value, large_payload)
+        self.assertIsNone(report[1])
+
+        message = self.consumer.consume()
+        assert message.value == large_payload
+
+        for i in range(10):
+            prod.produce(large_payload)
+
+        # use retry logic to loop over delivery reports and ensure we can
+        # produce a group of large messages
+        reports = []
+        def ensure_all_messages_produced():
+            report = prod.get_delivery_report()
+            reports.append(report)
+            assert len(reports) == 10
+        retry(ensure_all_messages_produced, retry_time=30, wait_between_tries=0.5)
+
+        for report in reports:
+            self.assertEqual(report[0].value, large_payload)
+            self.assertIsNone(report[1])
+
+        # cleanup and consumer all messages
+        msgs = []
+        def ensure_all_messages_consumed():
+            msg = self.consumer.consume()
+            if msg:
+                msgs.append(msg)
+            assert len(msgs) == 10
+        retry(ensure_all_messages_consumed, retry_time=15)
+
+    def test_async_produce_large_message(self):
+
+        large_payload = b''.join([uuid4().bytes for i in range(50000)])
+        assert len(large_payload) / 1024 / 1024 < 1.0
+
+        prod = self._get_producer(delivery_reports=True)
+        prod.produce(large_payload)
+
+        report = prod.get_delivery_report()
+        self.assertEqual(report[0].value, large_payload)
+        self.assertIsNone(report[1])
+
+        message = self.consumer.consume()
+        assert message.value == large_payload
+
+        for i in range(10):
+            prod.produce(large_payload)
+
+        # use retry logic to loop over delivery reports and ensure we can
+        # produce a group of large messages
+        reports = []
+        def ensure_all_messages_produced():
+            report = prod.get_delivery_report()
+            reports.append(report)
+            assert len(reports) == 10
+        retry(ensure_all_messages_produced, retry_time=30, wait_between_tries=0.5)
+
+        for report in reports:
+            self.assertEqual(report[0].value, large_payload)
+            self.assertIsNone(report[1])
+
+        # cleanup and consumer all messages
+        msgs = []
+        def ensure_all_messages_consumed():
+            msg = self.consumer.consume()
+            if msg:
+                msgs.append(msg)
+            assert len(msgs) == 10
+        retry(ensure_all_messages_consumed, retry_time=15)
 
 
 @pytest.mark.skipif(platform.python_implementation() == "PyPy",
