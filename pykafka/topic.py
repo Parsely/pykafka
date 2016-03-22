@@ -24,6 +24,7 @@ from .balancedconsumer import BalancedConsumer
 from .common import OffsetType
 from .exceptions import LeaderNotAvailable
 from .handlers import GEventHandler
+from .managedbalancedconsumer import ManagedBalancedConsumer
 from .partition import Partition
 from .producer import Producer
 from .protocol import PartitionOffsetRequest
@@ -186,13 +187,20 @@ class Topic(object):
                    consumer_group=consumer_group,
                    **kwargs)
 
-    def get_balanced_consumer(self, consumer_group, **kwargs):
+    def get_balanced_consumer(self, consumer_group, managed=False, **kwargs):
         """Return a BalancedConsumer of this topic
 
         :param consumer_group: The name of the consumer group to join
         :type consumer_group: bytes
+        :param managed: If True, manage the consumer group with Kafka using the 0.9
+            group management api (requires Kafka >=0.9))
+        :type managed: bool
         """
-        if "zookeeper_connect" not in kwargs and \
-                self._cluster._zookeeper_connect is not None:
-            kwargs['zookeeper_connect'] = self._cluster._zookeeper_connect
-        return BalancedConsumer(self, self._cluster, consumer_group, **kwargs)
+        if not managed:
+            if "zookeeper_connect" not in kwargs and \
+                    self._cluster._zookeeper_connect is not None:
+                kwargs['zookeeper_connect'] = self._cluster._zookeeper_connect
+            cls = BalancedConsumer
+        else:
+            cls = ManagedBalancedConsumer
+        return cls(self, self._cluster, consumer_group, **kwargs)
