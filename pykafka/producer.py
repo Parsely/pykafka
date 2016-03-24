@@ -39,7 +39,7 @@ from .exceptions import (
 )
 from .partitioners import random_partitioner
 from .protocol import Message, ProduceRequest
-from .utils.compat import iteritems, range, itervalues, Empty
+from .utils.compat import iteritems, itervalues, Empty
 
 log = logging.getLogger(__name__)
 
