@@ -30,7 +30,6 @@ class ProducerIntegrationTests(unittest2.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        cls.consumer.stop()
         stop_cluster(cls.kafka)
 
     def _get_producer(self, **kwargs):
