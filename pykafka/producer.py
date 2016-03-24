@@ -156,7 +156,7 @@ class Producer(object):
         if self._compression == CompressionType.SNAPPY and \
                 platform.python_implementation == "PyPy":
             log.warning("Caution: python-snappy segfaults when attempting to compress "
-                        "large messages")
+                        "large messages under PyPy")
         self._max_retries = max_retries
         self._retry_backoff_ms = retry_backoff_ms
         self._required_acks = required_acks
