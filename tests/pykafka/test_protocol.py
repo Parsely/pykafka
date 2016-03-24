@@ -330,7 +330,7 @@ class TestFetchAPI(unittest2.TestCase):
         self.assertEqual(message.offset, 1)
 
     def test_gzip_decompression(self):
-        msg = b''.join(
+        msg = b''.join([
             b'\x00\x00\x00\x01'  # len(topics)
             b'\x00\t'  # len(topic name)
                 b'test_gzip'  # topic name
@@ -347,7 +347,7 @@ class TestFetchAPI(unittest2.TestCase):
                             b'\xff\xff\xff\xff'  # len(key)
                             b'\x00\x00\x00\x81'  # len(value)
                                 b'\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x00c`\x80\x03\r\xbe.I\x7f0\x8b%\xb18%\rH\x8b\x95dd\x16+\x00Q\xa2BIjq\x89Bnjqqbz*T=#\x10\x1b\xb2\xf3\xcb\xf4\x81y\x1c \x15\xf1\xd9\xa9\x95@\xb64\\_Nq>v\xcdL@\xac\x7f\xb5(\xd9\x98\x81\xe1?\x10\x00y\x8a`M)\xf9\xa9\xc5y\xea%\n\x19\x89e\xa9@\x9d\x05\x89E%\x99%\x99\xf9y\n@\x93\x01N1\x9f[\xac\x00\x00\x00'  # value
-        )
+        ])
         response = protocol.FetchResponse(msg)
         for i in range(len(self.expected_data)):
             self.assertDictEqual(
@@ -355,7 +355,7 @@ class TestFetchAPI(unittest2.TestCase):
                 self.expected_data[i])
 
     def test_snappy_decompression(self):
-        msg = b''.join(
+        msg = b''.join([
             b'\x00\x00\x00\x01'  # len(topics)
             b'\x00\x0b'  # len(topic name)
                 b'test_snappy'  # topic name
@@ -372,7 +372,7 @@ class TestFetchAPI(unittest2.TestCase):
                             b'\xff\xff\xff\xff'  # len(key)
                             b'\x00\x00\x00\x9b'  # len(value)
                                 b'\x82SNAPPY\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x87\xac\x01\x00\x00\x19\x01\x10(\x0e\x8a\x19O\x05\x0fx\x04asdf\x00\x00\x00\x16this is a test message\x05$(\x00\x00\x01\x00\x00\x001\x07\x0f\x1c\x8e\x05\x10\x00\x08\x01"\x1c_key\x00\x00\x00\x1b\x158\x08lsoV=\x00H\x02\x00\x00\x00/\xd5rc3\x00\x00\xff\xff\xff\xff\x00\x00\x00!\x055ldoesn\'t have a partition key'  # value
-        )
+        ])
         response = protocol.FetchResponse(msg)
         for i in range(len(self.expected_data)):
             self.assertDictEqual(
