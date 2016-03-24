@@ -567,16 +567,17 @@ class SimpleConsumer(object):
         :param partition_offsets: (`partition`, `timestamp_or_offset`) pairs to
             reset where `partition` is the partition for which to reset the offset
             and `timestamp_or_offset` is EITHER the timestamp of the message
-            whose offset the partition should have OR the new offset the
-            partition should have
+            whose offset the partition should have OR the new "most recently
+            consumed" offset the partition should have
         :type partition_offsets: Sequence of tuples of the form
             (:class:`pykafka.partition.Partition`, int)
 
         NOTE: If an instance of `timestamp_or_offset` is treated by kafka as
         an invalid offset timestamp, this function directly sets the consumer's
         internal offset counter for that partition to that instance of
-        `timestamp_or_offset`. On the next fetch request, the consumer attempts
-        to fetch messages starting from that offset. See the following link
+        `timestamp_or_offset`. This counter represents the offset most recently
+        consumed. On the next fetch request, the consumer attempts
+        to fetch messages starting from that offset plus one. See the following link
         for more information on what kafka treats as a valid offset timestamp:
         https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol#AGuideToTheKafkaProtocol-OffsetRequest
         """

@@ -128,7 +128,11 @@ class Topic(object):
         return self.fetch_offset_limits(OffsetType.EARLIEST)
 
     def latest_available_offsets(self):
-        """Get the latest offset for each partition of this topic."""
+        """Fetch the next available offset
+
+        Get the offset of the next message that would be appended to each partition of
+            this topic.
+        """
         return self.fetch_offset_limits(OffsetType.LATEST)
 
     def update(self, metadata):
