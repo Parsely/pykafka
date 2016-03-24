@@ -7,6 +7,7 @@ import unittest2
 from uuid import uuid4
 
 from pykafka import KafkaClient
+from pykafka.common import OffsetType
 from pykafka.exceptions import MessageSizeTooLarge, ProducerQueueFullError
 from pykafka.partitioners import hashing_partitioner
 from pykafka.protocol import Message
@@ -26,8 +27,6 @@ class ProducerIntegrationTests(unittest2.TestCase):
         cls.topic_name = b'test-data'
         cls.kafka.create_topic(cls.topic_name, 3, 2)
         cls.client = KafkaClient(cls.kafka.brokers, use_greenlets=cls.USE_GEVENT)
-        cls.consumer = cls.client.topics[cls.topic_name].get_simple_consumer(
-            consumer_timeout_ms=1000)
 
     @classmethod
     def tearDownClass(cls):
@@ -38,6 +37,13 @@ class ProducerIntegrationTests(unittest2.TestCase):
         topic = self.client.topics[self.topic_name]
         return topic.get_producer(use_rdkafka=self.USE_RDKAFKA, **kwargs)
 
+    def _get_consumer(self):
+        return self.client.topics[self.topic_name].get_simple_consumer(
+            consumer_timeout_ms=1000,
+            auto_offset_reset=OffsetType.LATEST,
+            reset_offset_on_start=True,
+        )
+
     def test_produce(self):
         # unique bytes, just to be absolutely sure we're not fetching data
         # produced in a previous test
@@ -46,7 +52,8 @@ class ProducerIntegrationTests(unittest2.TestCase):
         prod = self._get_producer(sync=True, min_queued_messages=1)
         prod.produce(payload)
 
-        message = self.consumer.consume()
+        consumer = self._get_consumer()
+        message = consumer.consume()
         assert message.value == payload
 
     def test_sync_produce_raises(self):
@@ -67,7 +74,8 @@ class ProducerIntegrationTests(unittest2.TestCase):
         prod.produce(payload, partition_key=b"dummy")
 
         # set a timeout so we don't wait forever if we break producer code
-        message = self.consumer.consume()
+        consumer = self._get_consumer()
+        message = consumer.consume()
         assert message.value == payload
 
     def test_async_produce(self):
@@ -80,21 +88,14 @@ class ProducerIntegrationTests(unittest2.TestCase):
         self.assertEqual(report[0].value, payload)
         self.assertIsNone(report[1])
 
-        message = self.consumer.consume()
+        consumer = self._get_consumer()
+        message = consumer.consume()
         assert message.value == payload
 
     def test_recover_disconnected(self):
         """Test our retry-loop with a recoverable error"""
         payload = uuid4().bytes
         prod = self._get_producer(min_queued_messages=1, delivery_reports=True)
-
-        # We must stop the consumer for this test, to ensure that it is the
-        # producer that will encounter the disconnected brokers and initiate
-        # a cluster update
-        self.consumer.stop()
-        for t in self.consumer._fetch_workers:
-            t.join()
-        part_offsets = self.consumer.held_offsets
 
         for broker in self.client.brokers.values():
             broker._connection.disconnect()
@@ -103,12 +104,8 @@ class ProducerIntegrationTests(unittest2.TestCase):
         report = prod.get_delivery_report()
         self.assertIsNone(report[1])
 
-        self.consumer.start()
-        self.consumer.reset_offsets(
-            # This is just a reset_offsets, but works around issue #216:
-            [(self.consumer.partitions[pid], offset if offset != -1 else -2)
-             for pid, offset in part_offsets.items()])
-        message = self.consumer.consume()
+        consumer = self._get_consumer()
+        message = consumer.consume()
         self.assertEqual(message.value, payload)
 
     def test_async_produce_context(self):
@@ -118,7 +115,8 @@ class ProducerIntegrationTests(unittest2.TestCase):
         with self._get_producer(min_queued_messages=1) as producer:
             producer.produce(payload)
 
-        message = self.consumer.consume()
+        consumer = self._get_consumer()
+        message = consumer.consume()
         assert message.value == payload
 
     def test_async_produce_queue_full(self):
@@ -129,7 +127,8 @@ class ProducerIntegrationTests(unittest2.TestCase):
             with self.assertRaises(ProducerQueueFullError):
                 while True:
                     producer.produce(uuid4().bytes)
-        while self.consumer.consume() is not None:
+        consumer = self._get_consumer()
+        while consumer.consume() is not None:
             time.sleep(.05)
 
     def test_async_produce_lingers(self):
@@ -140,8 +139,9 @@ class ProducerIntegrationTests(unittest2.TestCase):
             producer.produce(uuid4().bytes)
             producer.produce(uuid4().bytes)
         self.assertTrue(int(time.time() - start) >= int(linger))
-        self.consumer.consume()
-        self.consumer.consume()
+        consumer = self._get_consumer()
+        consumer.consume()
+        consumer.consume()
 
     def test_async_produce_thread_exception(self):
         """Ensure that an exception on a worker thread is raised to the main thread"""
@@ -152,7 +152,8 @@ class ProducerIntegrationTests(unittest2.TestCase):
                 msg = Message("stuff", partition_id=0)
                 del msg.value
                 producer._produce(msg)
-        while self.consumer.consume() is not None:
+        consumer = self._get_consumer()
+        while consumer.consume() is not None:
             time.sleep(.05)
 
     def test_required_acks(self):
@@ -173,11 +174,12 @@ class ProducerIntegrationTests(unittest2.TestCase):
         """Test that None is accepted as a null payload"""
         prod = self._get_producer(sync=True, min_queued_messages=1)
         prod.produce(None)
-        self.assertIsNone(self.consumer.consume().value)
+        consumer = self._get_consumer()
+        self.assertIsNone(consumer.consume().value)
         prod.produce(None, partition_key=b"whatever")
-        self.assertIsNone(self.consumer.consume().value)
+        self.assertIsNone(consumer.consume().value)
         prod.produce(b"")  # empty string should be distinguished from None
-        self.assertEqual(b"", self.consumer.consume().value)
+        self.assertEqual(b"", consumer.consume().value)
 
     def test_owned_broker_flush_message_larger_then_max_request_size(self):
         """Test that producer batches messages into the batches no larger then
@@ -241,16 +243,17 @@ class ProducerIntegrationTests(unittest2.TestCase):
         large_payload = b''.join([uuid4().bytes for i in range(5)])
 
         prod = self._get_producer(
-                compression=CompressionType.SNAPPY,
-                delivery_reports=True
-                )
+            compression=CompressionType.SNAPPY,
+            delivery_reports=True
+        )
         prod.produce(large_payload)
 
         report = prod.get_delivery_report()
         self.assertEqual(report[0].value, large_payload)
         self.assertIsNone(report[1])
 
-        message = self.consumer.consume()
+        consumer = self._get_consumer()
+        message = consumer.consume()
         assert message.value == large_payload
 
         for i in range(10):
@@ -259,6 +262,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
         # use retry logic to loop over delivery reports and ensure we can
         # produce a group of large messages
         reports = []
+
         def ensure_all_messages_produced():
             report = prod.get_delivery_report()
             reports.append(report)
@@ -271,8 +275,9 @@ class ProducerIntegrationTests(unittest2.TestCase):
 
         # cleanup and consumer all messages
         msgs = []
+
         def ensure_all_messages_consumed():
-            msg = self.consumer.consume()
+            msg = consumer.consume()
             if msg:
                 msgs.append(msg)
             assert len(msgs) == 10
@@ -290,7 +295,8 @@ class ProducerIntegrationTests(unittest2.TestCase):
         self.assertEqual(report[0].value, large_payload)
         self.assertIsNone(report[1])
 
-        message = self.consumer.consume()
+        consumer = self._get_consumer()
+        message = consumer.consume()
         assert message.value == large_payload
 
         for i in range(10):
@@ -299,6 +305,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
         # use retry logic to loop over delivery reports and ensure we can
         # produce a group of large messages
         reports = []
+
         def ensure_all_messages_produced():
             report = prod.get_delivery_report()
             reports.append(report)
@@ -311,8 +318,9 @@ class ProducerIntegrationTests(unittest2.TestCase):
 
         # cleanup and consumer all messages
         msgs = []
+
         def ensure_all_messages_consumed():
-            msg = self.consumer.consume()
+            msg = consumer.consume()
             if msg:
                 msgs.append(msg)
             assert len(msgs) == 10
