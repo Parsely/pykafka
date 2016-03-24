@@ -48,10 +48,11 @@ class ProducerIntegrationTests(unittest2.TestCase):
         # produced in a previous test
         payload = uuid4().bytes
 
+        consumer = self._get_consumer()
+
         prod = self._get_producer(sync=True, min_queued_messages=1)
         prod.produce(payload)
 
-        consumer = self._get_consumer()
         message = consumer.consume()
         assert message.value == payload
 
@@ -66,6 +67,8 @@ class ProducerIntegrationTests(unittest2.TestCase):
         # produced in a previous test
         payload = uuid4().bytes
 
+        consumer = self._get_consumer()
+
         prod = self._get_producer(
             sync=True,
             min_queued_messages=1,
@@ -73,12 +76,13 @@ class ProducerIntegrationTests(unittest2.TestCase):
         prod.produce(payload, partition_key=b"dummy")
 
         # set a timeout so we don't wait forever if we break producer code
-        consumer = self._get_consumer()
         message = consumer.consume()
         assert message.value == payload
 
     def test_async_produce(self):
         payload = uuid4().bytes
+
+        consumer = self._get_consumer()
 
         prod = self._get_producer(min_queued_messages=1, delivery_reports=True)
         prod.produce(payload)
@@ -87,7 +91,6 @@ class ProducerIntegrationTests(unittest2.TestCase):
         self.assertEqual(report[0].value, payload)
         self.assertIsNone(report[1])
 
-        consumer = self._get_consumer()
         message = consumer.consume()
         assert message.value == payload
 
@@ -95,6 +98,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
         """Test our retry-loop with a recoverable error"""
         payload = uuid4().bytes
         prod = self._get_producer(min_queued_messages=1, delivery_reports=True)
+        consumer = self._get_consumer()
 
         for broker in self.client.brokers.values():
             broker._connection.disconnect()
@@ -103,7 +107,6 @@ class ProducerIntegrationTests(unittest2.TestCase):
         report = prod.get_delivery_report()
         self.assertIsNone(report[1])
 
-        consumer = self._get_consumer()
         message = consumer.consume()
         self.assertEqual(message.value, payload)
 
@@ -111,39 +114,40 @@ class ProducerIntegrationTests(unittest2.TestCase):
         """Ensure that the producer works as a context manager"""
         payload = uuid4().bytes
 
+        consumer = self._get_consumer()
         with self._get_producer(min_queued_messages=1) as producer:
             producer.produce(payload)
 
-        consumer = self._get_consumer()
         message = consumer.consume()
         assert message.value == payload
 
     def test_async_produce_queue_full(self):
         """Ensure that the producer raises an error when its queue is full"""
+        consumer = self._get_consumer()
         with self._get_producer(block_on_queue_full=False,
                                 max_queued_messages=1,
                                 linger_ms=1000) as producer:
             with self.assertRaises(ProducerQueueFullError):
                 while True:
                     producer.produce(uuid4().bytes)
-        consumer = self._get_consumer()
         while consumer.consume() is not None:
             time.sleep(.05)
 
     def test_async_produce_lingers(self):
         """Ensure that the context manager waits for linger_ms milliseconds"""
         linger = 3
+        consumer = self._get_consumer()
         with self._get_producer(linger_ms=linger * 1000) as producer:
             start = time.time()
             producer.produce(uuid4().bytes)
             producer.produce(uuid4().bytes)
         self.assertTrue(int(time.time() - start) >= int(linger))
-        consumer = self._get_consumer()
         consumer.consume()
         consumer.consume()
 
     def test_async_produce_thread_exception(self):
         """Ensure that an exception on a worker thread is raised to the main thread"""
+        consumer = self._get_consumer()
         with self.assertRaises(AttributeError):
             with self._get_producer(min_queued_messages=1) as producer:
                 # get some dummy data into the queue that will cause a crash
@@ -151,7 +155,6 @@ class ProducerIntegrationTests(unittest2.TestCase):
                 msg = Message("stuff", partition_id=0)
                 del msg.value
                 producer._produce(msg)
-        consumer = self._get_consumer()
         while consumer.consume() is not None:
             time.sleep(.05)
 
@@ -171,9 +174,9 @@ class ProducerIntegrationTests(unittest2.TestCase):
 
     def test_null_payloads(self):
         """Test that None is accepted as a null payload"""
+        consumer = self._get_consumer()
         prod = self._get_producer(sync=True, min_queued_messages=1)
         prod.produce(None)
-        consumer = self._get_consumer()
         self.assertIsNone(consumer.consume().value)
         prod.produce(None, partition_key=b"whatever")
         self.assertIsNone(consumer.consume().value)
@@ -240,6 +243,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
         # TODO: make payload size bigger once pypy snappy compression issue is
         # fixed
         large_payload = b''.join([uuid4().bytes for i in range(5)])
+        consumer = self._get_consumer()
 
         prod = self._get_producer(
             compression=CompressionType.SNAPPY,
@@ -251,7 +255,6 @@ class ProducerIntegrationTests(unittest2.TestCase):
         self.assertEqual(report[0].value, large_payload)
         self.assertIsNone(report[1])
 
-        consumer = self._get_consumer()
         message = consumer.consume()
         assert message.value == large_payload
 
@@ -284,6 +287,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
 
     def test_async_produce_large_message(self):
 
+        consumer = self._get_consumer()
         large_payload = b''.join([uuid4().bytes for i in range(50000)])
         assert len(large_payload) / 1024 / 1024 < 1.0
 
@@ -294,7 +298,6 @@ class ProducerIntegrationTests(unittest2.TestCase):
         self.assertEqual(report[0].value, large_payload)
         self.assertIsNone(report[1])
 
-        consumer = self._get_consumer()
         message = consumer.consume()
         assert message.value == large_payload
 
