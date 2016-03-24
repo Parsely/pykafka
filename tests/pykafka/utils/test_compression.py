@@ -1,4 +1,7 @@
+import platform
+import pytest
 import unittest2
+from uuid import uuid4
 
 from pykafka.utils import compression
 
@@ -27,6 +30,13 @@ class CompressionTests(unittest2.TestCase):
 
         decoded = compression.decode_snappy(encoded)
         self.assertEqual(self.text, decoded)
+
+    @pytest.mark.skipif(platform.python_implementation() == "PyPy",
+                        reason="PyPy fails to compress large messages with Snappy")
+    def test_snappy_large_payload(self):
+        payload = b''.join([uuid4().bytes for i in range(10)])
+        c = compression.encode_snappy(payload)
+        self.assertEqual(compression.decode_snappy(c), payload)
 
 
 if __name__ == '__main__':
