@@ -36,7 +36,7 @@ from .exceptions import (OffsetOutOfRangeError, UnknownTopicOrPartition,
                          ConsumerStoppedException, KafkaException,
                          NotLeaderForPartition, OffsetRequestFailedError,
                          RequestTimedOut, UnknownMemberId, RebalanceInProgress,
-                         ERROR_CODES)
+                         IllegalGeneration, ERROR_CODES)
 from .protocol import (PartitionFetchRequest, PartitionOffsetCommitRequest,
                        PartitionOffsetFetchRequest, PartitionOffsetRequest)
 from .utils.error_handlers import (handle_partition_responses, raise_error,
@@ -281,6 +281,9 @@ class SimpleConsumer(object):
         def _handle_GroupLoadInProgress(parts):
             log.info("Continuing in response to GroupLoadInProgress")
 
+        def _handle_IllegalGeneration(parts):
+            log.info("Continuing in response to IllegalGeneration")
+
         def _handle_UnknownMemberId(parts):
             log.info("Continuing in response to UnknownMemberId")
 
@@ -296,7 +299,8 @@ class SimpleConsumer(object):
             RequestTimedOut.ERROR_CODE: _handle_RequestTimedOut,
             GroupLoadInProgress.ERROR_CODE: _handle_GroupLoadInProgress,
             UnknownMemberId.ERROR_CODE: _handle_UnknownMemberId,
-            RebalanceInProgress.ERROR_CODE: _handle_RebalanceInProgress
+            RebalanceInProgress.ERROR_CODE: _handle_RebalanceInProgress,
+            IllegalGeneration.ERROR_CODE: _handle_IllegalGeneration
         }
 
     def _discover_group_coordinator(self):
