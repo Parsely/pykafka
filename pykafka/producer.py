@@ -589,7 +589,7 @@ class OwnedBroker(object):
                 if peeked_message and peeked_message.value is not None:
                     if len(peeked_message) > max_request_size:
                         exc = MessageSizeTooLarge(
-                            "Message size larger then max_request_size: {}".format(max_request_size)
+                            "Message size larger than max_request_size: {}".format(max_request_size)
                         )
                         log.warning(exc)
                         # bind the MessageSizeTooLarge error the delivery
