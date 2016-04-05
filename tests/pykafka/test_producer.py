@@ -184,7 +184,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
         self.assertEqual(b"", consumer.consume().value)
 
     def test_owned_broker_flush_message_larger_then_max_request_size(self):
-        """Test that producer batches messages into the batches no larger then
+        """Test that producer batches messages into the batches no larger than
         `max_request_size`
         """
         large_payload = b''.join([uuid4().bytes for i in range(50000)])
@@ -213,7 +213,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
         assert isinstance(exc, MessageSizeTooLarge)
 
     def test_owned_broker_flush_batching_by_max_request_size(self):
-        """Test that producer batches messages into the batches no larger then
+        """Test that producer batches messages into the batches no larger than
         `max_request_size`
         """
         large_payload = b''.join([uuid4().bytes for i in range(5000)])
