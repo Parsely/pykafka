@@ -1,6 +1,26 @@
 Changelog
 =========
 
+2.3.1 (2016-4-8)
+----------------
+
+`Compare 2.3.1`_
+
+.. _Compare 2.3.1: 
+
+Bug Fixes
+*********
+
+* Fixed a `NoneType` crash in `Producer` when rejecting larger messages
+* Stopped `Producer` integration tests from sharing a `Consumer` instance to make test
+  runs more consistent
+
+Miscellaneous
+*************
+
+* Added warning about using Snappy compression under PyPy
+* Clarified language around "most recent offset available"
+
 2.3.0 (2016-3-22)
 -----------------
 
