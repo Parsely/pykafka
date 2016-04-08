@@ -595,7 +595,7 @@ class OwnedBroker(object):
                         # bind the MessageSizeTooLarge error the delivery
                         # report and remove it from the producer queue
                         message = self.queue.pop()
-                        self._delivery_reports.put(peeked_message, exc=exc)
+                        self._delivery_reports.put(message, exc=exc)
                         # remove from pending message count
                         self.increment_messages_pending(-1)
                         continue
