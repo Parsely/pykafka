@@ -6,7 +6,7 @@ Changelog
 
 `Compare 2.3.1`_
 
-.. _Compare 2.3.1: 
+.. _Compare 2.3.1: https://github.com/parsely/pykafka/compare/2.3.0...4fb854cc5a7cba11ea58329a4a336edc38a5a3bd
 
 Bug Fixes
 *********
