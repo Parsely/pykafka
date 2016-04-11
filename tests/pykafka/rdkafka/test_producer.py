@@ -12,7 +12,7 @@ except ImportError:
 @pytest.mark.skipif(platform.python_implementation() == "PyPy",
                     reason="We pass PyObject pointers as msg_opaques for "
                            "delivery callbacks, which is unsafe on PyPy.")
-@pytest.mark.skipif(not RDKAFKA, reason="C extension for librdkafka not built.")                         
+@pytest.mark.skipif(not RDKAFKA, reason="C extension for librdkafka not built.")
 class TestRdKafkaProducer(test_producer.ProducerIntegrationTests):
     USE_RDKAFKA = True
 

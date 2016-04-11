@@ -72,10 +72,6 @@ class ve_build_ext(build_ext):
         def __init__(self):
             self.cause = sys.exc_info()[1]  # work around py 2/3 different syntax
 
-    class UnsupportedPlatform(Exception):
-        def __init__(self, python_implementation):
-            super(ve_build_ext.UnsupportedPlatform, self).__init__("librdkafka is not supported under %s" % python_implementation)
-
     def run(self):
         try:
             build_ext.run(self)
@@ -175,19 +171,18 @@ def run_setup(with_rdkafka=True):
 
 try:
     if not is_cpython:
-        raise ve_build_ext.UnsupportedPlatform(python_implementation)
-    run_setup()
+        print("librdkafka is not supported under %s" % python_implementation)
+        print(15 * "-")
+        print("INFO: Failed to build rdkafka extension:")
+        print("INFO: will now attempt setup without extension.")
+        print(15 * "-")
+        run_setup(with_rdkafka=False)
+    else:
+        run_setup()
 except ve_build_ext.BuildFailed as exc:
     print(15 * "-")
     print("INFO: Failed to build rdkafka extension:")
     print(exc.cause)
-    print("INFO: will now attempt setup without extension.")
-    print(15 * "-")
-    run_setup(with_rdkafka=False)
-except ve_build_ext.UnsupportedPlatform as exc:
-    print(15 * "-")
-    print("INFO: Failed to build rdkafka extension:")
-    print(exc)
     print("INFO: will now attempt setup without extension.")
     print(15 * "-")
     run_setup(with_rdkafka=False)
