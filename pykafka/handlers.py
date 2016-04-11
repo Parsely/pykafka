@@ -26,6 +26,7 @@ import gevent.queue
 import gevent.socket as gsocket
 import logging
 import socket as pysocket
+import sys
 import threading
 import time
 
@@ -185,25 +186,32 @@ class RequestHandler(object):
         shared = self.shared
 
         def worker():
-            while not shared.ending.is_set():
-                try:
-                    # set a timeout so we check `ending` every so often
-                    task = shared.requests.get(timeout=1)
-                except Empty:
-                    continue
-                except TypeError:  # can happen on interpreter shutdown
-                    break
-                try:
-                    shared.connection.request(task.request)
-                    if task.future:
-                        res = shared.connection.response()
-                        task.future.set_response(res)
-                except Exception as e:
-                    if task.future:
-                        task.future.set_error(e)
-                finally:
-                    shared.requests.task_done()
-            log.info("RequestHandler worker: exiting cleanly")
+            try:
+                while not shared.ending.is_set():
+                    try:
+                        # set a timeout so we check `ending` every so often
+                        task = shared.requests.get(timeout=1)
+                    except Empty:
+                        continue
+                    try:
+                        shared.connection.request(task.request)
+                        if task.future:
+                            res = shared.connection.response()
+                            task.future.set_response(res)
+                    except Exception as e:
+                        if task.future:
+                            task.future.set_error(e)
+                    finally:
+                        shared.requests.task_done()
+                log.info("RequestHandler worker: exiting cleanly")
+            except:
+                # deal with interpreter shutdown in the same way that
+                # python 3.x's threading module does, swallowing any
+                # errors raised when core modules such as sys have
+                # already been destroyed
+                if sys is None:
+                    return
+                raise
 
         name = "pykafka.RequestHandler.worker for {}:{}".format(
             self.shared.connection.host, self.shared.connection.port)
