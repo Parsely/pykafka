@@ -26,7 +26,7 @@ import gevent.queue
 import gevent.socket as gsocket
 import logging
 import socket as pysocket
-import sys
+import sys as _sys
 import threading
 import time
 
@@ -209,7 +209,7 @@ class RequestHandler(object):
                 # python 3.x's threading module does, swallowing any
                 # errors raised when core modules such as sys have
                 # already been destroyed
-                if sys is None:
+                if _sys is None:
                     return
                 raise
 
