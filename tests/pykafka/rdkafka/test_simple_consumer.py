@@ -75,15 +75,7 @@ def _latest_partition_offsets_by_reading(consumer, n_reads):
     return latest_offs
 
 
-<<<<<<< 3412915766d71383acffb401b830df4ebd12183f
 @patch_subclass(test_balancedconsumer.BalancedConsumerIntegrationTests,
                 platform.python_implementation() == "PyPy")
 class RdkBalancedConsumerIntegrationTests(unittest2.TestCase):
-=======
-@pytest.mark.skipif(platform.python_implementation() == "PyPy",
-                    reason="Unresolved crashes")
-@pytest.mark.skipif(not RDKAFKA, reason="C extension for librdkafka not built.")
-class RdkBalancedConsumerIntegrationTests(
-        test_balancedconsumer.BalancedConsumerIntegrationTests):
->>>>>>> Skip rdkafka tests if running under PyPy or if the extension is not installed.
     USE_RDKAFKA = True
