@@ -1,8 +1,73 @@
 Changelog
 =========
 
-2.2.1 (2016-2-19)
+2.3.1 (2016-4-8)
 ----------------
+
+`Compare 2.3.1`_
+
+.. _Compare 2.3.1: https://github.com/parsely/pykafka/compare/2.3.0...4fb854cc5a7cba11ea58329a4a336edc38a5a3bd
+
+Bug Fixes
+*********
+
+* Fixed a `NoneType` crash in `Producer` when rejecting larger messages
+* Stopped `Producer` integration tests from sharing a `Consumer` instance to make test
+  runs more consistent
+
+Miscellaneous
+*************
+
+* Added warning about using Snappy compression under PyPy
+* Clarified language around "most recent offset available"
+
+2.3.0 (2016-3-22)
+-----------------
+
+`Compare 2.3.0`_
+
+.. _Compare 2.3.0: https://github.com/Parsely/pykafka/compare/2.2.1...7855fa2beeb08c0f35a343d4f9ba09c725cdd32f
+
+Minor Version Features
+**********************
+
+* Added the `ManagedBalancedConsumer` class, which performs balanced consumption
+  using the Kafka 0.9 Group Membership API
+* Added the `managed` keyword argument to `Topic.get_balanced_consumer` to access
+  `ManagedBalancedConsumer`
+* Added a `compacted_topic` kwarg to `BalancedConsumer` to make it smarter about
+  offset ordering for compacted topics
+* Added methods to `Broker` that use the Group Membership API
+* Changed the terminology "offset manager" to "group coordinator" to match updated
+  Kafka jargon
+* Added new exception types from Kafka 0.9
+* Added `auto_start` keyword argument to `Producer` to match the consumer interface
+* Added `max_request_size` keyword argument to `Producer` to catch large messages
+  before they're sent to Kafka
+* Added protocol functions for the Group Membership API
+* New `SimpleConsumer` keyword arguments: `compacted_topic`, `generation_id`,
+  `consumer_id`
+
+Bug Fixes
+*********
+
+* Fixed a bug in Travis config causing tests not to run against Kafka 0.9
+* Upgraded to non-beta gevent version
+* Allowed a single `Broker` instance to maintain multiple connections to a broker
+  (useful when multiple consumers are sharing the same `KafkaClient`)
+* Allowed switchable socket implementations when using gevent
+* Handled `TypeError` during worker thread shutdown to avoid nuisance messages
+* Limited `Producer.min_queued_messages` to 1 when `sync=True`
+* Monkeypatched a bug in py.test causing tests to be erroneously skipped
+
+Miscellaneous
+*************
+
+* Added an issue template
+
+
+2.2.1 (2016-2-19)
+-----------------
 
 `Compare 2.2.1`_
 

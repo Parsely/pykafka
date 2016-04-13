@@ -91,6 +91,7 @@ class BrokerConnection(object):
     def __init__(self,
                  host,
                  port,
+                 handler,
                  buffer_size=1024 * 1024,
                  source_host='',
                  source_port=0,
@@ -102,6 +103,9 @@ class BrokerConnection(object):
         :param port: The port on the host to which to connect.  Assumed to be
             an ssl-endpoint if (and only if) `ssl_config` is also provided
         :type port: int
+        :param handler: The :class:`pykafka.handlers.Handler` instance to use when
+            creating a connection
+        :type handler: :class:`pykafka.handlers.Handler`
         :param buffer_size: The size (in bytes) of the buffer in which to
             hold response data.
         :type buffer_size: int
@@ -117,6 +121,7 @@ class BrokerConnection(object):
         self._buff = bytearray(buffer_size)
         self.host = host
         self.port = port
+        self._handler = handler
         self._socket = None
         self.source_host = source_host
         self.source_port = source_port
@@ -135,10 +140,11 @@ class BrokerConnection(object):
     def connect(self, timeout):
         """Connect to the broker."""
         log.debug("Connecting to %s:%s", self.host, self.port)
-        self._socket = self._wrap_socket(socket.create_connection(
-            (self.host, self.port),
-            timeout / 1000,
-            (self.source_host, self.source_port)
+        self._socket = self._wrap_socket(
+            self._handler.Socket.create_connection(
+                (self.host, self.port),
+                timeout / 1000,
+                (self.source_host, self.source_port)
         ))
         if self._socket is not None:
             log.debug("Successfully connected to %s:%s", self.host, self.port)

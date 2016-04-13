@@ -114,7 +114,7 @@ class Partition(object):
                 return limit
 
     def latest_available_offset(self):
-        """Get the latest offset for this partition."""
+        """Get the offset of the next message that would be appended to this partition"""
         return self.fetch_offset_limit(OffsetType.LATEST)[0]
 
     def earliest_available_offset(self):

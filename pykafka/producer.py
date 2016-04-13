@@ -20,6 +20,7 @@ limitations under the License.
 __all__ = ["Producer"]
 from collections import deque
 import logging
+import platform
 import sys
 import threading
 import traceback
@@ -39,7 +40,7 @@ from .exceptions import (
 )
 from .partitioners import random_partitioner
 from .protocol import Message, ProduceRequest
-from .utils.compat import iteritems, range, itervalues, Empty
+from .utils.compat import iteritems, itervalues, Empty
 
 log = logging.getLogger(__name__)
 
@@ -66,8 +67,10 @@ class Producer(object):
                  min_queued_messages=70000,
                  linger_ms=5 * 1000,
                  block_on_queue_full=True,
+                 max_request_size=1000012,
                  sync=False,
-                 delivery_reports=False):
+                 delivery_reports=False,
+                 auto_start=True):
         """Instantiate a new AsyncProducer
 
         :param cluster: The cluster to which to connect
@@ -103,7 +106,10 @@ class Producer(object):
         :type max_queued_messages: int
         :param min_queued_messages: The minimum number of messages the producer
             can have waiting in a queue before it flushes that queue to its
-            broker (must be greater than 0).
+            broker (must be greater than 0). This paramater can be used to
+            control the number of messages sent in one batch during async
+            production. This parameter is automatically overridden to 1
+            when `sync=True`.
         :type min_queued_messages: int
         :param linger_ms: This setting gives the upper bound on the delay for
             batching: once the producer gets min_queued_messages worth of
@@ -119,6 +125,13 @@ class Producer(object):
             indicates we should block until space is available in the queue.
             If False, we should throw an error immediately.
         :type block_on_queue_full: bool
+        :param max_request_size:
+            The maximum size of a request in bytes. This is also effectively a
+            cap on the maximum record size. Note that the server has its own
+            cap on record size which may be different from this. This setting
+            will limit the number of record batches the producer will send in a
+            single request to avoid sending huge requests.
+        :type max_request_size: int
         :param sync: Whether calls to `produce` should wait for the message to
             send before returning.  If `True`, an exception will be raised from
             `produce()` if delivery to kafka failed.
@@ -131,19 +144,28 @@ class Producer(object):
             or an `Exception` in case of failed delivery to kafka.
             This setting is ignored when `sync=True`.
         :type delivery_reports: bool
+        :param auto_start: Whether the producer should begin communicating
+            with kafka after __init__ is complete. If false, communication
+            can be started with `start()`.
+        :type auto_start: bool
         """
         self._cluster = cluster
         self._topic = topic
         self._partitioner = partitioner
         self._compression = compression
+        if self._compression == CompressionType.SNAPPY and \
+                platform.python_implementation == "PyPy":
+            log.warning("Caution: python-snappy segfaults when attempting to compress "
+                        "large messages under PyPy")
         self._max_retries = max_retries
         self._retry_backoff_ms = retry_backoff_ms
         self._required_acks = required_acks
         self._ack_timeout_ms = ack_timeout_ms
         self._max_queued_messages = max_queued_messages
-        self._min_queued_messages = max(1, min_queued_messages)
+        self._min_queued_messages = max(1, min_queued_messages if not sync else 1)
         self._linger_ms = linger_ms
         self._block_on_queue_full = block_on_queue_full
+        self._max_request_size = max_request_size
         self._synchronous = sync
         self._worker_exception = None
         self._worker_trace_logged = False
@@ -151,9 +173,11 @@ class Producer(object):
         self._delivery_reports = (_DeliveryReportQueue(self._cluster.handler)
                                   if delivery_reports or self._synchronous
                                   else _DeliveryReportNone())
+        self._auto_start = auto_start
         self._running = False
         self._update_lock = self._cluster.handler.Lock()
-        self.start()
+        if self._auto_start:
+            self.start()
 
     def __del__(self):
         log.debug("Finalising {}".format(self))
@@ -222,9 +246,15 @@ class Producer(object):
             for broker in brokers:
                 owned_broker = self._owned_brokers.pop(broker)
                 owned_broker.stop()
-                batch = owned_broker.flush(self._linger_ms)
-                if batch:
+
+                # loop becuase flush is not garentee to empty owned
+                # broker queue
+                while True:
+                    batch = owned_broker.flush(self._linger_ms, self._max_request_size)
+                    if not batch:
+                        break
                     queued_messages.extend(batch)
+
         self._owned_brokers = {}
         for partition in self._topic.partitions.values():
             if partition.leader.id not in self._owned_brokers:
@@ -299,12 +329,11 @@ class Producer(object):
                     reported_msg, exc = self.get_delivery_report(timeout=1)
                     break
                 except Empty:
-                    self._raise_worker_exceptions()
                     continue
             assert reported_msg is msg
             if exc is not None:
                 raise exc
-            self._cluster.handler.sleep()
+        self._raise_worker_exceptions()
 
     def get_delivery_report(self, block=True, timeout=None):
         """Fetch delivery reports for messages produced on the current thread
@@ -431,7 +460,7 @@ class Producer(object):
                 for msg in mset.messages:
                     if (non_recoverable or msg.produce_attempt >= self._max_retries):
                         self._delivery_reports.put(msg, exc)
-                        log.info("Message not delivered!! %r" % exc)
+                        log.error("Message not delivered!! %r" % exc)
                     else:
                         msg.produce_attempt += 1
                         self._produce(msg)
@@ -469,8 +498,12 @@ class OwnedBroker(object):
     :type messages_pending: int
     :ivar producer: The producer to which this OwnedBroker instance belongs
     :type producer: :class:`pykafka.producer.AsyncProducer`
+    :param auto_start: Whether the OwnedBroker should start flushing all
+        waiting messages and send to kafka after __init__ is complete. If
+        false, communication can be started with `start()`.
+    :type auto_start: bool
     """
-    def __init__(self, producer, broker):
+    def __init__(self, producer, broker, auto_start=True):
         self.producer = weakref.proxy(producer)
         self.broker = broker
         self.lock = self.producer._cluster.handler.RLock()
@@ -479,11 +512,16 @@ class OwnedBroker(object):
         self.queue = deque()
         self.messages_pending = 0
         self.running = True
+        self._auto_start = auto_start
 
+        if self._auto_start:
+            self.start()
+
+    def start(self):
         def queue_reader():
             while self.running:
                 try:
-                    batch = self.flush(self.producer._linger_ms)
+                    batch = self.flush(self.producer._linger_ms, self.producer._max_request_size)
                     if batch:
                         self.producer._send_request(batch, self)
                 except Exception:
@@ -492,7 +530,7 @@ class OwnedBroker(object):
                     break
             log.info("Worker exited for broker %s:%s", self.broker.host,
                      self.broker.port)
-        log.info("Starting new produce worker for broker %s", broker.id)
+        log.info("Starting new produce worker for broker %s", self.broker.id)
         name = "pykafka.OwnedBroker.queue_reader for broker {}".format(self.broker.id)
         self._queue_reader_worker = self.producer._cluster.handler.spawn(
             queue_reader, name=name)
@@ -526,12 +564,15 @@ class OwnedBroker(object):
                 if not self.flush_ready.is_set():
                     self.flush_ready.set()
 
-    def flush(self, linger_ms, release_pending=False):
+    def flush(self, linger_ms, max_request_size, release_pending=False):
         """Pop messages from the end of the queue
 
         :param linger_ms: How long (in milliseconds) to wait for the queue
             to contain messages before flushing
         :type linger_ms: int
+        :param max_request_size: The max size should each batch of messages
+            should be in bytes
+        :type max_request_size: int
         :param release_pending: Whether to decrement the messages_pending
             counter when the queue is flushed. True means that the messages
             popped from the queue will be discarded unless re-enqueued
@@ -540,7 +581,42 @@ class OwnedBroker(object):
         """
         self._wait_for_flush_ready(linger_ms)
         with self.lock:
-            batch = [self.queue.pop() for _ in range(len(self.queue))]
+            batch = []
+            batch_size_in_bytes = 0
+            while len(self.queue) > 0:
+                peeked_message = self.queue[-1]
+
+                if peeked_message and peeked_message.value is not None:
+                    if len(peeked_message) > max_request_size:
+                        exc = MessageSizeTooLarge(
+                            "Message size larger than max_request_size: {}".format(max_request_size)
+                        )
+                        log.warning(exc)
+                        # bind the MessageSizeTooLarge error the delivery
+                        # report and remove it from the producer queue
+                        message = self.queue.pop()
+                        # don't use producer.delivery_report_q here to enable
+                        # integration tests that test the OwnedBroker without a
+                        # Producer
+                        if peeked_message.delivery_report_q is not None:
+                            peeked_message.delivery_report_q.put((message, exc))
+                        # remove from pending message count
+                        self.increment_messages_pending(-1)
+                        continue
+
+                    # test if adding the message would go over the
+                    # max_request_size. if it would, break out of loop
+                    elif batch_size_in_bytes + len(peeked_message) > max_request_size:
+                        log.debug("max_request_size reached. producing batch")
+                        # if we did not fully empty the queue. reset the
+                        # flush_ready so we send another batch immediately
+                        self.flush_ready.set()
+                        break
+
+                message = self.queue.pop()
+                batch_size_in_bytes += len(message)
+                batch.append(message)
+
             if release_pending:
                 self.increment_messages_pending(-1 * len(batch))
             if not self.slot_available.is_set():
