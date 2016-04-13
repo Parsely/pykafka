@@ -19,6 +19,7 @@ limitations under the License.
 """
 __all__ = ["BrokerConnection"]
 import logging
+import ssl
 import socket
 import struct
 
@@ -27,6 +28,58 @@ from .utils.socket import recvall_into
 from .utils.compat import buffer
 
 log = logging.getLogger(__name__)
+
+
+class SslConfig(object):
+    """Config object for SSL connections
+
+    Supplanting this class with your own is simple: if you are not going to
+    be using the `pykafka.rdkafka` classes, only a method `wrap_socket()` is
+    expected (so you can eg. simply pass in a plain `ssl.SSLContext`
+    instance instead).  The `pykafka.rdkafka` classes require four further
+    attributes: `cafile`, `certfile`, `keyfile`, and `password` (for details,
+    see init docstring)
+    """
+    def __init__(self,
+                 cafile,
+                 certfile=None,
+                 keyfile=None,
+                 password=None):
+        """Specify certificates for SSL connection
+
+        :param cafile: Path to trusted CA certificate
+        :type cafile: str
+        :param certfile: Path to client certificate
+        :type certfile: str
+        :param keyfile: Path to client private-key file
+        :type keyfile: str
+        :param password: Password for private key
+        :type password: bytes
+        """
+        self.cafile = cafile
+        self.certfile = certfile
+        self.keyfile = keyfile
+        self.password = password
+        self._wrap_socket = None
+
+    def wrap_socket(self, sock):
+        """Wrap a socket in an SSL context (see `ssl.wrap_socket`)
+
+        :param socket: Plain socket
+        :type socket: :class:`socket.socket`
+        """
+        if self._wrap_socket is None:
+            if hasattr(ssl, 'SSLContext'):
+                ssl_context = ssl.create_default_context(cafile=self.cafile)
+                ssl_context.check_hostname = False
+                if self.certfile is not None:
+                    ssl_context.load_cert_chain(certfile=self.certfile,
+                                                keyfile=self.keyfile,
+                                                password=self.password)
+                self._wrap_socket = ssl_context.wrap_socket
+            else:  # Python version pre-2.7.9
+                raise NotImplementedError("TODO")
+        return self._wrap_socket(sock)
 
 
 class BrokerConnection(object):
@@ -41,12 +94,13 @@ class BrokerConnection(object):
                  buffer_size=1024 * 1024,
                  source_host='',
                  source_port=0,
-                 ssl_wrap_socket=None):
+                 ssl_config=None):
         """Initialize a socket connection to Kafka.
 
         :param host: The host to which to connect
         :type host: str
-        :param port: The port on the host to which to connect
+        :param port: The port on the host to which to connect.  Assumed to be
+            an ssl-endpoint if (and only if) `ssl_config` is also provided
         :type port: int
         :param buffer_size: The size (in bytes) of the buffer in which to
             hold response data.
@@ -57,11 +111,8 @@ class BrokerConnection(object):
         :param source_port: The port portion of the source address for
             the socket connection
         :type source_port: int
-        :param ssl_wrap_socket: Function such as `ssl.SSLContext.wrap_socket()`
-            or `ssl.wrap_socket()`.  It will be invoked with its `socket`
-            argument only; use `functools.partial` to bind other arguments.
-            Note that if this is not `None`, `host/port` is expected to be an
-            ssl-enabled rather than a plaintext endpoint
+        :param ssl_config: Config object for SSL connection
+        :type ssl_config: :class:`pykafka.connection.SslConfig`
         """
         self._buff = bytearray(buffer_size)
         self.host = host
@@ -69,7 +120,8 @@ class BrokerConnection(object):
         self._socket = None
         self.source_host = source_host
         self.source_port = source_port
-        self._wrap_socket = ssl_wrap_socket or (lambda x: x)
+        self._wrap_socket = (
+            ssl_config.wrap_socket if ssl_config else lambda x: x)
 
     def __del__(self):
         """Close this connection when the object is deleted."""

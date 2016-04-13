@@ -4,6 +4,7 @@ from .cluster import Cluster
 from .partition import Partition
 from .producer import Producer
 from .topic import Topic
+from .connection import SslConfig
 from .client import KafkaClient
 from .balancedconsumer import BalancedConsumer
 
@@ -11,4 +12,4 @@ __version__ = '2.2.2-dev'
 
 
 __all__ = ["Broker", "SimpleConsumer", "Cluster", "Partition", "Producer",
-           "Topic", "KafkaClient", "BalancedConsumer"]
+           "Topic", "SslConfig", "KafkaClient", "BalancedConsumer"]
