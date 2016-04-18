@@ -22,6 +22,11 @@ Set up the project for development and run the tests:
 Now any changes made in the ``pykafka/`` folder will immediately be reflected in the
 pykafka in your environment.
 
+Check the issues list for the `"help wanted"`_ tag if you're interested in finding a place
+to contribute.
+
+.. _"help wanted": https://github.com/Parsely/pykafka/issues?q=is%3Aopen+is%3Aissue+label%3A%22help+wanted%22
+
 Testing
 -------
 

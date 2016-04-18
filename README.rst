@@ -192,6 +192,15 @@ These are two different projects.
 See `the discussion here <https://github.com/Parsely/pykafka/issues/334>`_ for comparisons
 between the two projects.
 
+Contributing
+------------
+
+If you're interested in contributing code to PyKafka, a good place to start is the
+`"help wanted"`_ issue tag. We also recommend taking a look at the `contribution guide`_.
+
+.. _"help wanted": https://github.com/Parsely/pykafka/issues?q=is%3Aopen+is%3Aissue+label%3A%22help+wanted%22
+.. _contribution guide: https://github.com/Parsely/pykafka/blob/master/CONTRIBUTING.rst
+
 Support
 -------
 
