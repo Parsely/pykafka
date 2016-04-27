@@ -153,6 +153,7 @@ class KafkaInstance(ManagedInstance):
         self._processes = []
         self.zookeeper = None
         self.brokers = None
+        self.brokers_ssl = None
         self.certs = None
         # TODO: Need a better name so multiple can run at once.
         #       other ManagedInstances use things like 'name-port'
@@ -506,6 +507,8 @@ if __name__ == '__main__':
                         help='Kafka version to download')
     parser.add_argument('--scala-version', type=str, default='2.11',
                         help='Scala version for kafka build')
+    parser.add_argument('--export-hosts', type=str,
+                        help='Write host strings to given file path')
     args = parser.parse_args()
 
     _exiting = False
@@ -523,6 +526,14 @@ if __name__ == '__main__':
     print('Brokers: {brokers}'.format(brokers=cluster.brokers))
     print('Zookeeper: {zk}'.format(zk=cluster.zookeeper))
     print('Waiting for SIGINT to exit.')
+
+    if args.export_hosts is not None:
+        with open(args.export_hosts, 'w') as f:
+            f.write('BROKERS={}\n'.format(cluster.brokers))
+            if cluster.brokers_ssl is not None:
+                f.write('BROKERS_SSL={}\n'.format(cluster.brokers_ssl))
+            f.write('ZOOKEEPER={}\n'.format(cluster.zookeeper))
+
     while True:
         if _exiting:
             print('Exiting.')

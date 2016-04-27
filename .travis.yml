@@ -12,8 +12,6 @@ python:
 env:
   global:
       - PATH="/usr/lib/ccache:$PATH"
-      - BROKERS=localhost:9092,localhost:9093,localhost:9094
-      - ZOOKEEPER=localhost:2181
       - KAFKA_BIN="$HOME/kafka-bin"
   matrix:
       - KAFKA_VERSION=0.8.2.2
@@ -58,8 +56,12 @@ before_script:
     - export LIBRARY_PATH=$HOME/lib:$LIBRARY_PATH
     - export LD_LIBRARY_PATH=$HOME/lib:$LD_LIBRARY_PATH
     - export CFLAGS="-coverage"
-    - "python -m pykafka.test.kafka_instance 3 --kafka-version $KAFKA_VERSION --download-dir $KAFKA_BIN &"
-    - "sleep 10"
+    - TEMPFILE=`tempfile`
+    - python -m pykafka.test.kafka_instance 3 --kafka-version $KAFKA_VERSION --download-dir $KAFKA_BIN --export-hosts $TEMPFILE &
+    - while true; do sleep 1; echo "Waiting for cluster..."; if [[ `grep ZOOKEEPER $TEMPFILE` ]]; then break; fi; done
+    - export `grep BROKERS $TEMPFILE`
+    - export `grep BROKERS_SSL $TEMPFILE`
+    - export `grep ZOOKEEPER $TEMPFILE`
 
 script:
     - tox
