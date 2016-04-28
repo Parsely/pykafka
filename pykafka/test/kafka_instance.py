@@ -77,16 +77,20 @@ class KafkaConnection(object):
     Provides handy access to the shell scripts Kafka is bundled with.
     """
 
-    def __init__(self, bin_dir, brokers, zookeeper):
+    def __init__(self, bin_dir, brokers, zookeeper, brokers_ssl=None):
         """Create a connection to the cluster.
 
         :param bin_dir:   Location of downloaded kafka bin
         :param brokers:   Comma-separated list of brokers
         :param zookeeper: Connection straing for ZK
+        :param brokers_ssl: Comma-separated list of hosts with ssl-ports
         """
         self._bin_dir = bin_dir
         self.brokers = brokers
         self.zookeeper = zookeeper
+
+        self.brokers_ssl = brokers_ssl
+        self.certs = CertManager(bin_dir) if brokers_ssl is not None else None
 
     def _run_topics_sh(self, args):
         """Run kafka-topics.sh with the provided list of arguments."""
@@ -154,11 +158,12 @@ class KafkaInstance(ManagedInstance):
         self.zookeeper = None
         self.brokers = None
         self.brokers_ssl = None
-        self.certs = None
+        self.certs = self._gen_ssl_certs()
         # TODO: Need a better name so multiple can run at once.
         #       other ManagedInstances use things like 'name-port'
         ManagedInstance.__init__(self, name, use_gevent=use_gevent)
-        self.connection = KafkaConnection(bin_dir, self.brokers, self.zookeeper)
+        self.connection = KafkaConnection(
+            bin_dir, self.brokers, self.zookeeper, self.brokers_ssl)
 
     def _init_dirs(self):
         """Set up directories in the temp folder."""
@@ -223,6 +228,17 @@ class KafkaInstance(ManagedInstance):
                 yield port
             port += 1
 
+    def _gen_ssl_certs(self):
+        """Attempt generating ssl certificates for testing
+
+        :returns: :class:`CertManager` or None upon failure
+        """
+        if self._kafka_version >= "0.9":  # no SSL support in earlier versions
+            try:
+                return CertManager(self._bin_dir)
+            except:  # eg. because openssl or other tools not installed
+                log.exception("Couldn't generate ssl certs:")
+
     def _start_process(self):
         """Start the instance processes"""
         self._init_dirs()
@@ -276,11 +292,7 @@ class KafkaInstance(ManagedInstance):
             used_ports.append(port)
             log.info('Starting Kafka on port %i.', port)
 
-            if self._kafka_version >= "0.9":
-                if self.certs is None:
-                    # TODO continue gracefully if openssl or other tools are
-                    # not available
-                    self.certs = CertManager(self._bin_dir)
+            if self.certs is not None:
                 ssl_port = next(ports)
                 used_ssl_ports.append(ssl_port)
                 port_config = _kafka_ssl_properties.format(
