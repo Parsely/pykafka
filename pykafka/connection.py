@@ -18,6 +18,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 __all__ = ["BrokerConnection"]
+from functools import partial
 import logging
 import ssl
 import socket
@@ -33,12 +34,21 @@ log = logging.getLogger(__name__)
 class SslConfig(object):
     """Config object for SSL connections
 
-    Supplanting this class with your own is simple: if you are not going to
-    be using the `pykafka.rdkafka` classes, only a method `wrap_socket()` is
-    expected (so you can eg. simply pass in a plain `ssl.SSLContext`
-    instance instead).  The `pykafka.rdkafka` classes require four further
-    attributes: `cafile`, `certfile`, `keyfile`, and `password` (for details,
-    see init docstring)
+    This aims to pick optimal defaults for the majority of use cases.  If you
+    have special requirements (eg. you want to enable hostname checking), you
+    may monkey-patch `self._wrap_socket` (see `_legacy_wrap_socket()` for an
+    example) before passing the `SslConfig` to `KafkaClient` init, like so:
+
+        config = SslConfig(cafile='/your/ca/file')
+        config._wrap_socket = config._legacy_wrap_socket()
+        client = KafkaClient('localhost:<ssl-port>', ssl_config=config)
+
+    Alternatively, completely supplanting this class with your own is also
+    simple: if you are not going to be using the `pykafka.rdkafka` classes,
+    only a method `wrap_socket()` is expected (so you can eg. simply pass in
+    a plain `ssl.SSLContext` instance instead).  The `pykafka.rdkafka`
+    classes require four further attributes: `cafile`, `certfile`, `keyfile`,
+    and `password` (for details, see init docstring)
     """
     def __init__(self,
                  cafile,
@@ -77,9 +87,19 @@ class SslConfig(object):
                                                 keyfile=self.keyfile,
                                                 password=self.password)
                 self._wrap_socket = ssl_context.wrap_socket
-            else:  # Python version pre-2.7.9
-                raise NotImplementedError("TODO")
+            else:
+                self._wrap_socket = self._legacy_wrap_socket()
         return self._wrap_socket(sock)
+
+    def _legacy_wrap_socket(self):
+        """Create socket-wrapper on a pre-2.7.9 Python interpreter"""
+        return partial(ssl.wrap_socket,
+                       keyfile=self.keyfile,
+                       certfile=self.certfile,
+                       cert_reqs=ssl.CERT_REQUIRED,
+                       # protocol-wise, best we can do pre-2.7.9:
+                       ssl_version=ssl.PROTOCOL_TLSv1,
+                       ca_certs=self.cafile)
 
 
 class BrokerConnection(object):

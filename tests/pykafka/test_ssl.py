@@ -55,3 +55,10 @@ class SslIntegrationTests(unittest.TestCase):
                            password=certs.client_pass)
         client = KafkaClient(self.kafka.brokers_ssl, ssl_config=config)
         self.roundtrip_test(client)
+
+    def test_legacy_wrap_socket(self):
+        """Test socket-wrapping without SSLContext"""
+        config = SslConfig(cafile=self.kafka.certs.root_cert)
+        config._wrap_socket = config._legacy_wrap_socket()
+        client = KafkaClient(self.kafka.brokers_ssl, ssl_config=config)
+        self.roundtrip_test(client)
