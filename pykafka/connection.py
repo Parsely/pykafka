@@ -93,6 +93,8 @@ class SslConfig(object):
 
     def _legacy_wrap_socket(self):
         """Create socket-wrapper on a pre-2.7.9 Python interpreter"""
+        log.warning("SSL: using legacy fallback, which may use sub-optimal "
+                    "defaults. Check that this satisfies your needs.")
         return partial(ssl.wrap_socket,
                        keyfile=self.keyfile,
                        certfile=self.certfile,
