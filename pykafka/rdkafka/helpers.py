@@ -5,7 +5,7 @@ def rdk_ssl_config(cluster):
     else:
         # We obtain the ciphers used by the existing BrokerConnections, so the
         # security level for our rdkafka connections is never lower than that
-        ciphers = get_ciphers_from_sockets(cluster.brokers)
+        ciphers = _get_ciphers_from_sockets(cluster.brokers)
         assert ciphers
 
         conf = cluster._ssl_config
@@ -20,7 +20,7 @@ def rdk_ssl_config(cluster):
         return {k: v for k, v in rdk_conf.items() if v is not None}
 
 
-def get_ciphers_from_sockets(brokers):
+def _get_ciphers_from_sockets(brokers):
     """Obtain ciphers currently used by pykafka BrokerConnections"""
     ciphers = set()
     for b in brokers.values():

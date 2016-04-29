@@ -20,8 +20,8 @@ limitations under the License.
 __all__ = ["BrokerConnection"]
 from functools import partial
 import logging
-import ssl
 import socket
+import ssl
 import struct
 
 from .exceptions import SocketDisconnectedError
@@ -48,7 +48,7 @@ class SslConfig(object):
     only a method `wrap_socket()` is expected (so you can eg. simply pass in
     a plain `ssl.SSLContext` instance instead).  The `pykafka.rdkafka`
     classes require four further attributes: `cafile`, `certfile`, `keyfile`,
-    and `password` (for details, see init docstring)
+    and `password` (the `SslConfig.__init__` docstring explains their meaning)
     """
     def __init__(self,
                  cafile,
