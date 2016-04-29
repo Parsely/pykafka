@@ -48,6 +48,19 @@ to connect to it.
     >>> from pykafka import KafkaClient
     >>> client = KafkaClient(hosts="127.0.0.1:9092,127.0.0.1:9093,...")
 
+Or, for a TLS connection, you might write (and also see ``SslConfig`` docs
+for further details):
+
+.. sourcecode:: python
+
+    >>> from pykafka import KafkaClient, SslConfig
+    >>> config = SslConfig(cafile='/your/ca.cert',
+    ...                    certfile='/your/client.cert',  # optional
+    ...                    keyfile='/your/client.key',  # optional
+    ...                    password='unlock my client key please')  # optional
+    >>> client = KafkaClient(hosts="127.0.0.1:<ssl-port>,...",
+    ...                      ssl_config=config)
+
 If the cluster you've connected to has any topics defined on it, you can list
 them with:
 
