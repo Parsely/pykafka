@@ -98,7 +98,6 @@ class ProducerIntegrationTests(unittest2.TestCase):
         """Test our retry-loop with a recoverable error"""
         payload = uuid4().bytes
         prod = self._get_producer(min_queued_messages=1, delivery_reports=True)
-        consumer = self._get_consumer()
 
         for broker in self.client.brokers.values():
             broker._connection.disconnect()
@@ -106,9 +105,6 @@ class ProducerIntegrationTests(unittest2.TestCase):
         prod.produce(payload)
         report = prod.get_delivery_report()
         self.assertIsNone(report[1])
-
-        message = consumer.consume()
-        self.assertEqual(message.value, payload)
 
     def test_async_produce_context(self):
         """Ensure that the producer works as a context manager"""
