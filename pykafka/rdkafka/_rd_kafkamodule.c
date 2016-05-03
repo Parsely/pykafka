@@ -382,7 +382,10 @@ RdkHandle_configure(RdkHandle *self, PyObject *args, PyObject *kwds)
     }
 
     Py_BEGIN_ALLOW_THREADS  /* avoid callbacks deadlocking */
-        if (! self->rdk_conf) self->rdk_conf = rd_kafka_conf_new();
+        if (! self->rdk_conf) {
+            self->rdk_conf = rd_kafka_conf_new();
+            rd_kafka_conf_set_log_cb(self->rdk_conf, logging_callback);
+        }
         if (! self->rdk_topic_conf) {
             self->rdk_topic_conf = rd_kafka_topic_conf_new();
         }
@@ -468,10 +471,9 @@ RdkHandle_start(RdkHandle *self,
         return RdkHandle_start_fail(self, RdkHandle_stop);
     }
 
-    /* Set logger and brokers */
+    /* Set brokers */
     int brokers_added;
     Py_BEGIN_ALLOW_THREADS  /* avoid callbacks deadlocking */
-        rd_kafka_conf_set_log_cb(self->rdk_conf, logging_callback);
         brokers_added = rd_kafka_brokers_add(self->rdk_handle, brokers);
     Py_END_ALLOW_THREADS
     if (brokers_added == 0) {
