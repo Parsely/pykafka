@@ -243,9 +243,6 @@ class Cluster(object):
                     response = broker.request_metadata(topics)
                     if response is not None:
                         return response
-                # FIXME: handle ssl errors separately somehow, because if we
-                # don't, _get_metadata() might attempt to treat it as if it
-                # were a zookeeper host, which gets messy
                 except Exception as e:
                     log.error('Unable to connect to broker %s:%s. Continuing.', host, port)
                     log.exception(e)
