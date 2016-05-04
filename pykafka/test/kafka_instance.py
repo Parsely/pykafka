@@ -542,7 +542,7 @@ if __name__ == '__main__':
     if args.export_hosts is not None:
         with open(args.export_hosts, 'w') as f:
             f.write('BROKERS={}\n'.format(cluster.brokers))
-            if cluster.brokers_ssl is not None:
+            if cluster.brokers_ssl:
                 f.write('BROKERS_SSL={}\n'.format(cluster.brokers_ssl))
             f.write('ZOOKEEPER={}\n'.format(cluster.zookeeper))
 
