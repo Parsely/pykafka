@@ -6,6 +6,7 @@ from pykafka.exceptions import RdKafkaStoppedException, ConsumerStoppedException
 from pykafka.simpleconsumer import SimpleConsumer, OffsetType
 from pykafka.utils.compat import get_bytes
 from . import _rd_kafka
+from . import helpers
 
 
 log = logging.getLogger(__name__)
@@ -244,6 +245,7 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
             # instances to the kafka cluster:
             ##"group.id"
             }
+        conf.update(helpers.rdk_ssl_config(self._cluster))
 
         map_offset_types = {
             OffsetType.EARLIEST: "smallest",

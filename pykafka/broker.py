@@ -48,7 +48,8 @@ class Broker(object):
                  offsets_channel_socket_timeout_ms,
                  buffer_size=1024 * 1024,
                  source_host='',
-                 source_port=0):
+                 source_port=0,
+                 ssl_config=None):
         """Create a Broker instance.
 
         :param id_: The id number of this broker
@@ -75,6 +76,8 @@ class Broker(object):
         :param source_port: The port portion of the source address for
             socket connections
         :type source_port: int
+        :param ssl_config: Config object for SSL connection
+        :type ssl_config: :class:`pykafka.connection.SslConfig`
         """
         self._connection = None
         self._offsets_channel_connection = None
@@ -83,6 +86,7 @@ class Broker(object):
         self._port = port
         self._source_host = source_host
         self._source_port = source_port
+        self._ssl_config = ssl_config
         self._handler = handler
         self._req_handler = None
         self._offsets_channel_req_handler = None
@@ -110,7 +114,8 @@ class Broker(object):
                       offsets_channel_socket_timeout_ms,
                       buffer_size=64 * 1024,
                       source_host='',
-                      source_port=0):
+                      source_port=0,
+                      ssl_config=None):
         """Create a Broker using BrokerMetadata
 
         :param metadata: Metadata that describes the broker.
@@ -132,13 +137,16 @@ class Broker(object):
         :param source_port: The port portion of the source address for
             socket connections
         :type source_port: int
+        :param ssl_config: Config object for SSL connection
+        :type ssl_config: :class:`pykafka.connection.SslConfig`
         """
         return cls(metadata.id, metadata.host,
                    metadata.port, handler, socket_timeout_ms,
                    offsets_channel_socket_timeout_ms,
                    buffer_size=buffer_size,
                    source_host=source_host,
-                   source_port=source_port)
+                   source_port=source_port,
+                   ssl_config=ssl_config)
 
     @property
     def connected(self):
@@ -198,7 +206,8 @@ class Broker(object):
                                             self._handler,
                                             buffer_size=self._buffer_size,
                                             source_host=self._source_host,
-                                            source_port=self._source_port)
+                                            source_port=self._source_port,
+                                            ssl_config=self._ssl_config)
         self._connection.connect(self._socket_timeout_ms)
         self._req_handler = RequestHandler(self._handler, self._connection)
         self._req_handler.start()
@@ -213,7 +222,8 @@ class Broker(object):
         self._offsets_channel_connection = BrokerConnection(
             self.host, self.port, self._handler,
             buffer_size=self._buffer_size,
-            source_host=self._source_host, source_port=self._source_port)
+            source_host=self._source_host, source_port=self._source_port,
+            ssl_config=self._ssl_config)
         self._offsets_channel_connection.connect(self._offsets_channel_socket_timeout_ms)
         self._offsets_channel_req_handler = RequestHandler(
             self._handler, self._offsets_channel_connection

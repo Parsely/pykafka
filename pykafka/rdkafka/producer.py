@@ -6,6 +6,7 @@ from pykafka.producer import Producer, CompressionType, random_partitioner
 from pykafka.protocol import Message
 from pykafka.utils.compat import get_bytes
 from . import _rd_kafka
+from . import helpers
 
 
 log = logging.getLogger(__name__)
@@ -145,6 +146,8 @@ class RdKafkaProducer(Producer):
             ##"dr_cb"
             ##"dr_msg_cb"  # gets set in _rd_kafka module
             }
+        conf.update(helpers.rdk_ssl_config(self._cluster))
+
         topic_conf = {
             # see https://github.com/edenhill/librdkafka/issues/208
             "request.required.acks": (

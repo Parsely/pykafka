@@ -48,6 +48,19 @@ to connect to it.
     >>> from pykafka import KafkaClient
     >>> client = KafkaClient(hosts="127.0.0.1:9092,127.0.0.1:9093,...")
 
+Or, for a TLS connection, you might write (and also see ``SslConfig`` docs
+for further details):
+
+.. sourcecode:: python
+
+    >>> from pykafka import KafkaClient, SslConfig
+    >>> config = SslConfig(cafile='/your/ca.cert',
+    ...                    certfile='/your/client.cert',  # optional
+    ...                    keyfile='/your/client.key',  # optional
+    ...                    password='unlock my client key please')  # optional
+    >>> client = KafkaClient(hosts="127.0.0.1:<ssl-port>,...",
+    ...                      ssl_config=config)
+
 If the cluster you've connected to has any topics defined on it, you can list
 them with:
 
@@ -148,11 +161,11 @@ After that, all that's needed is that you pass an extra parameter
 that some configuration options may have different optimal values; it may be
 worthwhile to consult librdkafka's `configuration notes`_ for this.
 
-We currently test against librdkafka `0.8.6`_ only.  Note that use on pypy is
+We currently test against librdkafka `0.9.0.99`_ only.  Note that use on pypy is
 not recommended at this time; the producer is certainly expected to crash.
 
-.. _0.8.6: https://github.com/edenhill/librdkafka/releases/tag/0.8.6
-.. _configuration notes: https://github.com/edenhill/librdkafka/blob/0.8.6/CONFIGURATION.md
+.. _0.9.0.99: https://github.com/edenhill/librdkafka/releases/tag/0.9.0.99
+.. _configuration notes: https://github.com/edenhill/librdkafka/blob/0.9.0.99/CONFIGURATION.md
 
 Operational Tools
 -----------------

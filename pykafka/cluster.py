@@ -156,7 +156,8 @@ class Cluster(object):
                  offsets_channel_socket_timeout_ms=10 * 1000,
                  exclude_internal_topics=True,
                  source_address='',
-                 zookeeper_hosts=None):
+                 zookeeper_hosts=None,
+                 ssl_config=None):
         """Create a new Cluster instance.
 
         :param hosts: Comma-separated list of kafka hosts to which to connect.
@@ -178,6 +179,8 @@ class Cluster(object):
         :type exclude_internal_topics: bool
         :param source_address: The source address for socket connections
         :type source_address: str `'host:port'`
+        :param ssl_config: Config object for SSL connection
+        :type ssl_config: :class:`pykafka.connection.SslConfig`
         """
         self._seed_hosts = zookeeper_hosts if zookeeper_hosts is not None else hosts
         self._socket_timeout_ms = socket_timeout_ms
@@ -188,6 +191,7 @@ class Cluster(object):
         self._source_address = source_address
         self._source_host = self._source_address.split(':')[0]
         self._source_port = 0
+        self._ssl_config = ssl_config
         self._zookeeper_connect = zookeeper_hosts
         self._max_connection_retries = 3
         if ':' in self._source_address:
@@ -234,7 +238,8 @@ class Cluster(object):
                                     self._offsets_channel_socket_timeout_ms,
                                     buffer_size=1024 * 1024,
                                     source_host=self._source_host,
-                                    source_port=self._source_port)
+                                    source_port=self._source_port,
+                                    ssl_config=self._ssl_config)
                     response = broker.request_metadata(topics)
                     if response is not None:
                         return response
@@ -345,8 +350,8 @@ class Cluster(object):
                     self._offsets_channel_socket_timeout_ms,
                     buffer_size=1024 * 1024,
                     source_host=self._source_host,
-                    source_port=self._source_port
-                )
+                    source_port=self._source_port,
+                    ssl_config=self._ssl_config)
             elif not self._brokers[id_].connected:
                 log.info('Reconnecting to broker id %s: %s:%s', id_, meta.host, meta.port)
                 import socket
