@@ -89,7 +89,9 @@ class Producer(object):
             reordering, use `sync=True`.
         :type max_retries: int
         :param retry_backoff_ms: The amount of time (in milliseconds) to
-            back off during produce request retries.
+            back off during produce request retries. This does not equal the total time
+            spent between message send attempts, since that number can be influenced
+            by other kwargs, including `linger_ms` and `socket_timeout_ms`.
         :type retry_backoff_ms: int
         :param required_acks: The number of other brokers that must have
             committed the data to their log and acknowledged this to the leader

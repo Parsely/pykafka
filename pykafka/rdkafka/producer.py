@@ -16,6 +16,12 @@ class RdKafkaProducer(Producer):
     This aims to conform to the Producer interface as closely as possible.
     For an overview of how configuration keys are mapped to librdkafka's, see
     _mk_rdkafka_config_lists.
+
+    Note: the `retry_backoff_ms` parameter behaves slightly differently in the
+    `RdKafkaProducer` than it does in the pure Python `Producer`. In the rdkafka
+    implementation, `retry_backoff_ms` indicates the exact time spent between message
+    resend attempts, but in the pure Python version the time between attempts is also
+    influenced by several other parameters, including `linger_ms` and `socket_timeout_ms`.
     """
     def __init__(self,
                  cluster,
