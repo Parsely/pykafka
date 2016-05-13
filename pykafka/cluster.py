@@ -271,12 +271,6 @@ class Cluster(object):
                 if metadata is not None:
                     return metadata
 
-                # fall back to zookeeper for backward compatibility
-                broker_connects = self._get_brokers_from_zookeeper(self._seed_hosts)
-                metadata = self._request_metadata(broker_connects, topics)
-                if metadata is not None:
-                    return metadata
-
         # Couldn't connect anywhere. Raise an error.
         raise NoBrokersAvailableError(
             'Unable to connect to a broker to fetch metadata. See logs.')
