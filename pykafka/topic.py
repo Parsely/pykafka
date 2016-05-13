@@ -89,6 +89,8 @@ class Topic(object):
         if isinstance(self._cluster.handler, GEventHandler) and use_rdkafka:
             raise ImportError("use_rdkafka cannot be used with gevent")
         Cls = rdkafka.RdKafkaProducer if rdkafka and use_rdkafka else Producer
+        if Cls == rdkafka.RdKafkaProducer:
+            kwargs.pop('block_on_queue_full', None)
         return Cls(self._cluster, self, **kwargs)
 
     def get_sync_producer(self, **kwargs):
