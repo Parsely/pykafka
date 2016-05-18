@@ -35,7 +35,6 @@ class RdKafkaProducer(Producer):
                  max_queued_messages=100000,
                  min_queued_messages=2000,  # NB differs from pykafka.Producer
                  linger_ms=5 * 1000,
-                 block_on_queue_full=True,
                  max_request_size=1000012,
                  sync=False,
                  delivery_reports=False,
