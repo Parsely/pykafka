@@ -40,7 +40,7 @@ from .exceptions import (OffsetOutOfRangeError, UnknownTopicOrPartition,
 from .protocol import (PartitionFetchRequest, PartitionOffsetCommitRequest,
                        PartitionOffsetFetchRequest, PartitionOffsetRequest)
 from .utils.error_handlers import (handle_partition_responses, raise_error,
-                                   build_parts_by_error)
+                                   build_parts_by_error, valid_int)
 
 
 log = logging.getLogger(__name__)
@@ -145,19 +145,23 @@ class SimpleConsumer(object):
             requests
         :type consumer_id: bytes
         """
+        self._running = False
         self._cluster = cluster
         if not (isinstance(consumer_group, bytes) or consumer_group is None):
             raise TypeError("consumer_group must be a bytes object")
         self._consumer_group = consumer_group
         self._topic = topic
-        self._fetch_message_max_bytes = fetch_message_max_bytes
-        self._fetch_min_bytes = fetch_min_bytes
-        self._queued_max_messages = queued_max_messages
-        self._num_consumer_fetchers = num_consumer_fetchers
-        self._fetch_wait_max_ms = fetch_wait_max_ms
-        self._consumer_timeout_ms = consumer_timeout_ms
-        self._offsets_channel_backoff_ms = offsets_channel_backoff_ms
+        self._fetch_message_max_bytes = valid_int(fetch_message_max_bytes)
+        self._fetch_min_bytes = valid_int(fetch_min_bytes)
+        self._queued_max_messages = valid_int(queued_max_messages)
+        self._num_consumer_fetchers = valid_int(num_consumer_fetchers)
+        self._fetch_wait_max_ms = valid_int(fetch_wait_max_ms, allow_zero=True)
+        self._consumer_timeout_ms = valid_int(consumer_timeout_ms,
+                                              allow_zero=True, allow_negative=True)
+        self._offsets_channel_backoff_ms = valid_int(offsets_channel_backoff_ms)
         self._auto_offset_reset = auto_offset_reset
+        offsets_commit_max_retries = valid_int(offsets_commit_max_retries,
+                                               allow_zero=True)
         self._offsets_commit_max_retries = offsets_commit_max_retries
         # not directly configurable
         self._offsets_fetch_max_retries = offsets_commit_max_retries
@@ -165,7 +169,8 @@ class SimpleConsumer(object):
         self._auto_start = auto_start
         self._reset_offset_on_start = reset_offset_on_start
         self._is_compacted_topic = compacted_topic
-        self._generation_id = generation_id
+        self._generation_id = valid_int(generation_id, allow_zero=True,
+                                        allow_negative=True)
         self._consumer_id = consumer_id
 
         # incremented for any message arrival from any partition
@@ -173,7 +178,7 @@ class SimpleConsumer(object):
         self._messages_arrived = self._cluster.handler.Semaphore(value=0)
 
         self._auto_commit_enable = auto_commit_enable
-        self._auto_commit_interval_ms = auto_commit_interval_ms
+        self._auto_commit_interval_ms = valid_int(auto_commit_interval_ms)
         self._last_auto_commit = time.time()
         self._worker_exception = None
         self._worker_trace_logged = False
@@ -200,7 +205,6 @@ class SimpleConsumer(object):
 
         self._default_error_handlers = self._build_default_error_handlers()
 
-        self._running = False
         if self._auto_start:
             self.start()
 

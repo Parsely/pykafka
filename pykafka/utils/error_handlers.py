@@ -78,3 +78,17 @@ def build_parts_by_error(response, partitions_by_id):
 def raise_error(error, info=""):
     """Raise the given error"""
     raise error(info)
+
+
+def valid_int(param, allow_zero=False, allow_negative=False):
+    """Validate that param is an integer, raise an exception if not"""
+    try:  # a very permissive integer typecheck
+        param += 1
+    except TypeError:
+        raise TypeError(
+            "Expected integer but found argument of type '{}'".format(type(param)))
+    if not allow_negative and param < 0:
+        raise ValueError("Expected nonnegative number but got '{}'".format(param))
+    if not allow_zero and param == 0:
+        raise ValueError("Expected nonzero number but got '{}'".format(param))
+    return param

@@ -37,6 +37,7 @@ from .exceptions import KafkaException, PartitionOwnedError, ConsumerStoppedExce
 from .handlers import GEventHandler
 from .simpleconsumer import SimpleConsumer
 from .utils.compat import range, get_bytes, itervalues, iteritems, get_string
+from .utils.error_handlers import valid_int
 try:
     from . import rdkafka
 except ImportError:
@@ -194,20 +195,23 @@ class BalancedConsumer(object):
         self._topic = topic
 
         self._auto_commit_enable = auto_commit_enable
-        self._auto_commit_interval_ms = auto_commit_interval_ms
-        self._fetch_message_max_bytes = fetch_message_max_bytes
-        self._fetch_min_bytes = fetch_min_bytes
-        self._rebalance_max_retries = rebalance_max_retries
-        self._num_consumer_fetchers = num_consumer_fetchers
-        self._queued_max_messages = queued_max_messages
-        self._fetch_wait_max_ms = fetch_wait_max_ms
-        self._rebalance_backoff_ms = rebalance_backoff_ms
-        self._consumer_timeout_ms = consumer_timeout_ms
-        self._offsets_channel_backoff_ms = offsets_channel_backoff_ms
-        self._offsets_commit_max_retries = offsets_commit_max_retries
+        self._auto_commit_interval_ms = valid_int(auto_commit_interval_ms)
+        self._fetch_message_max_bytes = valid_int(fetch_message_max_bytes)
+        self._fetch_min_bytes = valid_int(fetch_min_bytes)
+        self._rebalance_max_retries = valid_int(rebalance_max_retries, allow_zero=True)
+        self._num_consumer_fetchers = valid_int(num_consumer_fetchers)
+        self._queued_max_messages = valid_int(queued_max_messages)
+        self._fetch_wait_max_ms = valid_int(fetch_wait_max_ms, allow_zero=True)
+        self._rebalance_backoff_ms = valid_int(rebalance_backoff_ms)
+        self._consumer_timeout_ms = valid_int(consumer_timeout_ms,
+                                              allow_zero=True, allow_negative=True)
+        self._offsets_channel_backoff_ms = valid_int(offsets_channel_backoff_ms)
+        self._offsets_commit_max_retries = valid_int(offsets_commit_max_retries,
+                                                     allow_zero=True)
         self._auto_offset_reset = auto_offset_reset
         self._zookeeper_connect = zookeeper_connect
-        self._zookeeper_connection_timeout_ms = zookeeper_connection_timeout_ms
+        self._zookeeper_connection_timeout_ms = valid_int(zookeeper_connection_timeout_ms,
+                                                          allow_zero=True)
         self._reset_offset_on_start = reset_offset_on_start
         self._post_rebalance_callback = post_rebalance_callback
         self._generation_id = -1
