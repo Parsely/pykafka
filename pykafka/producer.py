@@ -41,6 +41,7 @@ from .exceptions import (
 from .partitioners import random_partitioner
 from .protocol import Message, ProduceRequest
 from .utils.compat import iteritems, itervalues, Empty
+from .utils.error_handlers import valid_int
 
 log = logging.getLogger(__name__)
 
@@ -159,15 +160,17 @@ class Producer(object):
                 platform.python_implementation == "PyPy":
             log.warning("Caution: python-snappy segfaults when attempting to compress "
                         "large messages under PyPy")
-        self._max_retries = max_retries
-        self._retry_backoff_ms = retry_backoff_ms
-        self._required_acks = required_acks
-        self._ack_timeout_ms = ack_timeout_ms
-        self._max_queued_messages = max_queued_messages
-        self._min_queued_messages = max(1, min_queued_messages if not sync else 1)
-        self._linger_ms = linger_ms
+        self._max_retries = valid_int(max_retries, allow_zero=True)
+        self._retry_backoff_ms = valid_int(retry_backoff_ms)
+        self._required_acks = valid_int(required_acks, allow_zero=True,
+                                        allow_negative=True)
+        self._ack_timeout_ms = valid_int(ack_timeout_ms, allow_zero=True)
+        self._max_queued_messages = valid_int(max_queued_messages, allow_zero=True)
+        self._min_queued_messages = max(1, valid_int(min_queued_messages)
+                                        if not sync else 1)
+        self._linger_ms = valid_int(linger_ms, allow_zero=True)
         self._block_on_queue_full = block_on_queue_full
-        self._max_request_size = max_request_size
+        self._max_request_size = valid_int(max_request_size)
         self._synchronous = sync
         self._worker_exception = None
         self._worker_trace_logged = False
