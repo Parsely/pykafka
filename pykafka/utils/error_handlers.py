@@ -82,8 +82,9 @@ def raise_error(error, info=""):
 
 def valid_int(param, allow_zero=False, allow_negative=False):
     """Validate that param is an integer, raise an exception if not"""
+    pt = param
     try:  # a very permissive integer typecheck
-        param += 1
+        pt += 1
     except TypeError:
         raise TypeError(
             "Expected integer but found argument of type '{}'".format(type(param)))
