@@ -162,7 +162,8 @@ class Producer(object):
                         "large messages under PyPy")
         self._max_retries = valid_int(max_retries, allow_zero=True)
         self._retry_backoff_ms = valid_int(retry_backoff_ms)
-        self._required_acks = valid_int(required_acks, allow_zero=True)
+        self._required_acks = valid_int(required_acks, allow_zero=True,
+                                        allow_negative=True)
         self._ack_timeout_ms = valid_int(ack_timeout_ms, allow_zero=True)
         self._max_queued_messages = valid_int(max_queued_messages, allow_zero=True)
         self._min_queued_messages = max(1, valid_int(min_queued_messages)
