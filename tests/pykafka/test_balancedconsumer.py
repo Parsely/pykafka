@@ -205,7 +205,7 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
         self.assertEqual(len(consumers), self.n_partitions)
         verify_extras(consumers, 0)
 
-        # added extra consumers should idle
+        # added "extra" consumers should idle
         for i in range(extras):
             consumers.append(self.get_balanced_consumer(group, consumer_timeout_ms=5000))
         self.wait_for_rebalancing(*consumers)
