@@ -213,11 +213,11 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
             self.wait_for_rebalancing(*consumers)
             verify_extras(consumers, extras)
         finally:
-            try:
-                for consumer in consumers:
+            for consumer in consumers:
+                try:
                     consumer.stop()
-            except:
-                pass
+                except:
+                    pass
 
     def test_rebalance_callbacks(self):
         def on_rebalance(cns, old_partition_offsets, new_partition_offsets):
