@@ -535,15 +535,7 @@ class BalancedConsumer(object):
         self._setting_watches = False
 
     def _add_self(self):
-        """Register this consumer in zookeeper.
-
-        This method ensures that the number of participants is at most the
-        number of partitions.
-        """
-        participants = self._get_participants()
-        if len(self._topic.partitions) <= len(participants):
-            raise KafkaException("Cannot add consumer: more consumers than partitions")
-
+        """Register this consumer in zookeeper."""
         self._zookeeper.create(
             self._path_self, self._topic.name, ephemeral=True, makepath=True)
 

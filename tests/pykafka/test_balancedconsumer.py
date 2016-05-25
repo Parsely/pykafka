@@ -170,6 +170,55 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
             **kwargs
         )
 
+    def test_extra_consumer(self):
+        """Ensure proper operation of "extra" consumers in a group
+
+        An "extra" consumer is the N+1th member of a consumer group consuming a topic
+        of N partitions, and any consumer beyond the N+1th.
+        """
+        group = b"test_extra_consumer"
+        extras = 1
+
+        def verify_extras(consumers, extras_count):
+            messages = [c.consume() for c in consumers]
+            successes = [a for a in messages if a is not None]
+            nones = [a for a in messages if a is None]
+            attempts = 0
+            while len(nones) != extras_count and attempts < 5:
+                messages = [c.consume() for c in consumers]
+                successes = [a for a in messages if a is not None]
+                nones = [a for a in messages if a is None]
+                attempts += 1
+            self.assertEqual(len(nones), extras_count)
+            self.assertEqual(len(successes), self.n_partitions)
+
+        try:
+            consumers = [self.get_balanced_consumer(group, consumer_timeout_ms=5000)
+                         for i in range(self.n_partitions + extras)]
+            verify_extras(consumers, extras)
+
+            # when one consumer stops, the extra should pick up its partitions
+            removed = consumers[:extras]
+            for consumer in removed:
+                consumer.stop()
+            consumers = [a for a in consumers if a not in removed]
+            self.wait_for_rebalancing(*consumers)
+            self.assertEqual(len(consumers), self.n_partitions)
+            verify_extras(consumers, 0)
+
+            # added "extra" consumers should idle
+            for i in range(extras):
+                consumers.append(self.get_balanced_consumer(group,
+                                                            consumer_timeout_ms=5000))
+            self.wait_for_rebalancing(*consumers)
+            verify_extras(consumers, extras)
+        finally:
+            for consumer in consumers:
+                try:
+                    consumer.stop()
+                except:
+                    pass
+
     def test_rebalance_callbacks(self):
         def on_rebalance(cns, old_partition_offsets, new_partition_offsets):
             self.assertTrue(len(new_partition_offsets) > 0)

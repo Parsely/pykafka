@@ -227,9 +227,8 @@ class SimpleConsumer(object):
             raise ex
 
     def _update(self):
-        """Update the consumer and cluster after an ERROR_CODE
-        """
-        # only allow one thread to be updating the producer at a time
+        """Update the consumer and cluster after an ERROR_CODE"""
+        # only allow one thread to be updating the consumer at a time
         with self._update_lock:
             self._cluster.update()
             self._setup_partitions_by_leader()
