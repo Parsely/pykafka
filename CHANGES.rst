@@ -1,6 +1,41 @@
 Changelog
 =========
 
+2.4.0 (2016-5-25)
+-----------------
+
+`Compare 2.4.0`_
+
+.. _Compare 2.4.0: 
+
+Minor Version Features
+**********************
+
+* Added support for connecting to Kafka brokers using a secure TLS connection
+* Removed the fallback in `Cluster` that treated `hosts` as a ZooKeeper
+  connection string
+* Removed the `block_on_queue_full` kwarg from the rdkafka producer
+* Added the `max_request_size` kwarg to the rdkafka producer
+
+Bug Fixes
+*********
+
+* Performed permissive parameter validation in consumers and producer to avoid
+  cryptic errors on threads
+* Allowed more consumers than partitions in a balanced consumer group
+* Fixed python 3 compatibility in `kafka_tools.py`
+* Fixed a bug causing nuisance errors on interpreter shutdown
+* Removed some uses of deprecated functions in the rdkafka C extension
+* Fixed a bug causing crashes when kafka returns an invalid partition ID in
+  partition requests
+
+Miscellaneous
+*************
+
+* Added utilities for testing TLS support to the test suite
+* Made the gevent version requirement slightly more inclusive
+
+
 2.3.1 (2016-4-8)
 ----------------
 
