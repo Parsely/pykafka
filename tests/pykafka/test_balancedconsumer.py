@@ -192,24 +192,32 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
             self.assertEqual(len(nones), extras_count)
             self.assertEqual(len(successes), self.n_partitions)
 
-        consumers = [self.get_balanced_consumer(group, consumer_timeout_ms=5000)
-                     for i in range(self.n_partitions + extras)]
-        verify_extras(consumers, extras)
+        try:
+            consumers = [self.get_balanced_consumer(group, consumer_timeout_ms=5000)
+                         for i in range(self.n_partitions + extras)]
+            verify_extras(consumers, extras)
 
-        # when one consumer stops, the extra should pick up its partitions
-        removed = consumers[:extras]
-        for consumer in removed:
-            consumer.stop()
-        consumers = [a for a in consumers if a not in removed]
-        self.wait_for_rebalancing(*consumers)
-        self.assertEqual(len(consumers), self.n_partitions)
-        verify_extras(consumers, 0)
+            # when one consumer stops, the extra should pick up its partitions
+            removed = consumers[:extras]
+            for consumer in removed:
+                consumer.stop()
+            consumers = [a for a in consumers if a not in removed]
+            self.wait_for_rebalancing(*consumers)
+            self.assertEqual(len(consumers), self.n_partitions)
+            verify_extras(consumers, 0)
 
-        # added "extra" consumers should idle
-        for i in range(extras):
-            consumers.append(self.get_balanced_consumer(group, consumer_timeout_ms=5000))
-        self.wait_for_rebalancing(*consumers)
-        verify_extras(consumers, extras)
+            # added "extra" consumers should idle
+            for i in range(extras):
+                consumers.append(self.get_balanced_consumer(group,
+                                                            consumer_timeout_ms=5000))
+            self.wait_for_rebalancing(*consumers)
+            verify_extras(consumers, extras)
+        finally:
+            try:
+                for consumer in consumers:
+                    consumer.stop()
+            except:
+                pass
 
     def test_rebalance_callbacks(self):
         def on_rebalance(cns, old_partition_offsets, new_partition_offsets):
