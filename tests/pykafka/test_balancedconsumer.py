@@ -176,7 +176,7 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
         An "extra" consumer is the N+1th member of a consumer group consuming a topic
         of N partitions, and any consumer beyond the N+1th.
         """
-        group = "test_extra_consumer"
+        group = b"test_extra_consumer"
         extras = 1
 
         def verify_extras(consumers, extras_count):
