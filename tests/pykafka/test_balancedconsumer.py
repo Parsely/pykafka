@@ -181,21 +181,26 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
 
         def verify_extras(consumers, extras_count):
             messages = [c.consume() for c in consumers]
-            nones = [a for a in messages if a is None]
             successes = [a for a in messages if a is not None]
+            nones = [a for a in messages if a is None]
+            attempts = 0
+            while len(nones) != extras_count and attempts < 5:
+                messages = [c.consume() for c in consumers]
+                successes = [a for a in messages if a is not None]
+                nones = [a for a in messages if a is None]
+                attempts += 1
             self.assertEqual(len(nones), extras_count)
             self.assertEqual(len(successes), self.n_partitions)
 
-        consumers = [self.get_balanced_consumer(group,
-                                                consumer_timeout_ms=5000)
+        consumers = [self.get_balanced_consumer(group, consumer_timeout_ms=5000)
                      for i in range(self.n_partitions + extras)]
         verify_extras(consumers, extras)
 
         # when one consumer stops, the extra should pick up its partitions
-        for i in range(extras):
-            removed = consumers[i]
-            removed.stop()
-            consumers = [a for a in consumers if a is not removed]
+        removed = consumers[:extras]
+        for consumer in removed:
+            consumer.stop()
+        consumers = [a for a in consumers if a not in removed]
         self.wait_for_rebalancing(*consumers)
         self.assertEqual(len(consumers), self.n_partitions)
         verify_extras(consumers, 0)
