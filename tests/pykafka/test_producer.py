@@ -3,6 +3,7 @@ from __future__ import division
 import platform
 import pytest
 import time
+import types
 import unittest2
 from uuid import uuid4
 
@@ -66,7 +67,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
         p = self._get_producer(sync=True)
         def stub_send_request(self, message_batch, owned_broker):
             1/0
-        p._send_request = stub_send_request
+        p._send_request = types.MethodType(stub_send_request, p)
         with self.assertRaises(ZeroDivisionError):
             p.produce(b"test")
 
