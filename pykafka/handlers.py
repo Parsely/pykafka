@@ -24,10 +24,10 @@ import gevent.event
 import gevent.lock
 import gevent.queue
 import gevent.socket as gsocket
-import gevent.socket.error as gsocket_error
+from gevent.socket import error as gsocket_error
 import logging
 import socket as pysocket
-import socket.error as socket_error
+from socket import error as socket_error
 import sys as _sys
 import threading
 import time
