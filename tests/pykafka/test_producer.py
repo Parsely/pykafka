@@ -64,7 +64,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
                 prod.produce(10 ** 7 * b" ")
 
         if not self.USE_RDKAFKA:
-            # ensure that a crash on a worker thread still raises in sync mode
+            # ensure that a crash on a worker thread still raises exception in sync mode
             p = self._get_producer(sync=True)
             def stub_send_request(self, message_batch, owned_broker):
                 1/0
