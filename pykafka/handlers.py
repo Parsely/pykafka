@@ -24,8 +24,10 @@ import gevent.event
 import gevent.lock
 import gevent.queue
 import gevent.socket as gsocket
+import gevent.socket.error as gsocket_error
 import logging
 import socket as pysocket
+import socket.error as socket_error
 import sys as _sys
 import threading
 import time
@@ -84,6 +86,7 @@ class ThreadingHandler(Handler):
     Lock = threading.Lock
     Semaphore = Semaphore
     Socket = pysocket
+    SockErr = socket_error
     _workers_spawned = 0
 
     def sleep(self, seconds=0):
@@ -116,6 +119,7 @@ class GEventHandler(Handler):
     RLock = gevent.lock.RLock
     Semaphore = gevent.lock.Semaphore
     Socket = gsocket
+    SockErr = gsocket_error
 
     def sleep(self, seconds=0):
         gevent.sleep(seconds)
