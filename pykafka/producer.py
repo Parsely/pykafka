@@ -144,8 +144,9 @@ class Producer(object):
             message produced.  These must regularly be retrieved through
             `get_delivery_report()`, which returns a 2-tuple of
             :class:`pykafka.protocol.Message` and either `None` (for success)
-            or an `Exception` in case of failed delivery to kafka.
-            This setting is ignored when `sync=True`.
+            or an `Exception` in case of failed delivery to kafka. If
+            `get_delivery_report()` is not called regularly with this setting enabled,
+            memory usage will grow unbounded. This setting is ignored when `sync=True`.
         :type delivery_reports: bool
         :param auto_start: Whether the producer should begin communicating
             with kafka after __init__ is complete. If false, communication

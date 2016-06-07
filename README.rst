@@ -109,7 +109,9 @@ enabled by setting ``delivery_reports=True``.  Here's a rough usage example:
     ...                     break
 
 Note that the delivery report queue is thread-local: it will only serve reports
-for messages which were produced from the current thread.
+for messages which were produced from the current thread. Also, if you're using
+`delivery_reports=True`, failing to consume the delivery report queue will cause
+PyKafka's memory usage to grow unbounded.
 
 You can also consume messages from this topic using a `Consumer` instance.
 
