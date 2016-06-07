@@ -330,6 +330,7 @@ class Producer(object):
 
         if self._synchronous:
             while True:
+                self._raise_worker_exceptions()
                 self._cluster.handler.sleep()
                 try:
                     reported_msg, exc = self.get_delivery_report(timeout=1)

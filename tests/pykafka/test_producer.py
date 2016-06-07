@@ -3,6 +3,7 @@ from __future__ import division
 import platform
 import pytest
 import time
+import types
 import unittest2
 from uuid import uuid4
 
@@ -61,6 +62,15 @@ class ProducerIntegrationTests(unittest2.TestCase):
         with self._get_producer(sync=True, min_queued_messages=1) as prod:
             with self.assertRaises(MessageSizeTooLarge):
                 prod.produce(10 ** 7 * b" ")
+
+        if not self.USE_RDKAFKA:
+            # ensure that a crash on a worker thread still raises exception in sync mode
+            p = self._get_producer(sync=True)
+            def stub_send_request(self, message_batch, owned_broker):
+                1/0
+            p._send_request = types.MethodType(stub_send_request, p)
+            with self.assertRaises(ZeroDivisionError):
+                p.produce(b"test")
 
     def test_produce_hashing_partitioner(self):
         # unique bytes, just to be absolutely sure we're not fetching data
