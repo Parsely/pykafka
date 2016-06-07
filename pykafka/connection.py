@@ -17,10 +17,9 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-__all__ = ["BrokerConnection"]
+__all__ = ["SslConfig", "BrokerConnection"]
 from functools import partial
 import logging
-import socket
 import ssl
 import struct
 
@@ -167,7 +166,7 @@ class BrokerConnection(object):
                 (self.host, self.port),
                 timeout / 1000,
                 (self.source_host, self.source_port)
-        ))
+            ))
         if self._socket is not None:
             log.debug("Successfully connected to %s:%s", self.host, self.port)
 
