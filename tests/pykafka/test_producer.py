@@ -62,6 +62,14 @@ class ProducerIntegrationTests(unittest2.TestCase):
             with self.assertRaises(MessageSizeTooLarge):
                 prod.produce(10 ** 7 * b" ")
 
+        # ensure that a crash on a worker thread still raises in sync mode
+        p = self._get_producer(sync=True)
+        def stub_send_request(self, message_batch, owned_broker):
+            1/0
+        p._send_request = stub_send_request
+        with self.assertRaises(ZeroDivisionError):
+            p.produce(b"test")
+
     def test_produce_hashing_partitioner(self):
         # unique bytes, just to be absolutely sure we're not fetching data
         # produced in a previous test
