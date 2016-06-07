@@ -34,7 +34,7 @@ from .exceptions import (ERROR_CODES,
                          LeaderNotAvailable)
 from .protocol import GroupCoordinatorRequest, GroupCoordinatorResponse
 from .topic import Topic
-from .utils.compat import iteritems, range
+from .utils.compat import iteritems, itervalues, range
 
 log = logging.getLogger(__name__)
 
@@ -376,35 +376,33 @@ class Cluster(object):
         """
         log.info("Attempting to discover offset manager for consumer group '%s'",
                  consumer_group)
-        # arbitrarily choose a broker, since this request can go to any
-        broker = self.brokers[random.choice(list(self.brokers.keys()))]
-
         for i in range(self._max_connection_retries):
-            if i > 0:
-                log.debug("Retrying offset manager discovery")
-            time.sleep(i * 2)
+            for broker in itervalues(self.brokers):
+                if i > 0:
+                    log.debug("Retrying offset manager discovery")
+                time.sleep(i * 2)
 
-            req = GroupCoordinatorRequest(consumer_group)
-            future = broker.handler.request(req)
-            try:
-                res = future.get(GroupCoordinatorResponse)
-            except GroupCoordinatorNotAvailable:
-                log.error('Error discovering offset manager.')
-                if i == self._max_connection_retries - 1:
-                    raise
-            except SocketDisconnectedError:
-                log.error("Socket disconnected during offset manager "
-                          "discovery. This can happen when using PyKafka "
-                          "with a Kafka version lower than 0.8.2.")
-                if i == self._max_connection_retries - 1:
-                    raise
-                self.update()
-            else:
-                coordinator = self.brokers.get(res.coordinator_id, None)
-                if coordinator is None:
-                    raise Exception('Coordinator broker with id {id_} not found'.format(id_=res.coordinator_id))
-                log.info("Found coordinator broker with id %s", res.coordinator_id)
-                return coordinator
+                req = GroupCoordinatorRequest(consumer_group)
+                future = broker.handler.request(req)
+                try:
+                    res = future.get(GroupCoordinatorResponse)
+                except GroupCoordinatorNotAvailable:
+                    log.error('Error discovering offset manager.')
+                    if i == self._max_connection_retries - 1:
+                        raise
+                except SocketDisconnectedError:
+                    log.error("Socket disconnected during offset manager "
+                              "discovery. This can happen when using PyKafka "
+                              "with a Kafka version lower than 0.8.2.")
+                    if i == self._max_connection_retries - 1:
+                        raise
+                    self.update()
+                else:
+                    coordinator = self.brokers.get(res.coordinator_id, None)
+                    if coordinator is None:
+                        raise Exception('Coordinator broker with id {id_} not found'.format(id_=res.coordinator_id))
+                    log.info("Found coordinator broker with id %s", res.coordinator_id)
+                    return coordinator
 
     def update(self):
         """Update known brokers and topics."""
