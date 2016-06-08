@@ -84,7 +84,7 @@ class ProtocolClientError(KafkaException):
 
 
 class UnknownError(ProtocolClientError):
-    """An unexpected server erro"""
+    """An unexpected server error"""
     ERROR_CODE = -1
 
 

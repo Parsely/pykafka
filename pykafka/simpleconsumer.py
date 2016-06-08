@@ -30,7 +30,7 @@ import weakref
 from .common import OffsetType
 from .utils.compat import (Queue, Empty, iteritems, itervalues,
                            range, iterkeys)
-from .exceptions import (OffsetOutOfRangeError, UnknownTopicOrPartition,
+from .exceptions import (UnknownError, OffsetOutOfRangeError, UnknownTopicOrPartition,
                          OffsetMetadataTooLarge, GroupLoadInProgress,
                          NotCoordinatorForGroup, SocketDisconnectedError,
                          ConsumerStoppedException, KafkaException,
@@ -290,11 +290,15 @@ class SimpleConsumer(object):
         def _handle_UnknownMemberId(parts):
             log.info("Continuing in response to UnknownMemberId")
 
+        def _handle_UnknownError(parts):
+            log.info("Continuing in response to UnknownError")
+
         def _handle_RebalanceInProgress(parts):
             log.info("Continuing in response to RebalanceInProgress")
 
         return {
             UnknownTopicOrPartition.ERROR_CODE: lambda p: raise_error(UnknownTopicOrPartition),
+            UnknownError.ERROR_CODE: _handle_UnknownError,
             OffsetOutOfRangeError.ERROR_CODE: _handle_OffsetOutOfRangeError,
             NotLeaderForPartition.ERROR_CODE: _handle_NotLeaderForPartition,
             OffsetMetadataTooLarge.ERROR_CODE: lambda p: raise_error(OffsetMetadataTooLarge),
