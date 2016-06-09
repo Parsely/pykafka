@@ -161,12 +161,15 @@ class BrokerConnection(object):
     def connect(self, timeout):
         """Connect to the broker."""
         log.debug("Connecting to %s:%s", self.host, self.port)
-        self._socket = self._wrap_socket(
-            self._handler.Socket.create_connection(
-                (self.host, self.port),
-                timeout / 1000,
-                (self.source_host, self.source_port)
-            ))
+        try:
+            self._socket = self._wrap_socket(
+                self._handler.Socket.create_connection(
+                    (self.host, self.port),
+                    timeout / 1000,
+                    (self.source_host, self.source_port)
+                ))
+        except (self._handler.SockErr, self._handler.GaiError):
+            log.error("Failed to connect to %s:%s", self.host, self.port)
         if self._socket is not None:
             log.debug("Successfully connected to %s:%s", self.host, self.port)
 
