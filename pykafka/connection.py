@@ -168,7 +168,7 @@ class BrokerConnection(object):
                     timeout / 1000,
                     (self.source_host, self.source_port)
                 ))
-        except self._handler.SockErr:
+        except (self._handler.SockErr, self._handler.GaiError):
             log.error("Failed to connect to %s:%s", self.host, self.port)
         if self._socket is not None:
             log.debug("Successfully connected to %s:%s", self.host, self.port)
