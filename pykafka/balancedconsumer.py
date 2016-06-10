@@ -235,10 +235,10 @@ class BalancedConsumer(object):
         self._setting_watches = True
 
         self._topic_path = '/consumers/{group}/owners/{topic}'.format(
-            group=self._consumer_group,
+            group=get_string(self._consumer_group),
             topic=self._topic.name)
         self._consumer_id_path = '/consumers/{group}/ids'.format(
-            group=self._consumer_group)
+            group=get_string(self._consumer_group))
 
         self._zookeeper = None
         self._owns_zookeeper = zookeeper is None
