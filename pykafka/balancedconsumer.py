@@ -414,7 +414,8 @@ class BalancedConsumer(object):
             auto_start=start,
             compacted_topic=self._is_compacted_topic,
             generation_id=self._generation_id,
-            consumer_id=self._consumer_id
+            consumer_id=self._consumer_id,
+            parent_consumer=self
         )
 
     def _decide_partitions(self, participants, consumer_id=None):

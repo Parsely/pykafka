@@ -26,7 +26,8 @@ import weakref
 from .balancedconsumer import BalancedConsumer
 from .common import OffsetType
 from .exceptions import (IllegalGeneration, RebalanceInProgress, NotCoordinatorForGroup,
-                         GroupCoordinatorNotAvailable, ERROR_CODES, GroupLoadInProgress)
+                         GroupCoordinatorNotAvailable, ERROR_CODES, GroupLoadInProgress,
+                         UnknownMemberId)
 from .protocol import MemberAssignment
 from .utils.compat import iterkeys
 from .utils.error_handlers import valid_int
@@ -199,6 +200,7 @@ class ManagedBalancedConsumer(BalancedConsumer):
         self._consumer_id = b''
         self._worker_trace_logged = False
         self._worker_exception = None
+        self._should_rebalance = False
         self._default_error_handlers = self._build_default_error_handlers()
 
         if auto_start is True:
@@ -213,18 +215,21 @@ class ManagedBalancedConsumer(BalancedConsumer):
                 try:
                     if not self._running:
                         break
-
-                    log.info("Sending heartbeat from consumer '%s'", self._consumer_id)
-                    res = self._group_coordinator.heartbeat(self._connection_id,
-                                                            self._consumer_group,
-                                                            self._generation_id,
-                                                            self._consumer_id)
-                    if res.error_code != 0:
-                        log.info("Error code %d encountered on heartbeat.",
-                                 res.error_code)
-                        self._handle_error(res.error_code)
+                    if self._should_rebalance:
                         self._rebalance()
-
+                        self._should_rebalance = False
+                    else:
+                        log.info("Sending heartbeat from consumer '%s'",
+                                 self._consumer_id)
+                        res = self._group_coordinator.heartbeat(self._connection_id,
+                                                                self._consumer_group,
+                                                                self._generation_id,
+                                                                self._consumer_id)
+                        if res.error_code != 0:
+                            log.info("Error code %d encountered on heartbeat.",
+                                     res.error_code)
+                            self._handle_error(res.error_code)
+                            self._rebalance()
                     self._cluster.handler.sleep(self._heartbeat_interval_ms / 1000)
                 except ReferenceError:
                     break
@@ -273,6 +278,7 @@ class ManagedBalancedConsumer(BalancedConsumer):
         but uses the Kafka 0.9 Group Membership API instead of ZooKeeper to manage
         group state
         """
+        log.info("Member assignment update triggered")
         for i in range(self._rebalance_max_retries):
             try:
                 members = self._join_group()
@@ -314,6 +320,7 @@ class ManagedBalancedConsumer(BalancedConsumer):
         return {
             GroupCoordinatorNotAvailable.ERROR_CODE: _handle_GroupCoordinatorNotAvailable,
             NotCoordinatorForGroup.ERROR_CODE: _handle_NotCoordinatorForGroup,
+            UnknownMemberId.ERROR_CODE: None,
             GroupLoadInProgress.ERROR_CODE: None,
             RebalanceInProgress.ERROR_CODE: None,
             IllegalGeneration.ERROR_CODE: None
@@ -350,6 +357,7 @@ class ManagedBalancedConsumer(BalancedConsumer):
             self._cluster.handler.sleep(i * 2)
         self._generation_id = join_result.generation_id
         self._consumer_id = join_result.member_id
+        log.info("Successfully joined consumer group '%s'", self._consumer_group)
         return join_result.members
 
     def _sync_group(self, group_assignments):

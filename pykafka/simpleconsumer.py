@@ -70,7 +70,8 @@ class SimpleConsumer(object):
                  reset_offset_on_start=False,
                  compacted_topic=False,
                  generation_id=-1,
-                 consumer_id=b''):
+                 consumer_id=b'',
+                 parent_consumer=None):
         """Create a SimpleConsumer.
 
         Settings and default values are taken from the Scala
@@ -172,6 +173,7 @@ class SimpleConsumer(object):
         self._generation_id = valid_int(generation_id, allow_zero=True,
                                         allow_negative=True)
         self._consumer_id = consumer_id
+        self._parent_consumer = parent_consumer
 
         # incremented for any message arrival from any partition
         # the initial value is 0 (no messages waiting)
@@ -233,6 +235,8 @@ class SimpleConsumer(object):
             self._cluster.update()
             self._setup_partitions_by_leader()
             self._discover_group_coordinator()
+            if self._parent_consumer is not None:
+                self._parent_consumer._should_rebalance = True
 
     def start(self):
         """Begin communicating with Kafka, including setting up worker threads
@@ -286,6 +290,7 @@ class SimpleConsumer(object):
 
         def _handle_IllegalGeneration(parts):
             log.info("Continuing in response to IllegalGeneration")
+            self._update()
 
         def _handle_UnknownMemberId(parts):
             log.info("Continuing in response to UnknownMemberId")
