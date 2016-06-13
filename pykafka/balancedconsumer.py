@@ -257,7 +257,7 @@ class BalancedConsumer(object):
             module=self.__class__.__module__,
             name=self.__class__.__name__,
             id_=hex(id(self)),
-            group=self._consumer_group
+            group=get_string(self._consumer_group)
         )
 
     def _raise_worker_exceptions(self):
