@@ -235,10 +235,10 @@ class BalancedConsumer(object):
         self._setting_watches = True
 
         self._topic_path = '/consumers/{group}/owners/{topic}'.format(
-            group=self._consumer_group,
+            group=get_string(self._consumer_group),
             topic=self._topic.name)
         self._consumer_id_path = '/consumers/{group}/ids'.format(
-            group=self._consumer_group)
+            group=get_string(self._consumer_group))
 
         self._zookeeper = None
         self._owns_zookeeper = zookeeper is None
@@ -257,7 +257,7 @@ class BalancedConsumer(object):
             module=self.__class__.__module__,
             name=self.__class__.__name__,
             id_=hex(id(self)),
-            group=self._consumer_group
+            group=get_string(self._consumer_group)
         )
 
     def _raise_worker_exceptions(self):
