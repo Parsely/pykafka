@@ -163,11 +163,11 @@ After that, all that's needed is that you pass an extra parameter
 that some configuration options may have different optimal values; it may be
 worthwhile to consult librdkafka's `configuration notes`_ for this.
 
-We currently test against librdkafka `0.9.0.99`_ only.  Note that use on pypy is
+We currently test against librdkafka `0.9.1`_ only.  Note that use on pypy is
 not recommended at this time; the producer is certainly expected to crash.
 
-.. _0.9.0.99: https://github.com/edenhill/librdkafka/releases/tag/0.9.0.99
-.. _configuration notes: https://github.com/edenhill/librdkafka/blob/0.9.0.99/CONFIGURATION.md
+.. _0.9.1: https://github.com/edenhill/librdkafka/releases/tag/0.9.1
+.. _configuration notes: https://github.com/edenhill/librdkafka/blob/0.9.1/CONFIGURATION.md
 
 Operational Tools
 -----------------
