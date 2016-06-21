@@ -17,6 +17,7 @@ limitations under the License.
 import re
 import sys
 import os
+import platform
 
 from distutils.command.build_ext import build_ext
 from distutils.errors import CCompilerError, DistutilsExecError, DistutilsPlatformError
@@ -24,6 +25,11 @@ from setuptools import setup, find_packages
 from setuptools.command.test import test as TestCommand
 from setuptools.extension import Extension
 
+if sys.version_info < (2, 7):
+    raise Exception('pykafka requires Python 2.7 or higher.')
+
+python_implementation = platform.python_implementation()
+is_cpython = python_implementation == 'CPython'
 
 # Get version without importing, which avoids dependency issues
 def get_version():
@@ -150,6 +156,8 @@ def run_setup(with_rdkafka=True):
             "Intended Audience :: Developers",
             "License :: OSI Approved :: Apache Software License",
             "Programming Language :: Python",
+            "Programming Language :: Python :: Implementation :: PyPy",
+            "Programming Language :: Python :: Implementation :: CPython",
             "Programming Language :: Python :: 2",
             "Programming Language :: Python :: 2.7",
             "Programming Language :: Python :: 3",
@@ -162,7 +170,15 @@ def run_setup(with_rdkafka=True):
     )
 
 try:
-    run_setup()
+    if not is_cpython:
+        print("librdkafka is not supported under %s" % python_implementation)
+        print(15 * "-")
+        print("INFO: Failed to build rdkafka extension:")
+        print("INFO: will now attempt setup without extension.")
+        print(15 * "-")
+        run_setup(with_rdkafka=False)
+    else:
+        run_setup()
 except ve_build_ext.BuildFailed as exc:
     print(15 * "-")
     print("INFO: Failed to build rdkafka extension:")

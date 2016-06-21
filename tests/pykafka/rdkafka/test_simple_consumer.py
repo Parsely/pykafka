@@ -5,11 +5,17 @@ import pytest
 
 from tests.pykafka import test_simpleconsumer, test_balancedconsumer, patch_subclass
 from pykafka.utils.compat import range
+try:
+    from pykafka.rdkafka import _rd_kafka
+    RDKAFKA = True
+except ImportError:
+    RDKAFKA = False # C extension not built
 
 
 @pytest.mark.skipif(platform.python_implementation() == "PyPy",
                     reason="Unresolved crashes which I cannot reproduce "
                            "locally (TODO: track this down).")
+@pytest.mark.skipif(not RDKAFKA, reason="C extension for librdkafka not built.")
 class TestRdKafkaSimpleConsumer(test_simpleconsumer.TestSimpleConsumer):
     USE_RDKAFKA = True
 
