@@ -18,6 +18,7 @@ limitations under the License.
 """
 __all__ = ["Partition"]
 import logging
+import time
 import weakref
 
 from .common import OffsetType
@@ -100,14 +101,20 @@ class Partition(object):
         :param max_offsets: The maximum number of offsets to return
         :type max_offsets: int
         """
-        request = PartitionOffsetRequest(
-            self.topic.name, self.id, offsets_before, max_offsets
-        )
-        res = self._leader.request_offset_limits([request])
-        return res.topics[self.topic.name][self._id][0]
+        for i in range(self.topic._cluster._max_connection_retries):
+            if i > 0:
+                log.debug("Retrying offset limit fetch")
+            time.sleep(i * 2)
+            request = PartitionOffsetRequest(
+                self.topic.name, self.id, offsets_before, max_offsets
+            )
+            res = self._leader.request_offset_limits([request])
+            limit = res.topics[self.topic.name][self._id][0]
+            if len(limit) > 0:
+                return limit
 
     def latest_available_offset(self):
-        """Get the latest offset for this partition."""
+        """Get the offset of the next message that would be appended to this partition"""
         return self.fetch_offset_limit(OffsetType.LATEST)[0]
 
     def earliest_available_offset(self):

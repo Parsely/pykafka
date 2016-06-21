@@ -68,13 +68,27 @@ def build_parts_by_error(response, partitions_by_id):
     parts_by_error = defaultdict(list)
     for topic_name in response.topics.keys():
         for partition_id, pres in iteritems(response.topics[topic_name]):
-            owned_partition = None
             if partitions_by_id is not None and partition_id in partitions_by_id:
                 owned_partition = partitions_by_id[partition_id]
-            parts_by_error[pres.err].append((owned_partition, pres))
+                parts_by_error[pres.err].append((owned_partition, pres))
     return parts_by_error
 
 
 def raise_error(error, info=""):
     """Raise the given error"""
     raise error(info)
+
+
+def valid_int(param, allow_zero=False, allow_negative=False):
+    """Validate that param is an integer, raise an exception if not"""
+    pt = param
+    try:  # a very permissive integer typecheck
+        pt += 1
+    except TypeError:
+        raise TypeError(
+            "Expected integer but found argument of type '{}'".format(type(param)))
+    if not allow_negative and param < 0:
+        raise ValueError("Expected nonnegative number but got '{}'".format(param))
+    if not allow_zero and param == 0:
+        raise ValueError("Expected nonzero number but got '{}'".format(param))
+    return param

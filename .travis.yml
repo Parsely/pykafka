@@ -1,5 +1,9 @@
 language: python
 sudo: false
+cache:
+  directories:
+    - $HOME/.cache/pip
+    - $HOME/.ccache
 python:
     - "2.7"
     - "3.4"
@@ -7,12 +11,11 @@ python:
     - "pypy"
 env:
   global:
-      - BROKERS=localhost:9092,localhost:9093,localhost:9094
-      - ZOOKEEPER=localhost:2181
-      - KAFKA_BIN=/home/travis/kafka-bin
+      - PATH="/usr/lib/ccache:$PATH"
+      - KAFKA_BIN="$HOME/kafka-bin"
   matrix:
-      - KAFKA_VERSION=0.8.2.1
-      - KAFKA_VERSION=0.9.0.0
+      - KAFKA_VERSION=0.8.2.2
+      - KAFKA_VERSION=0.9.0.1
 
 addons:
   apt:
@@ -28,19 +31,37 @@ notifications:
     - yungchin@yungchin.nl
 
 install:
-    - pip install codecov kazoo tox testinstances tox-travis
-    - wget https://github.com/edenhill/librdkafka/archive/0.8.6.tar.gz
-    - tar -xzf 0.8.6.tar.gz
-    - cd librdkafka-0.8.6/ && ./configure --prefix=$HOME
-    - make && make install && cd -
+    - |
+        if [ "$TRAVIS_PYTHON_VERSION" = "pypy" ]; then
+          export PYENV_ROOT="$HOME/.pyenv"
+          if [ -f "$PYENV_ROOT/bin/pyenv" ]; then
+            pushd "$PYENV_ROOT" && git pull && popd
+          else
+            rm -rf "$PYENV_ROOT" && git clone --depth 1 https://github.com/yyuu/pyenv.git "$PYENV_ROOT"
+          fi
+          export PYPY_VERSION="4.0.1"
+          "$PYENV_ROOT/bin/pyenv" install --skip-existing "pypy-$PYPY_VERSION"
+          virtualenv --python="$PYENV_ROOT/versions/pypy-$PYPY_VERSION/bin/python" "$HOME/virtualenvs/pypy-$PYPY_VERSION"
+          source "$HOME/virtualenvs/pypy-$PYPY_VERSION/bin/activate"
+        fi
+    - pip install -U pip setuptools
+    - pip install codecov kazoo tox testinstances tox-travis "gevent==1.1"
+    - wget https://github.com/edenhill/librdkafka/archive/0.9.0.99.tar.gz
+    - tar -xzf 0.9.0.99.tar.gz
+    - cd librdkafka-0.9.0.99/ && ./configure --prefix=$HOME
+    - make -j 2 && make -j 2 install && cd -
 
 before_script:
     - export C_INCLUDE_PATH=$HOME/include:$C_INCLUDE_PATH
     - export LIBRARY_PATH=$HOME/lib:$LIBRARY_PATH
     - export LD_LIBRARY_PATH=$HOME/lib:$LD_LIBRARY_PATH
     - export CFLAGS="-coverage"
-    - "python -m pykafka.test.kafka_instance 3 --kafka-version $KAFKA_VERSION --download-dir /home/travis/kafka-bin &"
-    - "sleep 10"
+    - TEMPFILE=`tempfile`
+    - python -m pykafka.test.kafka_instance 3 --kafka-version $KAFKA_VERSION --download-dir $KAFKA_BIN --export-hosts $TEMPFILE &
+    - while true; do sleep 1; echo "Waiting for cluster..."; if [[ `grep ZOOKEEPER $TEMPFILE` ]]; then break; fi; done
+    - export `grep BROKERS $TEMPFILE`
+    - export `grep BROKERS_SSL $TEMPFILE`
+    - export `grep ZOOKEEPER $TEMPFILE`
 
 script:
     - tox

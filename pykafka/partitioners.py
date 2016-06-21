@@ -20,6 +20,8 @@ __all__ = ["random_partitioner", "BasePartitioner", "HashingPartitioner",
            "hashing_partitioner"]
 import random
 
+from hashlib import sha1
+
 
 def random_partitioner(partitions, key):
     """Returns a random partition out of all of the available partitions."""
@@ -50,7 +52,7 @@ class HashingPartitioner(BasePartitioner):
     until all brokers have accepted a write to that topic and have declared how
     many partitions that they are actually serving.
     """
-    def __init__(self, hash_func=hash):
+    def __init__(self, hash_func=None):
         """
         :param hash_func: hash function (defaults to :func:`hash`), should return
             an `int`. If hash randomization (Python 2.7) is enabled, a custom
@@ -59,6 +61,8 @@ class HashingPartitioner(BasePartitioner):
         :type hash_func: function
         """
         self.hash_func = hash_func
+        if self.hash_func is None:
+            self.hash_func = lambda k: int(sha1(k).hexdigest(), 16)
 
     def __call__(self, partitions, key):
         """

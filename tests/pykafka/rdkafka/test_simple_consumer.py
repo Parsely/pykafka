@@ -1,10 +1,9 @@
-from contextlib import contextmanager
 import platform
+import unittest2
 
 import pytest
 
-from tests.pykafka import test_simpleconsumer, test_balancedconsumer
-from pykafka.rdkafka import RdKafkaSimpleConsumer
+from tests.pykafka import test_simpleconsumer, test_balancedconsumer, patch_subclass
 from pykafka.utils.compat import range
 
 
@@ -70,8 +69,7 @@ def _latest_partition_offsets_by_reading(consumer, n_reads):
     return latest_offs
 
 
-@pytest.mark.skipif(platform.python_implementation() == "PyPy",
-                    reason="Unresolved crashes")
-class RdkBalancedConsumerIntegrationTests(
-        test_balancedconsumer.BalancedConsumerIntegrationTests):
+@patch_subclass(test_balancedconsumer.BalancedConsumerIntegrationTests,
+                platform.python_implementation() == "PyPy")
+class RdkBalancedConsumerIntegrationTests(unittest2.TestCase):
     USE_RDKAFKA = True

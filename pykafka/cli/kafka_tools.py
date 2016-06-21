@@ -11,7 +11,7 @@ import tabulate
 import pykafka
 from pykafka.common import OffsetType
 from pykafka.protocol import PartitionOffsetCommitRequest
-from pykafka.utils.compat import PY3
+from pykafka.utils.compat import PY3, iteritems
 
 #
 # Helper Functions
@@ -49,7 +49,7 @@ def fetch_consumer_lag(client, topic, consumer_group):
     :type client:  :class:`pykafka.KafkaClient`
     :param topic:  Name of the topic.
     :type topic:  :class:`pykafka.topic.Topic`
-    :param consumer_group: Name of the consumer group to reset offsets for.
+    :param consumer_group: Name of the consumer group to fetch lag for.
     :type consumer_groups: :class:`str`
     :returns: dict of {partition_id: (latest_offset, consumer_offset)}
     """
@@ -125,7 +125,7 @@ def print_consumer_lag(client, args):
     :type client:  :class:`pykafka.KafkaClient`
     :param topic:  Name of the topic.
     :type topic:  :class:`str`
-    :param consumer_group: Name of the consumer group to reset offsets for.
+    :param consumer_group: Name of the consumer group to fetch offsets for.
     :type consumer_groups: :class:`str`
     """
     # Don't auto-create topics.
@@ -135,7 +135,7 @@ def print_consumer_lag(client, args):
 
     lag_info = fetch_consumer_lag(client, topic, args.consumer_group)
     lag_info = [(k, '{:,}'.format(v[0] - v[1]), v[0], v[1])
-                for k, v in lag_info.iteritems()]
+                for k, v in iteritems(lag_info)]
     print(tabulate.tabulate(
         lag_info,
         headers=['Partition', 'Lag', 'Latest Offset', 'Current Offset'],
@@ -170,7 +170,7 @@ def print_offsets(client, args):
 
     offsets = fetch_offsets(client, topic, args.offset)
     print(tabulate.tabulate(
-        [(k, v.offset[0]) for k, v in offsets.iteritems()],
+        [(k, v.offset[0]) for k, v in iteritems(offsets)],
         headers=['Partition', 'Offset'],
         numalign='center',
     ))
@@ -224,10 +224,10 @@ def reset_offsets(client, args):
                                          res.offset[0],
                                          tmsp,
                                          'kafka-tools')
-            for partition_id, res in offsets.iteritems()]
+            for partition_id, res in iteritems(offsets)]
 
     # Send them to the appropriate broker.
-    broker = client.cluster.get_offset_manager(args.consumer_group)
+    broker = client.cluster.get_group_coordinator(args.consumer_group)
     broker.commit_consumer_group_offsets(
         args.consumer_group, 1, 'kafka-tools', reqs
     )

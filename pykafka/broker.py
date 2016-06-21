@@ -24,12 +24,12 @@ from .connection import BrokerConnection
 from .exceptions import LeaderNotAvailable, SocketDisconnectedError
 from .handlers import RequestHandler
 from .protocol import (
-    FetchRequest, FetchResponse, OffsetRequest,
-    OffsetResponse, MetadataRequest, MetadataResponse,
-    OffsetCommitRequest, OffsetCommitResponse,
-    OffsetFetchRequest, OffsetFetchResponse,
-    ProduceResponse)
-from .utils.compat import range, iteritems
+    FetchRequest, FetchResponse, OffsetRequest, OffsetResponse, MetadataRequest,
+    MetadataResponse, OffsetCommitRequest, OffsetCommitResponse, OffsetFetchRequest,
+    OffsetFetchResponse, ProduceResponse, JoinGroupRequest, JoinGroupResponse,
+    SyncGroupRequest, SyncGroupResponse, HeartbeatRequest, HeartbeatResponse,
+    LeaveGroupRequest, LeaveGroupResponse)
+from .utils.compat import range, iteritems, get_bytes
 
 log = logging.getLogger(__name__)
 
@@ -48,7 +48,8 @@ class Broker(object):
                  offsets_channel_socket_timeout_ms,
                  buffer_size=1024 * 1024,
                  source_host='',
-                 source_port=0):
+                 source_port=0,
+                 ssl_config=None):
         """Create a Broker instance.
 
         :param id_: The id number of this broker
@@ -75,6 +76,8 @@ class Broker(object):
         :param source_port: The port portion of the source address for
             socket connections
         :type source_port: int
+        :param ssl_config: Config object for SSL connection
+        :type ssl_config: :class:`pykafka.connection.SslConfig`
         """
         self._connection = None
         self._offsets_channel_connection = None
@@ -83,12 +86,14 @@ class Broker(object):
         self._port = port
         self._source_host = source_host
         self._source_port = source_port
+        self._ssl_config = ssl_config
         self._handler = handler
         self._req_handler = None
         self._offsets_channel_req_handler = None
         self._socket_timeout_ms = socket_timeout_ms
         self._offsets_channel_socket_timeout_ms = offsets_channel_socket_timeout_ms
         self._buffer_size = buffer_size
+        self._req_handlers = {}
         self.connect()
 
     def __repr__(self):
@@ -109,7 +114,8 @@ class Broker(object):
                       offsets_channel_socket_timeout_ms,
                       buffer_size=64 * 1024,
                       source_host='',
-                      source_port=0):
+                      source_port=0,
+                      ssl_config=None):
         """Create a Broker using BrokerMetadata
 
         :param metadata: Metadata that describes the broker.
@@ -131,13 +137,16 @@ class Broker(object):
         :param source_port: The port portion of the source address for
             socket connections
         :type source_port: int
+        :param ssl_config: Config object for SSL connection
+        :type ssl_config: :class:`pykafka.connection.SslConfig`
         """
         return cls(metadata.id, metadata.host,
                    metadata.port, handler, socket_timeout_ms,
                    offsets_channel_socket_timeout_ms,
                    buffer_size=buffer_size,
                    source_host=source_host,
-                   source_port=source_port)
+                   source_port=source_port,
+                   ssl_config=ssl_config)
 
     @property
     def connected(self):
@@ -194,9 +203,11 @@ class Broker(object):
         :class:`pykafka.handlers.RequestHandler` for this broker
         """
         self._connection = BrokerConnection(self.host, self.port,
+                                            self._handler,
                                             buffer_size=self._buffer_size,
                                             source_host=self._source_host,
-                                            source_port=self._source_port)
+                                            source_port=self._source_port,
+                                            ssl_config=self._ssl_config)
         self._connection.connect(self._socket_timeout_ms)
         self._req_handler = RequestHandler(self._handler, self._connection)
         self._req_handler.start()
@@ -209,13 +220,41 @@ class Broker(object):
         channel
         """
         self._offsets_channel_connection = BrokerConnection(
-            self.host, self.port, buffer_size=self._buffer_size,
-            source_host=self._source_host, source_port=self._source_port)
+            self.host, self.port, self._handler,
+            buffer_size=self._buffer_size,
+            source_host=self._source_host, source_port=self._source_port,
+            ssl_config=self._ssl_config)
         self._offsets_channel_connection.connect(self._offsets_channel_socket_timeout_ms)
         self._offsets_channel_req_handler = RequestHandler(
             self._handler, self._offsets_channel_connection
         )
         self._offsets_channel_req_handler.start()
+
+    def _get_unique_req_handler(self, connection_id):
+        """Return a RequestHandler instance unique to the given connection_id
+
+        In some applications, for example the Group Membership API, requests running
+        in the same process must be interleaved. When both of these requests are
+        using the same RequestHandler instance, the requests are queued and the
+        interleaving semantics are not upheld. This method behaves identically to
+        self._req_handler if there is only one connection_id per KafkaClient.
+        If a single KafkaClient needs to use more than one connection_id, this
+        method maintains a dictionary of connections unique to those ids.
+
+        :param connection_id: The unique identifier of the connection to return
+        :type connection_id: str
+        """
+        if len(self._req_handlers) == 0:
+            self._req_handlers[connection_id] = self._req_handler
+        elif connection_id not in self._req_handlers:
+            conn = BrokerConnection(
+                self.host, self.port, self._handler, buffer_size=self._buffer_size,
+                source_host=self._source_host, source_port=self._source_port)
+            conn.connect(self._socket_timeout_ms)
+            handler = RequestHandler(self._handler, conn)
+            handler.start()
+            self._req_handlers[connection_id] = handler
+        return self._req_handlers[connection_id]
 
     def fetch_messages(self,
                        partition_requests,
@@ -327,7 +366,7 @@ class Broker(object):
         if not self.offsets_channel_connected:
             self.connect_offsets_channel()
         req = OffsetCommitRequest(consumer_group,
-                                  consumer_group_generation_id,
+                                  get_bytes(consumer_group_generation_id),
                                   consumer_id,
                                   partition_requests=preqs)
         return self._offsets_channel_req_handler.request(req).get(OffsetCommitResponse)
@@ -348,3 +387,82 @@ class Broker(object):
             self.connect_offsets_channel()
         req = OffsetFetchRequest(consumer_group, partition_requests=preqs)
         return self._offsets_channel_req_handler.request(req).get(OffsetFetchResponse)
+
+    ##########################
+    #  Group Membership API  #
+    ##########################
+
+    def join_group(self, connection_id, consumer_group, member_id):
+        """Send a JoinGroupRequest
+
+        :param connection_id: The unique identifier of the connection on which to make
+            this request
+        :type connection_id: str
+        :param consumer_group: The name of the consumer group to join
+        :type consumer_group: bytes
+        :param member_id: The ID of the consumer joining the group
+        :type member_id: bytes
+        """
+        handler = self._get_unique_req_handler(connection_id)
+        future = handler.request(JoinGroupRequest(consumer_group, member_id))
+        self._handler.sleep()
+        return future.get(JoinGroupResponse)
+
+    def leave_group(self, connection_id, consumer_group, member_id):
+        """Send a LeaveGroupRequest
+
+        :param connection_id: The unique identifier of the connection on which to make
+            this request
+        :type connection_id: str
+        :param consumer_group: The name of the consumer group to leave
+        :type consumer_group: bytes
+        :param member_id: The ID of the consumer leaving the group
+        :type member_id: bytes
+        """
+        handler = self._get_unique_req_handler(connection_id)
+        future = handler.request(LeaveGroupRequest(consumer_group, member_id))
+        return future.get(LeaveGroupResponse)
+
+    def sync_group(self, connection_id, consumer_group, generation_id, member_id, group_assignment):
+        """Send a SyncGroupRequest
+
+        :param connection_id: The unique identifier of the connection on which to make
+            this request
+        :type connection_id: str
+        :param consumer_group: The name of the consumer group to which this consumer
+            belongs
+        :type consumer_group: bytes
+        :param generation_id: The current generation for the consumer group
+        :type generation_id: int
+        :param member_id: The ID of the consumer syncing
+        :type member_id: bytes
+        :param group_assignment: A sequence of :class:`pykafka.protocol.MemberAssignment`
+            instances indicating the partition assignments for each member of the group.
+            When `sync_group` is called by a member other than the leader of the group,
+            `group_assignment` should be an empty sequence.
+        :type group_assignment: iterable of :class:`pykafka.protocol.MemberAssignment`
+        """
+        handler = self._get_unique_req_handler(connection_id)
+        future = handler.request(
+            SyncGroupRequest(consumer_group, generation_id, member_id, group_assignment))
+        return future.get(SyncGroupResponse)
+
+    def heartbeat(self, connection_id, consumer_group, generation_id, member_id):
+        """Send a HeartbeatRequest
+
+        :param connection_id: The unique identifier of the connection on which to make
+            this request
+        :type connection_id: str
+        :param consumer_group: The name of the consumer group to which this consumer
+            belongs
+        :type consumer_group: bytes
+        :param generation_id: The current generation for the consumer group
+        :type generation_id: int
+        :param member_id: The ID of the consumer sending this heartbeat
+        :type member_id: bytes
+        """
+        handler = self._get_unique_req_handler(connection_id)
+        future = handler.request(
+            HeartbeatRequest(consumer_group, generation_id, member_id))
+        self._handler.sleep()
+        return future.get(HeartbeatResponse)

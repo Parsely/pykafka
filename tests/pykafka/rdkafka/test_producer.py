@@ -3,15 +3,13 @@ import platform
 import pytest
 
 from tests.pykafka import test_producer
-from pykafka.exceptions import MessageSizeTooLarge
-from pykafka.rdkafka import RdKafkaProducer
 
 
 @pytest.mark.skipif(platform.python_implementation() == "PyPy",
                     reason="We pass PyObject pointers as msg_opaques for "
                            "delivery callbacks, which is unsafe on PyPy.")
 class TestRdKafkaProducer(test_producer.ProducerIntegrationTests):
-    USE_RDKAFKA= True
+    USE_RDKAFKA = True
 
     @pytest.mark.xfail
     def test_async_produce_lingers(self):
@@ -33,4 +31,3 @@ class TestRdKafkaProducer(test_producer.ProducerIntegrationTests):
         own connection recovery.)
         """
         super(TestRdKafkaProducer, self).test_recover_disconnected()
-

@@ -19,11 +19,22 @@ limitations under the License.
 __all__ = ["ResponseFuture", "Handler", "ThreadingHandler", "RequestHandler"]
 
 from collections import namedtuple
-import functools
+import gevent
+import gevent.event
+import gevent.lock
+import gevent.queue
+import gevent.socket as gsocket
+from gevent.socket import error as gsocket_error
+from gevent.socket import gaierror as g_gaierror
 import logging
+import socket as pysocket
+from socket import error as socket_error
+from socket import gaierror as gaierror
+import sys as _sys
 import threading
+import time
 
-from .utils.compat import Queue, Empty
+from .utils.compat import Queue, Empty, Semaphore
 
 log = logging.getLogger(__name__)
 
@@ -71,18 +82,57 @@ class Handler(object):
 
 
 class ThreadingHandler(Handler):
-    """A handler. that uses a :class:`threading.Thread` to perform its work"""
-    QueueEmptyError = Empty
+    """A handler that uses a :class:`threading.Thread` to perform its work"""
     Queue = Queue
     Event = threading.Event
     Lock = threading.Lock
-    # turn off RLock's super annoying default logging
-    RLock = functools.partial(threading.RLock, verbose=False)
+    Semaphore = Semaphore
+    Socket = pysocket
+    SockErr = socket_error
+    GaiError = gaierror
+    _workers_spawned = 0
+
+    def sleep(self, seconds=0):
+        time.sleep(seconds)
+
+    # turn off RLock's super annoying default logging if possible
+    def RLock(*args, **kwargs):
+        kwargs['verbose'] = False
+        try:
+            return threading.RLock(*args[1:], **kwargs)
+        except TypeError:
+            kwargs.pop('verbose')
+            return threading.RLock(*args[1:], **kwargs)
 
     def spawn(self, target, *args, **kwargs):
+        if 'name' in kwargs:
+            kwargs['name'] = "{}: {}".format(ThreadingHandler._workers_spawned, kwargs['name'])
         t = threading.Thread(target=target, *args, **kwargs)
         t.daemon = True
         t.start()
+        ThreadingHandler._workers_spawned += 1
+        return t
+
+
+class GEventHandler(Handler):
+    """A handler that uses a greenlet to perform its work"""
+    Queue = gevent.queue.JoinableQueue
+    Event = gevent.event.Event
+    Lock = gevent.lock.RLock  # fixme
+    RLock = gevent.lock.RLock
+    Semaphore = gevent.lock.Semaphore
+    Socket = gsocket
+    SockErr = gsocket_error
+    GaiError = g_gaierror
+
+    def sleep(self, seconds=0):
+        gevent.sleep(seconds)
+
+    def spawn(self, target, *args, **kwargs):
+        # Greenlets don't support naming
+        if 'name' in kwargs:
+            kwargs.pop('name')
+        t = gevent.spawn(target, *args, **kwargs)
         return t
 
 
@@ -144,22 +194,33 @@ class RequestHandler(object):
         shared = self.shared
 
         def worker():
-            while not shared.ending.is_set():
-                try:
-                    # set a timeout so we check `ending` every so often
-                    task = shared.requests.get(timeout=1)
-                except Empty:
-                    continue
-                try:
-                    shared.connection.request(task.request)
-                    if task.future:
-                        res = shared.connection.response()
-                        task.future.set_response(res)
-                except Exception as e:
-                    if task.future:
-                        task.future.set_error(e)
-                finally:
-                    shared.requests.task_done()
-            log.info("RequestHandler worker: exiting cleanly")
+            try:
+                while not shared.ending.is_set():
+                    try:
+                        # set a timeout so we check `ending` every so often
+                        task = shared.requests.get(timeout=1)
+                    except Empty:
+                        continue
+                    try:
+                        shared.connection.request(task.request)
+                        if task.future:
+                            res = shared.connection.response()
+                            task.future.set_response(res)
+                    except Exception as e:
+                        if task.future:
+                            task.future.set_error(e)
+                    finally:
+                        shared.requests.task_done()
+                log.info("RequestHandler worker: exiting cleanly")
+            except:
+                # deal with interpreter shutdown in the same way that
+                # python 3.x's threading module does, swallowing any
+                # errors raised when core modules such as sys have
+                # already been destroyed
+                if _sys is None:
+                    return
+                raise
 
-        return self.handler.spawn(worker)
+        name = "pykafka.RequestHandler.worker for {}:{}".format(
+            self.shared.connection.host, self.shared.connection.port)
+        return self.handler.spawn(worker, name=name)

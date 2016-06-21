@@ -28,12 +28,13 @@ from kazoo.client import KazooClient
 
 from .broker import Broker
 from .exceptions import (ERROR_CODES,
-                         ConsumerCoordinatorNotAvailable,
+                         GroupCoordinatorNotAvailable,
+                         NoBrokersAvailableError,
                          SocketDisconnectedError,
                          LeaderNotAvailable)
-from .protocol import ConsumerMetadataRequest, ConsumerMetadataResponse
+from .protocol import GroupCoordinatorRequest, GroupCoordinatorResponse
 from .topic import Topic
-from .utils.compat import iteritems, range
+from .utils.compat import iteritems, itervalues, range
 
 log = logging.getLogger(__name__)
 
@@ -61,14 +62,13 @@ class TopicDict(dict):
             return topic_ref()
         else:
             # Topic exists, but needs to be instantiated locally
-            max_retries = 3
-            for i in range(max_retries):
+            for i in range(self._cluster()._max_connection_retries):
                 meta = self._cluster()._get_metadata([key])
                 try:
                     topic = Topic(self._cluster(), meta.topics[key])
                 except LeaderNotAvailable:
                     log.warning("LeaderNotAvailable encountered during Topic creation")
-                    if i == max_retries - 1:
+                    if i == self._cluster()._max_connection_retries - 1:
                         raise
                 else:
                     self[key] = weakref.ref(topic)
@@ -155,12 +155,16 @@ class Cluster(object):
                  socket_timeout_ms=30 * 1000,
                  offsets_channel_socket_timeout_ms=10 * 1000,
                  exclude_internal_topics=True,
-                 source_address=''):
+                 source_address='',
+                 zookeeper_hosts=None,
+                 ssl_config=None):
         """Create a new Cluster instance.
 
-        :param hosts: Comma-separated list of kafka hosts to used to connect. Also
-            accepts a KazooClient connect string
+        :param hosts: Comma-separated list of kafka hosts to which to connect.
         :type hosts: bytes
+        :param zookeeper_hosts: KazooClient-formatted string of ZooKeeper hosts to which
+            to connect. If not `None`, this argument takes precedence over `hosts`
+        :type zookeeper_hosts: bytes
         :param handler: The concurrency handler for network requests.
         :type handler: :class:`pykafka.handlers.Handler`
         :param socket_timeout_ms: The socket timeout (in milliseconds) for
@@ -175,8 +179,10 @@ class Cluster(object):
         :type exclude_internal_topics: bool
         :param source_address: The source address for socket connections
         :type source_address: str `'host:port'`
+        :param ssl_config: Config object for SSL connection
+        :type ssl_config: :class:`pykafka.connection.SslConfig`
         """
-        self._seed_hosts = hosts
+        self._seed_hosts = zookeeper_hosts if zookeeper_hosts is not None else hosts
         self._socket_timeout_ms = socket_timeout_ms
         self._offsets_channel_socket_timeout_ms = offsets_channel_socket_timeout_ms
         self._handler = handler
@@ -185,7 +191,9 @@ class Cluster(object):
         self._source_address = source_address
         self._source_host = self._source_address.split(':')[0]
         self._source_port = 0
-        self._zookeeper_connect = None
+        self._ssl_config = ssl_config
+        self._zookeeper_connect = zookeeper_hosts
+        self._max_connection_retries = 3
         if ':' in self._source_address:
             self._source_port = int(self._source_address.split(':')[1])
         self.update()
@@ -222,20 +230,22 @@ class Cluster(object):
         :type broker_connects: Iterable of two-element sequences of the format
             (broker_host, broker_port)
         """
-        try:
+        for i in range(self._max_connection_retries):
             for host, port in broker_connects:
-                broker = Broker(-1, host, int(port), self._handler,
-                                self._socket_timeout_ms,
-                                self._offsets_channel_socket_timeout_ms,
-                                buffer_size=1024 * 1024,
-                                source_host=self._source_host,
-                                source_port=self._source_port)
-                response = broker.request_metadata(topics)
-                if response is not None:
-                    return response
-        except Exception as e:
-            log.error('Unable to connect to broker %s:%s', host, port)
-            log.exception(e)
+                try:
+                    broker = Broker(-1, host, int(port), self._handler,
+                                    self._socket_timeout_ms,
+                                    self._offsets_channel_socket_timeout_ms,
+                                    buffer_size=1024 * 1024,
+                                    source_host=self._source_host,
+                                    source_port=self._source_port,
+                                    ssl_config=self._ssl_config)
+                    response = broker.request_metadata(topics)
+                    if response is not None:
+                        return response
+                except Exception as e:
+                    log.error('Unable to connect to broker %s:%s. Continuing.', host, port)
+                    log.exception(e)
 
     def _get_metadata(self, topics=None):
         """Get fresh cluster metadata from a broker."""
@@ -247,43 +257,66 @@ class Cluster(object):
                 if response is not None:
                     return response
         else:  # try seed hosts
-            metadata = None
-            broker_connects = [broker_str.split(":")
-                               for broker_str in self._seed_hosts.split(',')]
-            metadata = self._request_metadata(broker_connects, topics)
-            if metadata is not None:
-                return metadata
-
-            # try treating seed_hosts as a zookeeper host list
-            zookeeper = KazooClient(self._seed_hosts, timeout=self._socket_timeout_ms)
-            try:
-                zookeeper.start()
-            except Exception as e:
-                log.error('Unable to connect to ZooKeeper instance %s', self._seed_hosts)
-                log.exception(e)
-            else:
-                try:
-                    # get a list of connect strings from zookeeper
-                    brokers_path = "/brokers/ids/"
-                    broker_ids = zookeeper.get_children(brokers_path)
-                    broker_connects = []
-                    for broker_id in broker_ids:
-                        broker_json, _ = zookeeper.get("{}{}".format(brokers_path, broker_id))
-                        broker_info = json.loads(broker_json.decode("utf-8"))
-                        broker_connects.append((broker_info['host'], broker_info['port']))
-                    zookeeper.stop()
-                except Exception as e:
-                    log.error('Unable to fetch broker info from ZooKeeper')
-                    log.exception(e)
-
+            if self._zookeeper_connect is not None:
+                broker_connects = self._get_brokers_from_zookeeper(
+                    self._zookeeper_connect)
                 metadata = self._request_metadata(broker_connects, topics)
                 if metadata is not None:
-                    self._zookeeper_connect = self._seed_hosts
+                    return metadata
+            else:
+                broker_connects = [
+                    [broker_str.split(":")[0], broker_str.split(":")[1].split("/")[0]]
+                    for broker_str in self._seed_hosts.split(',')]
+                metadata = self._request_metadata(broker_connects, topics)
+                if metadata is not None:
                     return metadata
 
         # Couldn't connect anywhere. Raise an error.
-        raise RuntimeError(
+        raise NoBrokersAvailableError(
             'Unable to connect to a broker to fetch metadata. See logs.')
+
+    def _get_brokers_from_zookeeper(self, zk_connect):
+        """Build a list of broker connection pairs from a ZooKeeper host
+
+        :param zk_connect: The ZooKeeper connect string of the instance to which to
+            connect
+        :type zk_connect: str
+        """
+        zookeeper = KazooClient(zk_connect, timeout=self._socket_timeout_ms / 1000)
+        try:
+            # This math is necessary due to a nested timeout in KazooClient.
+            # KazooClient will attempt to retry its connections only until the
+            # start() timeout is reached. Each of those retries will timeout as
+            # indicated by the KazooClient kwarg. We do a number of timeouts of
+            # self._socket_timeout_ms equal to the number of hosts. This provides
+            # the same retrying behavior that pykafka uses above when treating
+            # this host string as a list of kafka brokers.
+            timeout = (len(zk_connect.split(',')) * self._max_connection_retries *
+                       self._socket_timeout_ms) / 1000
+            zookeeper.start(timeout=timeout)
+        except Exception as e:
+            log.error('Unable to connect to ZooKeeper instance %s', zk_connect)
+            log.exception(e)
+            return []
+        else:
+            try:
+                # get a list of connect strings from zookeeper
+                brokers_path = "/brokers/ids/"
+                broker_ids = zookeeper.get_children(brokers_path)
+                broker_connects = []
+                for broker_id in broker_ids:
+                    broker_json, _ = zookeeper.get("{}{}".format(brokers_path,
+                                                                 broker_id))
+                    broker_info = json.loads(broker_json.decode("utf-8"))
+                    broker_connects.append((broker_info['host'],
+                                            broker_info['port']))
+                zookeeper.stop()
+                self._zookeeper_connect = zk_connect
+                return broker_connects
+            except Exception as e:
+                log.error('Unable to fetch broker info from ZooKeeper')
+                log.exception(e)
+                return []
 
     def _update_brokers(self, broker_metadata):
         """Update brokers with fresh metadata.
@@ -311,8 +344,8 @@ class Cluster(object):
                     self._offsets_channel_socket_timeout_ms,
                     buffer_size=1024 * 1024,
                     source_host=self._source_host,
-                    source_port=self._source_port
-                )
+                    source_port=self._source_port,
+                    ssl_config=self._ssl_config)
             elif not self._brokers[id_].connected:
                 log.info('Reconnecting to broker id %s: %s:%s', id_, meta.host, meta.port)
                 import socket
@@ -332,8 +365,8 @@ class Cluster(object):
                 #       needed.
                 raise Exception('Broker host/port change detected! %s', broker)
 
-    def get_offset_manager(self, consumer_group):
-        """Get the broker designated as the offset manager for this consumer group.
+    def get_group_coordinator(self, consumer_group):
+        """Get the broker designated as the group coordinator for this consumer group.
 
         Based on Step 1 at https://cwiki.apache.org/confluence/display/KAFKA/Committing+and+fetching+consumer+offsets+in+Kafka
 
@@ -343,39 +376,38 @@ class Cluster(object):
         """
         log.info("Attempting to discover offset manager for consumer group '%s'",
                  consumer_group)
-        # arbitrarily choose a broker, since this request can go to any
-        broker = self.brokers[random.choice(list(self.brokers.keys()))]
-        MAX_RETRIES = 5
+        for i in range(self._max_connection_retries):
+            for broker in itervalues(self.brokers):
+                if i > 0:
+                    log.debug("Retrying offset manager discovery")
+                time.sleep(i * 2)
 
-        for i in range(MAX_RETRIES):
-            if i > 0:
-                log.debug("Retrying offset manager discovery")
-            time.sleep(i * 2)
-
-            req = ConsumerMetadataRequest(consumer_group)
-            future = broker.handler.request(req)
-            try:
-                res = future.get(ConsumerMetadataResponse)
-            except ConsumerCoordinatorNotAvailable:
-                log.error('Error discovering offset manager.')
-                if i == MAX_RETRIES - 1:
-                    raise
-            except SocketDisconnectedError:
-                log.error("Socket disconnected during offset manager "
-                          "discovery. This can happen when using PyKafka "
-                          "with a Kafka version lower than 0.8.2.")
-                self.update()
-            else:
-                coordinator = self.brokers.get(res.coordinator_id, None)
-                if coordinator is None:
-                    raise Exception('Coordinator broker with id {id_} not found'.format(id_=res.coordinator_id))
-                log.info("Found coordinator broker with id %s", res.coordinator_id)
-                return coordinator
+                req = GroupCoordinatorRequest(consumer_group)
+                future = broker.handler.request(req)
+                try:
+                    res = future.get(GroupCoordinatorResponse)
+                except GroupCoordinatorNotAvailable:
+                    log.error('Error discovering offset manager.')
+                    if i == self._max_connection_retries - 1:
+                        raise
+                except SocketDisconnectedError:
+                    log.error("Socket disconnected during offset manager "
+                              "discovery. This can happen when using PyKafka "
+                              "with a Kafka version lower than 0.8.2.")
+                    if i == self._max_connection_retries - 1:
+                        raise
+                    self.update()
+                else:
+                    coordinator = self.brokers.get(res.coordinator_id, None)
+                    if coordinator is None:
+                        raise Exception('Coordinator broker with id {id_} not found'.format(id_=res.coordinator_id))
+                    log.info("Found coordinator broker with id %s", res.coordinator_id)
+                    return coordinator
 
     def update(self):
         """Update known brokers and topics."""
-        max_retries = 3
-        for i in range(max_retries):
+        for i in range(self._max_connection_retries):
+            log.debug("Updating cluster, attempt {}/{}".format(i+1, self._max_connection_retries))
             metadata = self._get_metadata()
             if len(metadata.brokers) == 0 and len(metadata.topics) == 0:
                 log.warning('No broker metadata found. If this is a fresh cluster, '

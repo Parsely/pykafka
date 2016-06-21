@@ -21,25 +21,26 @@ __all__ = ["SimpleConsumer"]
 import itertools
 import logging
 import sys
-import time
 import threading
+import time
 import traceback
 from collections import defaultdict
 import weakref
 
 from .common import OffsetType
-from .utils.compat import (Semaphore, Queue, Empty, iteritems, itervalues,
+from .utils.compat import (Queue, Empty, iteritems, itervalues,
                            range, iterkeys)
-from .exceptions import (OffsetOutOfRangeError, UnknownTopicOrPartition,
-                         OffsetMetadataTooLarge, OffsetsLoadInProgress,
-                         NotCoordinatorForConsumer, SocketDisconnectedError,
+from .exceptions import (UnknownError, OffsetOutOfRangeError, UnknownTopicOrPartition,
+                         OffsetMetadataTooLarge, GroupLoadInProgress,
+                         NotCoordinatorForGroup, SocketDisconnectedError,
                          ConsumerStoppedException, KafkaException,
                          NotLeaderForPartition, OffsetRequestFailedError,
-                         ERROR_CODES)
+                         RequestTimedOut, UnknownMemberId, RebalanceInProgress,
+                         IllegalGeneration, ERROR_CODES)
 from .protocol import (PartitionFetchRequest, PartitionOffsetCommitRequest,
                        PartitionOffsetFetchRequest, PartitionOffsetRequest)
 from .utils.error_handlers import (handle_partition_responses, raise_error,
-                                   build_parts_by_error)
+                                   build_parts_by_error, valid_int)
 
 
 log = logging.getLogger(__name__)
@@ -66,7 +67,10 @@ class SimpleConsumer(object):
                  auto_offset_reset=OffsetType.EARLIEST,
                  consumer_timeout_ms=-1,
                  auto_start=True,
-                 reset_offset_on_start=False):
+                 reset_offset_on_start=False,
+                 compacted_topic=False,
+                 generation_id=-1,
+                 consumer_id=b''):
         """Create a SimpleConsumer.
 
         Settings and default values are taken from the Scala
@@ -131,46 +135,67 @@ class SimpleConsumer(object):
             internal offset counter to `self._auto_offset_reset` and commit that
             offset immediately upon starting up
         :type reset_offset_on_start: bool
+        :param compacted_topic: Set to read from a compacted topic. Forces
+            consumer to use less stringent message ordering logic because compacted
+            topics do not provide offsets in stict incrementing order.
+        :type compacted_topic: bool
+        :param generation_id: The generation id with which to make group requests
+        :type generation_id: int
+        :param consumer_id: The identifying string to use for this consumer on group
+            requests
+        :type consumer_id: bytes
         """
+        self._running = False
         self._cluster = cluster
         if not (isinstance(consumer_group, bytes) or consumer_group is None):
             raise TypeError("consumer_group must be a bytes object")
         self._consumer_group = consumer_group
         self._topic = topic
-        self._fetch_message_max_bytes = fetch_message_max_bytes
-        self._fetch_min_bytes = fetch_min_bytes
-        self._queued_max_messages = queued_max_messages
-        self._num_consumer_fetchers = num_consumer_fetchers
-        self._fetch_wait_max_ms = fetch_wait_max_ms
-        self._consumer_timeout_ms = consumer_timeout_ms
-        self._offsets_channel_backoff_ms = offsets_channel_backoff_ms
+        self._fetch_message_max_bytes = valid_int(fetch_message_max_bytes)
+        self._fetch_min_bytes = valid_int(fetch_min_bytes)
+        self._queued_max_messages = valid_int(queued_max_messages)
+        self._num_consumer_fetchers = valid_int(num_consumer_fetchers)
+        self._fetch_wait_max_ms = valid_int(fetch_wait_max_ms, allow_zero=True)
+        self._consumer_timeout_ms = valid_int(consumer_timeout_ms,
+                                              allow_zero=True, allow_negative=True)
+        self._offsets_channel_backoff_ms = valid_int(offsets_channel_backoff_ms)
         self._auto_offset_reset = auto_offset_reset
+        offsets_commit_max_retries = valid_int(offsets_commit_max_retries,
+                                               allow_zero=True)
         self._offsets_commit_max_retries = offsets_commit_max_retries
         # not directly configurable
         self._offsets_fetch_max_retries = offsets_commit_max_retries
         self._offsets_reset_max_retries = offsets_commit_max_retries
         self._auto_start = auto_start
         self._reset_offset_on_start = reset_offset_on_start
+        self._is_compacted_topic = compacted_topic
+        self._generation_id = valid_int(generation_id, allow_zero=True,
+                                        allow_negative=True)
+        self._consumer_id = consumer_id
 
         # incremented for any message arrival from any partition
         # the initial value is 0 (no messages waiting)
-        self._messages_arrived = Semaphore(value=0)
+        self._messages_arrived = self._cluster.handler.Semaphore(value=0)
 
         self._auto_commit_enable = auto_commit_enable
-        self._auto_commit_interval_ms = auto_commit_interval_ms
+        self._auto_commit_interval_ms = valid_int(auto_commit_interval_ms)
         self._last_auto_commit = time.time()
         self._worker_exception = None
         self._worker_trace_logged = False
         self._update_lock = self._cluster.handler.Lock()
 
-        self._discover_offset_manager()
+        self._discover_group_coordinator()
 
         if partitions is not None:
-            self._partitions = {p: OwnedPartition(p, self._messages_arrived)
+            self._partitions = {p: OwnedPartition(p, self._cluster.handler,
+                                                  self._messages_arrived,
+                                                  self._is_compacted_topic)
                                 for p in partitions}
         else:
             self._partitions = {topic.partitions[k]:
-                                OwnedPartition(p, self._messages_arrived)
+                                OwnedPartition(p, self._cluster.handler,
+                                               self._messages_arrived,
+                                               self._is_compacted_topic)
                                 for k, p in iteritems(topic.partitions)}
         self._partitions_by_id = {p.partition.id: p
                                   for p in itervalues(self._partitions)}
@@ -180,7 +205,6 @@ class SimpleConsumer(object):
 
         self._default_error_handlers = self._build_default_error_handlers()
 
-        self._running = False
         if self._auto_start:
             self.start()
 
@@ -203,13 +227,12 @@ class SimpleConsumer(object):
             raise ex
 
     def _update(self):
-        """Update the consumer and cluster after an ERROR_CODE
-        """
-        # only allow one thread to be updating the producer at a time
+        """Update the consumer and cluster after an ERROR_CODE"""
+        # only allow one thread to be updating the consumer at a time
         with self._update_lock:
             self._cluster.update()
             self._setup_partitions_by_leader()
-            self._discover_offset_manager()
+            self._discover_group_coordinator()
 
     def start(self):
         """Begin communicating with Kafka, including setting up worker threads
@@ -247,29 +270,53 @@ class SimpleConsumer(object):
                                    for owned_partition, pres in parts]
             )
 
-        def _handle_NotCoordinatorForConsumer(parts):
-            log.info("Updating cluster in response to NotCoordinatorForConsumer")
+        def _handle_RequestTimedOut(parts):
+            log.info("Continuing in response to RequestTimedOut")
+
+        def _handle_NotCoordinatorForGroup(parts):
+            log.info("Updating cluster in response to NotCoordinatorForGroup")
             self._update()
 
         def _handle_NotLeaderForPartition(parts):
             log.info("Updating cluster in response to NotLeaderForPartition")
             self._update()
 
+        def _handle_GroupLoadInProgress(parts):
+            log.info("Continuing in response to GroupLoadInProgress")
+
+        def _handle_IllegalGeneration(parts):
+            log.info("Continuing in response to IllegalGeneration")
+
+        def _handle_UnknownMemberId(parts):
+            log.info("Continuing in response to UnknownMemberId")
+
+        def _handle_UnknownError(parts):
+            log.info("Continuing in response to UnknownError")
+
+        def _handle_RebalanceInProgress(parts):
+            log.info("Continuing in response to RebalanceInProgress")
+
         return {
             UnknownTopicOrPartition.ERROR_CODE: lambda p: raise_error(UnknownTopicOrPartition),
+            UnknownError.ERROR_CODE: _handle_UnknownError,
             OffsetOutOfRangeError.ERROR_CODE: _handle_OffsetOutOfRangeError,
             NotLeaderForPartition.ERROR_CODE: _handle_NotLeaderForPartition,
             OffsetMetadataTooLarge.ERROR_CODE: lambda p: raise_error(OffsetMetadataTooLarge),
-            NotCoordinatorForConsumer.ERROR_CODE: _handle_NotCoordinatorForConsumer
+            NotCoordinatorForGroup.ERROR_CODE: _handle_NotCoordinatorForGroup,
+            RequestTimedOut.ERROR_CODE: _handle_RequestTimedOut,
+            GroupLoadInProgress.ERROR_CODE: _handle_GroupLoadInProgress,
+            UnknownMemberId.ERROR_CODE: _handle_UnknownMemberId,
+            RebalanceInProgress.ERROR_CODE: _handle_RebalanceInProgress,
+            IllegalGeneration.ERROR_CODE: _handle_IllegalGeneration
         }
 
-    def _discover_offset_manager(self):
-        """Set the offset manager for this consumer.
+    def _discover_group_coordinator(self):
+        """Set the group coordinator for this consumer.
 
         If a consumer group is not supplied to __init__, this method does nothing
         """
         if self._consumer_group is not None:
-            self._offset_manager = self._cluster.get_offset_manager(self._consumer_group)
+            self._group_coordinator = self._cluster.get_group_coordinator(self._consumer_group)
 
     @property
     def topic(self):
@@ -293,7 +340,8 @@ class SimpleConsumer(object):
     def __del__(self):
         """Stop consumption and workers when object is deleted"""
         log.debug("Finalising {}".format(self))
-        self.stop()
+        if self._running:
+            self.stop()
 
     def stop(self):
         """Flag all running workers for deletion."""
@@ -312,7 +360,7 @@ class SimpleConsumer(object):
                         break
                     if self._auto_commit_enable:
                         self._auto_commit()
-                    time.sleep(self._auto_commit_interval_ms / 1000)
+                    self._cluster.handler.sleep(self._auto_commit_interval_ms / 1000)
                 except ReferenceError:
                     break
                 except Exception:
@@ -321,7 +369,7 @@ class SimpleConsumer(object):
                     break
             log.debug("Autocommitter thread exiting")
         log.debug("Starting autocommitter thread")
-        return self._cluster.handler.spawn(autocommitter)
+        return self._cluster.handler.spawn(autocommitter, name="pykafka.SimpleConsumer.autocommiter")
 
     def _setup_fetch_workers(self):
         """Start the fetcher threads"""
@@ -334,7 +382,7 @@ class SimpleConsumer(object):
                     if not self._running:
                         break
                     self.fetch()
-                    time.sleep(.0001)
+                    self._cluster.handler.sleep(.0001)
                 except ReferenceError:
                     break
                 except Exception:
@@ -343,7 +391,7 @@ class SimpleConsumer(object):
                     break
             log.debug("Fetcher thread exiting")
         log.info("Starting %s fetcher threads", self._num_consumer_fetchers)
-        return [self._cluster.handler.spawn(fetcher)
+        return [self._cluster.handler.spawn(fetcher, name="pykafka.SimpleConsumer.fetcher")
                 for i in range(self._num_consumer_fetchers)]
 
     def __iter__(self):
@@ -369,6 +417,7 @@ class SimpleConsumer(object):
 
         while True:
             self._raise_worker_exceptions()
+            self._cluster.handler.sleep()
             if self._messages_arrived.acquire(blocking=block, timeout=timeout):
                 # by passing through this semaphore, we know that at
                 # least one message is waiting in some queue.
@@ -407,19 +456,19 @@ class SimpleConsumer(object):
 
         reqs = [p.build_offset_commit_request() for p in self._partitions.values()]
         log.debug("Committing offsets for %d partitions to broker id %s", len(reqs),
-                  self._offset_manager.id)
+                  self._group_coordinator.id)
         for i in range(self._offsets_commit_max_retries):
             if i > 0:
                 log.debug("Retrying")
-            time.sleep(i * (self._offsets_channel_backoff_ms / 1000))
+            self._cluster.handler.sleep(i * (self._offsets_channel_backoff_ms / 1000))
 
             try:
-                response = self._offset_manager.commit_consumer_group_offsets(
-                    self._consumer_group, -1, b'pykafka', reqs)
+                response = self._group_coordinator.commit_consumer_group_offsets(
+                    self._consumer_group, self._generation_id, self._consumer_id, reqs)
             except (SocketDisconnectedError, IOError):
-                log.error("Error committing offsets for topic '%s' "
+                log.error("Error committing offsets for topic '%s' from consumer id '%s'"
                           "(SocketDisconnectedError)",
-                          self._topic.name)
+                          self._topic.name, self._consumer_id)
                 if i >= self._offsets_commit_max_retries - 1:
                     raise
                 self._update()
@@ -429,10 +478,11 @@ class SimpleConsumer(object):
                 self._default_error_handlers,
                 response=response,
                 partitions_by_id=self._partitions_by_id)
-            if len(parts_by_error) == 1 and 0 in parts_by_error:
+            if (len(parts_by_error) == 1 and 0 in parts_by_error) or \
+                    len(parts_by_error) == 0:
                 break
-            log.error("Error committing offsets for topic '%s' (errors: %s)",
-                      self._topic.name,
+            log.error("Error committing offsets for topic '%s' from consumer id '%s'"
+                      "(errors: %s)", self._topic.name, self._consumer_id,
                       {ERROR_CODES[err]: [op.partition.id for op, _ in parts]
                        for err, parts in iteritems(parts_by_error)})
 
@@ -489,13 +539,13 @@ class SimpleConsumer(object):
         success_responses = []
 
         log.debug("Fetching offsets for %d partitions from broker id %s", len(reqs),
-                  self._offset_manager.id)
+                  self._group_coordinator.id)
 
         for i in range(self._offsets_fetch_max_retries):
             if i > 0:
                 log.debug("Retrying offset fetch")
 
-            res = self._offset_manager.fetch_consumer_group_offsets(self._consumer_group, reqs)
+            res = self._group_coordinator.fetch_consumer_group_offsets(self._consumer_group, reqs)
             parts_by_error = handle_partition_responses(
                 self._default_error_handlers,
                 response=res,
@@ -511,13 +561,13 @@ class SimpleConsumer(object):
                       {ERROR_CODES[err]: [op.partition.id for op, _ in parts]
                        for err, parts in iteritems(parts_by_error)})
 
-            time.sleep(i * (self._offsets_channel_backoff_ms / 1000))
+            self._cluster.handler.sleep(i * (self._offsets_channel_backoff_ms / 1000))
 
-            # retry only specific error responses
-            to_retry = []
-            to_retry.extend(parts_by_error.get(OffsetsLoadInProgress.ERROR_CODE, []))
-            to_retry.extend(parts_by_error.get(NotCoordinatorForConsumer.ERROR_CODE, []))
+            to_retry = [pair for err in itervalues(parts_by_error) for pair in err]
             reqs = [p.build_offset_fetch_request() for p, _ in to_retry]
+
+        if len(parts_by_error) > 1:
+            raise KafkaException(parts_by_error)
 
     def reset_offsets(self, partition_offsets=None):
         """Reset offsets for the specified partitions
@@ -528,16 +578,17 @@ class SimpleConsumer(object):
         :param partition_offsets: (`partition`, `timestamp_or_offset`) pairs to
             reset where `partition` is the partition for which to reset the offset
             and `timestamp_or_offset` is EITHER the timestamp of the message
-            whose offset the partition should have OR the new offset the
-            partition should have
-        :type partition_offsets: Iterable of
+            whose offset the partition should have OR the new "most recently
+            consumed" offset the partition should have
+        :type partition_offsets: Sequence of tuples of the form
             (:class:`pykafka.partition.Partition`, int)
 
         NOTE: If an instance of `timestamp_or_offset` is treated by kafka as
         an invalid offset timestamp, this function directly sets the consumer's
         internal offset counter for that partition to that instance of
-        `timestamp_or_offset`. On the next fetch request, the consumer attempts
-        to fetch messages starting from that offset. See the following link
+        `timestamp_or_offset`. This counter represents the offset most recently
+        consumed. On the next fetch request, the consumer attempts
+        to fetch messages starting from that offset plus one. See the following link
         for more information on what kafka treats as a valid offset timestamp:
         https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol#AGuideToTheKafkaProtocol-OffsetRequest
         """
@@ -625,7 +676,7 @@ class SimpleConsumer(object):
                           {ERROR_CODES[err]: [op.partition.id for op, _ in parts]
                            for err, parts in iteritems(parts_by_error)})
 
-                time.sleep(i * (self._offsets_channel_backoff_ms / 1000))
+                self._cluster.handler.sleep(i * (self._offsets_channel_backoff_ms / 1000))
 
                 for errcode, owned_partitions in iteritems(parts_by_error):
                     if errcode != 0:
@@ -707,22 +758,28 @@ class OwnedPartition(object):
     Used to keep track of offsets and the internal message queue.
     """
 
-    def __init__(self,
-                 partition,
-                 semaphore=None):
+    def __init__(self, partition, handler=None, semaphore=None, compacted_topic=False):
         """
         :param partition: The partition to hold
         :type partition: :class:`pykafka.partition.Partition`
+        :param handler: The :class:`pykafka.handlers.Handler` instance to use
+            to generate a lock
+        type handler: :class:`pykafka.handler.Handler`
         :param semaphore: A Semaphore that counts available messages and
             facilitates non-busy blocking
         :type semaphore: :class:`pykafka.utils.compat.Semaphore`
+        :param compacted_topic: Set to read from a compacted topic. Forces
+            consumer to use less stringent ordering logic when because compacted
+            topics do not provide offsets in stict incrementing order.
+        :type compacted_topic: bool
         """
         self.partition = partition
         self._messages = Queue()
         self._messages_arrived = semaphore
+        self._is_compacted_topic = compacted_topic
         self.last_offset_consumed = -1
         self.next_offset = 0
-        self.fetch_lock = threading.RLock()
+        self.fetch_lock = handler.RLock() if handler is not None else threading.RLock()
 
     @property
     def message_count(self):
@@ -816,11 +873,14 @@ class OwnedPartition(object):
         :type messages: Iterable of :class:`pykafka.common.Message`
         """
         for message in messages:
-            if message.offset != self.next_offset:
+            # enforce ordering of messages
+            if (self._is_compacted_topic and message.offset < self.next_offset) or \
+                    (not self._is_compacted_topic and message.offset != self.next_offset):
                 log.debug("Skipping enqueue for offset (%s) "
                           "not equal to next_offset (%s)",
                           message.offset, self.next_offset)
                 continue
+
             message.partition = self.partition
             if message.partition_id != self.partition.id:
                 log.error("Partition %s enqueued a message meant for partition %s",

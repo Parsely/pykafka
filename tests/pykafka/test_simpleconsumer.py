@@ -1,5 +1,7 @@
 from contextlib import contextmanager
 import mock
+import platform
+import pytest
 import time
 import unittest2
 from uuid import uuid4
@@ -13,6 +15,7 @@ from pykafka.utils.compat import range, iteritems
 class TestSimpleConsumer(unittest2.TestCase):
     maxDiff = None
     USE_RDKAFKA = False
+    USE_GEVENT = False
 
     @classmethod
     def setUpClass(cls):
@@ -199,6 +202,12 @@ class TestSimpleConsumer(unittest2.TestCase):
             self.assertEqual(current_offsets, latest_offsets)
 
 
+@pytest.mark.skipif(platform.python_implementation() == "PyPy",
+                    reason="Unresolved crashes")
+class TestGEventSimpleConsumer(TestSimpleConsumer):
+    USE_GEVENT = True
+
+
 class TestOwnedPartition(unittest2.TestCase):
     def test_partition_saves_offset(self):
         offset = 20
@@ -229,6 +238,32 @@ class TestOwnedPartition(unittest2.TestCase):
         message.offset = 20
 
         op.enqueue_messages([message])
+        self.assertEqual(op.message_count, 0)
+        op.consume()
+        self.assertEqual(op.last_offset_consumed, last_offset)
+
+    def test_compacted_topic_partition_rejects_old_message_after_initial(self):
+        last_offset = 400
+        message1 = mock.Mock()
+        message1.value = "first-test"
+        message1.partition_id = 0
+        message1.offset = last_offset
+
+        partition = mock.MagicMock()
+        partition.id = 0
+        op = OwnedPartition(partition, compacted_topic=True)
+        op.enqueue_messages([message1])
+        self.assertEqual(op.message_count, 1)
+        consumed_msg = op.consume()
+        self.assertEqual(op.message_count, 0)
+        self.assertEqual(op.last_offset_consumed, last_offset)
+
+        message2 = mock.Mock()
+        message2.value = "test"
+        message2.partition_id = 0
+        message2.offset = 20
+
+        op.enqueue_messages([message2])
         self.assertEqual(op.message_count, 0)
         op.consume()
         self.assertEqual(op.last_offset_consumed, last_offset)

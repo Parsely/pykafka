@@ -23,6 +23,8 @@ from collections import defaultdict
 from .balancedconsumer import BalancedConsumer
 from .common import OffsetType
 from .exceptions import LeaderNotAvailable
+from .handlers import GEventHandler
+from .managedbalancedconsumer import ManagedBalancedConsumer
 from .partition import Partition
 from .producer import Producer
 from .protocol import PartitionOffsetRequest
@@ -84,11 +86,18 @@ class Topic(object):
         """
         if not rdkafka and use_rdkafka:
             raise ImportError("use_rdkafka requires rdkafka to be installed")
-        Cls = rdkafka.RdKafkaProducer if rdkafka and use_rdkafka else Producer
+        if isinstance(self._cluster.handler, GEventHandler) and use_rdkafka:
+            raise ImportError("use_rdkafka cannot be used with gevent")
+        Cls = Producer
+        if rdkafka and use_rdkafka:
+            Cls = rdkafka.RdKafkaProducer
+            kwargs.pop('block_on_queue_full', None)
         return Cls(self._cluster, self, **kwargs)
 
     def get_sync_producer(self, **kwargs):
         """Create a :class:`pykafka.producer.Producer` for this topic.
+
+        The created `Producer` instance will have `sync=True`.
 
         For a description of all available `kwargs`, see the Producer docstring.
         """
@@ -122,7 +131,11 @@ class Topic(object):
         return self.fetch_offset_limits(OffsetType.EARLIEST)
 
     def latest_available_offsets(self):
-        """Get the latest offset for each partition of this topic."""
+        """Fetch the next available offset
+
+        Get the offset of the next message that would be appended to each partition of
+            this topic.
+        """
         return self.fetch_offset_limits(OffsetType.LATEST)
 
     def update(self, metadata):
@@ -166,12 +179,14 @@ class Topic(object):
         """Return a SimpleConsumer of this topic
 
         :param consumer_group: The name of the consumer group to join
-        :type consumer_group: str
+        :type consumer_group: bytes
         :param use_rdkafka: Use librdkafka-backed consumer if available
         :type use_rdkafka: bool
         """
         if not rdkafka and use_rdkafka:
             raise ImportError("use_rdkafka requires rdkafka to be installed")
+        if isinstance(self._cluster.handler, GEventHandler) and use_rdkafka:
+            raise ImportError("use_rdkafka cannot be used with gevent")
         Cls = (rdkafka.RdKafkaSimpleConsumer
                if rdkafka and use_rdkafka else SimpleConsumer)
         return Cls(self,
@@ -179,13 +194,20 @@ class Topic(object):
                    consumer_group=consumer_group,
                    **kwargs)
 
-    def get_balanced_consumer(self, consumer_group, **kwargs):
+    def get_balanced_consumer(self, consumer_group, managed=False, **kwargs):
         """Return a BalancedConsumer of this topic
 
         :param consumer_group: The name of the consumer group to join
-        :type consumer_group: str
+        :type consumer_group: bytes
+        :param managed: If True, manage the consumer group with Kafka using the 0.9
+            group management api (requires Kafka >=0.9))
+        :type managed: bool
         """
-        if "zookeeper_connect" not in kwargs and \
-                self._cluster._zookeeper_connect is not None:
-            kwargs['zookeeper_connect'] = self._cluster._zookeeper_connect
-        return BalancedConsumer(self, self._cluster, consumer_group, **kwargs)
+        if not managed:
+            if "zookeeper_connect" not in kwargs and \
+                    self._cluster._zookeeper_connect is not None:
+                kwargs['zookeeper_connect'] = self._cluster._zookeeper_connect
+            cls = BalancedConsumer
+        else:
+            cls = ManagedBalancedConsumer
+        return cls(self, self._cluster, consumer_group, **kwargs)

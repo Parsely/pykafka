@@ -1,6 +1,173 @@
 Changelog
 =========
 
+2.4.0 (2016-5-25)
+-----------------
+
+`Compare 2.4.0`_
+
+.. _Compare 2.4.0: https://github.com/Parsely/pykafka/compare/2.3.1...2.4.0
+
+Minor Version Features
+**********************
+
+* Added support for connecting to Kafka brokers using a secure TLS connection
+* Removed the fallback in `Cluster` that treated `hosts` as a ZooKeeper
+  connection string
+* Removed the `block_on_queue_full` kwarg from the rdkafka producer
+* Added the `max_request_size` kwarg to the rdkafka producer
+
+Bug Fixes
+*********
+
+* Performed permissive parameter validation in consumers and producer to avoid
+  cryptic errors on threads
+* Allowed more consumers than partitions in a balanced consumer group
+* Fixed python 3 compatibility in `kafka_tools.py`
+* Fixed a bug causing nuisance errors on interpreter shutdown
+* Removed some uses of deprecated functions in the rdkafka C extension
+* Fixed a bug causing crashes when kafka returns an invalid partition ID in
+  partition requests
+
+Miscellaneous
+*************
+
+* Added utilities for testing TLS support to the test suite
+* Made the gevent version requirement slightly more inclusive
+
+
+2.3.1 (2016-4-8)
+----------------
+
+`Compare 2.3.1`_
+
+.. _Compare 2.3.1: https://github.com/parsely/pykafka/compare/2.3.0...4fb854cc5a7cba11ea58329a4a336edc38a5a3bd
+
+Bug Fixes
+*********
+
+* Fixed a `NoneType` crash in `Producer` when rejecting larger messages
+* Stopped `Producer` integration tests from sharing a `Consumer` instance to make test
+  runs more consistent
+
+Miscellaneous
+*************
+
+* Added warning about using Snappy compression under PyPy
+* Clarified language around "most recent offset available"
+
+2.3.0 (2016-3-22)
+-----------------
+
+`Compare 2.3.0`_
+
+.. _Compare 2.3.0: https://github.com/Parsely/pykafka/compare/2.2.1...7855fa2beeb08c0f35a343d4f9ba09c725cdd32f
+
+Minor Version Features
+**********************
+
+* Added the `ManagedBalancedConsumer` class, which performs balanced consumption
+  using the Kafka 0.9 Group Membership API
+* Added the `managed` keyword argument to `Topic.get_balanced_consumer` to access
+  `ManagedBalancedConsumer`
+* Added a `compacted_topic` kwarg to `BalancedConsumer` to make it smarter about
+  offset ordering for compacted topics
+* Added methods to `Broker` that use the Group Membership API
+* Changed the terminology "offset manager" to "group coordinator" to match updated
+  Kafka jargon
+* Added new exception types from Kafka 0.9
+* Added `auto_start` keyword argument to `Producer` to match the consumer interface
+* Added `max_request_size` keyword argument to `Producer` to catch large messages
+  before they're sent to Kafka
+* Added protocol functions for the Group Membership API
+* New `SimpleConsumer` keyword arguments: `compacted_topic`, `generation_id`,
+  `consumer_id`
+
+Bug Fixes
+*********
+
+* Fixed a bug in Travis config causing tests not to run against Kafka 0.9
+* Upgraded to non-beta gevent version
+* Allowed a single `Broker` instance to maintain multiple connections to a broker
+  (useful when multiple consumers are sharing the same `KafkaClient`)
+* Allowed switchable socket implementations when using gevent
+* Handled `TypeError` during worker thread shutdown to avoid nuisance messages
+* Limited `Producer.min_queued_messages` to 1 when `sync=True`
+* Monkeypatched a bug in py.test causing tests to be erroneously skipped
+
+Miscellaneous
+*************
+
+* Added an issue template
+
+
+2.2.1 (2016-2-19)
+-----------------
+
+`Compare 2.2.1`_
+
+.. _Compare 2.2.1: https://github.com/Parsely/pykafka/compare/2.2.0...538c476d876df09c71496b82c4ac6a2f720c6765
+
+Bug Fixes
+*********
+
+* Fixed Travis issues related to PyPy testing
+* Fixed deprecated dependency on gevent.coros
+* Enabled caching in Travis for pip, librdkafka, and kafka installations
+* Fixed a crash during metadata updating related to zookeeper fallback
+* Unified connection retry logic in `Cluster`
+* Raised an exception if consumer offset reset fails after maximum retries
+* Fixed a bug allowing `get_delivery_report` to indefinitely block `produce()`
+* Fixed a bug causing producers to drop `to_retry` messages on `stop()`
+* Added retry logic to offset limit fetching
+
+
+2.2.0 (2016-1-26)
+----------------
+
+`Compare 2.2.0`_
+
+.. _Compare 2.2.0: https://github.com/Parsely/pykafka/compare/2.1.2...c1174cf6f67d350d279cf292fd7d9be9c9767600
+
+Minor Version Features
+**********************
+
+* Added support for gevent-based concurrency in pure cpython
+* Allowed ZooKeeper hosts to be specified directly to KafkaClient instead of
+  being treated as a fallback
+
+
+Bug Fixes
+*********
+
+* Fixed a bug causing `RLock`-related crashes in Python 3
+* Used the more stable sha1 hash function as the default for
+  `hashing_partitioner`
+* Fixed a bug in the meaning of `linger_ms` in the producer
+
+
+
+2.1.2 (2016-1-8)
+----------------
+
+`Compare 2.1.2`_
+
+.. _Compare 2.1.2: https://github.com/Parsely/pykafka/compare/2.1.1...70cce0fb59f4d0f6a4e50bb7521d2edb9c1e66fa
+
+Features
+********
+
+* Allowed consumers to run with no partitions
+
+Bug Fixes
+*********
+
+* Fixed a bug causing consumers to hold outdated partition sets
+* Handled some previously uncaught error codes in `SimpleConsumer`
+* Fixed an off-by-one bug in message set fetching
+* Made `consume()` stricter about message ordering and duplication
+
+
 2.1.1 (2015-12-11)
 ------------------
 
