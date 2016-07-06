@@ -1,6 +1,27 @@
 Changelog
 =========
 
+2.4.1.dev1 (2016-7-6)
+---------------------
+
+`Compare 2.4.0`_
+
+.. _Compare 2.4.0: https://github.com/Parsely/pykafka/compare/2.4.0...2.4.1.dev1
+
+You can install this release via pip with `pip install --pre pykafka==2.4.1.dev1`.
+It will not automatically install because it's a pre-release.
+
+Bug Fixes
+---------
+
+* Fixed an issue causing consumer group names to be written to ZooKeeper with a literal
+  `b''`. Since this change adjusts ZooKeeper storage formats, it should be applied with
+  caution to production systems. Deploying this change without a careful rollout plan
+  could cause consumers to lose track of their offsets.
+* Added logic to group coordinator discovery that retries the request once per broker
+* Handled socket errors in `BrokerConnection`
+* Fixed a bug causing synchronous production to hang in some situations
+
 2.4.0 (2016-5-25)
 -----------------
 
