@@ -4,9 +4,9 @@ Changelog
 2.4.1.dev1 (2016-7-6)
 ---------------------
 
-`Compare 2.4.0`_
+`Compare 2.4.1.dev1`_
 
-.. _Compare 2.4.0: https://github.com/Parsely/pykafka/compare/2.4.0...2.4.1.dev1
+.. _Compare 2.4.1.dev1: https://github.com/Parsely/pykafka/compare/2.4.0...2.4.1.dev1
 
 You can install this release via pip with `pip install --pre pykafka==2.4.1.dev1`.
 It will not automatically install because it's a pre-release.
