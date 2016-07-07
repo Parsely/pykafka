@@ -348,6 +348,9 @@ class SimpleConsumer(object):
         self._running = False
         if self._auto_commit_enable and self._consumer_group is not None:
             self.commit_offsets()
+        # unblock a waiting consume() call
+        if self._messages_arrived is not None:
+            self._messages_arrived.release()
 
     def _setup_autocommit_worker(self):
         """Start the autocommitter thread"""
