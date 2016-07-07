@@ -725,7 +725,10 @@ class BalancedConsumer(object):
         while message is None and not consumer_timed_out():
             self._raise_worker_exceptions()
             try:
-                message = self._consumer.consume(block=block)
+                # acquire the lock to ensure that we don't start trying to consume from
+                # a _consumer that might soon be replaced by an in-progress rebalance
+                with self._rebalancing_lock:
+                    message = self._consumer.consume(block=block)
             except (ConsumerStoppedException, AttributeError):
                 if not self._running:
                     raise ConsumerStoppedException
