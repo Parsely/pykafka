@@ -56,10 +56,10 @@ class KafkaClient(object):
         :param hosts: Comma-separated list of kafka hosts to which to connect.
             If `ssl_config` is specified, the ports specified here are assumed
             to be SSL ports
-        :type hosts: bytes
+        :type hosts: str
         :param zookeeper_hosts: KazooClient-formatted string of ZooKeeper hosts to which
             to connect. If not `None`, this argument takes precedence over `hosts`
-        :type zookeeper_hosts: bytes
+        :type zookeeper_hosts: str
         :param socket_timeout_ms: The socket timeout (in milliseconds) for
             network requests
         :type socket_timeout_ms: int
