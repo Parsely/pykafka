@@ -161,10 +161,10 @@ class Cluster(object):
         """Create a new Cluster instance.
 
         :param hosts: Comma-separated list of kafka hosts to which to connect.
-        :type hosts: bytes
+        :type hosts: str
         :param zookeeper_hosts: KazooClient-formatted string of ZooKeeper hosts to which
             to connect. If not `None`, this argument takes precedence over `hosts`
-        :type zookeeper_hosts: bytes
+        :type zookeeper_hosts: str
         :param handler: The concurrency handler for network requests.
         :type handler: :class:`pykafka.handlers.Handler`
         :param socket_timeout_ms: The socket timeout (in milliseconds) for
