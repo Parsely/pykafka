@@ -785,6 +785,7 @@ class OwnedPartition(object):
         self.last_offset_consumed = -1
         self.next_offset = 0
         self.fetch_lock = handler.RLock() if handler is not None else threading.RLock()
+        # include consumer id in offset metadata for debugging
         self._offset_metadata = {
             'consumer_id': self._consumer_id,
             'hostname': socket.gethostname()
