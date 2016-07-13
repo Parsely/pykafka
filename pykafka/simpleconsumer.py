@@ -20,6 +20,8 @@ limitations under the License.
 __all__ = ["SimpleConsumer"]
 import itertools
 import logging
+import json
+import socket
 import sys
 import threading
 import time
@@ -182,13 +184,15 @@ class SimpleConsumer(object):
         self._discover_group_coordinator()
 
         if partitions is not None:
-            self._partitions = {p: OwnedPartition(p, self._cluster.handler,
+            self._partitions = {p: OwnedPartition(p, self._consumer_id,
+                                                  self._cluster.handler,
                                                   self._messages_arrived,
                                                   self._is_compacted_topic)
                                 for p in partitions}
         else:
             self._partitions = {topic.partitions[k]:
-                                OwnedPartition(p, self._cluster.handler,
+                                OwnedPartition(p, self._consumer_id,
+                                               self._cluster.handler,
                                                self._messages_arrived,
                                                self._is_compacted_topic)
                                 for k, p in iteritems(topic.partitions)}
@@ -751,10 +755,17 @@ class OwnedPartition(object):
     Used to keep track of offsets and the internal message queue.
     """
 
-    def __init__(self, partition, handler=None, semaphore=None, compacted_topic=False):
+    def __init__(self,
+                 partition,
+                 consumer_id,
+                 handler=None,
+                 semaphore=None,
+                 compacted_topic=False):
         """
         :param partition: The partition to hold
         :type partition: :class:`pykafka.partition.Partition`
+        :param consumer_id: The ID of the parent consumer
+        :type consumer_id: bytes
         :param handler: The :class:`pykafka.handlers.Handler` instance to use
             to generate a lock
         type handler: :class:`pykafka.handler.Handler`
@@ -767,12 +778,17 @@ class OwnedPartition(object):
         :type compacted_topic: bool
         """
         self.partition = partition
+        self._consumer_id = consumer_id
         self._messages = Queue()
         self._messages_arrived = semaphore
         self._is_compacted_topic = compacted_topic
         self.last_offset_consumed = -1
         self.next_offset = 0
         self.fetch_lock = handler.RLock() if handler is not None else threading.RLock()
+        self._offset_metadata = {
+            'consumer_id': self._consumer_id,
+            'hostname': socket.gethostname()
+        }
 
     @property
     def message_count(self):
@@ -839,7 +855,7 @@ class OwnedPartition(object):
             self.partition.id,
             self.last_offset_consumed + 1,
             int(time.time() * 1000),
-            b'pykafka'
+            b'{}'.format(json.dumps(self._offset_metadata))
         )
 
     def build_offset_fetch_request(self):
