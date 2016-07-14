@@ -31,7 +31,7 @@ import weakref
 
 from .common import OffsetType
 from .utils.compat import (Queue, Empty, iteritems, itervalues,
-                           range, iterkeys)
+                           range, iterkeys, get_bytes)
 from .exceptions import (UnknownError, OffsetOutOfRangeError, UnknownTopicOrPartition,
                          OffsetMetadataTooLarge, GroupLoadInProgress,
                          NotCoordinatorForGroup, SocketDisconnectedError,
@@ -868,7 +868,7 @@ class OwnedPartition(object):
             self.partition.id,
             self.last_offset_consumed + 1,
             int(time.time() * 1000),
-            b'{}'.format(json.dumps(self._offset_metadata))
+            get_bytes('{}'.format(json.dumps(self._offset_metadata)))
         )
 
     def build_offset_fetch_request(self):
