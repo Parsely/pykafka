@@ -189,17 +189,19 @@ class SimpleConsumer(object):
         self._discover_group_coordinator()
 
         if partitions is not None:
-            self._partitions = {p: OwnedPartition(p, self._consumer_id,
+            self._partitions = {p: OwnedPartition(p,
                                                   self._cluster.handler,
                                                   self._messages_arrived,
-                                                  self._is_compacted_topic)
+                                                  self._is_compacted_topic,
+                                                  self._consumer_id)
                                 for p in partitions}
         else:
             self._partitions = {topic.partitions[k]:
-                                OwnedPartition(p, self._consumer_id,
+                                OwnedPartition(p,
                                                self._cluster.handler,
                                                self._messages_arrived,
-                                               self._is_compacted_topic)
+                                               self._is_compacted_topic,
+                                               self._consumer_id)
                                 for k, p in iteritems(topic.partitions)}
         self._partitions_by_id = {p.partition.id: p
                                   for p in itervalues(self._partitions)}
@@ -767,10 +769,10 @@ class OwnedPartition(object):
 
     def __init__(self,
                  partition,
-                 consumer_id=b'',
                  handler=None,
                  semaphore=None,
-                 compacted_topic=False):
+                 compacted_topic=False,
+                 consumer_id=b''):
         """
         :param partition: The partition to hold
         :type partition: :class:`pykafka.partition.Partition`
