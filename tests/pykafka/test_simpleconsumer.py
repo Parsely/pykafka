@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+import json
 import mock
 import platform
 import pytest
@@ -289,7 +290,9 @@ class TestOwnedPartition(unittest2.TestCase):
         self.assertEqual(request.topic_name, topic.name)
         self.assertEqual(request.partition_id, partition.id)
         self.assertEqual(request.offset, op.last_offset_consumed + 1)
-        self.assertEqual(request.metadata, b'pykafka')
+        parsed_metadata = json.loads(request.metadata)
+        self.assertEqual(parsed_metadata["consumer_id"], b'')
+        self.assertTrue(bool(parsed_metadata["hostname"]))
 
     def test_partition_offset_fetch_request(self):
         topic = mock.Mock()
