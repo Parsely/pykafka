@@ -767,7 +767,7 @@ class OwnedPartition(object):
 
     def __init__(self,
                  partition,
-                 consumer_id,
+                 consumer_id=b'',
                  handler=None,
                  semaphore=None,
                  compacted_topic=False):
