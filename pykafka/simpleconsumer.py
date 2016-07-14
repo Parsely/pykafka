@@ -31,7 +31,7 @@ import weakref
 
 from .common import OffsetType
 from .utils.compat import (Queue, Empty, iteritems, itervalues,
-                           range, iterkeys, get_bytes)
+                           range, iterkeys, get_bytes, get_string)
 from .exceptions import (UnknownError, OffsetOutOfRangeError, UnknownTopicOrPartition,
                          OffsetMetadataTooLarge, GroupLoadInProgress,
                          NotCoordinatorForGroup, SocketDisconnectedError,
@@ -799,7 +799,7 @@ class OwnedPartition(object):
         self.fetch_lock = handler.RLock() if handler is not None else threading.RLock()
         # include consumer id in offset metadata for debugging
         self._offset_metadata = {
-            'consumer_id': self._consumer_id,
+            'consumer_id': get_string(self._consumer_id),
             'hostname': socket.gethostname()
         }
 
