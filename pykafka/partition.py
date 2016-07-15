@@ -139,7 +139,7 @@ class Partition(object):
         :type metadata: :class:`pykafka.protocol.PartitionMetadata`
         """
         try:
-            log.debug("Updating partition {}".format(self.id))
+            log.debug("Updating partition {} - new leader {}".format(self.id, metadata.leader))
             # Check leader
             if metadata.leader != self._leader.id:
                 log.info('Updating leader for %s from broker %s to broker %s', self,
