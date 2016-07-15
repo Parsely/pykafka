@@ -257,7 +257,10 @@ class Producer(object):
                 # loop becuase flush is not garentee to empty owned
                 # broker queue
                 while True:
-                    batch = owned_broker.flush(self._linger_ms, self._max_request_size)
+                    batch = owned_broker.flush(self._linger_ms,
+                                               self._max_request_size,
+                                               release_pending=False,
+                                               wait=False)
                     if not batch:
                         break
                     queued_messages.extend(batch)
@@ -572,7 +575,7 @@ class OwnedBroker(object):
                 if not self.flush_ready.is_set():
                     self.flush_ready.set()
 
-    def flush(self, linger_ms, max_request_size, release_pending=False):
+    def flush(self, linger_ms, max_request_size, release_pending=False, wait=True):
         """Pop messages from the end of the queue
 
         :param linger_ms: How long (in milliseconds) to wait for the queue
@@ -586,8 +589,12 @@ class OwnedBroker(object):
             popped from the queue will be discarded unless re-enqueued
             by the caller.
         :type release_pending: bool
+        :param wait: If True, wait for the event indicating a flush is ready. If False,
+            attempt a flush immediately without waiting
+        :type wait: bool
         """
-        self._wait_for_flush_ready(linger_ms)
+        if wait:
+            self._wait_for_flush_ready(linger_ms)
         with self.lock:
             batch = []
             batch_size_in_bytes = 0
