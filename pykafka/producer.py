@@ -255,6 +255,7 @@ class Producer(object):
                 # loop becuase flush is not garentee to empty owned
                 # broker queue
                 while True:
+                    log.debug("in _setup_owned_brokers: flushing queue while stopping")
                     batch = owned_broker.flush(self._linger_ms, self._max_request_size)
                     if not batch:
                         break
