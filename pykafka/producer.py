@@ -436,6 +436,7 @@ class Producer(object):
                         owned_broker.broker.port,
                         presponse.err)
                     log.warning(info)
+                    log.debug("Have leader for partition {} as broker {}".format(partition, self._topic.partitions[partition].leader.id))
                     exc = ERROR_CODES[presponse.err](info)
                     to_retry.extend(
                         (mset, exc)
