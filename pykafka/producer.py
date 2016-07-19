@@ -534,7 +534,7 @@ class OwnedBroker(object):
                     batch = self.flush(self.producer._linger_ms, self.producer._max_request_size)
                     if batch:
                         # are there any messages in batch that are headed for a partition for which this broker is not the leader?
-                        log.debug("Batch contains misplaced message: {}".format(any([self._topic.partitions[m.partition_id].leader.id != self.broker.id for m in batch])))
+                        log.debug("Batch contains misplaced message: {}".format(any([self.producer._topic.partitions[m.partition_id].leader.id != self.broker.id for m in batch])))
                         self.producer._send_request(batch, self)
                 except Exception:
                     # surface all exceptions to the main thread
