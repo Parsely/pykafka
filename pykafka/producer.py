@@ -534,13 +534,14 @@ class OwnedBroker(object):
         def queue_reader():
             while self.running:
                 try:
-                    batch = self.flush(self.producer._linger_ms, self.producer._max_request_size)
-                    if batch:
-                        # are there any messages in batch that are headed for a partition for which this broker is not the leader?
-                        misplaced = any([self.producer._topic.partitions[m.partition_id].leader.id != self.broker.id for m in batch])
-                        assert not misplaced
-                        log.debug("queue_reader: Batch contains misplaced message: {}".format(misplaced))
-                        self.producer._send_request(batch, self)
+                    with self._update_lock:
+                        batch = self.flush(self.producer._linger_ms, self.producer._max_request_size)
+                        if batch:
+                            # are there any messages in batch that are headed for a partition for which this broker is not the leader?
+                            misplaced = any([self.producer._topic.partitions[m.partition_id].leader.id != self.broker.id for m in batch])
+                            assert not misplaced
+                            log.debug("queue_reader: Batch contains misplaced message: {}".format(misplaced))
+                            self.producer._send_request(batch, self)
                 except Exception:
                     # surface all exceptions to the main thread
                     self.producer._worker_exception = sys.exc_info()
