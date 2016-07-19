@@ -429,9 +429,6 @@ class Producer(object):
                     if presponse.err == 0:
                         mark_as_delivered(req.msets[topic][partition].messages)
                         continue  # All's well
-                    if presponse.err == NotLeaderForPartition.ERROR_CODE:
-                        # Update cluster metadata to get new leader
-                        self._update()
                     info = "Produce request for {}/{} to {}:{} failed with error code {}.".format(
                         topic,
                         partition,
@@ -444,6 +441,9 @@ class Producer(object):
                     to_retry.extend(
                         (mset, exc)
                         for mset in _get_partition_msgs(partition, req))
+                    if presponse.err == NotLeaderForPartition.ERROR_CODE:
+                        # Update cluster metadata to get new leader
+                        self._update()
         except SocketDisconnectedError as exc:
             log.warning('Broker %s:%s disconnected. Retrying.',
                         owned_broker.broker.host,
