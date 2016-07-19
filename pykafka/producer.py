@@ -390,7 +390,9 @@ class Producer(object):
             required_acks=self._required_acks,
             timeout=self._ack_timeout_ms
         )
-        log.debug("_send_request: Batch contains misplaced message: {}".format(any([self._topic.partitions[m.partition_id].leader.id != owned_broker.broker.id for m in message_batch])))
+        misplaced = any([self._topic.partitions[m.partition_id].leader.id != owned_broker.broker.id for m in message_batch])
+        assert not misplaced
+        log.debug("_send_request: Batch contains misplaced message: {}".format(misplaced))
         req.delivered = 0
         for msg in message_batch:
             req.add_message(msg, self._topic.name, msg.partition_id)
@@ -535,7 +537,9 @@ class OwnedBroker(object):
                     batch = self.flush(self.producer._linger_ms, self.producer._max_request_size)
                     if batch:
                         # are there any messages in batch that are headed for a partition for which this broker is not the leader?
-                        log.debug("queue_reader: Batch contains misplaced message: {}".format(any([self.producer._topic.partitions[m.partition_id].leader.id != self.broker.id for m in batch])))
+                        misplaced = any([self.producer._topic.partitions[m.partition_id].leader.id != self.broker.id for m in batch])
+                        assert not misplaced
+                        log.debug("queue_reader: Batch contains misplaced message: {}".format(misplaced))
                         self.producer._send_request(batch, self)
                 except Exception:
                     # surface all exceptions to the main thread
