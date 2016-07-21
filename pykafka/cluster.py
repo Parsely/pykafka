@@ -157,7 +157,8 @@ class Cluster(object):
                  exclude_internal_topics=True,
                  source_address='',
                  zookeeper_hosts=None,
-                 ssl_config=None):
+                 ssl_config=None,
+                 broker_version=b'0.9.0'):
         """Create a new Cluster instance.
 
         :param hosts: Comma-separated list of kafka hosts to which to connect.
@@ -181,6 +182,10 @@ class Cluster(object):
         :type source_address: str `'host:port'`
         :param ssl_config: Config object for SSL connection
         :type ssl_config: :class:`pykafka.connection.SslConfig`
+        :param broker_version: The protocol version of the cluster being connected to.
+            If this parameter doesn't match the actual broker version, some pykafka
+            features may not work properly.
+        :type broker_version: bytes
         """
         self._seed_hosts = zookeeper_hosts if zookeeper_hosts is not None else hosts
         self._socket_timeout_ms = socket_timeout_ms
@@ -194,6 +199,7 @@ class Cluster(object):
         self._ssl_config = ssl_config
         self._zookeeper_connect = zookeeper_hosts
         self._max_connection_retries = 3
+        self._broker_version = broker_version
         if ':' in self._source_address:
             self._source_port = int(self._source_address.split(':')[1])
         self.update()

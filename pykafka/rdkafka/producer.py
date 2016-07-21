@@ -41,6 +41,7 @@ class RdKafkaProducer(Producer):
                  auto_start=True):
         callargs = {k: v for k, v in vars().items()
                     if k not in ("self", "__class__")}
+        self._broker_version = cluster._broker_version
         self._rdk_producer = None
         self._poller_thread = None
         self._stop_poller_thread = cluster.handler.Event()
@@ -100,6 +101,7 @@ class RdKafkaProducer(Producer):
 
         conf = {  # destination: rd_kafka_conf_set
             "client.id": "pykafka.rdkafka",
+            "broker.version.fallback": self._broker_version,
             # Handled via rd_kafka_brokers_add instead:
             # "metadata.broker.list"
 
