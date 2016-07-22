@@ -35,8 +35,6 @@ class TestSimpleConsumer(unittest2.TestCase):
         for i in range(cls.total_msgs):
             cls.prod.produce('msg {i}'.format(i=i).encode())
 
-        cls.client = KafkaClient(cls.kafka.brokers)
-
     @classmethod
     def tearDownClass(cls):
         stop_cluster(cls.kafka)
