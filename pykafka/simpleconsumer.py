@@ -802,6 +802,8 @@ class OwnedPartition(object):
             'consumer_id': get_string(self._consumer_id),
             'hostname': socket.gethostname()
         }
+        # precalculate json to avoid expensive operation in loops
+        self._offset_metadata_json = json.dumps(self._offset_metadata)
 
     @property
     def message_count(self):
@@ -868,7 +870,7 @@ class OwnedPartition(object):
             self.partition.id,
             self.last_offset_consumed + 1,
             int(time.time() * 1000),
-            get_bytes('{}'.format(json.dumps(self._offset_metadata)))
+            get_bytes('{}'.format(self._offset_metadata_json))
         )
 
     def build_offset_fetch_request(self):
