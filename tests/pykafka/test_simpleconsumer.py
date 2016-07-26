@@ -293,7 +293,7 @@ class TestOwnedPartition(unittest2.TestCase):
         self.assertEqual(request.partition_id, partition.id)
         self.assertEqual(request.offset, op.last_offset_consumed + 1)
         parsed_metadata = json.loads(get_string(request.metadata))
-        self.assertEqual(parsed_metadata["consumer_id"], b'')
+        self.assertEqual(parsed_metadata["consumer_id"], '')
         self.assertTrue(bool(parsed_metadata["hostname"]))
 
     def test_partition_offset_fetch_request(self):
