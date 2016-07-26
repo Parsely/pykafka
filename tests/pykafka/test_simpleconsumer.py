@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+import json
 import mock
 import os
 import platform
@@ -10,7 +11,7 @@ from uuid import uuid4
 from pykafka import KafkaClient
 from pykafka.simpleconsumer import OwnedPartition, OffsetType
 from pykafka.test.utils import get_cluster, stop_cluster
-from pykafka.utils.compat import range, iteritems
+from pykafka.utils.compat import range, iteritems, get_string
 
 
 kafka_version = os.environ.get('KAFKA_VERSION', '0.8.0')
@@ -291,7 +292,9 @@ class TestOwnedPartition(unittest2.TestCase):
         self.assertEqual(request.topic_name, topic.name)
         self.assertEqual(request.partition_id, partition.id)
         self.assertEqual(request.offset, op.last_offset_consumed + 1)
-        self.assertEqual(request.metadata, b'pykafka')
+        parsed_metadata = json.loads(get_string(request.metadata))
+        self.assertEqual(parsed_metadata["consumer_id"], '')
+        self.assertTrue(bool(parsed_metadata["hostname"]))
 
     def test_partition_offset_fetch_request(self):
         topic = mock.Mock()
