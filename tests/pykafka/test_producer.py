@@ -1,5 +1,6 @@
 from __future__ import division
 
+import os
 import platform
 import pytest
 import time
@@ -17,6 +18,9 @@ from pykafka.common import CompressionType
 from pykafka.producer import OwnedBroker
 
 
+kafka_version = os.environ.get('KAFKA_VERSION', '0.8.0')
+
+
 class ProducerIntegrationTests(unittest2.TestCase):
     maxDiff = None
     USE_RDKAFKA = False
@@ -27,7 +31,9 @@ class ProducerIntegrationTests(unittest2.TestCase):
         cls.kafka = get_cluster()
         cls.topic_name = b'test-data'
         cls.kafka.create_topic(cls.topic_name, 3, 2)
-        cls.client = KafkaClient(cls.kafka.brokers, use_greenlets=cls.USE_GEVENT)
+        cls.client = KafkaClient(cls.kafka.brokers,
+                                 use_greenlets=cls.USE_GEVENT,
+                                 broker_version=kafka_version)
 
     @classmethod
     def tearDownClass(cls):

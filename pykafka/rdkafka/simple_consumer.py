@@ -27,6 +27,9 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
 
     For an overview of how configuration keys are mapped to librdkafka's, see
     _mk_rdkafka_config_lists.
+
+    The `broker_version` argument on `KafkaClient` must be set correctly to use the
+    rdkafka consumer.
     """
     def __init__(self,
                  topic,
@@ -54,6 +57,7 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
         self._rdk_consumer = None
         self._poller_thread = None
         self._stop_poller_thread = cluster.handler.Event()
+        self._broker_version = cluster._broker_version
         # super() must come last for the case where auto_start=True
         super(RdKafkaSimpleConsumer, self).__init__(**callargs)
 
@@ -185,6 +189,7 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
 
         conf = {  # destination: rd_kafka_conf_set
             "client.id": "pykafka.rdkafka",
+            "broker.version.fallback": self._broker_version,
             # Handled via rd_kafka_brokers_add instead:
             ##"metadata.broker.list"
 

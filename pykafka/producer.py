@@ -186,7 +186,8 @@ class Producer(object):
             self.start()
 
     def __del__(self):
-        log.debug("Finalising {}".format(self))
+        if log:  # in case log is finalized before self
+            log.debug("Finalising {}".format(self))
         self.stop()
 
     def _raise_worker_exceptions(self):
