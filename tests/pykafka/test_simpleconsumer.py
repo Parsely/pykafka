@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 import mock
+import os
 import platform
 import pytest
 import time
@@ -10,6 +11,9 @@ from pykafka import KafkaClient
 from pykafka.simpleconsumer import OwnedPartition, OffsetType
 from pykafka.test.utils import get_cluster, stop_cluster
 from pykafka.utils.compat import range, iteritems
+
+
+kafka_version = os.environ.get('KAFKA_VERSION', '0.8.0')
 
 
 class TestSimpleConsumer(unittest2.TestCase):
@@ -24,14 +28,12 @@ class TestSimpleConsumer(unittest2.TestCase):
         cls.kafka.create_topic(cls.topic_name, 3, 2)
 
         cls.total_msgs = 1000
-        cls.client = KafkaClient(cls.kafka.brokers)
+        cls.client = KafkaClient(cls.kafka.brokers, broker_version=kafka_version)
         cls.prod = cls.client.topics[cls.topic_name].get_producer(
             min_queued_messages=1
         )
         for i in range(cls.total_msgs):
             cls.prod.produce('msg {i}'.format(i=i).encode())
-
-        cls.client = KafkaClient(cls.kafka.brokers)
 
     @classmethod
     def tearDownClass(cls):

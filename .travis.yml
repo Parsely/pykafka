@@ -46,9 +46,9 @@ install:
         fi
     - pip install -U pip setuptools
     - pip install codecov kazoo tox testinstances tox-travis "gevent==1.1"
-    - wget https://github.com/edenhill/librdkafka/archive/0.9.0.99.tar.gz
-    - tar -xzf 0.9.0.99.tar.gz
-    - cd librdkafka-0.9.0.99/ && ./configure --prefix=$HOME
+    - wget https://github.com/edenhill/librdkafka/archive/0.9.1.tar.gz
+    - tar -xzf 0.9.1.tar.gz
+    - cd librdkafka-0.9.1/ && ./configure --prefix=$HOME
     - make -j 2 && make -j 2 install && cd -
 
 before_script:
@@ -64,7 +64,7 @@ before_script:
     - export `grep ZOOKEEPER $TEMPFILE`
 
 script:
-    - tox
+    - tox tests
 
 # Calculate coverage on success
 after_success:
