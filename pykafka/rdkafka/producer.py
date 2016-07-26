@@ -22,6 +22,9 @@ class RdKafkaProducer(Producer):
     implementation, `retry_backoff_ms` indicates the exact time spent between message
     resend attempts, but in the pure Python version the time between attempts is also
     influenced by several other parameters, including `linger_ms` and `socket_timeout_ms`.
+
+    The `broker_version` argument on `KafkaClient` must be set correctly to use the
+    rdkafka producer.
     """
     def __init__(self,
                  cluster,

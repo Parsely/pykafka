@@ -27,6 +27,9 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
 
     For an overview of how configuration keys are mapped to librdkafka's, see
     _mk_rdkafka_config_lists.
+
+    The `broker_version` argument on `KafkaClient` must be set correctly to use the
+    rdkafka consumer.
     """
     def __init__(self,
                  topic,
