@@ -48,7 +48,7 @@ class KafkaClient(object):
                  exclude_internal_topics=True,
                  source_address='',
                  ssl_config=None,
-                 broker_version=b'0.9.0'):
+                 broker_version='0.9.0'):
         """Create a connection to a Kafka cluster.
 
         Documentation for source_address can be found at
@@ -81,7 +81,7 @@ class KafkaClient(object):
         :param broker_version: The protocol version of the cluster being connected to.
             If this parameter doesn't match the actual broker version, some pykafka
             features may not work properly.
-        :type broker_version: bytes
+        :type broker_version: str
         """
         self._seed_hosts = zookeeper_hosts if zookeeper_hosts is not None else hosts
         self._source_address = source_address

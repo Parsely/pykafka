@@ -20,7 +20,8 @@ from pykafka.utils.compat import range, iterkeys, iteritems
 from tests.pykafka import patch_subclass
 
 
-kafka_version = pkg_resources.parse_version(os.environ.get('KAFKA_VERSION', '0.8'))
+kafka_version_string = os.environ.get('KAFKA_VERSION', '0.8')
+kafka_version = pkg_resources.parse_version(kafka_version_string)
 version_09 = pkg_resources.parse_version("0.9.0.0")
 
 
@@ -144,7 +145,9 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
         cls.topic_name = uuid4().hex.encode()
         cls.n_partitions = 3
         cls.kafka.create_topic(cls.topic_name, cls.n_partitions, 2)
-        cls.client = KafkaClient(cls.kafka.brokers, use_greenlets=cls.USE_GEVENT)
+        cls.client = KafkaClient(cls.kafka.brokers,
+                                 use_greenlets=cls.USE_GEVENT,
+                                 broker_version=kafka_version_string)
         cls.prod = cls.client.topics[cls.topic_name].get_producer(
             min_queued_messages=1
         )

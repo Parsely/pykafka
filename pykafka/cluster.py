@@ -158,7 +158,7 @@ class Cluster(object):
                  source_address='',
                  zookeeper_hosts=None,
                  ssl_config=None,
-                 broker_version=b'0.9.0'):
+                 broker_version='0.9.0'):
         """Create a new Cluster instance.
 
         :param hosts: Comma-separated list of kafka hosts to which to connect.
@@ -185,7 +185,7 @@ class Cluster(object):
         :param broker_version: The protocol version of the cluster being connected to.
             If this parameter doesn't match the actual broker version, some pykafka
             features may not work properly.
-        :type broker_version: bytes
+        :type broker_version: str
         """
         self._seed_hosts = zookeeper_hosts if zookeeper_hosts is not None else hosts
         self._socket_timeout_ms = socket_timeout_ms
