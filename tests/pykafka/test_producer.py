@@ -303,7 +303,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
         large_payload = b''.join([uuid4().bytes for i in range(50000)])
         assert len(large_payload) / 1024 / 1024 < 1.0
 
-        prod = self._get_producer(delivery_reports=True)
+        prod = self._get_producer(delivery_reports=True, linger_ms=1000)
         prod.produce(large_payload)
 
         report = prod.get_delivery_report()
