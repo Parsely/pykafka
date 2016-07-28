@@ -774,11 +774,11 @@ class SimpleConsumer(object):
 
     def _wait_for_slot_available(self):
         """Block until at least one queue has less than `_queued_max_messages`"""
-        if all(op.message_count > self._queued_max_messages
+        if all(op.message_count >= self._queued_max_messages
                for op in itervalues(self._partitions)):
             for op in itervalues(self._partitions):
                 op.fetch_lock.acquire()
-            if all(op.message_count > self._queued_max_messages
+            if all(op.message_count >= self._queued_max_messages
                    for op in itervalues(self._partitions)):
                 self._slot_available.clear()
             for op in itervalues(self._partitions):
