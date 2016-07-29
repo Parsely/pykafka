@@ -105,7 +105,7 @@ class SimpleConsumer(object):
             `auto_commit_enable` is `False`.
         :type auto_commit_interval_ms: int
         :param queued_max_messages: Maximum number of messages buffered for
-            consumption
+            consumption per partition
         :type queued_max_messages: int
         :param fetch_min_bytes: The minimum amount of data (in bytes) the server
             should return for a fetch request. If insufficient data is available
@@ -178,6 +178,7 @@ class SimpleConsumer(object):
         # incremented for any message arrival from any partition
         # the initial value is 0 (no messages waiting)
         self._messages_arrived = self._cluster.handler.Semaphore(value=0)
+        self._slot_available = self._cluster.handler.Event()
 
         self._auto_commit_enable = auto_commit_enable
         self._auto_commit_interval_ms = valid_int(auto_commit_interval_ms)
@@ -424,6 +425,7 @@ class SimpleConsumer(object):
             else:
                 timeout = 1.0
 
+        ret = None
         while True:
             self._raise_worker_exceptions()
             self._cluster.handler.sleep()
@@ -436,12 +438,21 @@ class SimpleConsumer(object):
                 while not message:
                     owned_partition = next(self.partition_cycle)
                     message = owned_partition.consume()
-                return message
+                ret = message
+                break
             else:
                 if not self._running:
                     raise ConsumerStoppedException()
                 elif not block or self._consumer_timeout_ms > 0:
-                    return None
+                    ret = None
+                    break
+
+        if any(op.message_count <= self._queued_max_messages
+               for op in itervalues(self._partitions)):
+            if not self._slot_available.is_set():
+                self._slot_available.set()
+
+        return ret
 
     def _auto_commit(self):
         """Commit offsets only if it's time to do so"""
@@ -724,6 +735,7 @@ class SimpleConsumer(object):
             for owned_partition in parts:
                 owned_partition.fetch_lock.release()
 
+        self._wait_for_slot_available()
         sorted_by_leader = sorted(iteritems(self._partitions_by_leader),
                                   key=lambda k: k[0].id)
         for broker, owned_partitions in sorted_by_leader:
@@ -759,6 +771,19 @@ class SimpleConsumer(object):
                     parts_by_error=parts_by_error,
                     success_handler=_handle_success)
                 unlock_partitions(iterkeys(partition_reqs))
+
+    def _wait_for_slot_available(self):
+        """Block until at least one queue has less than `_queued_max_messages`"""
+        if all(op.message_count >= self._queued_max_messages
+               for op in itervalues(self._partitions)):
+            for op in itervalues(self._partitions):
+                op.fetch_lock.acquire()
+            if all(op.message_count >= self._queued_max_messages
+                   for op in itervalues(self._partitions)):
+                self._slot_available.clear()
+            for op in itervalues(self._partitions):
+                op.fetch_lock.release()
+            self._slot_available.wait()
 
 
 class OwnedPartition(object):
