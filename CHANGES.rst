@@ -15,9 +15,9 @@ Bug Fixes
 ---------
 
 * Fixed an issue causing consumer group names to be written to ZooKeeper with a literal
-  `b''`. Since this change adjusts ZooKeeper storage formats, it should be applied with
+  `b''`. :warning:**Since this change adjusts ZooKeeper storage formats, it should be applied with
   caution to production systems. Deploying this change without a careful rollout plan
-  could cause consumers to lose track of their offsets.
+  could cause consumers to lose track of their offsets.**:warning:
 * Added logic to group coordinator discovery that retries the request once per broker
 * Handled socket errors in `BrokerConnection`
 * Fixed a bug causing synchronous production to hang in some situations
