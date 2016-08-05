@@ -1,6 +1,38 @@
 Changelog
 =========
 
+2.4.1.dev2 (in progress)
+------------------------
+
+`Compare 2.4.1.dev2`_
+
+.. _Compare 2.4.1.dev2: https://github.com/Parsely/pykafka/compare/2.4.1.dev1...master
+
+Minor version Features
+----------------------
+
+* Added the `broker_version` kwarg to several components. It's currently only
+  used by the librdkafka features. The kwarg is used to facilitate the use of
+  librdkafka via pykafka against multiple Kafka broker versions.
+* Changed offset commit requests to include useful information in the offset
+  metadata field, including consumer ID and hostname
+
+Bug Fixes
+---------
+
+* Fixed the operation of `consumer_timeout_ms`, which had been broken for
+  `BalancedConsumer` groups
+* Fixed a bug causing `Producer.__del__` to crash during finalization
+* Made the consumer's fetch loop nonbusy when the internal queues are full to
+  save CPU cycles when message volume is high
+
+Miscellaneous
+-------------
+
+* Upgraded the version of PyPy used in automated tests
+* Upgraded the version of librdkafka used in automated tests
+* Pinned the version of the `testinstances` library on which the tests depend
+
 2.4.1.dev1 (2016-7-6)
 ---------------------
 
