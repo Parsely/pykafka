@@ -373,12 +373,13 @@ class Producer(object):
         """
         success = False
         while not success:
-            leader_id = self._topic.partitions[message.partition_id].leader.id
-            if leader_id in self._owned_brokers:
-                self._owned_brokers[leader_id].enqueue(message)
-                success = True
-            else:
-                success = False
+            with self._update_lock:
+                leader_id = self._topic.partitions[message.partition_id].leader.id
+                if leader_id in self._owned_brokers:
+                    self._owned_brokers[leader_id].enqueue(message)
+                    success = True
+                else:
+                    success = False
 
     def _send_request(self, message_batch, owned_broker):
         """Send the produce request to the broker and handle the response.
