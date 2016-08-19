@@ -233,6 +233,9 @@ class Producer(object):
         """
         # only allow one thread to be updating the producer at a time
         with self._update_lock:
+            if self._owned_brokers is not None:
+                for owned_broker in list(self._owned_brokers.values()):
+                    owned_broker.stop()
             self._cluster.update()
             queued_messages = self._setup_owned_brokers()
             if len(queued_messages):
