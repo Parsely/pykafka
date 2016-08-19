@@ -592,6 +592,8 @@ class OwnedBroker(object):
             batch = []
             batch_size_in_bytes = 0
             while len(self.queue) > 0:
+                if not self.running:
+                    return []
                 peeked_message = self.queue[-1]
 
                 if peeked_message and peeked_message.value is not None:
@@ -629,6 +631,8 @@ class OwnedBroker(object):
                 self.increment_messages_pending(-1 * len(batch))
             if not self.slot_available.is_set():
                 self.slot_available.set()
+        if not self.running:
+            return []
         return batch
 
     def _wait_for_flush_ready(self, linger_ms):
