@@ -233,6 +233,9 @@ class Producer(object):
         """
         # only allow one thread to be updating the producer at a time
         with self._update_lock:
+            if self._owned_brokers is not None:
+                for owned_broker in list(self._owned_brokers.values()):
+                    owned_broker.stop()
             self._cluster.update()
             queued_messages = self._setup_owned_brokers()
             if len(queued_messages):
@@ -372,12 +375,13 @@ class Producer(object):
         """
         success = False
         while not success:
-            leader_id = self._topic.partitions[message.partition_id].leader.id
-            if leader_id in self._owned_brokers:
-                self._owned_brokers[leader_id].enqueue(message)
-                success = True
-            else:
-                success = False
+            with self._update_lock:
+                leader_id = self._topic.partitions[message.partition_id].leader.id
+                if leader_id in self._owned_brokers:
+                    self._owned_brokers[leader_id].enqueue(message)
+                    success = True
+                else:
+                    success = False
 
     def _send_request(self, message_batch, owned_broker):
         """Send the produce request to the broker and handle the response.
@@ -599,6 +603,8 @@ class OwnedBroker(object):
             batch = []
             batch_size_in_bytes = 0
             while len(self.queue) > 0:
+                if not self.running:
+                    return []
                 peeked_message = self.queue[-1]
 
                 if peeked_message and peeked_message.value is not None:
@@ -636,6 +642,8 @@ class OwnedBroker(object):
                 self.increment_messages_pending(-1 * len(batch))
             if not self.slot_available.is_set():
                 self.slot_available.set()
+        if not self.running:
+            return []
         return batch
 
     def _wait_for_flush_ready(self, linger_ms):
