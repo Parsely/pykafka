@@ -1,12 +1,12 @@
 Changelog
 =========
 
-2.4.1.dev2 (in progress)
-------------------------
+2.5.0.dev1
+----------
 
-`Compare 2.4.1.dev2`_
+`Compare 2.5.0.dev1`_
 
-.. _Compare 2.4.1.dev2: https://github.com/Parsely/pykafka/compare/2.4.1.dev1...master
+.. _Compare 2.5.0.dev1: https://github.com/Parsely/pykafka/compare/2.4.1.dev1...2.5.0.dev1
 
 Minor version Features
 ----------------------
@@ -16,6 +16,7 @@ Minor version Features
   librdkafka via pykafka against multiple Kafka broker versions.
 * Changed offset commit requests to include useful information in the offset
   metadata field, including consumer ID and hostname
+* Added the `GroupHashingPartitioner`
 
 Bug Fixes
 ---------
@@ -25,6 +26,13 @@ Bug Fixes
 * Fixed a bug causing `Producer.__del__` to crash during finalization
 * Made the consumer's fetch loop nonbusy when the internal queues are full to
   save CPU cycles when message volume is high
+* Fixed a bug causing `Producer.flush()` to wait for `linger_ms` during calls initiated
+  by `_update()`
+* Fixed a race condition between `Producer._update` and `OwnedBroker.flush` causing
+  infinite retry loops
+* Changed `Producer.produce` to block while the internal broker list is being updated.
+  This avoids possible mismatches between old and new cluster metadata used by the
+  `Producer`.
 
 Miscellaneous
 -------------
