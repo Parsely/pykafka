@@ -371,6 +371,11 @@ class Cluster(object):
                 #       needed.
                 raise Exception('Broker host/port change detected! %s', broker)
 
+    def get_offset_manager(self, consumer_group):
+        log.warning("WARNING: Cluster.get_offset_manager is deprecated since pykafka "
+                    "2.3.0. Instead, use Cluster.get_group_coordinator.")
+        return self.get_group_coordinator(consumer_group)
+
     def get_group_coordinator(self, consumer_group):
         """Get the broker designated as the group coordinator for this consumer group.
 
