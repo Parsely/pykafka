@@ -1,12 +1,62 @@
 Changelog
 =========
 
-2.5.0.dev1
-----------
+2.5.0 (2016-9-15)
+-----------------
+
+`Compare 2.5.0`_
+
+.. _Compare 2.5.0: https://github.com/Parsely/pykafka/compare/2.4.0...2.5.0
+
+Minor version Features
+----------------------
+
+* Added the `broker_version` kwarg to several components. It's currently only
+  used by the librdkafka features. The kwarg is used to facilitate the use of
+  librdkafka via pykafka against multiple Kafka broker versions.
+* Changed offset commit requests to include useful information in the offset
+  metadata field, including consumer ID and hostname
+* Added the `GroupHashingPartitioner`
+
+Bug Fixes
+---------
+
+* Fixed the operation of `consumer_timeout_ms`, which had been broken for
+  `BalancedConsumer` groups
+* Fixed a bug causing `Producer.__del__` to crash during finalization
+* Made the consumer's fetch loop nonbusy when the internal queues are full to
+  save CPU cycles when message volume is high
+* Fixed a bug causing `Producer.flush()` to wait for `linger_ms` during calls initiated
+  by `_update()`
+* Fixed a race condition between `Producer._update` and `OwnedBroker.flush` causing
+  infinite retry loops
+* Changed `Producer.produce` to block while the internal broker list is being updated.
+  This avoids possible mismatches between old and new cluster metadata used by the
+  `Producer`.
+* Fixed an issue causing consumer group names to be written to ZooKeeper with a literal
+  `b''` in python3. :warning:**Since this change adjusts ZooKeeper storage formats, it
+  should be applied with caution to production systems. Deploying this change without a
+  careful rollout plan could cause consumers to lose track of their offsets.**:warning:
+* Added logic to group coordinator discovery that retries the request once per broker
+* Handled socket errors in `BrokerConnection`
+* Fixed a bug causing synchronous production to hang in some situations
+
+Miscellaneous
+-------------
+
+* Upgraded the version of PyPy used in automated tests
+* Upgraded the version of librdkafka used in automated tests
+* Pinned the version of the `testinstances` library on which the tests depend
+
+2.5.0.dev1 (2016-8-23)
+----------------------
 
 `Compare 2.5.0.dev1`_
 
 .. _Compare 2.5.0.dev1: https://github.com/Parsely/pykafka/compare/2.4.1.dev1...2.5.0.dev1
+
+You can install this release via pip with `pip install --pre pykafka==2.5.0.dev1`.
+It will not automatically install because it's a pre-release.
 
 Minor version Features
 ----------------------
