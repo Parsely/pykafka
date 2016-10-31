@@ -109,7 +109,7 @@ def desc_topic(client, args):
     topic = client.topics[args.topic]
     print('Topic: {}'.format(topic.name))
     print('Partitions: {}'.format(len(topic.partitions)))
-    print('Replicas: {}'.format(len(topic.partitions.values()[0].replicas)))
+    print('Replicas: {}'.format(len(list(topic.partitions.values())[0].replicas)))
     print(tabulate.tabulate(
         [(p.id, p.leader.id, [r.id for r in p.replicas], [r.id for r in p.isr])
          for p in topic.partitions.values()],
