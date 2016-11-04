@@ -409,7 +409,7 @@ class SimpleConsumer(object):
         while True:
             message = self.consume(block=True)
             if not message:
-                raise StopIteration
+                return
             yield message
 
     def consume(self, block=True):

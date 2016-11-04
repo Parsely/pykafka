@@ -744,7 +744,7 @@ class BalancedConsumer(object):
         while True:
             message = self.consume(block=True)
             if not message:
-                raise StopIteration
+                return
             yield message
 
     def commit_offsets(self):
