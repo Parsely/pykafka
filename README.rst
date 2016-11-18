@@ -155,7 +155,8 @@ files and shared library are somewhere where python can find them, both when you
 the extension (which is taken care of by ``setup.py develop``) and at run time.
 Typically, this means that you need to either install librdkafka in a place
 conventional for your system, or declare ``C_INCLUDE_PATH``, ``LIBRARY_PATH``,
-and ``LD_LIBRARY_PATH`` in your shell environment.
+and ``LD_LIBRARY_PATH`` in your shell environment to point to the installation location
+of the librdkafka shared objects. You can find this location with `locate librdkafka.so`.
 
 After that, all that's needed is that you pass an extra parameter
 ``use_rdkafka=True`` to ``topic.get_producer()``,
