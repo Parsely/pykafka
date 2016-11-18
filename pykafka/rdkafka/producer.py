@@ -23,6 +23,10 @@ class RdKafkaProducer(Producer):
     resend attempts, but in the pure Python version the time between attempts is also
     influenced by several other parameters, including `linger_ms` and `socket_timeout_ms`.
 
+    Note also that `linger_ms` becomes the rdkafka-based producer's
+    `queue.buffering.max.ms` config option and thus must be within the acceptable range
+    defined by librdkafka.
+
     The `broker_version` argument on `KafkaClient` must be set correctly to use the
     rdkafka producer.
     """
