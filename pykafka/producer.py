@@ -430,7 +430,10 @@ class Producer(object):
             for topic, partitions in iteritems(response.topics):
                 for partition, presponse in iteritems(partitions):
                     if presponse.err == 0:
-                        mark_as_delivered(req.msets[topic][partition].messages)
+                        messages = req.msets[topic][partition].messages
+                        for i, message in enumerate(messages):
+                            message.offset = presponse.offset + i
+                        mark_as_delivered(messages)
                         continue  # All's well
                     if presponse.err == NotLeaderForPartition.ERROR_CODE:
                         # Update cluster metadata to get new leader
