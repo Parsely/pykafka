@@ -25,7 +25,10 @@ class RdKafkaProducer(Producer):
 
     Note also that `linger_ms` becomes the rdkafka-based producer's
     `queue.buffering.max.ms` config option and thus must be within the acceptable range
-    defined by librdkafka.
+    defined by librdkafka. Several other parameters, including `ack_timeout_ms`,
+    `max_retries`, and `retry_backoff_ms`, are used to derive certain librdkafka
+    config values. Certain combinations of values for these parameters can result in
+    configuration errors from librdkafka.
 
     The `broker_version` argument on `KafkaClient` must be set correctly to use the
     rdkafka producer.
