@@ -1609,7 +1609,7 @@ class LeaveGroupResponse(Response):
 # Administrative API
 ###
 class ListGroupsRequest(Request):
-    """A list group request
+    """A list groups request
 
     Specification::
 
@@ -1622,7 +1622,7 @@ class ListGroupsRequest(Request):
 
     def get_bytes(self):
         """Create a new list group request"""
-        output = bytearray(self.HEADER_LEN)
+        output = bytearray(len(self))
         self._write_header(output)
         return output
 
@@ -1631,9 +1631,8 @@ class ListGroupsRequest(Request):
         return self.HEADER_LEN
 
 
-
 class ListGroupsResponse(Response):
-    """A list group response
+    """A list groups response
 
     Specification::
 
@@ -1656,3 +1655,96 @@ class ListGroupsResponse(Response):
         self.groups = []
         for group_info in response[1]:
             self.groups.append(group_info)
+
+
+class DescribeGroupsRequest(Request):
+    """A describe groups request
+
+    Specification::
+
+    DescribeGroupsRequest => [GroupId]
+      GroupId => string
+    """
+    def __init__(self, group_ids):
+        self.group_ids = group_ids
+
+    @property
+    def API_KEY(self):
+        """API_KEY for this request, from the Kafka docs"""
+        return 15
+
+    def get_bytes(self):
+        """Create a new list group request"""
+        output = bytearray(len(self))
+        self._write_header(output)
+        offset = self.HEADER_LEN
+        fmt = '!i'
+        struct.pack_into(fmt, output, offset, len(self.group_ids))
+        offset += struct.calcsize(fmt)
+        for group_id in self.group_ids:
+            fmt = '!h%ds' % len(group_id)
+            struct.pack_into(fmt, output, offset, len(group_id), group_id)
+            offset += struct.calcsize(fmt)
+        return output
+
+    def __len__(self):
+        """Length of the serialized message, in bytes"""
+        # header + len(group_ids)
+        size = self.HEADER_LEN + 4
+        for group_id in self.group_ids:
+            # len(group_id) + group_id
+            size += 2 + len(group_id)
+        return size
+
+
+GroupMember = namedtuple(
+    'GroupMember',
+    ['member_id', 'client_id', 'client_host', 'member_metadata', 'member_assignment']
+)
+
+
+DescribeGroupResponse = namedtuple(
+    'DescribeGroupResponse',
+    ['error_code', 'group_id', 'state', 'protocol_type', 'protocol', 'members']
+)
+
+
+class DescribeGroupsResponse(Response):
+    """A describe groups response
+
+    Specification::
+
+
+    DescribeGroupsResponse => [ErrorCode GroupId State ProtocolType Protocol Members]
+      ErrorCode => int16
+      GroupId => string
+      State => string
+      ProtocolType => string
+      Protocol => string
+      Members => [MemberId ClientId ClientHost MemberMetadata MemberAssignment]
+        MemberId => string
+        ClientId => string
+        ClientHost => string
+        MemberMetadata => bytes
+        MemberAssignment => bytes
+    """
+    def __init__(self, buff):
+        """Deserialize into a new Response
+
+        :param buff: Serialized message
+        :type buff: :class:`bytearray`
+        """
+        fmt = '[hSSSS [SSSYY ] ]'
+        response = struct_helpers.unpack_from(fmt, buff, 0)
+
+        self.groups = []
+        for group_info in response:
+            members = []
+            for member_info in group_info[5]:
+                # TODO - parse metadata bytestring (new_member[3]) into ConsumerGroupProtocolMetadata
+                member_metadata = member_info[3]
+                member_assignment = MemberAssignment.from_bytestring(member_info[4])
+                members.append(GroupMember(*(member_info[:3] + (member_metadata,
+                                                                member_assignment))))
+            group = DescribeGroupResponse(*(group_info[:5] + (members,)))
+            self.groups.append(group)
