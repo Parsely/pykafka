@@ -379,9 +379,8 @@ class Cluster(object):
         """
         descriptions = {}
         for broker in itervalues(self.brokers):
-            res = broker.list_groups()
             res = broker.describe_groups([group.group_id for group
-                                          in itervalues(res.groups)])
+                                          in itervalues(broker.list_groups().groups)])
             descriptions.update(res.groups)
         return descriptions
 
