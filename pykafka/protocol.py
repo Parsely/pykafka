@@ -1205,10 +1205,10 @@ class ConsumerGroupProtocolMetadata(object):
             Topic => string
         UserData => bytes
     """
-    def __init__(self):
-        self.version = 0
-        self.topic_names = [b"dummytopic"]
-        self.user_data = b"testuserdata"
+    def __init__(self, version=0, topic_names=None, user_data=b"testuserdata"):
+        self.version = version
+        self.topic_names = topic_names or [b"dummytopic"]
+        self.user_data = user_data
 
     def __len__(self):
         # version + len(topic names)
@@ -1234,6 +1234,18 @@ class ConsumerGroupProtocolMetadata(object):
         struct.pack_into(fmt, output, offset, len(self.user_data), self.user_data)
         offset += struct.calcsize(fmt)
         return output
+
+    @classmethod
+    def from_bytestring(cls, buff):
+        if len(buff) == 0:
+            return cls()
+        fmt = 'h [S] Y'
+        response = struct_helpers.unpack_from(fmt, buff, 0)
+
+        version = response[0]
+        topic_names = response[1]
+        user_data = response[2]
+        return cls(version, topic_names, user_data)
 
 
 GroupMembershipProtocol = namedtuple(
@@ -1338,8 +1350,8 @@ class JoinGroupResponse(Response):
         self.group_protocol = response[2]
         self.leader_id = response[3]
         self.member_id = response[4]
-        # TODO - parse metadata bytestring into ConsumerGroupProtocolMetadata?
-        self.members = {_id: meta for _id, meta in response[5]}
+        self.members = {_id: ConsumerGroupProtocolMetadata.from_bytestring(meta)
+                        for _id, meta in response[5]}
 
 
 class MemberAssignment(object):
