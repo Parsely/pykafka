@@ -720,5 +720,19 @@ class TestGroupMembershipAPI(unittest2.TestCase):
         self.assertEqual(response.error_code, 0)
 
 
+class TestAdministrativeAPI(unittest2.TestCase):
+    maxDiff = None
+
+    def test_list_groups_request(self):
+        req = protocol.ListGroupsRequest()
+        msg = req.get_bytes()
+        self.assertEqual(
+            msg,
+            bytearray(
+                b'\x00\x00\x00\x11\x00\x10\x00\x00\x00\x00\x00\x00\x00\x07pykafka'  # header
+            )
+        )
+
+
 if __name__ == '__main__':
     unittest2.main()
