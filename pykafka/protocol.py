@@ -1603,3 +1603,56 @@ class LeaveGroupResponse(Response):
         fmt = 'h'
         response = struct_helpers.unpack_from(fmt, buff, 0)
         self.error_code = response[0]
+
+
+###
+# Administrative API
+###
+class ListGroupsRequest(Request):
+    """A list group request
+
+    Specification::
+
+    ListGroupsRequest =>
+    """
+    @property
+    def API_KEY(self):
+        """API_KEY for this request, from the Kafka docs"""
+        return 16
+
+    def get_bytes(self):
+        """Create a new list group request"""
+        output = bytearray(self.HEADER_LEN)
+        self._write_header(output)
+        return output
+
+    def __len__(self):
+        """Length of the serialized message, in bytes"""
+        return self.HEADER_LEN
+
+
+
+class ListGroupsResponse(Response):
+    """A list group response
+
+    Specification::
+
+    ListGroupsResponse => ErrorCode Groups
+      ErrorCode => int16
+      Groups => [GroupId ProtocolType]
+        GroupId => string
+        ProtocolType => string
+    """
+    def __init__(self, buff):
+        """Deserialize into a new Response
+
+        :param buff: Serialized message
+        :type buff: :class:`bytearray`
+        """
+        fmt = 'h [SS]'
+        response = struct_helpers.unpack_from(fmt, buff, 0)
+
+        self.error = response[0]
+        self.groups = []
+        for group_info in response[1]:
+            self.groups.append(group_info)
