@@ -1631,6 +1631,12 @@ class ListGroupsRequest(Request):
         return self.HEADER_LEN
 
 
+GroupListing = namedtuple(
+    'GroupListing',
+    ['group_id', 'protocol_type']
+)
+
+
 class ListGroupsResponse(Response):
     """A list groups response
 
@@ -1652,9 +1658,10 @@ class ListGroupsResponse(Response):
         response = struct_helpers.unpack_from(fmt, buff, 0)
 
         self.error = response[0]
-        self.groups = []
+        self.groups = {}
         for group_info in response[1]:
-            self.groups.append(group_info)
+            listing = GroupListing(*group_info)
+            self.groups[listing.group_id] = listing
 
 
 class DescribeGroupsRequest(Request):
@@ -1737,14 +1744,15 @@ class DescribeGroupsResponse(Response):
         fmt = '[hSSSS [SSSYY ] ]'
         response = struct_helpers.unpack_from(fmt, buff, 0)
 
-        self.groups = []
+        self.groups = {}
         for group_info in response:
-            members = []
+            members = {}
             for member_info in group_info[5]:
                 # TODO - parse metadata bytestring (new_member[3]) into ConsumerGroupProtocolMetadata
                 member_metadata = member_info[3]
                 member_assignment = MemberAssignment.from_bytestring(member_info[4])
-                members.append(GroupMember(*(member_info[:3] + (member_metadata,
-                                                                member_assignment))))
+                member = GroupMember(*(member_info[:3] + (member_metadata,
+                                                          member_assignment)))
+                members[member.member_id] = member
             group = DescribeGroupResponse(*(group_info[:5] + (members,)))
-            self.groups.append(group)
+            self.groups[group.group_id] = group
