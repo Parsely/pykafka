@@ -371,7 +371,7 @@ class Cluster(object):
                 #       needed.
                 raise Exception('Broker host/port change detected! %s', broker)
 
-    def get_group_descriptions(self):
+    def get_managed_group_descriptions(self):
         """Return detailed descriptions of all managed consumer groups on this cluster
 
         This function only returns descriptions for consumer groups created via the
