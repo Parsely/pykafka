@@ -597,12 +597,14 @@ class TestGroupMembershipAPI(unittest2.TestCase):
         )
         self.assertEqual(response.generation_id, 1)
         self.assertEqual(response.group_protocol, b'dummyassignmentstrategy')
-        self.assertEqual(response.leader_id,
-                         b'pykafka-b2361322-674c-4e26-9194-305962636e57')
-        self.assertEqual(response.member_id,
-                         b'pykafka-b2361322-674c-4e26-9194-305962636e57')
-        self.assertEqual(response.members,
-                         {b'pykafka-b2361322-674c-4e26-9194-305962636e57': b'\x00\x00\x00\x00\x00\x01\x00\ndummytopic\x00\x00\x00\x0ctestuserdata'})
+        member_id = b'pykafka-b2361322-674c-4e26-9194-305962636e57'
+        self.assertEqual(response.leader_id, member_id)
+        self.assertEqual(response.member_id, member_id)
+        self.assertTrue(member_id in response.members)
+        metadata = response.members[member_id]
+        self.assertEqual(metadata.version, 0)
+        self.assertEqual(metadata.topic_names, [b"dummytopic"])
+        self.assertEqual(metadata.user_data, b"testuserdata")
 
     def test_member_assignment_construction(self):
         assignment = protocol.MemberAssignment([(b"mytopic1", [3, 5, 7, 9]),
