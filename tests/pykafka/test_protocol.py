@@ -733,6 +733,86 @@ class TestAdministrativeAPI(unittest2.TestCase):
             )
         )
 
+    def test_list_groups_response(self):
+        response = protocol.ListGroupsResponse(
+            bytearray(
+                b'\x00\x00'  # error code
+                b'\x00\x00\x00\x01'  # len(groups)
+                    b'\x00\t'  # len(group_id)
+                        b'testgroup'  # group_id
+                    b'\x00\x08'  # len(protocol_type)
+                        b'consumer'  # protocol_type
+            )
+        )
+        self.assertEqual(len(response.groups), 1)
+        group = response.groups[response.groups.keys()[0]]
+        self.assertEqual(group.group_id, "testgroup")
+        self.assertEqual(group.protocol_type, "consumer")
+
+    def test_describe_groups_request(self):
+        req = protocol.DescribeGroupsRequest([b'testgroup'])
+        msg = req.get_bytes()
+        self.assertEqual(
+            msg,
+            bytearray(
+                b'\x00\x00\x00 \x00\x0f\x00\x00\x00\x00\x00\x00\x00\x07pykafka'  # header
+                b'\x00\x00\x00\x01'  # len(group_ids)
+                    b'\x00\t'  # len(group_id)
+                        b'testgroup'  # group_id
+            )
+        )
+
+    def test_describe_groups_response(self):
+        response = protocol.DescribeGroupsResponse(
+            bytearray(
+                b'\x00\x00\x00\x01'  # len(groups)
+                    b'\x00\x00'  # error code
+                    b'\x00\t'  # len(group_id)
+                        b'testgroup'  # group_id
+                    b'\x00\x06'  # len(state)
+                        b'Stable'  # state
+                    b'\x00\x08'  # len(protocol_type)
+                        b'consumer'  # protocol_type
+                    b'\x00\x19'  # len(protocol)
+                        b'pykafkaassignmentstrategy'  # protocol
+                    b'\x00\x00\x00\x01'  # len(members)
+                        b'\x00,'  # len(member_id)
+                            b'pykafka-d42426fb-c295-4cd9-b585-6dd79daf3afe'  # member_id
+                        b'\x00\x07'  # len(client_id)
+                            b'pykafka'  # client_id
+                        b'\x00\n'  # len(client_host)
+                            b'/127.0.0.1'  # client_host
+                        b'\x00\x00\x00'  # len(member_metadata)
+                            b'\x00\x00\x00\x00\x00\x01\x00\ndummytopic\x00\x00\x00\x0ctestuserdata'
+                        b'\x00\x00\x00H'  # len(member_assignment)
+                            b'\x00\x01\x00\x00\x00\x01\x00\x14testtopic_replicated'  # member_assignment
+                            b'\x00\x00\x00\n\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00'
+                            b'\x02\x00\x00\x00\x08\x00\x00\x00\x03\x00\x00\x00\t'
+                            b'\x00\x00\x00\x04\x00\x00\x00\x05\x00\x00\x00\x06'
+                            b'\x00\x00\x00\x07\x00\x00\x00\x00'
+            )
+        )
+        self.assertTrue('testgroup' in response.groups)
+        group_response = response.groups['testgroup']
+        self.assertEqual(group_response.error_code, 0)
+        self.assertEqual(group_response.group_id, 'testgroup')
+        self.assertEqual(group_response.state, 'Stable')
+        self.assertEqual(group_response.protocol_type, 'consumer')
+        self.assertEqual(group_response.protocol, 'pykafkaassignmentstrategy')
+        member_id = 'pykafka-d42426fb-c295-4cd9-b585-6dd79daf3afe'
+        self.assertTrue(member_id in group_response.members)
+        member = group_response.members[member_id]
+        self.assertEqual(member.member_id, member_id)
+        self.assertEqual(member.client_id, 'pykafka')
+        self.assertEqual(member.client_host, '/127.0.0.1')
+        self.assertEqual(
+            member.member_metadata,
+            b'\x00\x00\x00\x00\x00\x01\x00\ndummytopic\x00\x00\x00\x0ctestuserdata')
+        assignment = member.member_assignment
+        self.assertEqual(assignment.version, 1)
+        self.assertEqual(assignment.partition_assignment,
+                         [('testtopic_replicated', [0, 1, 2, 8, 3, 9, 4, 5, 6, 7])])
+
 
 if __name__ == '__main__':
     unittest2.main()
