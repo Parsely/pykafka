@@ -636,10 +636,10 @@ class TestGroupMembershipAPI(unittest2.TestCase):
         req = protocol.SyncGroupRequest(
             b'dummygroup', 1, b'testmember1',
             [
-                protocol.MemberAssignment([(b"mytopic1", [3, 5, 7, 9]),
-                                           (b"mytopic2", [3, 5, 7, 9])], member_id=b"a"),
-                protocol.MemberAssignment([(b"mytopic1", [2, 4, 6, 8]),
-                                           (b"mytopic2", [2, 4, 6, 8])], member_id=b"b")
+                (b"a", protocol.MemberAssignment([(b"mytopic1", [3, 5, 7, 9]),
+                                                  (b"mytopic2", [3, 5, 7, 9])])),
+                (b"b", protocol.MemberAssignment([(b"mytopic1", [2, 4, 6, 8]),
+                                                  (b"mytopic2", [2, 4, 6, 8])]))
             ])
         msg = req.get_bytes()
         self.assertEqual(
