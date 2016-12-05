@@ -371,6 +371,19 @@ class Cluster(object):
                 #       needed.
                 raise Exception('Broker host/port change detected! %s', broker)
 
+    def get_managed_group_descriptions(self):
+        """Return detailed descriptions of all managed consumer groups on this cluster
+
+        This function only returns descriptions for consumer groups created via the
+        Group Management API, which pykafka refers to as :class:`ManagedBalancedConsumer`s
+        """
+        descriptions = {}
+        for broker in itervalues(self.brokers):
+            res = broker.describe_groups([group.group_id for group
+                                          in itervalues(broker.list_groups().groups)])
+            descriptions.update(res.groups)
+        return descriptions
+
     def get_offset_manager(self, consumer_group):
         log.warning("WARNING: Cluster.get_offset_manager is deprecated since pykafka "
                     "2.3.0. Instead, use Cluster.get_group_coordinator.")

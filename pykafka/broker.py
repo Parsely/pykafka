@@ -28,7 +28,8 @@ from .protocol import (
     MetadataResponse, OffsetCommitRequest, OffsetCommitResponse, OffsetFetchRequest,
     OffsetFetchResponse, ProduceResponse, JoinGroupRequest, JoinGroupResponse,
     SyncGroupRequest, SyncGroupResponse, HeartbeatRequest, HeartbeatResponse,
-    LeaveGroupRequest, LeaveGroupResponse)
+    LeaveGroupRequest, LeaveGroupResponse, ListGroupsRequest, ListGroupsResponse,
+    DescribeGroupsRequest, DescribeGroupsResponse)
 from .utils.compat import range, iteritems, get_bytes
 
 log = logging.getLogger(__name__)
@@ -466,3 +467,20 @@ class Broker(object):
             HeartbeatRequest(consumer_group, generation_id, member_id))
         self._handler.sleep()
         return future.get(HeartbeatResponse)
+
+    ########################
+    #  Administrative API  #
+    ########################
+    def list_groups(self):
+        """Send a ListGroupsRequest"""
+        future = self._req_handler.request(ListGroupsRequest())
+        return future.get(ListGroupsResponse)
+
+    def describe_groups(self, group_ids):
+        """Send a DescribeGroupsRequest
+
+        :param group_ids: A sequence of group identifiers for which to return descriptions
+        :type group_ids: sequence of str
+        """
+        future = self._req_handler.request(DescribeGroupsRequest(group_ids))
+        return future.get(DescribeGroupsResponse)

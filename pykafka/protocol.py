@@ -1615,3 +1615,156 @@ class LeaveGroupResponse(Response):
         fmt = 'h'
         response = struct_helpers.unpack_from(fmt, buff, 0)
         self.error_code = response[0]
+
+
+###
+# Administrative API
+###
+class ListGroupsRequest(Request):
+    """A list groups request
+
+    Specification::
+
+    ListGroupsRequest =>
+    """
+    @property
+    def API_KEY(self):
+        """API_KEY for this request, from the Kafka docs"""
+        return 16
+
+    def get_bytes(self):
+        """Create a new list group request"""
+        output = bytearray(len(self))
+        self._write_header(output)
+        return output
+
+    def __len__(self):
+        """Length of the serialized message, in bytes"""
+        return self.HEADER_LEN
+
+
+GroupListing = namedtuple(
+    'GroupListing',
+    ['group_id', 'protocol_type']
+)
+
+
+class ListGroupsResponse(Response):
+    """A list groups response
+
+    Specification::
+
+    ListGroupsResponse => ErrorCode Groups
+      ErrorCode => int16
+      Groups => [GroupId ProtocolType]
+        GroupId => string
+        ProtocolType => string
+    """
+    def __init__(self, buff):
+        """Deserialize into a new Response
+
+        :param buff: Serialized message
+        :type buff: :class:`bytearray`
+        """
+        fmt = 'h [SS]'
+        response = struct_helpers.unpack_from(fmt, buff, 0)
+
+        self.error = response[0]
+        self.groups = {}
+        for group_info in response[1]:
+            listing = GroupListing(*group_info)
+            self.groups[listing.group_id] = listing
+
+
+class DescribeGroupsRequest(Request):
+    """A describe groups request
+
+    Specification::
+
+    DescribeGroupsRequest => [GroupId]
+      GroupId => string
+    """
+    def __init__(self, group_ids):
+        self.group_ids = group_ids
+
+    @property
+    def API_KEY(self):
+        """API_KEY for this request, from the Kafka docs"""
+        return 15
+
+    def get_bytes(self):
+        """Create a new list group request"""
+        output = bytearray(len(self))
+        self._write_header(output)
+        offset = self.HEADER_LEN
+        fmt = '!i'
+        struct.pack_into(fmt, output, offset, len(self.group_ids))
+        offset += struct.calcsize(fmt)
+        for group_id in self.group_ids:
+            fmt = '!h%ds' % len(group_id)
+            struct.pack_into(fmt, output, offset, len(group_id), group_id)
+            offset += struct.calcsize(fmt)
+        return output
+
+    def __len__(self):
+        """Length of the serialized message, in bytes"""
+        # header + len(group_ids)
+        size = self.HEADER_LEN + 4
+        for group_id in self.group_ids:
+            # len(group_id) + group_id
+            size += 2 + len(group_id)
+        return size
+
+
+GroupMember = namedtuple(
+    'GroupMember',
+    ['member_id', 'client_id', 'client_host', 'member_metadata', 'member_assignment']
+)
+
+
+DescribeGroupResponse = namedtuple(
+    'DescribeGroupResponse',
+    ['error_code', 'group_id', 'state', 'protocol_type', 'protocol', 'members']
+)
+
+
+class DescribeGroupsResponse(Response):
+    """A describe groups response
+
+    Specification::
+
+
+    DescribeGroupsResponse => [ErrorCode GroupId State ProtocolType Protocol Members]
+      ErrorCode => int16
+      GroupId => string
+      State => string
+      ProtocolType => string
+      Protocol => string
+      Members => [MemberId ClientId ClientHost MemberMetadata MemberAssignment]
+        MemberId => string
+        ClientId => string
+        ClientHost => string
+        MemberMetadata => bytes
+        MemberAssignment => bytes
+    """
+    def __init__(self, buff):
+        """Deserialize into a new Response
+
+        :param buff: Serialized message
+        :type buff: :class:`bytearray`
+        """
+        fmt = '[hSSSS [SSSYY ] ]'
+        response = struct_helpers.unpack_from(fmt, buff, 0)
+
+        self.groups = {}
+        for group_info in response:
+            members = {}
+            for member_info in group_info[5]:
+                member_metadata = ConsumerGroupProtocolMetadata.from_bytestring(
+                    member_info[3])
+                member_assignment = MemberAssignment.from_bytestring(member_info[4])
+                member = GroupMember(*(member_info[:3] + (member_metadata,
+                                                          member_assignment)))
+                members[member.member_id] = member
+            group = DescribeGroupResponse(*(group_info[:5] + (members,)))
+            self.groups[group.group_id] = group
