@@ -747,9 +747,9 @@ class TestAdministrativeAPI(unittest2.TestCase):
             )
         )
         self.assertEqual(len(response.groups), 1)
-        group = response.groups[response.groups.keys()[0]]
-        self.assertEqual(group.group_id, "testgroup")
-        self.assertEqual(group.protocol_type, "consumer")
+        group = response.groups[b"testgroup"]
+        self.assertEqual(group.group_id, b"testgroup")
+        self.assertEqual(group.protocol_type, b"consumer")
 
     def test_describe_groups_request(self):
         req = protocol.DescribeGroupsRequest([b'testgroup'])
@@ -794,19 +794,19 @@ class TestAdministrativeAPI(unittest2.TestCase):
                             b'\x00\x00\x00\x07\x00\x00\x00\x00'
             )
         )
-        self.assertTrue('testgroup' in response.groups)
-        group_response = response.groups['testgroup']
+        self.assertTrue(b'testgroup' in response.groups)
+        group_response = response.groups[b'testgroup']
         self.assertEqual(group_response.error_code, 0)
-        self.assertEqual(group_response.group_id, 'testgroup')
-        self.assertEqual(group_response.state, 'Stable')
-        self.assertEqual(group_response.protocol_type, 'consumer')
-        self.assertEqual(group_response.protocol, 'pykafkaassignmentstrategy')
-        member_id = 'pykafka-d42426fb-c295-4cd9-b585-6dd79daf3afe'
+        self.assertEqual(group_response.group_id, b'testgroup')
+        self.assertEqual(group_response.state, b'Stable')
+        self.assertEqual(group_response.protocol_type, b'consumer')
+        self.assertEqual(group_response.protocol, b'pykafkaassignmentstrategy')
+        member_id = b'pykafka-d42426fb-c295-4cd9-b585-6dd79daf3afe'
         self.assertTrue(member_id in group_response.members)
         member = group_response.members[member_id]
         self.assertEqual(member.member_id, member_id)
-        self.assertEqual(member.client_id, 'pykafka')
-        self.assertEqual(member.client_host, '/127.0.0.1')
+        self.assertEqual(member.client_id, b'pykafka')
+        self.assertEqual(member.client_host, b'/127.0.0.1')
         metadata = member.member_metadata
         self.assertEqual(metadata.version, 0)
         self.assertEqual(metadata.topic_names, [b"dummytopic"])
@@ -814,7 +814,7 @@ class TestAdministrativeAPI(unittest2.TestCase):
         assignment = member.member_assignment
         self.assertEqual(assignment.version, 1)
         self.assertEqual(assignment.partition_assignment,
-                         [('testtopic_replicated', [0, 1, 2, 8, 3, 9, 4, 5, 6, 7])])
+                         [(b'testtopic_replicated', [0, 1, 2, 8, 3, 9, 4, 5, 6, 7])])
 
 
 if __name__ == '__main__':
