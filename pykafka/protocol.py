@@ -1365,8 +1365,7 @@ class MemberAssignment(object):
             Partition => int32
         UserData => bytes
     """
-    def __init__(self, partition_assignment, member_id=None, version=1):
-        self.member_id = member_id
+    def __init__(self, partition_assignment, version=1):
         self.version = version
         self.partition_assignment = partition_assignment
 
@@ -1436,9 +1435,9 @@ class SyncGroupRequest(Request):
         # + len(member id) + member id + len(group assignment)
         size += 2 + len(self.member_id) + 4
         # group assignment tuples
-        for member_assignment in self.group_assignment:
+        for member_id, member_assignment in self.group_assignment:
             # + len(member id) + member id + len(member assignment) + member assignment
-            size += 2 + len(member_assignment.member_id) + 4 + len(member_assignment)
+            size += 2 + len(member_id) + 4 + len(member_assignment)
         return size
 
     @property
@@ -1460,12 +1459,11 @@ class SyncGroupRequest(Request):
                          self.generation_id, len(self.member_id), self.member_id,
                          len(self.group_assignment))
         offset += struct.calcsize(fmt)
-        for member_assignment in self.group_assignment:
+        for member_id, member_assignment in self.group_assignment:
             assignment_bytes = bytes(member_assignment.get_bytes())
-            fmt = '!h%dsi%ds' % (len(member_assignment.member_id), len(assignment_bytes))
-            struct.pack_into(fmt, output, offset, len(member_assignment.member_id),
-                             member_assignment.member_id, len(assignment_bytes),
-                             assignment_bytes)
+            fmt = '!h%dsi%ds' % (len(member_id), len(assignment_bytes))
+            struct.pack_into(fmt, output, offset, len(member_id), member_id,
+                             len(assignment_bytes), assignment_bytes)
             offset += struct.calcsize(fmt)
         return output
 
