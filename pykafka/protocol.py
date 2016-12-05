@@ -1759,8 +1759,8 @@ class DescribeGroupsResponse(Response):
         for group_info in response:
             members = {}
             for member_info in group_info[5]:
-                # TODO - parse metadata bytestring (new_member[3]) into ConsumerGroupProtocolMetadata
-                member_metadata = member_info[3]
+                member_metadata = ConsumerGroupProtocolMetadata.from_bytestring(
+                    member_info[3])
                 member_assignment = MemberAssignment.from_bytestring(member_info[4])
                 member = GroupMember(*(member_info[:3] + (member_metadata,
                                                           member_assignment)))

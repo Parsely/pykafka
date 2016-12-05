@@ -784,7 +784,7 @@ class TestAdministrativeAPI(unittest2.TestCase):
                             b'pykafka'  # client_id
                         b'\x00\n'  # len(client_host)
                             b'/127.0.0.1'  # client_host
-                        b'\x00\x00\x00'  # len(member_metadata)
+                        b'\x00\x00\x00"'  # len(member_metadata)
                             b'\x00\x00\x00\x00\x00\x01\x00\ndummytopic\x00\x00\x00\x0ctestuserdata'
                         b'\x00\x00\x00H'  # len(member_assignment)
                             b'\x00\x01\x00\x00\x00\x01\x00\x14testtopic_replicated'  # member_assignment
@@ -807,9 +807,10 @@ class TestAdministrativeAPI(unittest2.TestCase):
         self.assertEqual(member.member_id, member_id)
         self.assertEqual(member.client_id, 'pykafka')
         self.assertEqual(member.client_host, '/127.0.0.1')
-        self.assertEqual(
-            member.member_metadata,
-            b'\x00\x00\x00\x00\x00\x01\x00\ndummytopic\x00\x00\x00\x0ctestuserdata')
+        metadata = member.member_metadata
+        self.assertEqual(metadata.version, 0)
+        self.assertEqual(metadata.topic_names, [b"dummytopic"])
+        self.assertEqual(metadata.user_data, b"testuserdata")
         assignment = member.member_assignment
         self.assertEqual(assignment.version, 1)
         self.assertEqual(assignment.partition_assignment,
