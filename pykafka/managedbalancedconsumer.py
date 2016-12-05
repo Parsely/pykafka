@@ -279,11 +279,12 @@ class ManagedBalancedConsumer(BalancedConsumer):
                 # generate partition assignments for each group member
                 # if this is not the leader, join_result.members will be empty
                 group_assignments = [
-                    MemberAssignment([
+                    (member_id,
+                     MemberAssignment([
                         (self._topic.name,
                          [p.id for p in self._decide_partitions(
-                          iterkeys(members), consumer_id=member_id)])
-                    ], member_id=member_id) for member_id in members]
+                          iterkeys(members), consumer_id=member_id)])])
+                    ) for member_id in members]
 
                 assignment = self._sync_group(group_assignments)
                 self._setup_internal_consumer(
