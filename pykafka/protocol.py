@@ -1353,8 +1353,7 @@ class MemberAssignment(object):
             Partition => int32
         UserData => bytes
     """
-    def __init__(self, partition_assignment, member_id=None, version=1):
-        self.member_id = member_id
+    def __init__(self, partition_assignment, version=1):
         self.version = version
         self.partition_assignment = partition_assignment
 
