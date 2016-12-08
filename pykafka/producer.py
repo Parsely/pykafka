@@ -26,6 +26,8 @@ import threading
 import traceback
 import weakref
 
+from six import reraise
+
 from .common import CompressionType
 from .exceptions import (
     ERROR_CODES,
@@ -193,15 +195,7 @@ class Producer(object):
     def _raise_worker_exceptions(self):
         """Raises exceptions encountered on worker threads"""
         if self._worker_exception is not None:
-            _, ex, tb = self._worker_exception
-            # avoid logging worker exceptions more than once, which can
-            # happen when this function's `raise` triggers `__exit__`
-            # which calls `stop`
-            if not self._worker_trace_logged:
-                self._worker_trace_logged = True
-                log.error("Exception encountered in worker thread:\n%s",
-                          "".join(traceback.format_tb(tb)))
-            raise ex
+            reraise(*self._worker_exception)
 
     def __repr__(self):
         return "<{module}.{name} at {id_}>".format(

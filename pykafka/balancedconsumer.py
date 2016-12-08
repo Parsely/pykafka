@@ -31,6 +31,7 @@ from kazoo.client import KazooClient
 from kazoo.handlers.gevent import SequentialGeventHandler
 from kazoo.exceptions import NoNodeException, NodeExistsError
 from kazoo.recipe.watchers import ChildrenWatch
+from six import reraise
 
 from .common import OffsetType
 from .exceptions import KafkaException, PartitionOwnedError, ConsumerStoppedException
@@ -263,12 +264,7 @@ class BalancedConsumer(object):
     def _raise_worker_exceptions(self):
         """Raises exceptions encountered on worker threads"""
         if self._worker_exception is not None:
-            _, ex, tb = self._worker_exception
-            if not self._worker_trace_logged:
-                self._worker_trace_logged = True
-                log.error("Exception encountered in worker thread:\n%s",
-                          "".join(traceback.format_tb(tb)))
-            raise ex
+            reraise(*self._worker_exception)
 
     @property
     def topic(self):
