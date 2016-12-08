@@ -23,7 +23,6 @@ import logging
 import platform
 import sys
 import threading
-import traceback
 import weakref
 
 from six import reraise

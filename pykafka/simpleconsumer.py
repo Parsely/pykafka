@@ -25,7 +25,6 @@ import socket
 import sys
 import threading
 import time
-import traceback
 from collections import defaultdict
 import weakref
 

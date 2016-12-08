@@ -23,7 +23,6 @@ import logging
 import socket
 import sys
 import time
-import traceback
 from uuid import uuid4
 import weakref
 
