@@ -32,6 +32,7 @@ def get_version():
                          version_file.read()).group('version')
 
 install_requires = [
+    'six>=1.5',
     'kazoo',
     'tabulate',
     'gevent>=1.1.0'
