@@ -175,7 +175,6 @@ class Producer(object):
         self._max_request_size = valid_int(max_request_size)
         self._synchronous = sync
         self._worker_exception = None
-        self._worker_trace_logged = False
         self._owned_brokers = None
         self._delivery_reports = (_DeliveryReportQueue(self._cluster.handler)
                                   if delivery_reports or self._synchronous

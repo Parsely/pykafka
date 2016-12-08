@@ -185,7 +185,6 @@ class SimpleConsumer(object):
         self._auto_commit_interval_ms = valid_int(auto_commit_interval_ms)
         self._last_auto_commit = time.time()
         self._worker_exception = None
-        self._worker_trace_logged = False
         self._update_lock = self._cluster.handler.Lock()
 
         self._discover_group_coordinator()

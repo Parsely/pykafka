@@ -217,7 +217,6 @@ class BalancedConsumer(object):
         self._generation_id = -1
         self._running = False
         self._worker_exception = None
-        self._worker_trace_logged = False
         self._is_compacted_topic = compacted_topic
 
         if not rdkafka and use_rdkafka:
