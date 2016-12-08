@@ -21,6 +21,7 @@ __all__ = ["Producer"]
 from collections import deque
 import logging
 import platform
+import struct
 import sys
 import threading
 import traceback
@@ -449,8 +450,8 @@ class Producer(object):
                     to_retry.extend(
                         (mset, exc)
                         for mset in _get_partition_msgs(partition, req))
-        except SocketDisconnectedError as exc:
-            log.warning('Broker %s:%s disconnected. Retrying.',
+        except (SocketDisconnectedError, struct.error) as exc:
+            log.warning('Error encountered when producing to broker %s:%s. Retrying.',
                         owned_broker.broker.host,
                         owned_broker.broker.port)
             try:
