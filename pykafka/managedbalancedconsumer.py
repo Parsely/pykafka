@@ -197,7 +197,6 @@ class ManagedBalancedConsumer(BalancedConsumer):
         self._consumer = None
         self._group_coordinator = None
         self._consumer_id = b''
-        self._worker_trace_logged = False
         self._worker_exception = None
         self._default_error_handlers = self._build_default_error_handlers()
 

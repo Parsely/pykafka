@@ -25,9 +25,10 @@ import socket
 import sys
 import threading
 import time
-import traceback
 from collections import defaultdict
 import weakref
+
+from six import reraise
 
 from .common import OffsetType
 from .utils.compat import (Queue, Empty, iteritems, itervalues,
@@ -184,7 +185,6 @@ class SimpleConsumer(object):
         self._auto_commit_interval_ms = valid_int(auto_commit_interval_ms)
         self._last_auto_commit = time.time()
         self._worker_exception = None
-        self._worker_trace_logged = False
         self._update_lock = self._cluster.handler.Lock()
 
         self._discover_group_coordinator()
@@ -226,12 +226,7 @@ class SimpleConsumer(object):
     def _raise_worker_exceptions(self):
         """Raises exceptions encountered on worker threads"""
         if self._worker_exception is not None:
-            _, ex, tb = self._worker_exception
-            if not self._worker_trace_logged:
-                self._worker_trace_logged = True
-                log.error("Exception encountered in worker thread:\n%s",
-                          "".join(traceback.format_tb(tb)))
-            raise ex
+            reraise(*self._worker_exception)
 
     def _update(self):
         """Update the consumer and cluster after an ERROR_CODE"""

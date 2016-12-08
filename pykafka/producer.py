@@ -23,8 +23,9 @@ import logging
 import platform
 import sys
 import threading
-import traceback
 import weakref
+
+from six import reraise
 
 from .common import CompressionType
 from .exceptions import (
@@ -174,7 +175,6 @@ class Producer(object):
         self._max_request_size = valid_int(max_request_size)
         self._synchronous = sync
         self._worker_exception = None
-        self._worker_trace_logged = False
         self._owned_brokers = None
         self._delivery_reports = (_DeliveryReportQueue(self._cluster.handler)
                                   if delivery_reports or self._synchronous
@@ -193,15 +193,7 @@ class Producer(object):
     def _raise_worker_exceptions(self):
         """Raises exceptions encountered on worker threads"""
         if self._worker_exception is not None:
-            _, ex, tb = self._worker_exception
-            # avoid logging worker exceptions more than once, which can
-            # happen when this function's `raise` triggers `__exit__`
-            # which calls `stop`
-            if not self._worker_trace_logged:
-                self._worker_trace_logged = True
-                log.error("Exception encountered in worker thread:\n%s",
-                          "".join(traceback.format_tb(tb)))
-            raise ex
+            reraise(*self._worker_exception)
 
     def __repr__(self):
         return "<{module}.{name} at {id_}>".format(
