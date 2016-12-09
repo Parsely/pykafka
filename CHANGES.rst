@@ -1,6 +1,30 @@
 Changelog
 =========
 
+2.6.0.dev1 (2016-12-8)
+----------------------
+
+`Compare 2.6.0.dev1`_
+
+.. _Compare 2.6.0.dev1: https://github.com/Parsely/pykafka/compare/2.5.0...2.6.0.dev1
+
+Minor Version Features
+----------------------
+
+* Added support to `Broker` and `Cluster` for Kafka 0.10's Administrative API
+* Changed the `MemberAssignment` protocol API to more closely match the schema defined
+  by Kafka
+
+Bug Fixes
+---------
+
+* Changed components to use `six.reraise` to raise worker thread exceptions for easier
+  debugging
+* Included message offset in messages returned from `Producer` delivery reports
+* Handled `struct.error` exceptions in `Producer._send_request`
+* Changed protocol implementation to parse `ConsumerGroupProtocolMetadata` from
+  bytestrings returned from Kafka
+
 2.5.0 (2016-9-15)
 -----------------
 
