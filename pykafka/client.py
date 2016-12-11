@@ -23,7 +23,6 @@ from .handlers import ThreadingHandler, GEventHandler
 import logging
 
 from .cluster import Cluster
-from .handlers import ThreadingHandler
 
 
 log = logging.getLogger(__name__)
