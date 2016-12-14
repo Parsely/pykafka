@@ -189,7 +189,8 @@ class InconsistentGroupProtocol(ProtocolClientError):
 
 class UnknownMemberId(ProtocolClientError):
     """Returned from group requests (offset commits/fetches, heartbeats, etc) when the
-        memberId is not in the current generation.
+        memberId is not in the current generation. Also returned if SimpleConsumer is
+        incorrectly instantiated with a non-default consumer_id.
     """
     ERROR_CODE = 25
 

@@ -142,10 +142,12 @@ class SimpleConsumer(object):
             consumer to use less stringent message ordering logic because compacted
             topics do not provide offsets in stict incrementing order.
         :type compacted_topic: bool
-        :param generation_id: The generation id with which to make group requests
+        :param generation_id: Deprecated::2.7 Do not set if directly instantiating
+            SimpleConsumer. The generation id with which to make group requests
         :type generation_id: int
-        :param consumer_id: The identifying string to use for this consumer on group
-            requests
+        :param consumer_id: Deprecated::2.7 Do not set if directly instantiating
+            SimpleConsumer. The identifying string to use for this consumer on
+            group requests
         :type consumer_id: bytes
         """
         self._running = False
