@@ -1,6 +1,18 @@
 Changelog
 =========
 
+2.6.0.dev2 (2016-12-14)
+-----------------------
+
+`Compare 2.6.0.dev2`_
+
+.. _Compare 2.6.0.dev2: https://github.com/Parsely/pykafka/compare/2.6.0.dev1...2.6.0.dev2
+
+Bug Fixes
+---------
+
+* Handled `struct.error` exceptions in `Producer._send_request`
+
 2.6.0.dev1 (2016-12-8)
 ----------------------
 
@@ -21,7 +33,6 @@ Bug Fixes
 * Changed components to use `six.reraise` to raise worker thread exceptions for easier
   debugging
 * Included message offset in messages returned from `Producer` delivery reports
-* Handled `struct.error` exceptions in `Producer._send_request`
 * Changed protocol implementation to parse `ConsumerGroupProtocolMetadata` from
   bytestrings returned from Kafka
 
