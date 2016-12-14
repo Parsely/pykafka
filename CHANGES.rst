@@ -13,6 +13,11 @@ Bug Fixes
 
 * Handled `struct.error` exceptions in `Producer._send_request`
 
+Miscellaneous
+-------------
+
+* Upgraded the version of PyPy used in automated tests
+
 2.6.0.dev1 (2016-12-8)
 ----------------------
 
