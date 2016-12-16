@@ -446,10 +446,7 @@ class Producer(object):
             log.warning('Error encountered when producing to broker %s:%s. Retrying.',
                         owned_broker.broker.host,
                         owned_broker.broker.port)
-            try:
-                self._update()
-            except NoBrokersAvailableError:
-                log.warning("No brokers available")
+            self._update()
             to_retry = [
                 (mset, exc)
                 for topic, partitions in iteritems(req.msets)
