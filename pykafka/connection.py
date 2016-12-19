@@ -170,8 +170,8 @@ class BrokerConnection(object):
                 ))
         except (self._handler.SockErr, self._handler.GaiError):
             log.error("Failed to connect to %s:%s", self.host, self.port)
-        if self._socket is not None:
-            log.debug("Successfully connected to %s:%s", self.host, self.port)
+            raise SocketDisconnectedError
+        log.debug("Successfully connected to %s:%s", self.host, self.port)
 
     def disconnect(self):
         """Disconnect from the broker."""

@@ -95,7 +95,11 @@ class Broker(object):
         self._offsets_channel_socket_timeout_ms = offsets_channel_socket_timeout_ms
         self._buffer_size = buffer_size
         self._req_handlers = {}
-        self.connect()
+        try:
+            self.connect()
+        except SocketDisconnectedError:
+            log.warning("Failed to connect newly created broker for {host}:{port}".format(
+                host=self._host, port=self._port))
 
     def __repr__(self):
         return "<{module}.{name} at {id_} (host={host}, port={port}, id={my_id})>".format(
