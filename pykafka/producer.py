@@ -225,6 +225,7 @@ class Producer(object):
         was triggered
         """
         # only allow one thread to be updating the producer at a time
+
         with self._update_lock:
             if self._owned_brokers is not None:
                 for owned_broker in list(self._owned_brokers.values()):
@@ -368,13 +369,16 @@ class Producer(object):
         """
         success = False
         while not success:
+            owned_broker = None
             with self._update_lock:
                 leader_id = self._topic.partitions[message.partition_id].leader.id
                 if leader_id in self._owned_brokers:
-                    self._owned_brokers[leader_id].enqueue(message)
+                    owned_broker = self._owned_brokers[leader_id]
                     success = True
                 else:
                     success = False
+            if success:
+                owned_broker.enqueue(message)
 
     def _send_request(self, message_batch, owned_broker):
         """Send the produce request to the broker and handle the response.
@@ -535,6 +539,8 @@ class OwnedBroker(object):
                 except Exception:
                     # surface all exceptions to the main thread
                     self.producer._worker_exception = sys.exc_info()
+                    if not self.running and not self.slot_available.is_set():
+                        self.slot_available.set()
                     break
             log.info("Worker exited for broker %s:%s", self.broker.host,
                      self.broker.port)
