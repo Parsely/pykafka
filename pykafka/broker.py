@@ -35,6 +35,17 @@ from .utils.compat import range, iteritems, get_bytes
 log = logging.getLogger(__name__)
 
 
+def _check_handler(handler_name="_req_handler"):
+    def decorator(fn):
+        """Ensures that the given handler is not None before calling fn"""
+        def wrapped(self, *args, **kwargs):
+            if getattr(self, handler_name) is None:
+                raise SocketDisconnectedError
+            return fn(self, *args, **kwargs)
+        return wrapped
+    return decorator
+
+
 class Broker(object):
     """
     A Broker is an abstraction over a real kafka server instance.
@@ -261,6 +272,7 @@ class Broker(object):
             self._req_handlers[connection_id] = handler
         return self._req_handlers[connection_id]
 
+    @_check_handler()
     def fetch_messages(self,
                        partition_requests,
                        timeout=30000,
@@ -287,6 +299,7 @@ class Broker(object):
         # XXX - this call returns even with less than min_bytes of messages?
         return future.get(FetchResponse)
 
+    @_check_handler()
     def produce_messages(self, produce_request):
         """Produce messages to a set of partitions.
 
@@ -300,6 +313,7 @@ class Broker(object):
             future = self._req_handler.request(produce_request)
             return future.get(ProduceResponse)
 
+    @_check_handler()
     def request_offset_limits(self, partition_requests):
         """Request offset information for a set of topic/partitions
 
@@ -311,6 +325,7 @@ class Broker(object):
         future = self._req_handler.request(OffsetRequest(partition_requests))
         return future.get(OffsetResponse)
 
+    @_check_handler()
     def request_metadata(self, topics=None):
         """Request cluster metadata
 
@@ -345,6 +360,7 @@ class Broker(object):
     #  Commit/Fetch API  #
     ######################
 
+    @_check_handler(handler_name="_offsets_channel_req_handler")
     def commit_consumer_group_offsets(self,
                                       consumer_group,
                                       consumer_group_generation_id,
@@ -376,6 +392,7 @@ class Broker(object):
                                   partition_requests=preqs)
         return self._offsets_channel_req_handler.request(req).get(OffsetCommitResponse)
 
+    @_check_handler(handler_name="_offsets_channel_req_handler")
     def fetch_consumer_group_offsets(self, consumer_group, preqs):
         """Fetch the offsets stored in Kafka with the Offset Commit/Fetch API
 
@@ -409,6 +426,8 @@ class Broker(object):
         :type member_id: bytes
         """
         handler = self._get_unique_req_handler(connection_id)
+        if handler is None:
+            raise SocketDisconnectedError
         future = handler.request(JoinGroupRequest(consumer_group, member_id))
         self._handler.sleep()
         return future.get(JoinGroupResponse)
@@ -425,6 +444,8 @@ class Broker(object):
         :type member_id: bytes
         """
         handler = self._get_unique_req_handler(connection_id)
+        if handler is None:
+            raise SocketDisconnectedError
         future = handler.request(LeaveGroupRequest(consumer_group, member_id))
         return future.get(LeaveGroupResponse)
 
@@ -448,6 +469,8 @@ class Broker(object):
         :type group_assignment: iterable of :class:`pykafka.protocol.MemberAssignment`
         """
         handler = self._get_unique_req_handler(connection_id)
+        if handler is None:
+            raise SocketDisconnectedError
         future = handler.request(
             SyncGroupRequest(consumer_group, generation_id, member_id, group_assignment))
         return future.get(SyncGroupResponse)
@@ -467,6 +490,8 @@ class Broker(object):
         :type member_id: bytes
         """
         handler = self._get_unique_req_handler(connection_id)
+        if handler is None:
+            raise SocketDisconnectedError
         future = handler.request(
             HeartbeatRequest(consumer_group, generation_id, member_id))
         self._handler.sleep()
@@ -475,11 +500,13 @@ class Broker(object):
     ########################
     #  Administrative API  #
     ########################
+    @_check_handler()
     def list_groups(self):
         """Send a ListGroupsRequest"""
         future = self._req_handler.request(ListGroupsRequest())
         return future.get(ListGroupsResponse)
 
+    @_check_handler()
     def describe_groups(self, group_ids):
         """Send a DescribeGroupsRequest
 
