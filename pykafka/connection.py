@@ -196,9 +196,10 @@ class BrokerConnection(object):
             raise SocketDisconnectedError
         try:
             self._socket.sendall(bytes_)
-        except SocketDisconnectedError:
+        except self._handler.SockErr as e:
+            log.error("Failed to send data, error: %s" % repr(e))
             self.disconnect()
-            raise
+            raise SocketDisconnectedError
 
     def response(self):
         """Wait for a response from the broker"""
