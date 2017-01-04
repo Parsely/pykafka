@@ -539,7 +539,7 @@ class OwnedBroker(object):
                 except Exception:
                     # surface all exceptions to the main thread
                     self.producer._worker_exception = sys.exc_info()
-                    if not self.running and not self.slot_available.is_set():
+                    if not self.slot_available.is_set():
                         self.slot_available.set()
                     break
             log.info("Worker exited for broker %s:%s", self.broker.host,
