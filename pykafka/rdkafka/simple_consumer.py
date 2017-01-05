@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 import logging
+from pkg_resources import parse_version
 import time
 
 from pykafka.exceptions import RdKafkaStoppedException, ConsumerStoppedException
@@ -189,7 +190,6 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
 
         conf = {  # destination: rd_kafka_conf_set
             "client.id": "pykafka.rdkafka",
-            "broker.version.fallback": self._broker_version,
             # Handled via rd_kafka_brokers_add instead:
             ##"metadata.broker.list"
 
@@ -250,6 +250,9 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
             # instances to the kafka cluster:
             ##"group.id"
             }
+        # broker.version.fallback is incompatible with >-0.10
+        if parse_version(self._broker_version) < parse_version("0.10.0"):
+            conf["broker.version.fallback"] = self._broker_version
         conf.update(helpers.rdk_ssl_config(self._cluster))
 
         map_offset_types = {

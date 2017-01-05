@@ -1,4 +1,5 @@
 import logging
+from pkg_resources import parse_version
 
 from pykafka.exceptions import RdKafkaStoppedException, ProducerStoppedException
 from pykafka.producer import Producer, CompressionType, random_partitioner
@@ -111,7 +112,6 @@ class RdKafkaProducer(Producer):
 
         conf = {  # destination: rd_kafka_conf_set
             "client.id": "pykafka.rdkafka",
-            "broker.version.fallback": self._broker_version,
             # Handled via rd_kafka_brokers_add instead:
             # "metadata.broker.list"
 
@@ -162,6 +162,9 @@ class RdKafkaProducer(Producer):
             # "dr_cb"
             # "dr_msg_cb"  # gets set in _rd_kafka module
         }
+        # broker.version.fallback is incompatible with >-0.10
+        if parse_version(self._broker_version) < parse_version("0.10.0"):
+            conf["broker.version.fallback"] = self._broker_version
         conf.update(helpers.rdk_ssl_config(self._cluster))
 
         topic_conf = {
