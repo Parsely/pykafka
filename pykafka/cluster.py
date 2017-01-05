@@ -354,10 +354,9 @@ class Cluster(object):
                     ssl_config=self._ssl_config)
             elif not self._brokers[id_].connected:
                 log.info('Reconnecting to broker id %s: %s:%s', id_, meta.host, meta.port)
-                import socket
                 try:
                     self._brokers[id_].connect()
-                except socket.error:
+                except SocketDisconnectedError:
                     log.info('Failed to re-establish connection with broker id %s: %s:%s',
                              id_, meta.host, meta.port)
             else:
