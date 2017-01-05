@@ -225,7 +225,6 @@ class Producer(object):
         was triggered
         """
         # only allow one thread to be updating the producer at a time
-
         with self._update_lock:
             if self._owned_brokers is not None:
                 for owned_broker in list(self._owned_brokers.values()):
@@ -369,16 +368,12 @@ class Producer(object):
         """
         success = False
         while not success:
-            owned_broker = None
-            with self._update_lock:
-                leader_id = self._topic.partitions[message.partition_id].leader.id
-                if leader_id in self._owned_brokers:
-                    owned_broker = self._owned_brokers[leader_id]
-                    success = True
-                else:
-                    success = False
-            if success:
-                owned_broker.enqueue(message)
+            leader_id = self._topic.partitions[message.partition_id].leader.id
+            if leader_id in self._owned_brokers:
+                self._owned_brokers[leader_id].enqueue(message)
+                success = True
+            else:
+                success = False
 
     def _send_request(self, message_batch, owned_broker):
         """Send the produce request to the broker and handle the response.
