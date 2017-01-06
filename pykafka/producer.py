@@ -524,6 +524,10 @@ class OwnedBroker(object):
         if self._auto_start:
             self.start()
 
+    def cleanup(self):
+        if not self.slot_available.is_set():
+            self.slot_available.set()
+
     def start(self):
         def queue_reader():
             while self.running:
@@ -534,9 +538,8 @@ class OwnedBroker(object):
                 except Exception:
                     # surface all exceptions to the main thread
                     self.producer._worker_exception = sys.exc_info()
-                    if not self.slot_available.is_set():
-                        self.slot_available.set()
                     break
+            self.cleanup()
             log.info("Worker exited for broker %s:%s", self.broker.host,
                      self.broker.port)
         log.info("Starting new produce worker for broker %s", self.broker.id)
