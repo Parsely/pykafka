@@ -368,13 +368,12 @@ class Producer(object):
         """
         success = False
         while not success:
-            with self._update_lock:
-                leader_id = self._topic.partitions[message.partition_id].leader.id
-                if leader_id in self._owned_brokers:
-                    self._owned_brokers[leader_id].enqueue(message)
-                    success = True
-                else:
-                    success = False
+            leader_id = self._topic.partitions[message.partition_id].leader.id
+            if leader_id in self._owned_brokers:
+                self._owned_brokers[leader_id].enqueue(message)
+                success = True
+            else:
+                success = False
 
     def _send_request(self, message_batch, owned_broker):
         """Send the produce request to the broker and handle the response.
@@ -525,6 +524,10 @@ class OwnedBroker(object):
         if self._auto_start:
             self.start()
 
+    def cleanup(self):
+        if not self.slot_available.is_set():
+            self.slot_available.set()
+
     def start(self):
         def queue_reader():
             while self.running:
@@ -536,6 +539,7 @@ class OwnedBroker(object):
                     # surface all exceptions to the main thread
                     self.producer._worker_exception = sys.exc_info()
                     break
+            self.cleanup()
             log.info("Worker exited for broker %s:%s", self.broker.host,
                      self.broker.port)
         log.info("Starting new produce worker for broker %s", self.broker.id)
