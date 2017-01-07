@@ -446,5 +446,7 @@ class Cluster(object):
             except LeaderNotAvailable:
                 log.warning("LeaderNotAvailable encountered. This may be "
                             "because one or more partitions have no available replicas.")
+                if i == self._max_connection_retries - 1:
+                    raise LeaderNotAvailable
             else:
                 break
