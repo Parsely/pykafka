@@ -249,6 +249,9 @@ class Cluster(object):
                     response = broker.request_metadata(topics)
                     if response is not None:
                         return response
+                except SocketDisconnectedError:
+                    log.error("Socket disconnected during metadata request for "
+                              "broker %s:%s. Continuing.", host, port)
                 except Exception as e:
                     log.error('Unable to connect to broker %s:%s. Continuing.', host, port)
                     log.exception(e)
