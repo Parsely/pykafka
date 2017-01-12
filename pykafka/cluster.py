@@ -417,9 +417,7 @@ class Cluster(object):
                     if i == self._max_connection_retries - 1:
                         raise
                 except SocketDisconnectedError:
-                    log.error("Socket disconnected during offset manager "
-                              "discovery. This can happen when using PyKafka "
-                              "with a Kafka version lower than 0.8.2.")
+                    log.error("Socket disconnected during offset manager discovery)
                     if i == self._max_connection_retries - 1:
                         raise
                     self.update()
