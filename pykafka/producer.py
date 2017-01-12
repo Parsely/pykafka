@@ -667,7 +667,9 @@ class OwnedBroker(object):
                 if len(self.queue) >= self.producer._max_queued_messages:
                     self.slot_available.clear()
             if self.producer._block_on_queue_full:
-                self.slot_available.wait()
+                while not self.slot_available.is_set():
+                    self.producer._cluster.handler.sleep()
+                    self.slot_available.wait(5)
             else:
                 raise ProducerQueueFullError("Queue full for broker %d",
                                              self.broker.id)

@@ -778,7 +778,9 @@ class SimpleConsumer(object):
                 self._slot_available.clear()
             for op in itervalues(self._partitions):
                 op.fetch_lock.release()
-            self._slot_available.wait()
+            while not self._slot_available.is_set():
+                self._cluster.handler.sleep()
+                self._slot_available.wait()
 
 
 class OwnedPartition(object):
