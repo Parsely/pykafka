@@ -780,7 +780,7 @@ class SimpleConsumer(object):
                 op.fetch_lock.release()
             while not self._slot_available.is_set():
                 self._cluster.handler.sleep()
-                self._slot_available.wait()
+                self._slot_available.wait(5)
 
 
 class OwnedPartition(object):
