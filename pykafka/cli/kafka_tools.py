@@ -319,10 +319,10 @@ def _get_arg_parser():
     _add_topic(parser)
     _add_consumer_group(parser)
 
-    # Print Offsets
+    # Print Broker Offsets
     parser = subparsers.add_parser(
         'print_offsets',
-        help='Fetch offsets for a topic/consumer group'
+        help='Fetch broker offsets for a topic'
     )
     parser.set_defaults(func=print_offsets)
     _add_topic(parser)
