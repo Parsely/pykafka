@@ -25,9 +25,7 @@ def fetch_offsets(client, topic, offset):
     :type client:  :class:`pykafka.KafkaClient`
     :param topic:  Name of the topic.
     :type topic:  :class:`pykafka.topic.Topic`
-    :param offset: Offset to reset to. Can be earliest, latest or a datetime.
-        Using a datetime will reset the offset to the latest message published
-        *before* the datetime.
+    :param offset: Offset to fetch. Can be earliest, latest or a datetime.
     :type offset: :class:`pykafka.common.OffsetType` or
         :class:`datetime.datetime`
     :returns: {partition_id: :class:`pykafka.protocol.OffsetPartitionResponse`}
@@ -147,7 +145,7 @@ def print_consumer_lag(client, args):
 
 
 def print_offsets(client, args):
-    """Print offsets for a topic/consumer group.
+    """Print offsets for a topic
 
     NOTE: Time-based offset lookups are not precise, but are based on segment
           boundaries. If there is only one segment, as when Kafka has just
