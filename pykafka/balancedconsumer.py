@@ -415,7 +415,7 @@ class BalancedConsumer(object):
         """Decide which partitions belong to this consumer.
 
         Uses the consumer rebalancing algorithm described here
-        http://kafka.apache.org/documentation.html
+        https://kafka.apache.org/documentation/#impl_consumerrebalance
 
         It is very important that the participants array is sorted,
         since this algorithm runs on each consumer and indexes into the same

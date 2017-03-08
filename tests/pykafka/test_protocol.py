@@ -561,7 +561,7 @@ class TestGroupMembershipAPI(unittest2.TestCase):
         self.assertEqual(
             msg,
             bytearray(
-                b'\x00\x00\x00|\x00\x0b\x00\x00\x00\x00\x00\x00\x00\x07pykafka'  # header
+                b'\x00\x00\x00h\x00\x0b\x00\x00\x00\x00\x00\x00\x00\x07pykafka'  # header
                 b'\x00\n'  # len(groupid)
                     b'dummygroup'  # groupid
                 b'\x00\x00u0'  # session timeout
@@ -570,8 +570,8 @@ class TestGroupMembershipAPI(unittest2.TestCase):
                 b'\x00\x08'  # len(protocol type)
                     b'consumer'  # protocol type
                 b'\x00\x00\x00\x01'  # len(group protocols)
-                    b'\x00\x19'  # len(protocol name)
-                        b'pykafkaassignmentstrategy'  # protocol name
+                    b'\x00\x05'  # len(protocol name)
+                        b'range'  # protocol name
                     b'\x00\x00\x00"'  # len(protocol metadata)
                         b'\x00\x00\x00\x00\x00\x01\x00\ndummytopic\x00\x00\x00\x0ctestuserdata'  # protocol metadata
             )
@@ -775,8 +775,8 @@ class TestAdministrativeAPI(unittest2.TestCase):
                         b'Stable'  # state
                     b'\x00\x08'  # len(protocol_type)
                         b'consumer'  # protocol_type
-                    b'\x00\x19'  # len(protocol)
-                        b'pykafkaassignmentstrategy'  # protocol
+                    b'\x00\x05'  # len(protocol)
+                        b'range'  # protocol
                     b'\x00\x00\x00\x01'  # len(members)
                         b'\x00,'  # len(member_id)
                             b'pykafka-d42426fb-c295-4cd9-b585-6dd79daf3afe'  # member_id
@@ -800,7 +800,7 @@ class TestAdministrativeAPI(unittest2.TestCase):
         self.assertEqual(group_response.group_id, b'testgroup')
         self.assertEqual(group_response.state, b'Stable')
         self.assertEqual(group_response.protocol_type, b'consumer')
-        self.assertEqual(group_response.protocol, b'pykafkaassignmentstrategy')
+        self.assertEqual(group_response.protocol, b'range')
         member_id = b'pykafka-d42426fb-c295-4cd9-b585-6dd79daf3afe'
         self.assertTrue(member_id in group_response.members)
         member = group_response.members[member_id]
