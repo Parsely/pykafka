@@ -57,6 +57,7 @@ class ManagedBalancedConsumer(BalancedConsumer):
                  auto_commit_interval_ms=60 * 1000,
                  queued_max_messages=2000,
                  fetch_min_bytes=1,
+                 fetch_error_backoff_ms=500,
                  fetch_wait_max_ms=100,
                  offsets_channel_backoff_ms=1000,
                  offsets_commit_max_retries=5,
@@ -101,6 +102,9 @@ class ManagedBalancedConsumer(BalancedConsumer):
             server should return for a fetch request. If insufficient data is
             available, the request will block until sufficient data is available.
         :type fetch_min_bytes: int
+        :param fetch_error_backoff_ms: *UNUSED*.
+            See :class:`pykafka.simpleconsumer.SimpleConsumer`.
+        :type fetch_error_backoff_ms: int
         :param fetch_wait_max_ms: The maximum amount of time (in milliseconds)
             that the server will block before answering a fetch request if
             there isn't sufficient data to immediately satisfy `fetch_min_bytes`.
