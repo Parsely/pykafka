@@ -146,7 +146,9 @@ class Message(Message, Serializable):
     `partition` is set to the :class:`pykafka.partition.Partition` instance
     from which the message was sent.
 
-    :ivar compression_type: Type of compression to use for the message
+    :ivar compression_type: The compression algorithm used to generate the message's
+        current value. Internal use only - regardless of the algorithm used, this
+        will be `CompressionType.NONE` in any publicly accessible `Message`s.
     :ivar partition_key: Value used to assign this message to a particular partition.
     :ivar value: The payload associated with this message
     :ivar offset: The offset of the message
