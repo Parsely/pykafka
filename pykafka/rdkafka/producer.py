@@ -148,6 +148,10 @@ class RdKafkaProducer(Producer):
             # "open_cb"
             # "opaque"
             # "internal.termination.signal"
+            # Do not log connection.close, which may be caused by
+            # connections.max.idle.ms
+            # Cf https://github.com/edenhill/librdkafka/issues/437
+            "log.connection.close": "false",
 
             "queue.buffering.max.messages": self._max_queued_messages,
             "queue.buffering.max.ms": self._linger_ms,
