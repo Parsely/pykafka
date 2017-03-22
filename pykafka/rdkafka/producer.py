@@ -184,7 +184,7 @@ class RdKafkaProducer(Producer):
             "message.timeout.ms": 1.2 * self._max_retries * (
                 self._ack_timeout_ms + self._retry_backoff_ms),
 
-            # "produce.offset.report"
+            "produce.offset.report": self._delivery_reports.queue is not None,
             # "partitioner"  # dealt with in pykafka
             # "opaque"
         }

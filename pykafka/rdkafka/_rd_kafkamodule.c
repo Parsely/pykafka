@@ -553,6 +553,10 @@ Producer_delivery_report_callback(rd_kafka_t *rk,
     /* Producer_produce sent *Message as msg_opaque == rkmessage->_private */
     PyObject *message = (PyObject *)rkmessage->_private;
     PyObject *put_func = (PyObject *)opaque;
+    if (rkmessage->offset != -1) {
+        PyObject* offset = PyLong_FromUnsignedLongLong(rkmessage->offset);
+        PyObject_SetAttrString(message, "offset", offset);
+    }
     if (-1 == Producer_delivery_report_put(put_func, message, rkmessage->err)) {
         /* Must swallow exception as this is a non-python callback */
         PyObject *res = PyObject_CallMethod(
