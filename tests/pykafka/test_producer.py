@@ -106,6 +106,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
         report = prod.get_delivery_report()
         self.assertEqual(report[0].value, payload)
         self.assertIsNone(report[1])
+        self.assertGreaterEqual(report[0].offset, 0)
 
         message = consumer.consume()
         assert message.value == payload
