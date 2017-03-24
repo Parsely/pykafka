@@ -20,16 +20,19 @@ limitations under the License.
 __all__ = ["SimpleConsumer"]
 import itertools
 import logging
+import json
+import socket
 import sys
 import threading
 import time
-import traceback
 from collections import defaultdict
 import weakref
 
+from six import reraise
+
 from .common import OffsetType
 from .utils.compat import (Queue, Empty, iteritems, itervalues,
-                           range, iterkeys)
+                           range, iterkeys, get_bytes, get_string)
 from .exceptions import (UnknownError, OffsetOutOfRangeError, UnknownTopicOrPartition,
                          OffsetMetadataTooLarge, GroupLoadInProgress,
                          NotCoordinatorForGroup, SocketDisconnectedError,
@@ -103,7 +106,7 @@ class SimpleConsumer(object):
             `auto_commit_enable` is `False`.
         :type auto_commit_interval_ms: int
         :param queued_max_messages: Maximum number of messages buffered for
-            consumption
+            consumption per partition
         :type queued_max_messages: int
         :param fetch_min_bytes: The minimum amount of data (in bytes) the server
             should return for a fetch request. If insufficient data is available
@@ -176,26 +179,30 @@ class SimpleConsumer(object):
         # incremented for any message arrival from any partition
         # the initial value is 0 (no messages waiting)
         self._messages_arrived = self._cluster.handler.Semaphore(value=0)
+        self._slot_available = self._cluster.handler.Event()
 
         self._auto_commit_enable = auto_commit_enable
         self._auto_commit_interval_ms = valid_int(auto_commit_interval_ms)
         self._last_auto_commit = time.time()
         self._worker_exception = None
-        self._worker_trace_logged = False
         self._update_lock = self._cluster.handler.Lock()
 
         self._discover_group_coordinator()
 
         if partitions is not None:
-            self._partitions = {p: OwnedPartition(p, self._cluster.handler,
+            self._partitions = {p: OwnedPartition(p,
+                                                  self._cluster.handler,
                                                   self._messages_arrived,
-                                                  self._is_compacted_topic)
+                                                  self._is_compacted_topic,
+                                                  self._consumer_id)
                                 for p in partitions}
         else:
             self._partitions = {topic.partitions[k]:
-                                OwnedPartition(p, self._cluster.handler,
+                                OwnedPartition(p,
+                                               self._cluster.handler,
                                                self._messages_arrived,
-                                               self._is_compacted_topic)
+                                               self._is_compacted_topic,
+                                               self._consumer_id)
                                 for k, p in iteritems(topic.partitions)}
         self._partitions_by_id = {p.partition.id: p
                                   for p in itervalues(self._partitions)}
@@ -219,12 +226,7 @@ class SimpleConsumer(object):
     def _raise_worker_exceptions(self):
         """Raises exceptions encountered on worker threads"""
         if self._worker_exception is not None:
-            _, ex, tb = self._worker_exception
-            if not self._worker_trace_logged:
-                self._worker_trace_logged = True
-                log.error("Exception encountered in worker thread:\n%s",
-                          "".join(traceback.format_tb(tb)))
-            raise ex
+            reraise(*self._worker_exception)
 
     def _update(self):
         """Update the consumer and cluster after an ERROR_CODE"""
@@ -348,6 +350,9 @@ class SimpleConsumer(object):
         self._running = False
         if self._auto_commit_enable and self._consumer_group is not None:
             self.commit_offsets()
+        # unblock a waiting consume() call
+        if self._messages_arrived is not None:
+            self._messages_arrived.release()
 
     def _setup_autocommit_worker(self):
         """Start the autocommitter thread"""
@@ -399,7 +404,7 @@ class SimpleConsumer(object):
         while True:
             message = self.consume(block=True)
             if not message:
-                raise StopIteration
+                return
             yield message
 
     def consume(self, block=True):
@@ -415,6 +420,7 @@ class SimpleConsumer(object):
             else:
                 timeout = 1.0
 
+        ret = None
         while True:
             self._raise_worker_exceptions()
             self._cluster.handler.sleep()
@@ -427,12 +433,21 @@ class SimpleConsumer(object):
                 while not message:
                     owned_partition = next(self.partition_cycle)
                     message = owned_partition.consume()
-                return message
+                ret = message
+                break
             else:
                 if not self._running:
                     raise ConsumerStoppedException()
                 elif not block or self._consumer_timeout_ms > 0:
-                    return None
+                    ret = None
+                    break
+
+        if any(op.message_count <= self._queued_max_messages
+               for op in itervalues(self._partitions)):
+            if not self._slot_available.is_set():
+                self._slot_available.set()
+
+        return ret
 
     def _auto_commit(self):
         """Commit offsets only if it's time to do so"""
@@ -715,6 +730,7 @@ class SimpleConsumer(object):
             for owned_partition in parts:
                 owned_partition.fetch_lock.release()
 
+        self._wait_for_slot_available()
         sorted_by_leader = sorted(iteritems(self._partitions_by_leader),
                                   key=lambda k: k[0].id)
         for broker, owned_partitions in sorted_by_leader:
@@ -751,6 +767,21 @@ class SimpleConsumer(object):
                     success_handler=_handle_success)
                 unlock_partitions(iterkeys(partition_reqs))
 
+    def _wait_for_slot_available(self):
+        """Block until at least one queue has less than `_queued_max_messages`"""
+        if all(op.message_count >= self._queued_max_messages
+               for op in itervalues(self._partitions)):
+            for op in itervalues(self._partitions):
+                op.fetch_lock.acquire()
+            if all(op.message_count >= self._queued_max_messages
+                   for op in itervalues(self._partitions)):
+                self._slot_available.clear()
+            for op in itervalues(self._partitions):
+                op.fetch_lock.release()
+            while not self._slot_available.is_set():
+                self._cluster.handler.sleep()
+                self._slot_available.wait(5)
+
 
 class OwnedPartition(object):
     """A partition that is owned by a SimpleConsumer.
@@ -758,10 +789,17 @@ class OwnedPartition(object):
     Used to keep track of offsets and the internal message queue.
     """
 
-    def __init__(self, partition, handler=None, semaphore=None, compacted_topic=False):
+    def __init__(self,
+                 partition,
+                 handler=None,
+                 semaphore=None,
+                 compacted_topic=False,
+                 consumer_id=b''):
         """
         :param partition: The partition to hold
         :type partition: :class:`pykafka.partition.Partition`
+        :param consumer_id: The ID of the parent consumer
+        :type consumer_id: bytes
         :param handler: The :class:`pykafka.handlers.Handler` instance to use
             to generate a lock
         type handler: :class:`pykafka.handler.Handler`
@@ -774,12 +812,20 @@ class OwnedPartition(object):
         :type compacted_topic: bool
         """
         self.partition = partition
+        self._consumer_id = consumer_id
         self._messages = Queue()
         self._messages_arrived = semaphore
         self._is_compacted_topic = compacted_topic
         self.last_offset_consumed = -1
         self.next_offset = 0
         self.fetch_lock = handler.RLock() if handler is not None else threading.RLock()
+        # include consumer id in offset metadata for debugging
+        self._offset_metadata = {
+            'consumer_id': get_string(self._consumer_id),
+            'hostname': socket.gethostname()
+        }
+        # precalculate json to avoid expensive operation in loops
+        self._offset_metadata_json = json.dumps(self._offset_metadata)
 
     @property
     def message_count(self):
@@ -846,7 +892,7 @@ class OwnedPartition(object):
             self.partition.id,
             self.last_offset_consumed + 1,
             int(time.time() * 1000),
-            b'pykafka'
+            get_bytes('{}'.format(self._offset_metadata_json))
         )
 
     def build_offset_fetch_request(self):

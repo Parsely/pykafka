@@ -169,9 +169,9 @@ class BrokerConnection(object):
                     (self.source_host, self.source_port)
                 ))
         except (self._handler.SockErr, self._handler.GaiError):
-            log.error("Failed to connect to %s:%s", self.host, self.port)
-        if self._socket is not None:
-            log.debug("Successfully connected to %s:%s", self.host, self.port)
+            log.info("Failed to connect to %s:%s", self.host, self.port)
+            raise SocketDisconnectedError
+        log.debug("Successfully connected to %s:%s", self.host, self.port)
 
     def disconnect(self):
         """Disconnect from the broker."""
@@ -196,9 +196,10 @@ class BrokerConnection(object):
             raise SocketDisconnectedError
         try:
             self._socket.sendall(bytes_)
-        except SocketDisconnectedError:
+        except self._handler.SockErr as e:
+            log.error("Failed to send data, error: %s" % repr(e))
             self.disconnect()
-            raise
+            raise SocketDisconnectedError
 
     def response(self):
         """Wait for a response from the broker"""

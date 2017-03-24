@@ -1,4 +1,5 @@
 import logging
+from pkg_resources import parse_version
 
 from pykafka.exceptions import RdKafkaStoppedException, ProducerStoppedException
 from pykafka.producer import Producer, CompressionType, random_partitioner
@@ -22,6 +23,16 @@ class RdKafkaProducer(Producer):
     implementation, `retry_backoff_ms` indicates the exact time spent between message
     resend attempts, but in the pure Python version the time between attempts is also
     influenced by several other parameters, including `linger_ms` and `socket_timeout_ms`.
+
+    Note also that `linger_ms` becomes the rdkafka-based producer's
+    `queue.buffering.max.ms` config option and thus must be within the acceptable range
+    defined by librdkafka. Several other parameters, including `ack_timeout_ms`,
+    `max_retries`, and `retry_backoff_ms`, are used to derive certain librdkafka
+    config values. Certain combinations of values for these parameters can result in
+    configuration errors from librdkafka.
+
+    The `broker_version` argument on `KafkaClient` must be set correctly to use the
+    rdkafka producer.
     """
     def __init__(self,
                  cluster,
@@ -41,6 +52,7 @@ class RdKafkaProducer(Producer):
                  auto_start=True):
         callargs = {k: v for k, v in vars().items()
                     if k not in ("self", "__class__")}
+        self._broker_version = cluster._broker_version
         self._rdk_producer = None
         self._poller_thread = None
         self._stop_poller_thread = cluster.handler.Event()
@@ -136,6 +148,10 @@ class RdKafkaProducer(Producer):
             # "open_cb"
             # "opaque"
             # "internal.termination.signal"
+            # Do not log connection.close, which may be caused by
+            # connections.max.idle.ms
+            # Cf https://github.com/edenhill/librdkafka/issues/437
+            "log.connection.close": "false",
 
             "queue.buffering.max.messages": self._max_queued_messages,
             "queue.buffering.max.ms": self._linger_ms,
@@ -150,6 +166,9 @@ class RdKafkaProducer(Producer):
             # "dr_cb"
             # "dr_msg_cb"  # gets set in _rd_kafka module
         }
+        # broker.version.fallback is incompatible with >-0.10
+        if parse_version(self._broker_version) < parse_version("0.10.0"):
+            conf["broker.version.fallback"] = self._broker_version
         conf.update(helpers.rdk_ssl_config(self._cluster))
 
         topic_conf = {
@@ -165,7 +184,7 @@ class RdKafkaProducer(Producer):
             "message.timeout.ms": 1.2 * self._max_retries * (
                 self._ack_timeout_ms + self._retry_backoff_ms),
 
-            # "produce.offset.report"
+            "produce.offset.report": self._delivery_reports.queue is not None,
             # "partitioner"  # dealt with in pykafka
             # "opaque"
         }

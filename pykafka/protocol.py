@@ -146,7 +146,9 @@ class Message(Message, Serializable):
     `partition` is set to the :class:`pykafka.partition.Partition` instance
     from which the message was sent.
 
-    :ivar compression_type: Type of compression to use for the message
+    :ivar compression_type: The compression algorithm used to generate the message's
+        current value. Internal use only - regardless of the algorithm used, this
+        will be `CompressionType.NONE` in any publicly accessible `Message`s.
     :ivar partition_key: Value used to assign this message to a particular partition.
     :ivar value: The payload associated with this message
     :ivar offset: The offset of the message
@@ -1205,10 +1207,10 @@ class ConsumerGroupProtocolMetadata(object):
             Topic => string
         UserData => bytes
     """
-    def __init__(self):
-        self.version = 0
-        self.topic_names = [b"dummytopic"]
-        self.user_data = b"testuserdata"
+    def __init__(self, version=0, topic_names=None, user_data=b"testuserdata"):
+        self.version = version
+        self.topic_names = topic_names or [b"dummytopic"]
+        self.user_data = user_data
 
     def __len__(self):
         # version + len(topic names)
@@ -1235,13 +1237,25 @@ class ConsumerGroupProtocolMetadata(object):
         offset += struct.calcsize(fmt)
         return output
 
+    @classmethod
+    def from_bytestring(cls, buff):
+        if len(buff) == 0:
+            return cls()
+        fmt = 'h [S] Y'
+        response = struct_helpers.unpack_from(fmt, buff, 0)
+
+        version = response[0]
+        topic_names = response[1]
+        user_data = response[2]
+        return cls(version, topic_names, user_data)
+
 
 GroupMembershipProtocol = namedtuple(
     'GroupMembershipProtocol', ['protocol_type', 'protocol_name', 'metadata']
 )
 
 
-ConsumerGroupProtocol = GroupMembershipProtocol(b"consumer", b"pykafkaassignmentstrategy",
+ConsumerGroupProtocol = GroupMembershipProtocol(b"consumer", b"range",
                                                 ConsumerGroupProtocolMetadata())
 
 
@@ -1338,8 +1352,8 @@ class JoinGroupResponse(Response):
         self.group_protocol = response[2]
         self.leader_id = response[3]
         self.member_id = response[4]
-        # TODO - parse metadata bytestring into ConsumerGroupProtocolMetadata?
-        self.members = {_id: meta for _id, meta in response[5]}
+        self.members = {_id: ConsumerGroupProtocolMetadata.from_bytestring(meta)
+                        for _id, meta in response[5]}
 
 
 class MemberAssignment(object):
@@ -1353,8 +1367,7 @@ class MemberAssignment(object):
             Partition => int32
         UserData => bytes
     """
-    def __init__(self, partition_assignment, member_id=None, version=1):
-        self.member_id = member_id
+    def __init__(self, partition_assignment, version=1):
         self.version = version
         self.partition_assignment = partition_assignment
 
@@ -1424,9 +1437,9 @@ class SyncGroupRequest(Request):
         # + len(member id) + member id + len(group assignment)
         size += 2 + len(self.member_id) + 4
         # group assignment tuples
-        for member_assignment in self.group_assignment:
+        for member_id, member_assignment in self.group_assignment:
             # + len(member id) + member id + len(member assignment) + member assignment
-            size += 2 + len(member_assignment.member_id) + 4 + len(member_assignment)
+            size += 2 + len(member_id) + 4 + len(member_assignment)
         return size
 
     @property
@@ -1448,12 +1461,11 @@ class SyncGroupRequest(Request):
                          self.generation_id, len(self.member_id), self.member_id,
                          len(self.group_assignment))
         offset += struct.calcsize(fmt)
-        for member_assignment in self.group_assignment:
+        for member_id, member_assignment in self.group_assignment:
             assignment_bytes = bytes(member_assignment.get_bytes())
-            fmt = '!h%dsi%ds' % (len(member_assignment.member_id), len(assignment_bytes))
-            struct.pack_into(fmt, output, offset, len(member_assignment.member_id),
-                             member_assignment.member_id, len(assignment_bytes),
-                             assignment_bytes)
+            fmt = '!h%dsi%ds' % (len(member_id), len(assignment_bytes))
+            struct.pack_into(fmt, output, offset, len(member_id), member_id,
+                             len(assignment_bytes), assignment_bytes)
             offset += struct.calcsize(fmt)
         return output
 
@@ -1603,3 +1615,156 @@ class LeaveGroupResponse(Response):
         fmt = 'h'
         response = struct_helpers.unpack_from(fmt, buff, 0)
         self.error_code = response[0]
+
+
+###
+# Administrative API
+###
+class ListGroupsRequest(Request):
+    """A list groups request
+
+    Specification::
+
+    ListGroupsRequest =>
+    """
+    @property
+    def API_KEY(self):
+        """API_KEY for this request, from the Kafka docs"""
+        return 16
+
+    def get_bytes(self):
+        """Create a new list group request"""
+        output = bytearray(len(self))
+        self._write_header(output)
+        return output
+
+    def __len__(self):
+        """Length of the serialized message, in bytes"""
+        return self.HEADER_LEN
+
+
+GroupListing = namedtuple(
+    'GroupListing',
+    ['group_id', 'protocol_type']
+)
+
+
+class ListGroupsResponse(Response):
+    """A list groups response
+
+    Specification::
+
+    ListGroupsResponse => ErrorCode Groups
+      ErrorCode => int16
+      Groups => [GroupId ProtocolType]
+        GroupId => string
+        ProtocolType => string
+    """
+    def __init__(self, buff):
+        """Deserialize into a new Response
+
+        :param buff: Serialized message
+        :type buff: :class:`bytearray`
+        """
+        fmt = 'h [SS]'
+        response = struct_helpers.unpack_from(fmt, buff, 0)
+
+        self.error = response[0]
+        self.groups = {}
+        for group_info in response[1]:
+            listing = GroupListing(*group_info)
+            self.groups[listing.group_id] = listing
+
+
+class DescribeGroupsRequest(Request):
+    """A describe groups request
+
+    Specification::
+
+    DescribeGroupsRequest => [GroupId]
+      GroupId => string
+    """
+    def __init__(self, group_ids):
+        self.group_ids = group_ids
+
+    @property
+    def API_KEY(self):
+        """API_KEY for this request, from the Kafka docs"""
+        return 15
+
+    def get_bytes(self):
+        """Create a new list group request"""
+        output = bytearray(len(self))
+        self._write_header(output)
+        offset = self.HEADER_LEN
+        fmt = '!i'
+        struct.pack_into(fmt, output, offset, len(self.group_ids))
+        offset += struct.calcsize(fmt)
+        for group_id in self.group_ids:
+            fmt = '!h%ds' % len(group_id)
+            struct.pack_into(fmt, output, offset, len(group_id), group_id)
+            offset += struct.calcsize(fmt)
+        return output
+
+    def __len__(self):
+        """Length of the serialized message, in bytes"""
+        # header + len(group_ids)
+        size = self.HEADER_LEN + 4
+        for group_id in self.group_ids:
+            # len(group_id) + group_id
+            size += 2 + len(group_id)
+        return size
+
+
+GroupMember = namedtuple(
+    'GroupMember',
+    ['member_id', 'client_id', 'client_host', 'member_metadata', 'member_assignment']
+)
+
+
+DescribeGroupResponse = namedtuple(
+    'DescribeGroupResponse',
+    ['error_code', 'group_id', 'state', 'protocol_type', 'protocol', 'members']
+)
+
+
+class DescribeGroupsResponse(Response):
+    """A describe groups response
+
+    Specification::
+
+
+    DescribeGroupsResponse => [ErrorCode GroupId State ProtocolType Protocol Members]
+      ErrorCode => int16
+      GroupId => string
+      State => string
+      ProtocolType => string
+      Protocol => string
+      Members => [MemberId ClientId ClientHost MemberMetadata MemberAssignment]
+        MemberId => string
+        ClientId => string
+        ClientHost => string
+        MemberMetadata => bytes
+        MemberAssignment => bytes
+    """
+    def __init__(self, buff):
+        """Deserialize into a new Response
+
+        :param buff: Serialized message
+        :type buff: :class:`bytearray`
+        """
+        fmt = '[hSSSS [SSSYY ] ]'
+        response = struct_helpers.unpack_from(fmt, buff, 0)
+
+        self.groups = {}
+        for group_info in response:
+            members = {}
+            for member_info in group_info[5]:
+                member_metadata = ConsumerGroupProtocolMetadata.from_bytestring(
+                    member_info[3])
+                member_assignment = MemberAssignment.from_bytestring(member_info[4])
+                member = GroupMember(*(member_info[:3] + (member_metadata,
+                                                          member_assignment)))
+                members[member.member_id] = member
+            group = DescribeGroupResponse(*(group_info[:5] + (members,)))
+            self.groups[group.group_id] = group

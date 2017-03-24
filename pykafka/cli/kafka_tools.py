@@ -25,9 +25,7 @@ def fetch_offsets(client, topic, offset):
     :type client:  :class:`pykafka.KafkaClient`
     :param topic:  Name of the topic.
     :type topic:  :class:`pykafka.topic.Topic`
-    :param offset: Offset to reset to. Can be earliest, latest or a datetime.
-        Using a datetime will reset the offset to the latest message published
-        *before* the datetime.
+    :param offset: Offset to fetch. Can be earliest, latest or a datetime.
     :type offset: :class:`pykafka.common.OffsetType` or
         :class:`datetime.datetime`
     :returns: {partition_id: :class:`pykafka.protocol.OffsetPartitionResponse`}
@@ -109,7 +107,7 @@ def desc_topic(client, args):
     topic = client.topics[args.topic]
     print('Topic: {}'.format(topic.name))
     print('Partitions: {}'.format(len(topic.partitions)))
-    print('Replicas: {}'.format(len(topic.partitions.values()[0].replicas)))
+    print('Replicas: {}'.format(len(list(topic.partitions.values())[0].replicas)))
     print(tabulate.tabulate(
         [(p.id, p.leader.id, [r.id for r in p.replicas], [r.id for r in p.isr])
          for p in topic.partitions.values()],
@@ -147,7 +145,7 @@ def print_consumer_lag(client, args):
 
 
 def print_offsets(client, args):
-    """Print offsets for a topic/consumer group.
+    """Print offsets for a topic
 
     NOTE: Time-based offset lookups are not precise, but are based on segment
           boundaries. If there is only one segment, as when Kafka has just
@@ -319,10 +317,10 @@ def _get_arg_parser():
     _add_topic(parser)
     _add_consumer_group(parser)
 
-    # Print Offsets
+    # Print Broker Offsets
     parser = subparsers.add_parser(
         'print_offsets',
-        help='Fetch offsets for a topic/consumer group'
+        help='Fetch broker offsets for a topic'
     )
     parser.set_defaults(func=print_offsets)
     _add_topic(parser)

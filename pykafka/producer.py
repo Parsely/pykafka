@@ -21,10 +21,12 @@ __all__ = ["Producer"]
 from collections import deque
 import logging
 import platform
+import struct
 import sys
 import threading
-import traceback
 import weakref
+
+from six import reraise
 
 from .common import CompressionType
 from .exceptions import (
@@ -174,7 +176,6 @@ class Producer(object):
         self._max_request_size = valid_int(max_request_size)
         self._synchronous = sync
         self._worker_exception = None
-        self._worker_trace_logged = False
         self._owned_brokers = None
         self._delivery_reports = (_DeliveryReportQueue(self._cluster.handler)
                                   if delivery_reports or self._synchronous
@@ -186,21 +187,14 @@ class Producer(object):
             self.start()
 
     def __del__(self):
-        log.debug("Finalising {}".format(self))
+        if log:  # in case log is finalized before self
+            log.debug("Finalising {}".format(self))
         self.stop()
 
     def _raise_worker_exceptions(self):
         """Raises exceptions encountered on worker threads"""
         if self._worker_exception is not None:
-            _, ex, tb = self._worker_exception
-            # avoid logging worker exceptions more than once, which can
-            # happen when this function's `raise` triggers `__exit__`
-            # which calls `stop`
-            if not self._worker_trace_logged:
-                self._worker_trace_logged = True
-                log.error("Exception encountered in worker thread:\n%s",
-                          "".join(traceback.format_tb(tb)))
-            raise ex
+            reraise(*self._worker_exception)
 
     def __repr__(self):
         return "<{module}.{name} at {id_}>".format(
@@ -232,6 +226,9 @@ class Producer(object):
         """
         # only allow one thread to be updating the producer at a time
         with self._update_lock:
+            if self._owned_brokers is not None:
+                for owned_broker in list(self._owned_brokers.values()):
+                    owned_broker.stop()
             self._cluster.update()
             queued_messages = self._setup_owned_brokers()
             if len(queued_messages):
@@ -256,7 +253,10 @@ class Producer(object):
                 # loop becuase flush is not garentee to empty owned
                 # broker queue
                 while True:
-                    batch = owned_broker.flush(self._linger_ms, self._max_request_size)
+                    batch = owned_broker.flush(self._linger_ms,
+                                               self._max_request_size,
+                                               release_pending=False,
+                                               wait=False)
                     if not batch:
                         break
                     queued_messages.extend(batch)
@@ -425,7 +425,10 @@ class Producer(object):
             for topic, partitions in iteritems(response.topics):
                 for partition, presponse in iteritems(partitions):
                     if presponse.err == 0:
-                        mark_as_delivered(req.msets[topic][partition].messages)
+                        messages = req.msets[topic][partition].messages
+                        for i, message in enumerate(messages):
+                            message.offset = presponse.offset + i
+                        mark_as_delivered(messages)
                         continue  # All's well
                     if presponse.err == NotLeaderForPartition.ERROR_CODE:
                         # Update cluster metadata to get new leader
@@ -441,14 +444,11 @@ class Producer(object):
                     to_retry.extend(
                         (mset, exc)
                         for mset in _get_partition_msgs(partition, req))
-        except SocketDisconnectedError as exc:
-            log.warning('Broker %s:%s disconnected. Retrying.',
+        except (SocketDisconnectedError, struct.error) as exc:
+            log.warning('Error encountered when producing to broker %s:%s. Retrying.',
                         owned_broker.broker.host,
                         owned_broker.broker.port)
-            try:
-                self._update()
-            except NoBrokersAvailableError:
-                log.warning("No brokers available")
+            self._update()
             to_retry = [
                 (mset, exc)
                 for topic, partitions in iteritems(req.msets)
@@ -527,6 +527,10 @@ class OwnedBroker(object):
         if self._auto_start:
             self.start()
 
+    def cleanup(self):
+        if not self.slot_available.is_set():
+            self.slot_available.set()
+
     def start(self):
         def queue_reader():
             while self.running:
@@ -538,6 +542,7 @@ class OwnedBroker(object):
                     # surface all exceptions to the main thread
                     self.producer._worker_exception = sys.exc_info()
                     break
+            self.cleanup()
             log.info("Worker exited for broker %s:%s", self.broker.host,
                      self.broker.port)
         log.info("Starting new produce worker for broker %s", self.broker.id)
@@ -574,7 +579,7 @@ class OwnedBroker(object):
                 if not self.flush_ready.is_set():
                     self.flush_ready.set()
 
-    def flush(self, linger_ms, max_request_size, release_pending=False):
+    def flush(self, linger_ms, max_request_size, release_pending=False, wait=True):
         """Pop messages from the end of the queue
 
         :param linger_ms: How long (in milliseconds) to wait for the queue
@@ -588,12 +593,18 @@ class OwnedBroker(object):
             popped from the queue will be discarded unless re-enqueued
             by the caller.
         :type release_pending: bool
+        :param wait: If True, wait for the event indicating a flush is ready. If False,
+            attempt a flush immediately without waiting
+        :type wait: bool
         """
-        self._wait_for_flush_ready(linger_ms)
+        if wait:
+            self._wait_for_flush_ready(linger_ms)
         with self.lock:
             batch = []
             batch_size_in_bytes = 0
             while len(self.queue) > 0:
+                if not self.running:
+                    return []
                 peeked_message = self.queue[-1]
 
                 if peeked_message and peeked_message.value is not None:
@@ -631,6 +642,8 @@ class OwnedBroker(object):
                 self.increment_messages_pending(-1 * len(batch))
             if not self.slot_available.is_set():
                 self.slot_available.set()
+        if not self.running:
+            return []
         return batch
 
     def _wait_for_flush_ready(self, linger_ms):
@@ -657,7 +670,9 @@ class OwnedBroker(object):
                 if len(self.queue) >= self.producer._max_queued_messages:
                     self.slot_available.clear()
             if self.producer._block_on_queue_full:
-                self.slot_available.wait()
+                while not self.slot_available.is_set():
+                    self.producer._cluster.handler.sleep()
+                    self.slot_available.wait(5)
             else:
                 raise ProducerQueueFullError("Queue full for broker %d",
                                              self.broker.id)

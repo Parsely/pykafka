@@ -23,7 +23,6 @@ import logging
 import socket
 import sys
 import time
-import traceback
 from uuid import uuid4
 import weakref
 
@@ -31,6 +30,7 @@ from kazoo.client import KazooClient
 from kazoo.handlers.gevent import SequentialGeventHandler
 from kazoo.exceptions import NoNodeException, NodeExistsError
 from kazoo.recipe.watchers import ChildrenWatch
+from six import reraise
 
 from .common import OffsetType
 from .exceptions import KafkaException, PartitionOwnedError, ConsumerStoppedException
@@ -217,7 +217,6 @@ class BalancedConsumer(object):
         self._generation_id = -1
         self._running = False
         self._worker_exception = None
-        self._worker_trace_logged = False
         self._is_compacted_topic = compacted_topic
 
         if not rdkafka and use_rdkafka:
@@ -263,12 +262,7 @@ class BalancedConsumer(object):
     def _raise_worker_exceptions(self):
         """Raises exceptions encountered on worker threads"""
         if self._worker_exception is not None:
-            _, ex, tb = self._worker_exception
-            if not self._worker_trace_logged:
-                self._worker_trace_logged = True
-                log.error("Exception encountered in worker thread:\n%s",
-                          "".join(traceback.format_tb(tb)))
-            raise ex
+            reraise(*self._worker_exception)
 
     @property
     def topic(self):
@@ -421,7 +415,7 @@ class BalancedConsumer(object):
         """Decide which partitions belong to this consumer.
 
         Uses the consumer rebalancing algorithm described here
-        http://kafka.apache.org/documentation.html
+        https://kafka.apache.org/documentation/#impl_consumerrebalance
 
         It is very important that the participants array is sorted,
         since this algorithm runs on each consumer and indexes into the same
@@ -725,7 +719,10 @@ class BalancedConsumer(object):
         while message is None and not consumer_timed_out():
             self._raise_worker_exceptions()
             try:
-                message = self._consumer.consume(block=block)
+                # acquire the lock to ensure that we don't start trying to consume from
+                # a _consumer that might soon be replaced by an in-progress rebalance
+                with self._rebalancing_lock:
+                    message = self._consumer.consume(block=block)
             except (ConsumerStoppedException, AttributeError):
                 if not self._running:
                     raise ConsumerStoppedException
@@ -741,7 +738,7 @@ class BalancedConsumer(object):
         while True:
             message = self.consume(block=True)
             if not message:
-                raise StopIteration
+                return
             yield message
 
     def commit_offsets(self):

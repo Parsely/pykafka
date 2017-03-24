@@ -561,7 +561,7 @@ class TestGroupMembershipAPI(unittest2.TestCase):
         self.assertEqual(
             msg,
             bytearray(
-                b'\x00\x00\x00|\x00\x0b\x00\x00\x00\x00\x00\x00\x00\x07pykafka'  # header
+                b'\x00\x00\x00h\x00\x0b\x00\x00\x00\x00\x00\x00\x00\x07pykafka'  # header
                 b'\x00\n'  # len(groupid)
                     b'dummygroup'  # groupid
                 b'\x00\x00u0'  # session timeout
@@ -570,8 +570,8 @@ class TestGroupMembershipAPI(unittest2.TestCase):
                 b'\x00\x08'  # len(protocol type)
                     b'consumer'  # protocol type
                 b'\x00\x00\x00\x01'  # len(group protocols)
-                    b'\x00\x19'  # len(protocol name)
-                        b'pykafkaassignmentstrategy'  # protocol name
+                    b'\x00\x05'  # len(protocol name)
+                        b'range'  # protocol name
                     b'\x00\x00\x00"'  # len(protocol metadata)
                         b'\x00\x00\x00\x00\x00\x01\x00\ndummytopic\x00\x00\x00\x0ctestuserdata'  # protocol metadata
             )
@@ -597,12 +597,14 @@ class TestGroupMembershipAPI(unittest2.TestCase):
         )
         self.assertEqual(response.generation_id, 1)
         self.assertEqual(response.group_protocol, b'dummyassignmentstrategy')
-        self.assertEqual(response.leader_id,
-                         b'pykafka-b2361322-674c-4e26-9194-305962636e57')
-        self.assertEqual(response.member_id,
-                         b'pykafka-b2361322-674c-4e26-9194-305962636e57')
-        self.assertEqual(response.members,
-                         {b'pykafka-b2361322-674c-4e26-9194-305962636e57': b'\x00\x00\x00\x00\x00\x01\x00\ndummytopic\x00\x00\x00\x0ctestuserdata'})
+        member_id = b'pykafka-b2361322-674c-4e26-9194-305962636e57'
+        self.assertEqual(response.leader_id, member_id)
+        self.assertEqual(response.member_id, member_id)
+        self.assertTrue(member_id in response.members)
+        metadata = response.members[member_id]
+        self.assertEqual(metadata.version, 0)
+        self.assertEqual(metadata.topic_names, [b"dummytopic"])
+        self.assertEqual(metadata.user_data, b"testuserdata")
 
     def test_member_assignment_construction(self):
         assignment = protocol.MemberAssignment([(b"mytopic1", [3, 5, 7, 9]),
@@ -634,10 +636,10 @@ class TestGroupMembershipAPI(unittest2.TestCase):
         req = protocol.SyncGroupRequest(
             b'dummygroup', 1, b'testmember1',
             [
-                protocol.MemberAssignment([(b"mytopic1", [3, 5, 7, 9]),
-                                           (b"mytopic2", [3, 5, 7, 9])], member_id=b"a"),
-                protocol.MemberAssignment([(b"mytopic1", [2, 4, 6, 8]),
-                                           (b"mytopic2", [2, 4, 6, 8])], member_id=b"b")
+                (b"a", protocol.MemberAssignment([(b"mytopic1", [3, 5, 7, 9]),
+                                                  (b"mytopic2", [3, 5, 7, 9])])),
+                (b"b", protocol.MemberAssignment([(b"mytopic1", [2, 4, 6, 8]),
+                                                  (b"mytopic2", [2, 4, 6, 8])]))
             ])
         msg = req.get_bytes()
         self.assertEqual(
@@ -718,6 +720,101 @@ class TestGroupMembershipAPI(unittest2.TestCase):
             )
         )
         self.assertEqual(response.error_code, 0)
+
+
+class TestAdministrativeAPI(unittest2.TestCase):
+    maxDiff = None
+
+    def test_list_groups_request(self):
+        req = protocol.ListGroupsRequest()
+        msg = req.get_bytes()
+        self.assertEqual(
+            msg,
+            bytearray(
+                b'\x00\x00\x00\x11\x00\x10\x00\x00\x00\x00\x00\x00\x00\x07pykafka'  # header
+            )
+        )
+
+    def test_list_groups_response(self):
+        response = protocol.ListGroupsResponse(
+            bytearray(
+                b'\x00\x00'  # error code
+                b'\x00\x00\x00\x01'  # len(groups)
+                    b'\x00\t'  # len(group_id)
+                        b'testgroup'  # group_id
+                    b'\x00\x08'  # len(protocol_type)
+                        b'consumer'  # protocol_type
+            )
+        )
+        self.assertEqual(len(response.groups), 1)
+        group = response.groups[b"testgroup"]
+        self.assertEqual(group.group_id, b"testgroup")
+        self.assertEqual(group.protocol_type, b"consumer")
+
+    def test_describe_groups_request(self):
+        req = protocol.DescribeGroupsRequest([b'testgroup'])
+        msg = req.get_bytes()
+        self.assertEqual(
+            msg,
+            bytearray(
+                b'\x00\x00\x00 \x00\x0f\x00\x00\x00\x00\x00\x00\x00\x07pykafka'  # header
+                b'\x00\x00\x00\x01'  # len(group_ids)
+                    b'\x00\t'  # len(group_id)
+                        b'testgroup'  # group_id
+            )
+        )
+
+    def test_describe_groups_response(self):
+        response = protocol.DescribeGroupsResponse(
+            bytearray(
+                b'\x00\x00\x00\x01'  # len(groups)
+                    b'\x00\x00'  # error code
+                    b'\x00\t'  # len(group_id)
+                        b'testgroup'  # group_id
+                    b'\x00\x06'  # len(state)
+                        b'Stable'  # state
+                    b'\x00\x08'  # len(protocol_type)
+                        b'consumer'  # protocol_type
+                    b'\x00\x05'  # len(protocol)
+                        b'range'  # protocol
+                    b'\x00\x00\x00\x01'  # len(members)
+                        b'\x00,'  # len(member_id)
+                            b'pykafka-d42426fb-c295-4cd9-b585-6dd79daf3afe'  # member_id
+                        b'\x00\x07'  # len(client_id)
+                            b'pykafka'  # client_id
+                        b'\x00\n'  # len(client_host)
+                            b'/127.0.0.1'  # client_host
+                        b'\x00\x00\x00"'  # len(member_metadata)
+                            b'\x00\x00\x00\x00\x00\x01\x00\ndummytopic\x00\x00\x00\x0ctestuserdata'
+                        b'\x00\x00\x00H'  # len(member_assignment)
+                            b'\x00\x01\x00\x00\x00\x01\x00\x14testtopic_replicated'  # member_assignment
+                            b'\x00\x00\x00\n\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00'
+                            b'\x02\x00\x00\x00\x08\x00\x00\x00\x03\x00\x00\x00\t'
+                            b'\x00\x00\x00\x04\x00\x00\x00\x05\x00\x00\x00\x06'
+                            b'\x00\x00\x00\x07\x00\x00\x00\x00'
+            )
+        )
+        self.assertTrue(b'testgroup' in response.groups)
+        group_response = response.groups[b'testgroup']
+        self.assertEqual(group_response.error_code, 0)
+        self.assertEqual(group_response.group_id, b'testgroup')
+        self.assertEqual(group_response.state, b'Stable')
+        self.assertEqual(group_response.protocol_type, b'consumer')
+        self.assertEqual(group_response.protocol, b'range')
+        member_id = b'pykafka-d42426fb-c295-4cd9-b585-6dd79daf3afe'
+        self.assertTrue(member_id in group_response.members)
+        member = group_response.members[member_id]
+        self.assertEqual(member.member_id, member_id)
+        self.assertEqual(member.client_id, b'pykafka')
+        self.assertEqual(member.client_host, b'/127.0.0.1')
+        metadata = member.member_metadata
+        self.assertEqual(metadata.version, 0)
+        self.assertEqual(metadata.topic_names, [b"dummytopic"])
+        self.assertEqual(metadata.user_data, b"testuserdata")
+        assignment = member.member_assignment
+        self.assertEqual(assignment.version, 1)
+        self.assertEqual(assignment.partition_assignment,
+                         [(b'testtopic_replicated', [0, 1, 2, 8, 3, 9, 4, 5, 6, 7])])
 
 
 if __name__ == '__main__':

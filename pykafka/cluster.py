@@ -157,14 +157,15 @@ class Cluster(object):
                  exclude_internal_topics=True,
                  source_address='',
                  zookeeper_hosts=None,
-                 ssl_config=None):
+                 ssl_config=None,
+                 broker_version='0.9.0'):
         """Create a new Cluster instance.
 
         :param hosts: Comma-separated list of kafka hosts to which to connect.
-        :type hosts: bytes
+        :type hosts: str
         :param zookeeper_hosts: KazooClient-formatted string of ZooKeeper hosts to which
             to connect. If not `None`, this argument takes precedence over `hosts`
-        :type zookeeper_hosts: bytes
+        :type zookeeper_hosts: str
         :param handler: The concurrency handler for network requests.
         :type handler: :class:`pykafka.handlers.Handler`
         :param socket_timeout_ms: The socket timeout (in milliseconds) for
@@ -181,6 +182,10 @@ class Cluster(object):
         :type source_address: str `'host:port'`
         :param ssl_config: Config object for SSL connection
         :type ssl_config: :class:`pykafka.connection.SslConfig`
+        :param broker_version: The protocol version of the cluster being connected to.
+            If this parameter doesn't match the actual broker version, some pykafka
+            features may not work properly.
+        :type broker_version: str
         """
         self._seed_hosts = zookeeper_hosts if zookeeper_hosts is not None else hosts
         self._socket_timeout_ms = socket_timeout_ms
@@ -194,6 +199,7 @@ class Cluster(object):
         self._ssl_config = ssl_config
         self._zookeeper_connect = zookeeper_hosts
         self._max_connection_retries = 3
+        self._broker_version = broker_version
         if ':' in self._source_address:
             self._source_port = int(self._source_address.split(':')[1])
         self.update()
@@ -243,6 +249,9 @@ class Cluster(object):
                     response = broker.request_metadata(topics)
                     if response is not None:
                         return response
+                except SocketDisconnectedError:
+                    log.error("Socket disconnected during metadata request for "
+                              "broker %s:%s. Continuing.", host, port)
                 except Exception as e:
                     log.error('Unable to connect to broker %s:%s. Continuing.', host, port)
                     log.exception(e)
@@ -348,10 +357,9 @@ class Cluster(object):
                     ssl_config=self._ssl_config)
             elif not self._brokers[id_].connected:
                 log.info('Reconnecting to broker id %s: %s:%s', id_, meta.host, meta.port)
-                import socket
                 try:
                     self._brokers[id_].connect()
-                except socket.error:
+                except SocketDisconnectedError:
                     log.info('Failed to re-establish connection with broker id %s: %s:%s',
                              id_, meta.host, meta.port)
             else:
@@ -364,6 +372,24 @@ class Cluster(object):
                 #       Figure out and implement update/disconnect/reconnect if
                 #       needed.
                 raise Exception('Broker host/port change detected! %s', broker)
+
+    def get_managed_group_descriptions(self):
+        """Return detailed descriptions of all managed consumer groups on this cluster
+
+        This function only returns descriptions for consumer groups created via the
+        Group Management API, which pykafka refers to as :class:`ManagedBalancedConsumer`s
+        """
+        descriptions = {}
+        for broker in itervalues(self.brokers):
+            res = broker.describe_groups([group.group_id for group
+                                          in itervalues(broker.list_groups().groups)])
+            descriptions.update(res.groups)
+        return descriptions
+
+    def get_offset_manager(self, consumer_group):
+        log.warning("WARNING: Cluster.get_offset_manager is deprecated since pykafka "
+                    "2.3.0. Instead, use Cluster.get_group_coordinator.")
+        return self.get_group_coordinator(consumer_group)
 
     def get_group_coordinator(self, consumer_group):
         """Get the broker designated as the group coordinator for this consumer group.
@@ -391,9 +417,7 @@ class Cluster(object):
                     if i == self._max_connection_retries - 1:
                         raise
                 except SocketDisconnectedError:
-                    log.error("Socket disconnected during offset manager "
-                              "discovery. This can happen when using PyKafka "
-                              "with a Kafka version lower than 0.8.2.")
+                    log.error("Socket disconnected during offset manager discovery")
                     if i == self._max_connection_retries - 1:
                         raise
                     self.update()
@@ -407,7 +431,7 @@ class Cluster(object):
     def update(self):
         """Update known brokers and topics."""
         for i in range(self._max_connection_retries):
-            log.debug("Updating cluster, attempt {}/{}".format(i+1, self._max_connection_retries))
+            log.debug("Updating cluster, attempt {}/{}".format(i + 1, self._max_connection_retries))
             metadata = self._get_metadata()
             if len(metadata.brokers) == 0 and len(metadata.topics) == 0:
                 log.warning('No broker metadata found. If this is a fresh cluster, '
@@ -422,5 +446,7 @@ class Cluster(object):
             except LeaderNotAvailable:
                 log.warning("LeaderNotAvailable encountered. This may be "
                             "because one or more partitions have no available replicas.")
+                if i == self._max_connection_retries - 1:
+                    raise
             else:
                 break

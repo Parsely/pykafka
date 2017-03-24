@@ -32,6 +32,7 @@ def get_version():
                          version_file.read()).group('version')
 
 install_requires = [
+    'six>=1.5',
     'kazoo',
     'tabulate',
     'gevent>=1.1.0'
@@ -155,6 +156,7 @@ def run_setup(with_rdkafka=True):
             "Programming Language :: Python :: 3",
             "Programming Language :: Python :: 3.4",
             "Programming Language :: Python :: 3.5",
+            "Programming Language :: Python :: 3.6",
             "Topic :: Database",
             "Topic :: Database :: Front-Ends",
             "Topic :: Software Development :: Libraries :: Python Modules",
