@@ -40,7 +40,8 @@ try:
     log.info("Successfully loaded pykafka.rdkafka extension.")
 except ImportError:
     rdkafka = False
-    log.info("Could not load pykafka.rdkafka extension.", exc_info=True)
+    log.info("Could not load pykafka.rdkafka extension.")
+    log.debug("Traceback:", exc_info=True)
 
 
 class Topic(object):
