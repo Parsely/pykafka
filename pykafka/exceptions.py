@@ -208,6 +208,13 @@ class RebalanceInProgress(ProtocolClientError):
     ERROR_CODE = 27
 
 
+class TopicAuthorizationFailed(ProtocolClientError):
+    """Returned by the broker when the client is not authorized to access the requested
+        topic.
+    """
+    ERROR_CODE = 29
+
+
 class GroupAuthorizationFailed(ProtocolClientError):
     """Returned by the broker when the client is not authorized to access a particular
     groupId.
@@ -235,6 +242,7 @@ ERROR_CODES = dict(
                 UnknownMemberId,
                 InvalidSessionTimeout,
                 RebalanceInProgress,
+                TopicAuthorizationFailed,
                 GroupAuthorizationFailed)
 )
 
