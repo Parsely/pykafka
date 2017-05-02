@@ -417,7 +417,7 @@ class Cluster(object):
                     if i == self._max_connection_retries - 1:
                         raise
                 except SocketDisconnectedError:
-                    log.error("Socket disconnected during offset manager discovery")
+                    log.warning("Socket disconnected during offset manager discovery")
                     if i == self._max_connection_retries - 1:
                         raise
                     self.update()
