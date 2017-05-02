@@ -1,6 +1,34 @@
 Changelog
 =========
 
+2.6.0.dev3 (2017-5-2)
+---------------------
+
+`Compare 2.6.0.dev3`_
+
+.. _Compare 2.6.0.dev3: https://github.com/Parsely/pykafka/compare/2.6.0.dev2...2.6.0.dev3
+
+Minor Version Features
+----------------------
+
+* Changed the rdkafka C module to return offset reports from produce requests
+
+Bug Fixes
+---------
+
+* Added some safety checks and error handling to `Broker`, `Cluster`, `Connection`
+* Removed update lock from `produce()`
+* Add cleanup logic to `Producer` to avoid certain deadlock situations
+* Change the name of the assignment strategy to match the standard `range` strategy
+* Fix crash in rdkafka related to `broker.version.fallback`
+* Fix nuisance error messages from rdkafka
+
+Miscellaneous
+-------------
+
+* Upgraded the version of python 3 and Kafka used in automated tests
+
+
 2.6.0.dev2 (2016-12-14)
 -----------------------
 
