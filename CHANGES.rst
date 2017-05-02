@@ -1,6 +1,43 @@
 Changelog
 =========
 
+2.6.0 (2017-5-2)
+----------------
+
+`Compare 2.6.0`_
+
+.. _Compare 2.6.0: https://github.com/Parsely/pykafka/compare/2.5.0...2.6.0
+
+Minor Version Features
+----------------------
+
+* Added support to `Broker` and `Cluster` for Kafka 0.10's Administrative API
+* Changed the `MemberAssignment` protocol API to more closely match the schema defined
+  by Kafka
+* Changed the rdkafka C module to return offset reports from produce requests
+
+Bug Fixes
+---------
+
+* Changed components to use `six.reraise` to raise worker thread exceptions for easier
+  debugging
+* Included message offset in messages returned from `Producer` delivery reports
+* Changed protocol implementation to parse `ConsumerGroupProtocolMetadata` from
+  bytestrings returned from Kafka
+* Added some safety checks and error handling to `Broker`, `Cluster`, `Connection`
+* Removed update lock from `produce()`
+* Add cleanup logic to `Producer` to avoid certain deadlock situations
+* Change the name of the assignment strategy to match the standard `range` strategy
+* Fix crash in rdkafka related to `broker.version.fallback`
+* Fix nuisance error messages from rdkafka
+* Handled `struct.error` exceptions in `Producer._send_request`
+
+Miscellaneous
+-------------
+
+* Upgraded the version of PyPy used in automated tests
+* Upgraded the version of python 3 and Kafka used in automated tests
+
 2.6.0.dev3 (2017-5-2)
 ---------------------
 
