@@ -64,6 +64,7 @@ class SimpleConsumer(object):
                  auto_commit_interval_ms=60 * 1000,
                  queued_max_messages=2000,
                  fetch_min_bytes=1,
+                 fetch_error_backoff_ms=500,
                  fetch_wait_max_ms=100,
                  offsets_channel_backoff_ms=1000,
                  offsets_commit_max_retries=5,
@@ -112,6 +113,13 @@ class SimpleConsumer(object):
             should return for a fetch request. If insufficient data is available
             the request will block until sufficient data is available.
         :type fetch_min_bytes: int
+        :param fetch_error_backoff_ms: The amount of time (in milliseconds) that
+            the consumer should wait before retrying after an error. Errors include
+            absence of data (`RD_KAFKA_RESP_ERR__PARTITION_EOF`), so this can slow
+            a normal fetch scenario. Only used by the native consumer
+            (`RdKafkaSimpleConsumer`).
+        :type fetch_error_backoff_ms: int
+        :type fetch_error_backoff_ms: int
         :param fetch_wait_max_ms: The maximum amount of time (in milliseconds)
             the server will block before answering the fetch request if there
             isn't sufficient data to immediately satisfy `fetch_min_bytes`.

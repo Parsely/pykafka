@@ -6,9 +6,9 @@ import time
 from pykafka.exceptions import RdKafkaStoppedException, ConsumerStoppedException
 from pykafka.simpleconsumer import SimpleConsumer, OffsetType
 from pykafka.utils.compat import get_bytes
+from pykafka.utils.error_handlers import valid_int
 from . import _rd_kafka
 from . import helpers
-
 
 log = logging.getLogger(__name__)
 
@@ -43,6 +43,7 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
                  auto_commit_interval_ms=60 * 1000,
                  queued_max_messages=10**5,  # NB differs from SimpleConsumer
                  fetch_min_bytes=1,
+                 fetch_error_backoff_ms=500,
                  fetch_wait_max_ms=100,
                  offsets_channel_backoff_ms=1000,
                  offsets_commit_max_retries=5,
@@ -59,6 +60,7 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
         self._poller_thread = None
         self._stop_poller_thread = cluster.handler.Event()
         self._broker_version = cluster._broker_version
+        self._fetch_error_backoff_ms = valid_int(fetch_error_backoff_ms)
         # super() must come last for the case where auto_start=True
         super(RdKafkaSimpleConsumer, self).__init__(**callargs)
 
@@ -242,7 +244,7 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
             "fetch.wait.max.ms": self._fetch_wait_max_ms,
             "fetch.message.max.bytes": self._fetch_message_max_bytes,
             "fetch.min.bytes": self._fetch_min_bytes,
-            ##"fetch.error.backoff.ms"  # currently no real equivalent for it
+            "fetch.error.backoff.ms": self._fetch_error_backoff_ms,
 
             # We're outsourcing message fetching, but not offset management or
             # consumer rebalancing to librdkafka.  Thus, consumer-group id
