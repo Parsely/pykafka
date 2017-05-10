@@ -230,6 +230,7 @@ class BalancedConsumer(object):
         self._use_rdkafka = rdkafka and use_rdkafka
 
         self._rebalancing_lock = cluster.handler.Lock()
+        self._internal_consumer_running = self._cluster.handler.Event()
         self._consumer = None
         self._consumer_id = get_bytes("{hostname}:{uuid}".format(
             hostname=socket.gethostname(),
@@ -372,6 +373,12 @@ class BalancedConsumer(object):
                         (cns.partitions[id_], offset) for
                         (id_, offset) in iteritems(reset_offsets)])
             self._consumer = cns
+        if self._consumer and self._consumer._running:
+            if not self._internal_consumer_running.is_set():
+                self._internal_consumer_running.set()
+        else:
+            if self._internal_consumer_running.is_set():
+                self._internal_consumer_running.clear()
         return True
 
     def _get_internal_consumer(self, partitions=None, start=True):
@@ -723,7 +730,10 @@ class BalancedConsumer(object):
         message = None
         self._last_message_time = time.time()
         while message is None and not consumer_timed_out():
-            self._raise_worker_exceptions()
+            while not self._internal_consumer_running.is_set():
+                self._cluster.handler.sleep()
+                self._raise_worker_exceptions()
+                self._internal_consumer_running.wait(5)
             try:
                 # acquire the lock to ensure that we don't start trying to consume from
                 # a _consumer that might soon be replaced by an in-progress rebalance
