@@ -433,7 +433,9 @@ class BalancedConsumer(object):
             assignment. Defaults to `self._consumer_id`
         """
         # Freeze and sort partitions so we always have the same results
-        p_to_str = lambda p: '-'.join([str(p.topic.name), str(p.leader.id), str(p.id)])
+        def p_to_str(p):
+            return '-'.join([str(p.topic.name), str(p.leader.id), str(p.id)])
+
         all_parts = self._topic.partitions.values()
         all_parts = sorted(all_parts, key=p_to_str)
 
