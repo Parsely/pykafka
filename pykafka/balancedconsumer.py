@@ -730,10 +730,10 @@ class BalancedConsumer(object):
         message = None
         self._last_message_time = time.time()
         while message is None and not consumer_timed_out():
-            while not self._internal_consumer_running.is_set():
+            if not self._internal_consumer_running.is_set():
                 self._cluster.handler.sleep()
                 self._raise_worker_exceptions()
-                self._internal_consumer_running.wait(5)
+                self._internal_consumer_running.wait(self._consumer_timeout_ms / 1000)
             try:
                 # acquire the lock to ensure that we don't start trying to consume from
                 # a _consumer that might soon be replaced by an in-progress rebalance
