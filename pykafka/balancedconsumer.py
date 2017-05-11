@@ -742,7 +742,6 @@ class BalancedConsumer(object):
             except (ConsumerStoppedException, AttributeError):
                 if not self._running:
                     raise ConsumerStoppedException
-                continue
             if message:
                 self._last_message_time = time.time()
             if not block:
