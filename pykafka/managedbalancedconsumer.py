@@ -194,6 +194,7 @@ class ManagedBalancedConsumer(BalancedConsumer):
 
         self._generation_id = -1
         self._rebalancing_lock = cluster.handler.Lock()
+        self._internal_consumer_running = self._cluster.handler.Event()
         # ManagedBalancedConsumers in the same process cannot share connections.
         # This connection hash is passed to Broker calls that use the group
         # membership  API
