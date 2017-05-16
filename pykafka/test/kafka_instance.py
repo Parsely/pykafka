@@ -27,6 +27,8 @@ import sys
 import tempfile
 import time
 
+from pkg_resources import parse_version
+
 from testinstances import utils
 from testinstances.exceptions import ProcessNotStartingError
 from testinstances.managed_instance import ManagedInstance
@@ -233,7 +235,8 @@ class KafkaInstance(ManagedInstance):
 
         :returns: :class:`CertManager` or None upon failure
         """
-        if self._kafka_version >= "0.9":  # no SSL support in earlier versions
+        # no SSL support in earlier versions
+        if parse_version(self._kafka_version) >= parse_version("0.9"):
             try:
                 return CertManager(self._bin_dir)
             except:  # eg. because openssl or other tools not installed
