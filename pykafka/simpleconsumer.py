@@ -353,6 +353,10 @@ class SimpleConsumer(object):
         if self._running:
             self.stop()
 
+    def cleanup(self):
+        if not self._slot_available.is_set():
+            self._slot_available.set()
+
     def stop(self):
         """Flag all running workers for deletion."""
         self._running = False
@@ -380,6 +384,7 @@ class SimpleConsumer(object):
                     # surface all exceptions to the main thread
                     self._worker_exception = sys.exc_info()
                     break
+            self.cleanup()
             log.debug("Autocommitter thread exiting")
         log.debug("Starting autocommitter thread")
         return self._cluster.handler.spawn(autocommitter, name="pykafka.SimpleConsumer.autocommiter")
