@@ -59,6 +59,7 @@ import logging
 import struct
 from collections import defaultdict, namedtuple
 from zlib import crc32
+import time
 
 from .common import CompressionType, Message
 from .exceptions import ERROR_CODES, MessageSizeTooLarge
@@ -165,7 +166,8 @@ class Message(Message, Serializable):
         "partition_id",
         "partition",
         "produce_attempt",
-        "delivery_report_q"
+        "delivery_report_q",
+        "timestamp"
     ]
 
     def __init__(self,
@@ -175,11 +177,13 @@ class Message(Message, Serializable):
                  offset=-1,
                  partition_id=-1,
                  produce_attempt=0,
+                 timestamp=0,
                  delivery_report_q=None):
         self.compression_type = compression_type
         self.partition_key = partition_key
         self.value = value
         self.offset = offset
+        self.timestamp = timestamp
         # this is set on decode to expose it to clients that use the protocol
         # implementation but not the consumer
         self.partition_id = partition_id
@@ -232,6 +236,13 @@ class Message(Message, Serializable):
         data = buffer(buff[(offset + 4):(offset + 4 + fmt_size)])
         crc = crc32(data) & 0xffffffff
         struct.pack_into('!I', buff, offset, crc)
+
+    @property
+    def timestamp_t(self):
+        """Get the timestamp as a time.struct_time, if valid"""
+        if self.timestamp not in (0, -1):
+            # Assuming a unix epoch
+            return time.gmtime(self.timestamp / 1000.0)
 
 
 class MessageSet(Serializable):

@@ -966,17 +966,20 @@ Consumer_consume(RdkHandle *self, PyObject *args)
 
     if (rkmessage->err == RD_KAFKA_RESP_ERR_NO_ERROR) {
         /* Build a pykafka.protocol.Message */
+        rd_kafka_timestamp_type_t timestamp_type;
+        int64_t timestamp = rd_kafka_message_timestamp(rkmessage, &timestamp_type);
 #if PY_MAJOR_VERSION >= 3
-        const char *format = "{s:y#,s:y#,s:l,s:L}";
+        const char *format = "{s:y#,s:y#,s:l,s:L,s:L}";
 #else
-        const char *format = "{s:s#,s:s#,s:l,s:L}";
+        const char *format = "{s:s#,s:s#,s:l,s:L,s:L}";
 #endif
         kwargs = Py_BuildValue(
             format,
             "value", rkmessage->payload, rkmessage->len,
             "partition_key", rkmessage->key, rkmessage->key_len,
             "partition_id", (long)rkmessage->partition,
-            "offset", (PY_LONG_LONG)rkmessage->offset);
+            "offset", (PY_LONG_LONG)rkmessage->offset,
+            "timestamp", (PY_LONG_LONG)timestamp);
         if (! kwargs) goto cleanup;
         empty_args = PyTuple_New(0);
         if (! empty_args) goto cleanup;
