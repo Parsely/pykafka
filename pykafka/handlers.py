@@ -19,13 +19,6 @@ limitations under the License.
 __all__ = ["ResponseFuture", "Handler", "ThreadingHandler", "RequestHandler"]
 
 from collections import namedtuple
-import gevent
-import gevent.event
-import gevent.lock
-import gevent.queue
-import gevent.socket as gsocket
-from gevent.socket import error as gsocket_error
-from gevent.socket import gaierror as g_gaierror
 import logging
 import socket as pysocket
 from socket import error as socket_error
@@ -33,6 +26,17 @@ from socket import gaierror as gaierror
 import sys as _sys
 import threading
 import time
+
+try:
+    import gevent
+    import gevent.event
+    import gevent.lock
+    import gevent.queue
+    import gevent.socket as gsocket
+    from gevent.socket import error as gsocket_error
+    from gevent.socket import gaierror as g_gaierror
+except ImportError:
+    gevent = None
 
 from .utils.compat import Queue, Empty, Semaphore
 
@@ -114,26 +118,27 @@ class ThreadingHandler(Handler):
         return t
 
 
-class GEventHandler(Handler):
-    """A handler that uses a greenlet to perform its work"""
-    Queue = gevent.queue.JoinableQueue
-    Event = gevent.event.Event
-    Lock = gevent.lock.RLock  # fixme
-    RLock = gevent.lock.RLock
-    Semaphore = gevent.lock.Semaphore
-    Socket = gsocket
-    SockErr = gsocket_error
-    GaiError = g_gaierror
+if gevent:
+    class GEventHandler(Handler):
+        """A handler that uses a greenlet to perform its work"""
+        Queue = gevent.queue.JoinableQueue
+        Event = gevent.event.Event
+        Lock = gevent.lock.RLock  # fixme
+        RLock = gevent.lock.RLock
+        Semaphore = gevent.lock.Semaphore
+        Socket = gsocket
+        SockErr = gsocket_error
+        GaiError = g_gaierror
 
-    def sleep(self, seconds=0):
-        gevent.sleep(seconds)
+        def sleep(self, seconds=0):
+            gevent.sleep(seconds)
 
-    def spawn(self, target, *args, **kwargs):
-        # Greenlets don't support naming
-        if 'name' in kwargs:
-            kwargs.pop('name')
-        t = gevent.spawn(target, *args, **kwargs)
-        return t
+        def spawn(self, target, *args, **kwargs):
+            # Greenlets don't support naming
+            if 'name' in kwargs:
+                kwargs.pop('name')
+            t = gevent.spawn(target, *args, **kwargs)
+            return t
 
 
 class RequestHandler(object):

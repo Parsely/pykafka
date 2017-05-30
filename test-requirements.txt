@@ -3,4 +3,5 @@ pytest-cov
 python-snappy
 mock
 unittest2
+gevent
 -e git+https://github.com/Parsely/testinstances.git@0.3.0#egg=testinstances
