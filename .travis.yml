@@ -4,12 +4,22 @@ cache:
   directories:
     - $HOME/.cache/pip
     - $HOME/.ccache
-python:
-    - "2.7"
-    - "3.4"
-    - "3.5"
-    - "3.6"
-    - "pypy"
+matrix:
+  include:
+    - env: TOX_ENV=py27
+      python: 2.7
+    - env: TOX_ENV=py34
+      python: 3.4
+    - env: TOX_ENV=py35
+      python: 3.5
+    - env: TOX_ENV=py36
+      python: 3.6
+    - env: TOX_ENV=pypy
+      python: pypy
+    - env: TOX_ENV=py27-gevent
+      python: 2.7
+    - env: TOX_ENV=py36-gevent
+      python: 3.6
 env:
   global:
       - PATH="/usr/lib/ccache:$PATH"
@@ -46,7 +56,7 @@ install:
           source "$HOME/virtualenvs/pypy-$PYPY_VERSION/bin/activate"
         fi
     - pip install -U pip setuptools
-    - pip install codecov kazoo tox testinstances tox-travis "gevent==1.1"
+    - pip install codecov kazoo tox testinstances
     - wget https://github.com/edenhill/librdkafka/archive/0.9.1.tar.gz
     - tar -xzf 0.9.1.tar.gz
     - cd librdkafka-0.9.1/ && ./configure --prefix=$HOME
@@ -65,7 +75,7 @@ before_script:
     - export `grep ZOOKEEPER $TEMPFILE`
 
 script:
-    - tox tests
+    - tox -e $TOX_ENV tests
 
 # Calculate coverage on success
 after_success:
