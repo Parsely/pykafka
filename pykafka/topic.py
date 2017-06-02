@@ -189,7 +189,7 @@ class Topic(object):
         """
         if not rdkafka and use_rdkafka:
             raise ImportError("use_rdkafka requires rdkafka to be installed")
-        if isinstance(self._cluster.handler, GEventHandler) and use_rdkafka:
+        if GEventHandler and isinstance(self._cluster.handler, GEventHandler) and use_rdkafka:
             raise ImportError("use_rdkafka cannot be used with gevent")
         Cls = (rdkafka.RdKafkaSimpleConsumer
                if rdkafka and use_rdkafka else SimpleConsumer)
