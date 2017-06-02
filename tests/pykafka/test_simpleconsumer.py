@@ -8,6 +8,11 @@ import time
 import unittest2
 from uuid import uuid4
 
+try:
+    import gevent
+except ImportError:
+    gevent = None
+
 from pykafka import KafkaClient
 from pykafka.simpleconsumer import OwnedPartition, OffsetType
 from pykafka.test.utils import get_cluster, stop_cluster
@@ -205,7 +210,7 @@ class TestSimpleConsumer(unittest2.TestCase):
             self.assertEqual(current_offsets, latest_offsets)
 
 
-@pytest.mark.skipif(platform.python_implementation() == "PyPy",
+@pytest.mark.skipif(platform.python_implementation() == "PyPy" or gevent is None,
                     reason="Unresolved crashes")
 class TestGEventSimpleConsumer(TestSimpleConsumer):
     USE_GEVENT = True

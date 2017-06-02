@@ -8,6 +8,11 @@ import types
 import unittest2
 from uuid import uuid4
 
+try:
+    import gevent
+except ImportError:
+    gevent = None
+
 from pykafka import KafkaClient
 from pykafka.common import OffsetType
 from pykafka.exceptions import MessageSizeTooLarge, ProducerQueueFullError
@@ -342,7 +347,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
         retry(ensure_all_messages_consumed, retry_time=15)
 
 
-@pytest.mark.skipif(platform.python_implementation() == "PyPy",
+@pytest.mark.skipif(platform.python_implementation() == "PyPy" or gevent is None,
                     reason="Unresolved crashes")
 class TestGEventProducer(ProducerIntegrationTests):
     USE_GEVENT = True
