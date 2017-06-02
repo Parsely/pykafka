@@ -180,7 +180,7 @@ class TestSimpleConsumer(unittest2.TestCase):
 
             # The consumer fetcher thread should prompt broker reconnection
             t_start = time.time()
-            timeout = 40. if USE_GEVENT else 20.
+            timeout = 40. if self.USE_GEVENT else 20.
             try:
                 for broker in self.client.brokers.values():
                     while not broker._connection.connected:
