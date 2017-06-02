@@ -6,27 +6,38 @@ cache:
     - $HOME/.ccache
 matrix:
   include:
-    - env: TOX_ENV=py27
+    - env: TOX_ENV=py27 KAFKA_VERSION=0.8.2.2
       python: 2.7
-    - env: TOX_ENV=py34
+    - env: TOX_ENV=py27 KAFKA_VERSION=0.10.0.1
+      python: 2.7
+    - env: TOX_ENV=py34 KAFKA_VERSION=0.8.2.2
       python: 3.4
-    - env: TOX_ENV=py35
+    - env: TOX_ENV=py34 KAFKA_VERSION=0.10.0.1
+      python: 3.4
+    - env: TOX_ENV=py35 KAFKA_VERSION=0.8.2.2
       python: 3.5
-    - env: TOX_ENV=py36
+    - env: TOX_ENV=py35 KAFKA_VERSION=0.10.0.1
+      python: 3.5
+    - env: TOX_ENV=py36 KAFKA_VERSION=0.8.2.2
       python: 3.6
-    - env: TOX_ENV=pypy
+    - env: TOX_ENV=py36 KAFKA_VERSION=0.10.0.1
+      python: 3.6
+    - env: TOX_ENV=pypy KAFKA_VERSION=0.8.2.2
       python: pypy
-    - env: TOX_ENV=py27-gevent
+    - env: TOX_ENV=pypy KAFKA_VERSION=0.10.0.1
+      python: pypy
+    - env: TOX_ENV=py27-gevent KAFKA_VERSION=0.8.2.2
       python: 2.7
-    - env: TOX_ENV=py36-gevent
+    - env: TOX_ENV=py27-gevent KAFKA_VERSION=0.10.0.1
+      python: 2.7
+    - env: TOX_ENV=py36-gevent KAFKA_VERSION=0.8.2.2
+      python: 3.6
+    - env: TOX_ENV=py36-gevent KAFKA_VERSION=0.10.0.1
       python: 3.6
 env:
   global:
       - PATH="/usr/lib/ccache:$PATH"
       - KAFKA_BIN="$HOME/kafka-bin"
-  matrix:
-      - KAFKA_VERSION=0.8.2.2
-      - KAFKA_VERSION=0.10.0.1
 
 addons:
   apt:
