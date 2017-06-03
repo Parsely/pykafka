@@ -563,6 +563,14 @@ Producer_delivery_report_callback(rd_kafka_t *rk,
             logger, "exception", "s", "Failure in delivery callback");
         Py_XDECREF(res);
         PyErr_Clear();
+    } else {
+        // Set timestamp to the one created by librdkafka
+        rd_kafka_timestamp_type_t timestamp_type;
+        int64_t timestamp = rd_kafka_message_timestamp(rkmessage, &timestamp_type);
+        if (timestamp_type != RD_KAFKA_TIMESTAMP_NOT_AVAILABLE) {
+            PyObject* timestamp_o = PyLong_FromUnsignedLongLong(timestamp);
+            PyObject_SetAttrString(message, "timestamp", timestamp_o);
+        }
     }
 
     Py_DECREF(message);  /* We INCREF'd this in Producer_produce() */
@@ -968,6 +976,9 @@ Consumer_consume(RdkHandle *self, PyObject *args)
         /* Build a pykafka.protocol.Message */
         rd_kafka_timestamp_type_t timestamp_type;
         int64_t timestamp = rd_kafka_message_timestamp(rkmessage, &timestamp_type);
+        if (timestamp_type == RD_KAFKA_TIMESTAMP_NOT_AVAILABLE) {
+            timestamp = 0;
+        }
 #if PY_MAJOR_VERSION >= 3
         const char *format = "{s:y#,s:y#,s:l,s:L,s:L}";
 #else

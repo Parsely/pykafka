@@ -227,6 +227,7 @@ class TestFetchAPI(unittest2.TestCase):
             'produce_attempt': 0,
             'delivery_report_q': None,
             'timestamp': 0,
+            'protocol_version': 0,
             'partition': None
         }, {
             'partition_key': b'test_key',
@@ -237,6 +238,7 @@ class TestFetchAPI(unittest2.TestCase):
             'produce_attempt': 0,
             'delivery_report_q': None,
             'timestamp': 0,
+            'protocol_version': 0,
             'partition': None
         }, {
             'partition_key': None,
@@ -247,6 +249,7 @@ class TestFetchAPI(unittest2.TestCase):
             'produce_attempt': 0,
             'delivery_report_q': None,
             'timestamp': 0,
+            'protocol_version': 0,
             'partition': None
         }]
 

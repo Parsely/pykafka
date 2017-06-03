@@ -25,6 +25,7 @@ import struct
 import sys
 import threading
 import weakref
+from pkg_resources import parse_version
 
 from six import reraise
 
@@ -156,6 +157,8 @@ class Producer(object):
         :type auto_start: bool
         """
         self._cluster = cluster
+        self._protocol_version = int(
+            parse_version(cluster._broker_version) >= parse_version("0.10.0"))
         self._topic = topic
         self._partitioner = partitioner
         self._compression = compression
@@ -300,7 +303,7 @@ class Producer(object):
                 for queue_reader in queue_readers:
                     queue_reader.join()
 
-    def produce(self, message, partition_key=None):
+    def produce(self, message, partition_key=None, timestamp=None):
         """Produce a message.
 
         :param message: The message to produce (use None to send null)
@@ -325,6 +328,8 @@ class Producer(object):
         msg = Message(value=message,
                       partition_key=partition_key,
                       partition_id=partition_id,
+                      timestamp=timestamp,
+                      protocol_version=self._protocol_version,
                       # We must pass our thread-local Queue instance directly,
                       # as results will be written to it in a worker thread
                       delivery_report_q=self._delivery_reports.queue)
