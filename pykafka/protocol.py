@@ -274,7 +274,7 @@ class Message(Message, Serializable):
             1000 * (dt - datetime(1970, 1, 1)).total_seconds())
 
     def set_timestamp(self, ts):
-        if isinstance(ts, (int, float, types.NoneType)):
+        if isinstance(ts, (int, float, type(None))):
             self.timestamp = ts
         elif isinstance(ts, datetime):
             self.timestamp_d = ts
