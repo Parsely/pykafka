@@ -61,6 +61,7 @@ from collections import defaultdict, namedtuple
 from zlib import crc32
 from datetime import datetime
 import types
+from six import integer_types
 
 from .common import CompressionType, Message
 from .exceptions import ERROR_CODES, MessageSizeTooLarge
@@ -274,7 +275,7 @@ class Message(Message, Serializable):
             1000 * (dt - datetime(1970, 1, 1)).total_seconds())
 
     def set_timestamp(self, ts):
-        if isinstance(ts, (int, float, type(None))):
+        if isinstance(ts, integer_types + (float, type(None))):
             self.timestamp = ts
         elif isinstance(ts, datetime):
             self.timestamp_d = ts
