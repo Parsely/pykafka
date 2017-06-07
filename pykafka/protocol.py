@@ -278,7 +278,7 @@ class Message(Message, Serializable):
         if isinstance(ts, integer_types + (float, type(None))):
             self.timestamp = ts
         elif isinstance(ts, datetime):
-            self.timestamp_d = ts
+            self.timestamp_dt = ts
         else:
             raise RuntimeError()
 
