@@ -45,6 +45,7 @@ from .partitioners import random_partitioner
 from .protocol import Message, ProduceRequest
 from .utils.compat import iteritems, itervalues, Empty
 from .utils.error_handlers import valid_int
+from .utils import msg_protocol_version
 
 log = logging.getLogger(__name__)
 
@@ -157,8 +158,7 @@ class Producer(object):
         :type auto_start: bool
         """
         self._cluster = cluster
-        self._protocol_version = int(
-            parse_version(cluster._broker_version) >= parse_version("0.10.0"))
+        self._protocol_version = msg_protocol_version(cluster._broker_version)
         self._topic = topic
         self._partitioner = partitioner
         self._compression = compression

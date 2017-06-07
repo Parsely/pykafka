@@ -261,14 +261,14 @@ class Message(Message, Serializable):
         struct.pack_into('!I', buff, offset, crc)
 
     @property
-    def timestamp_d(self):
+    def timestamp_dt(self):
         """Get the timestamp as a datetime, if valid"""
-        if self.timestamp not in (0, -1):
+        if self.timestamp > 0:
             # Assuming a unix epoch
             return datetime.utcfromtimestamp(self.timestamp / 1000.0)
 
-    @timestamp_d.setter
-    def timestamp_d(self, dt):
+    @timestamp_dt.setter
+    def timestamp_dt(self, dt):
         """Set the timestamp from a datetime object"""
         self.timestamp = int(
             1000 * (dt - datetime(1970, 1, 1)).total_seconds())
