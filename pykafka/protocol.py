@@ -350,7 +350,9 @@ class MessageSet(Serializable):
             compressed = compression.encode_snappy(buffer(uncompressed))
         else:
             raise TypeError("Unknown compression: %s" % self.compression_type)
-        return Message(compressed, compression_type=self.compression_type)
+        protocol_version = max((m.protocol_version for m in self._messages))
+        return Message(compressed, compression_type=self.compression_type,
+                       protocol_version=protocol_version)
 
     @classmethod
     def decode(cls, buff, partition_id=-1):
