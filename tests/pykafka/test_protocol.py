@@ -280,8 +280,30 @@ class TestFetchAPI(unittest2.TestCase):
             'partition_id': 0,
             'produce_attempt': 0,
             'delivery_report_q': None,
-            'timestamp': 0,
-            'protocol_version': 0,
+            'timestamp': 1497302164,
+            'protocol_version': 1,
+            'partition': None
+        }, {
+            'partition_key': b"test_key",
+            'compression_type': 0,
+            'value': b"this doesn't have a partition key",
+            'offset': 2,
+            'partition_id': 0,
+            'produce_attempt': 0,
+            'delivery_report_q': None,
+            'timestamp': 1497302164,
+            'protocol_version': 1,
+            'partition': None
+        }, {
+            'partition_key': None,
+            'compression_type': 0,
+            'value': b"this doesn't have a partition key",
+            'offset': 2,
+            'partition_id': 0,
+            'produce_attempt': 0,
+            'delivery_report_q': None,
+            'timestamp': 1497302164,
+            'protocol_version': 1,
             'partition': None
         }]
 
@@ -369,23 +391,15 @@ class TestFetchAPI(unittest2.TestCase):
 
     def test_gzip_decompression(self):
         msg = b''.join([
-            b'\x00\x00\x00\x01'  # len(topics)
-            b'\x00\t'  # len(topic name)
-                b'test_gzip'  # topic name
-            b'\x00\x00\x00\x01'  # len(partitions)
-                b'\x00\x00\x00\x00'  # partition
-                    b'\x00\x00'  # error code
-                    b'\x00\x00\x00\x00\x00\x00\x00\x03'  # highwater mark offset
-                    b'\x00\x00\x00\x9b'  # message set size
-                        b'\x00\x00\x00\x00\x00\x00\x00\x02'  # offset
-                        b'\x00\x00\x00\x8f'  # message size
-                            b'\xbb\xe7\x1f\xb8'  # crc
-                            b'\x00'  # magic byte
-                            b'\x01'  # attributes
-                            b'\xff\xff\xff\xff'  # len(key)
-                            b'\x00\x00\x00\x81'  # len(value)
-                                b'\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x00c`\x80\x03\r\xbe.I\x7f0\x8b%\xb18%\rH\x8b\x95dd\x16+\x00Q\xa2BIjq\x89Bnjqqbz*T=#\x10\x1b\xb2\xf3\xcb\xf4\x81y\x1c \x15\xf1\xd9\xa9\x95@\xb64\\_Nq>v\xcdL@\xac\x7f\xb5(\xd9\x98\x81\xe1?\x10\x00y\x8a`M)\xf9\xa9\xc5y\xea%\n\x19\x89e\xa9@\x9d\x05\x89E%\x99%\x99\xf9y\n@\x93\x01N1\x9f[\xac\x00\x00\x00'  # value
-        ])
+"\x00\x00\x00\x01\x00\ttest_gzip\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00"
+"\x00\x00\x00\x00\x00\x05\x00\x00\x00\xad\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00"
+"\x00\xa1S\x82\x9d\xff\x00\x01\xff\xff\xff\xff\x00\x00\x00\x93\x1f\x8b\x08\x00\x00"
+"\x00\x00\x00\x00\x00c`\x80\x03\r\xbe.I\x7f0\x8b%\xb18%\rH\x8b\x95dd\x16+\x00Q\xa2"
+"BIjq\x89Bnjqqbz*T=#\x10\x1b\xb2\xf3\xcb\xf4\x81y\x1c \x15\xf1\xd9\xa9\x95@\xb6"
+"4\\_Nq>v\xcdL@\xac\x7f\xb5(\xd9\x98\x81\xe1?\x10\x00y\x8a`M)\xf9\xa9\xc5y\xea%\n"
+"\x19\x89e\xa9@\x9d\x05\x89E%\x99%\x99\xf9y\n\x10\x93A\x80\x19\x88\xcd/\x9a<1\xc5"
+"\xb0\x97h#X\xc8\xb0\x1d\x00Bj\t\\*\x01\x00\x00\x00\x00\x00\x00"
+            ])
         response = protocol.FetchResponse(msg)
         for i in range(len(self.expected_data)):
             self.assertDictEqual(
