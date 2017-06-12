@@ -109,7 +109,7 @@ class RdKafkaProducer(Producer):
         # marked 'P' or '*') that appear in librdkafka/CONFIGURATION.md should
         # be listed below, in either `conf` or `topic_conf`, even if we do not
         # set them and they are commented out.
-
+        ver10 = parse_version(self._broker_version) >= parse_version("0.10.0")
         conf = {  # destination: rd_kafka_conf_set
             "client.id": "pykafka.rdkafka",
             # Handled via rd_kafka_brokers_add instead:
@@ -163,11 +163,12 @@ class RdKafkaProducer(Producer):
 
             # Report successful and failed messages so we know to dealloc them
             "delivery.report.only.error": "false",
+            "api.version.request": ver10,
             # "dr_cb"
             # "dr_msg_cb"  # gets set in _rd_kafka module
         }
         # broker.version.fallback is incompatible with >-0.10
-        if parse_version(self._broker_version) < parse_version("0.10.0"):
+        if not ver10:
             conf["broker.version.fallback"] = self._broker_version
         conf.update(helpers.rdk_ssl_config(self._cluster))
 

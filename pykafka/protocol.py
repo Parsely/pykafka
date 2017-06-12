@@ -59,6 +59,9 @@ import logging
 import struct
 from collections import defaultdict, namedtuple
 from zlib import crc32
+from datetime import datetime
+import types
+from six import integer_types
 
 from .common import CompressionType, Message
 from .exceptions import ERROR_CODES, MessageSizeTooLarge
@@ -155,7 +158,6 @@ class Message(Message, Serializable):
     :ivar partition_id: The id of the partition to which this message belongs
     :ivar delivery_report_q: For use by :class:`pykafka.producer.Producer`
     """
-    MAGIC = 0
 
     __slots__ = [
         "compression_type",
@@ -165,7 +167,9 @@ class Message(Message, Serializable):
         "partition_id",
         "partition",
         "produce_attempt",
-        "delivery_report_q"
+        "delivery_report_q",
+        "protocol_version",
+        "timestamp"
     ]
 
     def __init__(self,
@@ -175,11 +179,16 @@ class Message(Message, Serializable):
                  offset=-1,
                  partition_id=-1,
                  produce_attempt=0,
+                 protocol_version=0,
+                 timestamp=None,
                  delivery_report_q=None):
         self.compression_type = compression_type
         self.partition_key = partition_key
         self.value = value
         self.offset = offset
+        if timestamp is None and protocol_version > 0:
+            timestamp = datetime.utcnow()
+        self.set_timestamp(timestamp)
         # this is set on decode to expose it to clients that use the protocol
         # implementation but not the consumer
         self.partition_id = partition_id
@@ -188,6 +197,8 @@ class Message(Message, Serializable):
         self.produce_attempt = produce_attempt
         # delivery_report_q is used by the producer
         self.delivery_report_q = delivery_report_q
+        assert protocol_version in (0, 1)
+        self.protocol_version = protocol_version
 
     def __len__(self):
         size = 4 + 1 + 1 + 4 + 4
@@ -195,18 +206,26 @@ class Message(Message, Serializable):
             size += len(self.value)
         if self.partition_key is not None:
             size += len(self.partition_key)
+        if self.protocol_version > 0 and self.timestamp:
+            size += 8
         return size
 
     @classmethod
     def decode(self, buff, msg_offset=-1, partition_id=-1):
-        fmt = 'iBBYY'
-        response = struct_helpers.unpack_from(fmt, buff, 0)
-        crc, _, attr, key, val = response
+        (crc, protocol_version) = struct_helpers.unpack_from('iB', buff, 0)
+        offset = 5
+        timestamp = 0
+        if protocol_version > 0:
+            (timestamp,) = struct_helpers.unpack_from('Q', buff, offset)
+            offset += 8
+        (attr, key, val) = struct_helpers.unpack_from('BYY', buff, offset)
         # TODO: Handle CRC failure
         return Message(val,
                        partition_key=key,
                        compression_type=attr,
                        offset=msg_offset,
+                       protocol_version=protocol_version,
+                       timestamp=timestamp,
                        partition_id=partition_id)
 
     def pack_into(self, buff, offset):
@@ -218,20 +237,50 @@ class Message(Message, Serializable):
         :param offset: The offset to start the write at
         """
         # NB a length of 0 means an empty string, whereas -1 means null
+        # Assuming a CreateTime timestamp, not a LogAppendTime.
         len_key = -1 if self.partition_key is None else len(self.partition_key)
         len_value = -1 if self.value is None else len(self.value)
-        fmt = '!BBi%dsi%ds' % (max(len_key, 0), max(len_value, 0))
-        args = (self.MAGIC,
+        protocol_version = self.protocol_version
+        # Only actually use protocol 1 if timestamp is defined.
+        if self.protocol_version == 1 and self.timestamp:
+            fmt = '!BBQi%dsi%ds' % (max(len_key, 0), max(len_value, 0))
+        else:
+            protocol_version = 0
+            fmt = '!BBi%dsi%ds' % (max(len_key, 0), max(len_value, 0))
+        args = [protocol_version,
                 self.compression_type,
                 len_key,
                 self.partition_key or b"",
                 len_value,
-                self.value or b"")
+                self.value or b""]
+        if protocol_version > 0:
+            args.insert(2, int(self.timestamp))
         struct.pack_into(fmt, buff, offset + 4, *args)
         fmt_size = struct.calcsize(fmt)
         data = buffer(buff[(offset + 4):(offset + 4 + fmt_size)])
         crc = crc32(data) & 0xffffffff
         struct.pack_into('!I', buff, offset, crc)
+
+    @property
+    def timestamp_dt(self):
+        """Get the timestamp as a datetime, if valid"""
+        if self.timestamp > 0:
+            # Assuming a unix epoch
+            return datetime.utcfromtimestamp(self.timestamp / 1000.0)
+
+    @timestamp_dt.setter
+    def timestamp_dt(self, dt):
+        """Set the timestamp from a datetime object"""
+        self.timestamp = int(
+            1000 * (dt - datetime(1970, 1, 1)).total_seconds())
+
+    def set_timestamp(self, ts):
+        if isinstance(ts, integer_types + (float, type(None))):
+            self.timestamp = ts
+        elif isinstance(ts, datetime):
+            self.timestamp_dt = ts
+        else:
+            raise RuntimeError()
 
 
 class MessageSet(Serializable):
@@ -301,7 +350,9 @@ class MessageSet(Serializable):
             compressed = compression.encode_snappy(buffer(uncompressed))
         else:
             raise TypeError("Unknown compression: %s" % self.compression_type)
-        return Message(compressed, compression_type=self.compression_type)
+        protocol_version = max((m.protocol_version for m in self._messages))
+        return Message(compressed, compression_type=self.compression_type,
+                       protocol_version=protocol_version)
 
     @classmethod
     def decode(cls, buff, partition_id=-1):
