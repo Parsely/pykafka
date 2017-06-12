@@ -136,6 +136,8 @@ class TestProduceAPI(unittest2.TestCase):
 
     test_messages = [
         protocol.Message(b'this is a test message', partition_key=b'asdf'),
+        protocol.Message(b'this is a test message', partition_key=b'asdf',
+                         timestamp=1497302164, protocol_version=1),
         protocol.Message(b'this is also a test message', partition_key=b'test_key'),
         protocol.Message(b"this doesn't have a partition key"),
     ]
@@ -169,17 +171,47 @@ class TestProduceAPI(unittest2.TestCase):
             )
         )
 
+    def test_request_message_timestamp(self):
+        message = self.test_messages[1]
+        req = protocol.ProduceRequest()
+        req.add_message(message, b'test', 0)
+        msg = req.get_bytes()
+        self.assertEqual(
+            msg,
+            bytearray(
+                b'\x00\x00\x00i\x00\x00\x00\x00\x00\x00\x00\x00\x00\x07pykafka'  # header
+                b'\x00\x01'  # required acks
+                b"\x00\x00\'\x10"  # timeout
+                b"\x00\x00\x00\x01"  # len(topics)
+                    b"\x00\x04"  # len(topic name)
+                        b"test"  # topic name
+                    b"\x00\x00\x00\x01"  # len(partitions)
+                        b"\x00\x00\x00\x00"  # partition
+                        b"\x00\x00\x00<"  # message set size
+                            b"\xff\xff\xff\xff\xff\xff\xff\xff"  # offset
+                            b"\x00\x00\x000"  # message size
+                                b"Z\x92\x80\t"  # crc
+                                b"\x01"  # magic byte (protocol version)
+                                b"\x00"  # attributes
+                                b"\x00\x00\x00\x00Y?\x04\x94"  # timestamp
+                                b"\x00\x00\x00\x04"  # len(key)
+                                    b"asdf"  # key
+                                b"\x00\x00\x00\x16"  # len(value)
+                                    b"this is a test message"  # value
+            )
+        )
+
     def test_gzip_compression(self):
         req = protocol.ProduceRequest(compression_type=CompressionType.GZIP)
         [req.add_message(m, b'test_gzip', 0) for m in self.test_messages]
         msg = req.get_bytes()
-        self.assertEqual(len(msg), 207)  # this isn't a good test
+        self.assertEqual(len(msg), 230)  # this isn't a good test
 
     def test_snappy_compression(self):
         req = protocol.ProduceRequest(compression_type=CompressionType.SNAPPY)
         [req.add_message(m, b'test_snappy', 0) for m in self.test_messages]
         msg = req.get_bytes()
-        self.assertEqual(len(msg), 212)  # this isn't a good test
+        self.assertEqual(len(msg), 240)  # this isn't a good test
 
     def test_partition_error(self):
         # Response has a UnknownTopicOrPartition error for test/0
