@@ -212,13 +212,13 @@ class Message(Message, Serializable):
 
     @classmethod
     def decode(self, buff, msg_offset=-1, partition_id=-1):
-        (crc, protocol_version) = struct_helpers.unpack_from('iB', buff, 0)
-        offset = 5
+        (crc, protocol_version, attr) = struct_helpers.unpack_from('iBB', buff, 0)
+        offset = 6
         timestamp = 0
         if protocol_version > 0:
             (timestamp,) = struct_helpers.unpack_from('Q', buff, offset)
             offset += 8
-        (attr, key, val) = struct_helpers.unpack_from('BYY', buff, offset)
+        (key, val) = struct_helpers.unpack_from('YY', buff, offset)
         # TODO: Handle CRC failure
         return Message(val,
                        partition_key=key,
