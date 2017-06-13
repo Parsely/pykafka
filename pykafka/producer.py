@@ -320,6 +320,8 @@ class Producer(object):
         if not (isinstance(message, bytes) or message is None):
             raise TypeError("Producer.produce accepts a bytes object as message, but it "
                             "got '%s'", type(message))
+        if self._protocol_version < 1 and timestamp:
+            raise RuntimeError("Producer.produce got a timestamp with protocol 0")
         if not self._running:
             raise ProducerStoppedException()
         partitions = list(self._topic.partitions.values())
