@@ -62,6 +62,8 @@ from zlib import crc32
 from datetime import datetime
 import types
 from six import integer_types
+from pkg_resources import parse_version
+
 
 from .common import CompressionType, Message
 from .exceptions import ERROR_CODES, MessageSizeTooLarge
@@ -771,6 +773,18 @@ class FetchResponse(Response):
           HighwaterMarkOffset => int64
           MessageSetSize => int32
     """
+    api_version = 0
+
+    @staticmethod
+    def get_subclass(broker_protocol):
+        target_version = parse_version(broker_protocol)
+        if target_version >= parse_version("0.10.0"):
+            return FetchResponseV2
+        elif target_version >= parse_version("0.9.0"):
+            return FetchResponseV1
+        else:
+            return FetchResponse
+
     def __init__(self, buff, offset=0):
         """Deserialize into a new Response
 
@@ -810,6 +824,8 @@ class FetchResponse(Response):
 
 
 class FetchResponseV1(FetchResponse):
+    api_version = 1
+
     def __init__(self, buff, offset=0):
         """Deserialize into a new Response
 
@@ -821,6 +837,10 @@ class FetchResponseV1(FetchResponse):
         # TODO: Use throttle_time
         self.throttle_time = struct_helpers.unpack_from("i", buff, offset)
         super(FetchResponseV1, self).__init__(buff, offset + 4)
+
+
+class FetchResponseV2(FetchResponseV1):
+    api_version = 2
 
 
 ##

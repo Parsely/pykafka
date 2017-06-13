@@ -19,18 +19,17 @@ limitations under the License.
 __all__ = ["Broker"]
 import logging
 import time
-from pkg_resources import parse_version
 
 from .connection import BrokerConnection
 from .exceptions import LeaderNotAvailable, SocketDisconnectedError
 from .handlers import RequestHandler
 from .protocol import (
-    FetchRequest, FetchResponse, FetchResponseV1, OffsetRequest, OffsetResponse,
-    MetadataRequest, MetadataResponse, OffsetCommitRequest, OffsetCommitResponse,
-    OffsetFetchRequest, OffsetFetchResponse, ProduceResponse, JoinGroupRequest,
-    JoinGroupResponse, SyncGroupRequest, SyncGroupResponse, HeartbeatRequest,
-    HeartbeatResponse, LeaveGroupRequest, LeaveGroupResponse, ListGroupsRequest,
-    ListGroupsResponse, DescribeGroupsRequest, DescribeGroupsResponse)
+    FetchRequest, FetchResponse, OffsetRequest, OffsetResponse, MetadataRequest,
+    MetadataResponse, OffsetCommitRequest, OffsetCommitResponse, OffsetFetchRequest,
+    OffsetFetchResponse, ProduceResponse, JoinGroupRequest, JoinGroupResponse,
+    SyncGroupRequest, SyncGroupResponse, HeartbeatRequest, HeartbeatResponse,
+    LeaveGroupRequest, LeaveGroupResponse, ListGroupsRequest, ListGroupsResponse,
+    DescribeGroupsRequest, DescribeGroupsResponse)
 from .utils.compat import range, iteritems, get_bytes
 
 log = logging.getLogger(__name__)
@@ -294,20 +293,12 @@ class Broker(object):
             block for up to `timeout` milliseconds.
         :type min_bytes: int
         """
-        response_class = FetchResponseV1
-        my_version = parse_version(self._broker_version)
-        if my_version >= parse_version("0.10.0"):
-            api_version = 2
-        elif my_version >= parse_version("0.9.0"):
-            api_version = 1
-        else:
-            api_version = 0
-            response_class = FetchResponse
+        response_class = FetchResponse.get_subclass(self._broker_version)
         future = self._req_handler.request(FetchRequest(
             partition_requests=partition_requests,
             timeout=timeout,
             min_bytes=min_bytes,
-            api_version=api_version,
+            api_version=response_class.api_version,
         ))
         # XXX - this call returns even with less than min_bytes of messages?
         return future.get(response_class)
