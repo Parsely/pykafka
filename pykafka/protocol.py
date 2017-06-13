@@ -171,6 +171,7 @@ class Message(Message, Serializable):
         "produce_attempt",
         "delivery_report_q",
         "protocol_version",
+        "compressed_offset",
         "timestamp"
     ]
 
@@ -183,8 +184,10 @@ class Message(Message, Serializable):
                  produce_attempt=0,
                  protocol_version=0,
                  timestamp=None,
+                 compressed_offset=False,
                  delivery_report_q=None):
         self.compression_type = compression_type
+        self.compressed_offset = compressed_offset
         self.partition_key = partition_key
         self.value = value
         self.offset = offset
