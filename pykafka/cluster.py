@@ -246,7 +246,8 @@ class Cluster(object):
                                     buffer_size=1024 * 1024,
                                     source_host=self._source_host,
                                     source_port=self._source_port,
-                                    ssl_config=self._ssl_config)
+                                    ssl_config=self._ssl_config,
+                                    broker_version=self._broker_version)
                     response = broker.request_metadata(topics)
                     if response is not None:
                         return response
@@ -355,7 +356,8 @@ class Cluster(object):
                     buffer_size=1024 * 1024,
                     source_host=self._source_host,
                     source_port=self._source_port,
-                    ssl_config=self._ssl_config)
+                    ssl_config=self._ssl_config,
+                    broker_version=self._broker_version)
             elif not self._brokers[id_].connected:
                 log.info('Reconnecting to broker id %s: %s:%s', id_, meta.host, meta.port)
                 try:

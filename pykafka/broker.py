@@ -19,17 +19,18 @@ limitations under the License.
 __all__ = ["Broker"]
 import logging
 import time
+from pkg_resources import parse_version
 
 from .connection import BrokerConnection
 from .exceptions import LeaderNotAvailable, SocketDisconnectedError
 from .handlers import RequestHandler
 from .protocol import (
-    FetchRequest, FetchResponse, OffsetRequest, OffsetResponse, MetadataRequest,
-    MetadataResponse, OffsetCommitRequest, OffsetCommitResponse, OffsetFetchRequest,
-    OffsetFetchResponse, ProduceResponse, JoinGroupRequest, JoinGroupResponse,
-    SyncGroupRequest, SyncGroupResponse, HeartbeatRequest, HeartbeatResponse,
-    LeaveGroupRequest, LeaveGroupResponse, ListGroupsRequest, ListGroupsResponse,
-    DescribeGroupsRequest, DescribeGroupsResponse)
+    FetchRequest, FetchResponse, FetchResponseV1, OffsetRequest, OffsetResponse,
+    MetadataRequest, MetadataResponse, OffsetCommitRequest, OffsetCommitResponse,
+    OffsetFetchRequest, OffsetFetchResponse, ProduceResponse, JoinGroupRequest,
+    JoinGroupResponse, SyncGroupRequest, SyncGroupResponse, HeartbeatRequest,
+    HeartbeatResponse, LeaveGroupRequest, LeaveGroupResponse, ListGroupsRequest,
+    ListGroupsResponse, DescribeGroupsRequest, DescribeGroupsResponse)
 from .utils.compat import range, iteritems, get_bytes
 
 log = logging.getLogger(__name__)
@@ -59,7 +60,8 @@ class Broker(object):
                  buffer_size=1024 * 1024,
                  source_host='',
                  source_port=0,
-                 ssl_config=None):
+                 ssl_config=None,
+                 broker_version="0.9.0"):
         """Create a Broker instance.
 
         :param id_: The id number of this broker
@@ -104,6 +106,7 @@ class Broker(object):
         self._offsets_channel_socket_timeout_ms = offsets_channel_socket_timeout_ms
         self._buffer_size = buffer_size
         self._req_handlers = {}
+        self._broker_version = broker_version
         try:
             self.connect()
         except SocketDisconnectedError:
@@ -129,7 +132,8 @@ class Broker(object):
                       buffer_size=64 * 1024,
                       source_host='',
                       source_port=0,
-                      ssl_config=None):
+                      ssl_config=None,
+                      broker_version="0.9.0"):
         """Create a Broker using BrokerMetadata
 
         :param metadata: Metadata that describes the broker.
@@ -160,7 +164,8 @@ class Broker(object):
                    buffer_size=buffer_size,
                    source_host=source_host,
                    source_port=source_port,
-                   ssl_config=ssl_config)
+                   ssl_config=ssl_config,
+                   broker_version=broker_version)
 
     @property
     def connected(self):
@@ -289,13 +294,23 @@ class Broker(object):
             block for up to `timeout` milliseconds.
         :type min_bytes: int
         """
+        response_class = FetchResponseV1
+        my_version = parse_version(self._broker_version)
+        if my_version >= parse_version("0.10.0"):
+            api_version = 2
+        elif my_version >= parse_version("0.9.0"):
+            api_version = 1
+        else:
+            api_version = 0
+            response_class = FetchResponse
         future = self._req_handler.request(FetchRequest(
             partition_requests=partition_requests,
             timeout=timeout,
             min_bytes=min_bytes,
+            api_version=api_version,
         ))
         # XXX - this call returns even with less than min_bytes of messages?
-        return future.get(FetchResponse)
+        return future.get(response_class)
 
     @_check_handler
     def produce_messages(self, produce_request):

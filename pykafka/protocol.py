@@ -677,7 +677,8 @@ class FetchRequest(Request):
           FetchOffset => int64
           MaxBytes => int32
     """
-    def __init__(self, partition_requests=[], timeout=1000, min_bytes=1024):
+    def __init__(self, partition_requests=[], timeout=1000, min_bytes=1024,
+                 api_version=0):
         """Create a new fetch request
 
         Kafka 0.8 uses long polling for fetch requests, which is different
@@ -695,6 +696,7 @@ class FetchRequest(Request):
         self.timeout = timeout
         self.min_bytes = min_bytes
         self._reqs = defaultdict(dict)
+        self.api_version = api_version
         for req in partition_requests:
             self.add_request(req)
 
@@ -732,7 +734,7 @@ class FetchRequest(Request):
         :rtype: :class:`bytearray`
         """
         output = bytearray(len(self))
-        self._write_header(output)
+        self._write_header(output, api_version=self.api_version)
         offset = self.HEADER_LEN
         struct.pack_into('!iiii', output, offset,
                          -1, self.timeout, self.min_bytes, len(self._reqs))
@@ -769,14 +771,16 @@ class FetchResponse(Response):
           HighwaterMarkOffset => int64
           MessageSetSize => int32
     """
-    def __init__(self, buff):
+    def __init__(self, buff, offset=0):
         """Deserialize into a new Response
 
         :param buff: Serialized message
         :type buff: :class:`bytearray`
+        :param offset: Offset into the message
+        :type offset: int
         """
         fmt = '[S [ihqY] ]'
-        response = struct_helpers.unpack_from(fmt, buff, 0)
+        response = struct_helpers.unpack_from(fmt, buff, offset)
         self.topics = defaultdict(dict)
         for (topic, partitions) in response:
             for partition in partitions:
@@ -803,6 +807,20 @@ class FetchResponse(Response):
                 output += self._unpack_message_set(decompressed,
                                                    partition_id=partition_id)
         return output
+
+
+class FetchResponseV1(FetchResponse):
+    def __init__(self, buff, offset=0):
+        """Deserialize into a new Response
+
+        :param buff: Serialized message
+        :type buff: :class:`bytearray`
+        :param offset: Offset into the message
+        :type offset: int
+        """
+        # TODO: Use throttle_time
+        self.throttle_time = struct_helpers.unpack_from("i", buff, offset)
+        super(FetchResponseV1, self).__init__(buff, offset + 4)
 
 
 ##
