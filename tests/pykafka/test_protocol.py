@@ -252,7 +252,6 @@ class TestFetchAPI(unittest2.TestCase):
     expected_data = [
         {
             'partition_key': b'asdf',
-            'compressed_offset': True,
             'compression_type': 0,
             'value': b'this is a test message',
             'offset': 0,
@@ -264,7 +263,6 @@ class TestFetchAPI(unittest2.TestCase):
             'partition': None
         }, {
             'partition_key': b'test_key',
-            'compressed_offset': True,
             'compression_type': 0,
             'value': b'this is also a test message',
             'offset': 0,
@@ -276,7 +274,6 @@ class TestFetchAPI(unittest2.TestCase):
             'partition': None
         }, {
             'partition_key': None,
-            'compressed_offset': True,
             'compression_type': 0,
             'value': b"this doesn't have a partition key",
             'offset': 0,
@@ -288,7 +285,6 @@ class TestFetchAPI(unittest2.TestCase):
             'partition': None
         }, {
             'partition_key': b"test_key",
-            'compressed_offset': True,
             'compression_type': 0,
             'value': b"this has a partition key and a timestamp",
             'offset': 0,
@@ -300,7 +296,6 @@ class TestFetchAPI(unittest2.TestCase):
             'partition': None
         }, {
             'partition_key': None,
-            'compressed_offset': True,
             'compression_type': 0,
             'value': b"this has a timestamp",
             'offset': 0,
