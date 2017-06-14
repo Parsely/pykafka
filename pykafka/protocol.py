@@ -814,14 +814,22 @@ class FetchResponse(Response):
         for message in message_set.messages:
             if message.compression_type == CompressionType.NONE:
                 output.append(message)
+                continue
             elif message.compression_type == CompressionType.GZIP:
                 decompressed = compression.decode_gzip(message.value)
-                output += self._unpack_message_set(decompressed,
-                                                   partition_id=partition_id)
+                messages = self._unpack_message_set(decompressed,
+                                                    partition_id=partition_id)
             elif message.compression_type == CompressionType.SNAPPY:
                 decompressed = compression.decode_snappy(message.value)
-                output += self._unpack_message_set(decompressed,
-                                                   partition_id=partition_id)
+                messages = self._unpack_message_set(decompressed,
+                                                    partition_id=partition_id)
+            if messages[-1].offset < message.offset:
+                # With protocol 1, offsets from compressed messages start at 0
+                assert messages[0].offset == 0
+                delta = message.offset - len(messages) + 1
+                for msg in messages:
+                    msg.offset += delta
+            output += messages
         return output
 
 
