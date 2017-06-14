@@ -777,6 +777,8 @@ class FetchResponse(Response):
 
     @staticmethod
     def get_subclass(broker_protocol):
+        """Choose which subclass of response to demand and expect. Cf.
+        https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol"""
         target_version = parse_version(broker_protocol)
         if target_version >= parse_version("0.10.0"):
             return FetchResponseV2
