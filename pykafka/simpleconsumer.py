@@ -933,7 +933,7 @@ class OwnedPartition(object):
         """
         for message in messages:
             # enforce ordering of messages
-            if (self._is_compacted_topic and message.offset < self.next_offset) or
+            if (self._is_compacted_topic and message.offset < self.next_offset) or \
                     (not self._is_compacted_topic and message.offset != self.next_offset):
                 log.debug("Skipping enqueue for offset (%s) "
                           "not equal to next_offset (%s)",
