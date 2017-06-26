@@ -254,7 +254,7 @@ class TestFetchAPI(unittest2.TestCase):
             'partition_key': b'asdf',
             'compression_type': 0,
             'value': b'this is a test message',
-            'offset': 1,
+            'offset': 0,
             'partition_id': 0,
             'produce_attempt': 0,
             'delivery_report_q': None,
