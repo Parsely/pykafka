@@ -59,7 +59,8 @@ class Broker(object):
                  buffer_size=1024 * 1024,
                  source_host='',
                  source_port=0,
-                 ssl_config=None):
+                 ssl_config=None,
+                 broker_version="0.9.0"):
         """Create a Broker instance.
 
         :param id_: The id number of this broker
@@ -104,6 +105,7 @@ class Broker(object):
         self._offsets_channel_socket_timeout_ms = offsets_channel_socket_timeout_ms
         self._buffer_size = buffer_size
         self._req_handlers = {}
+        self._broker_version = broker_version
         try:
             self.connect()
         except SocketDisconnectedError:
@@ -129,7 +131,8 @@ class Broker(object):
                       buffer_size=64 * 1024,
                       source_host='',
                       source_port=0,
-                      ssl_config=None):
+                      ssl_config=None,
+                      broker_version="0.9.0"):
         """Create a Broker using BrokerMetadata
 
         :param metadata: Metadata that describes the broker.
@@ -160,7 +163,8 @@ class Broker(object):
                    buffer_size=buffer_size,
                    source_host=source_host,
                    source_port=source_port,
-                   ssl_config=ssl_config)
+                   ssl_config=ssl_config,
+                   broker_version=broker_version)
 
     @property
     def connected(self):
@@ -289,13 +293,15 @@ class Broker(object):
             block for up to `timeout` milliseconds.
         :type min_bytes: int
         """
+        response_class = FetchResponse.get_subclass(self._broker_version)
         future = self._req_handler.request(FetchRequest(
             partition_requests=partition_requests,
             timeout=timeout,
             min_bytes=min_bytes,
+            api_version=response_class.api_version,
         ))
         # XXX - this call returns even with less than min_bytes of messages?
-        return future.get(FetchResponse)
+        return future.get(response_class)
 
     @_check_handler
     def produce_messages(self, produce_request):

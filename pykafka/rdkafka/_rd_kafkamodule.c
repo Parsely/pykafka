@@ -957,6 +957,7 @@ Consumer_consume(RdkHandle *self, PyObject *args)
     PyObject *empty_args = NULL;
     PyObject *kwargs = NULL;
     rd_kafka_message_t *rkmessage;
+    int protocol_version = 0;
 
     if (RdkHandle_safe_lock(self, /* check_running= */ 1)) return NULL;
     Py_BEGIN_ALLOW_THREADS  /* avoid callbacks deadlocking */
@@ -978,11 +979,15 @@ Consumer_consume(RdkHandle *self, PyObject *args)
         int64_t timestamp = rd_kafka_message_timestamp(rkmessage, &timestamp_type);
         if (timestamp_type == RD_KAFKA_TIMESTAMP_NOT_AVAILABLE) {
             timestamp = 0;
+        } else {
+            // infer protocol from presence of timestamp. Fragile, but protocol
+            // not transmitted by librdkafka
+            protocol_version = 1;
         }
 #if PY_MAJOR_VERSION >= 3
-        const char *format = "{s:y#,s:y#,s:l,s:L,s:L}";
+        const char *format = "{s:y#,s:y#,s:l,s:L,s:i,s:L}";
 #else
-        const char *format = "{s:s#,s:s#,s:l,s:L,s:L}";
+        const char *format = "{s:s#,s:s#,s:l,s:L,s:i,s:L}";
 #endif
         kwargs = Py_BuildValue(
             format,
@@ -990,6 +995,7 @@ Consumer_consume(RdkHandle *self, PyObject *args)
             "partition_key", rkmessage->key, rkmessage->key_len,
             "partition_id", (long)rkmessage->partition,
             "offset", (PY_LONG_LONG)rkmessage->offset,
+            "protocol_version", protocol_version,
             "timestamp", (PY_LONG_LONG)timestamp);
         if (! kwargs) goto cleanup;
         empty_args = PyTuple_New(0);

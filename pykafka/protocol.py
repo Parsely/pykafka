@@ -62,6 +62,8 @@ from zlib import crc32
 from datetime import datetime
 import types
 from six import integer_types
+from pkg_resources import parse_version
+
 
 from .common import CompressionType, Message
 from .exceptions import ERROR_CODES, MessageSizeTooLarge
@@ -212,13 +214,13 @@ class Message(Message, Serializable):
 
     @classmethod
     def decode(self, buff, msg_offset=-1, partition_id=-1):
-        (crc, protocol_version) = struct_helpers.unpack_from('iB', buff, 0)
-        offset = 5
+        (crc, protocol_version, attr) = struct_helpers.unpack_from('iBB', buff, 0)
+        offset = 6
         timestamp = 0
         if protocol_version > 0:
             (timestamp,) = struct_helpers.unpack_from('Q', buff, offset)
             offset += 8
-        (attr, key, val) = struct_helpers.unpack_from('BYY', buff, offset)
+        (key, val) = struct_helpers.unpack_from('YY', buff, offset)
         # TODO: Handle CRC failure
         return Message(val,
                        partition_key=key,
@@ -677,7 +679,8 @@ class FetchRequest(Request):
           FetchOffset => int64
           MaxBytes => int32
     """
-    def __init__(self, partition_requests=[], timeout=1000, min_bytes=1024):
+    def __init__(self, partition_requests=[], timeout=1000, min_bytes=1024,
+                 api_version=0):
         """Create a new fetch request
 
         Kafka 0.8 uses long polling for fetch requests, which is different
@@ -695,6 +698,7 @@ class FetchRequest(Request):
         self.timeout = timeout
         self.min_bytes = min_bytes
         self._reqs = defaultdict(dict)
+        self.api_version = api_version
         for req in partition_requests:
             self.add_request(req)
 
@@ -732,7 +736,7 @@ class FetchRequest(Request):
         :rtype: :class:`bytearray`
         """
         output = bytearray(len(self))
-        self._write_header(output)
+        self._write_header(output, api_version=self.api_version)
         offset = self.HEADER_LEN
         struct.pack_into('!iiii', output, offset,
                          -1, self.timeout, self.min_bytes, len(self._reqs))
@@ -769,14 +773,30 @@ class FetchResponse(Response):
           HighwaterMarkOffset => int64
           MessageSetSize => int32
     """
-    def __init__(self, buff):
+    api_version = 0
+
+    @staticmethod
+    def get_subclass(broker_protocol):
+        """Choose which subclass of response to demand and expect. Cf.
+        https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol"""
+        target_version = parse_version(broker_protocol)
+        if target_version >= parse_version("0.10.0"):
+            return FetchResponseV2
+        elif target_version >= parse_version("0.9.0"):
+            return FetchResponseV1
+        else:
+            return FetchResponse
+
+    def __init__(self, buff, offset=0):
         """Deserialize into a new Response
 
         :param buff: Serialized message
         :type buff: :class:`bytearray`
+        :param offset: Offset into the message
+        :type offset: int
         """
         fmt = '[S [ihqY] ]'
-        response = struct_helpers.unpack_from(fmt, buff, 0)
+        response = struct_helpers.unpack_from(fmt, buff, offset)
         self.topics = defaultdict(dict)
         for (topic, partitions) in response:
             for partition in partitions:
@@ -794,15 +814,43 @@ class FetchResponse(Response):
         for message in message_set.messages:
             if message.compression_type == CompressionType.NONE:
                 output.append(message)
+                continue
             elif message.compression_type == CompressionType.GZIP:
                 decompressed = compression.decode_gzip(message.value)
-                output += self._unpack_message_set(decompressed,
-                                                   partition_id=partition_id)
+                messages = self._unpack_message_set(decompressed,
+                                                    partition_id=partition_id)
             elif message.compression_type == CompressionType.SNAPPY:
                 decompressed = compression.decode_snappy(message.value)
-                output += self._unpack_message_set(decompressed,
-                                                   partition_id=partition_id)
+                messages = self._unpack_message_set(decompressed,
+                                                    partition_id=partition_id)
+            if messages[-1].offset < message.offset:
+                # With protocol 1, offsets from compressed messages start at 0
+                assert messages[0].offset == 0
+                delta = message.offset - len(messages) + 1
+                for msg in messages:
+                    msg.offset += delta
+            output += messages
         return output
+
+
+class FetchResponseV1(FetchResponse):
+    api_version = 1
+
+    def __init__(self, buff, offset=0):
+        """Deserialize into a new Response
+
+        :param buff: Serialized message
+        :type buff: :class:`bytearray`
+        :param offset: Offset into the message
+        :type offset: int
+        """
+        # TODO: Use throttle_time
+        self.throttle_time = struct_helpers.unpack_from("i", buff, offset)
+        super(FetchResponseV1, self).__init__(buff, offset + 4)
+
+
+class FetchResponseV2(FetchResponseV1):
+    api_version = 2
 
 
 ##
