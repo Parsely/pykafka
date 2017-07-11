@@ -148,7 +148,7 @@ class SimpleConsumer(object):
         :type reset_offset_on_start: bool
         :param compacted_topic: Set to read from a compacted topic. Forces
             consumer to use less stringent message ordering logic because compacted
-            topics do not provide offsets in stict incrementing order.
+            topics do not provide offsets in strict incrementing order.
         :type compacted_topic: bool
         :param generation_id: The generation id with which to make group requests
         :type generation_id: int
@@ -821,7 +821,7 @@ class OwnedPartition(object):
         :type semaphore: :class:`pykafka.utils.compat.Semaphore`
         :param compacted_topic: Set to read from a compacted topic. Forces
             consumer to use less stringent ordering logic when because compacted
-            topics do not provide offsets in stict incrementing order.
+            topics do not provide offsets in strict incrementing order.
         :type compacted_topic: bool
         """
         self.partition = partition
