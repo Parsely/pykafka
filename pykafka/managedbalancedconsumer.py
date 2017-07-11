@@ -155,7 +155,7 @@ class ManagedBalancedConsumer(BalancedConsumer):
         :type use_rdkafka: bool
         :param compacted_topic: Set to read from a compacted topic. Forces
             consumer to use less stringent message ordering logic because compacted
-            topics do not provide offsets in stict incrementing order.
+            topics do not provide offsets in strict incrementing order.
         :type compacted_topic: bool
         :param heartbeat_interval_ms: The amount of time in milliseconds to wait between
             heartbeat requests
