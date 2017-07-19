@@ -199,6 +199,7 @@ class Cluster(object):
         self._ssl_config = ssl_config
         self._zookeeper_connect = zookeeper_hosts
         self._max_connection_retries = 3
+        self._max_connection_retries_offset_mgr = 8
         self._broker_version = broker_version
         if ':' in self._source_address:
             self._source_port = int(self._source_address.split(':')[1])
@@ -245,7 +246,8 @@ class Cluster(object):
                                     buffer_size=1024 * 1024,
                                     source_host=self._source_host,
                                     source_port=self._source_port,
-                                    ssl_config=self._ssl_config)
+                                    ssl_config=self._ssl_config,
+                                    broker_version=self._broker_version)
                     response = broker.request_metadata(topics)
                     if response is not None:
                         return response
@@ -354,7 +356,8 @@ class Cluster(object):
                     buffer_size=1024 * 1024,
                     source_host=self._source_host,
                     source_port=self._source_port,
-                    ssl_config=self._ssl_config)
+                    ssl_config=self._ssl_config,
+                    broker_version=self._broker_version)
             elif not self._brokers[id_].connected:
                 log.info('Reconnecting to broker id %s: %s:%s', id_, meta.host, meta.port)
                 try:
@@ -402,11 +405,12 @@ class Cluster(object):
         """
         log.info("Attempting to discover offset manager for consumer group '%s'",
                  consumer_group)
-        for i in range(self._max_connection_retries):
+        max_connection_retries = self._max_connection_retries_offset_mgr
+        for i in range(max_connection_retries):
+            if i > 0:
+                log.debug("Retrying offset manager discovery")
+            time.sleep(i * 2)
             for broker in itervalues(self.brokers):
-                if i > 0:
-                    log.debug("Retrying offset manager discovery")
-                time.sleep(i * 2)
 
                 req = GroupCoordinatorRequest(consumer_group)
                 future = broker.handler.request(req)
@@ -414,11 +418,11 @@ class Cluster(object):
                     res = future.get(GroupCoordinatorResponse)
                 except GroupCoordinatorNotAvailable:
                     log.error('Error discovering offset manager.')
-                    if i == self._max_connection_retries - 1:
+                    if i == max_connection_retries - 1:
                         raise
                 except SocketDisconnectedError:
                     log.warning("Socket disconnected during offset manager discovery")
-                    if i == self._max_connection_retries - 1:
+                    if i == max_connection_retries - 1:
                         raise
                     self.update()
                 else:

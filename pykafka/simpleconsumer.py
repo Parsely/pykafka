@@ -148,7 +148,7 @@ class SimpleConsumer(object):
         :type reset_offset_on_start: bool
         :param compacted_topic: Set to read from a compacted topic. Forces
             consumer to use less stringent message ordering logic because compacted
-            topics do not provide offsets in stict incrementing order.
+            topics do not provide offsets in strict incrementing order.
         :type compacted_topic: bool
         :param generation_id: The generation id with which to make group requests
         :type generation_id: int
@@ -353,6 +353,10 @@ class SimpleConsumer(object):
         if self._running:
             self.stop()
 
+    def cleanup(self):
+        if not self._slot_available.is_set():
+            self._slot_available.set()
+
     def stop(self):
         """Flag all running workers for deletion."""
         self._running = False
@@ -380,6 +384,7 @@ class SimpleConsumer(object):
                     # surface all exceptions to the main thread
                     self._worker_exception = sys.exc_info()
                     break
+            self.cleanup()
             log.debug("Autocommitter thread exiting")
         log.debug("Starting autocommitter thread")
         return self._cluster.handler.spawn(autocommitter, name="pykafka.SimpleConsumer.autocommiter")
@@ -816,7 +821,7 @@ class OwnedPartition(object):
         :type semaphore: :class:`pykafka.utils.compat.Semaphore`
         :param compacted_topic: Set to read from a compacted topic. Forces
             consumer to use less stringent ordering logic when because compacted
-            topics do not provide offsets in stict incrementing order.
+            topics do not provide offsets in strict incrementing order.
         :type compacted_topic: bool
         """
         self.partition = partition

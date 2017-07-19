@@ -136,6 +136,8 @@ class TestProduceAPI(unittest2.TestCase):
 
     test_messages = [
         protocol.Message(b'this is a test message', partition_key=b'asdf'),
+        protocol.Message(b'this is a test message', partition_key=b'asdf',
+                         timestamp=1497302164, protocol_version=1),
         protocol.Message(b'this is also a test message', partition_key=b'test_key'),
         protocol.Message(b"this doesn't have a partition key"),
     ]
@@ -169,17 +171,47 @@ class TestProduceAPI(unittest2.TestCase):
             )
         )
 
+    def test_request_message_timestamp(self):
+        message = self.test_messages[1]
+        req = protocol.ProduceRequest()
+        req.add_message(message, b'test', 0)
+        msg = req.get_bytes()
+        self.assertEqual(
+            msg,
+            bytearray(
+                b'\x00\x00\x00i\x00\x00\x00\x00\x00\x00\x00\x00\x00\x07pykafka'  # header
+                b'\x00\x01'  # required acks
+                b"\x00\x00\'\x10"  # timeout
+                b"\x00\x00\x00\x01"  # len(topics)
+                    b"\x00\x04"  # len(topic name)
+                        b"test"  # topic name
+                    b"\x00\x00\x00\x01"  # len(partitions)
+                        b"\x00\x00\x00\x00"  # partition
+                        b"\x00\x00\x00<"  # message set size
+                            b"\xff\xff\xff\xff\xff\xff\xff\xff"  # offset
+                            b"\x00\x00\x000"  # message size
+                                b"Z\x92\x80\t"  # crc
+                                b"\x01"  # magic byte (protocol version)
+                                b"\x00"  # attributes
+                                b"\x00\x00\x00\x00Y?\x04\x94"  # timestamp
+                                b"\x00\x00\x00\x04"  # len(key)
+                                    b"asdf"  # key
+                                b"\x00\x00\x00\x16"  # len(value)
+                                    b"this is a test message"  # value
+            )
+        )
+
     def test_gzip_compression(self):
         req = protocol.ProduceRequest(compression_type=CompressionType.GZIP)
         [req.add_message(m, b'test_gzip', 0) for m in self.test_messages]
         msg = req.get_bytes()
-        self.assertEqual(len(msg), 207)  # this isn't a good test
+        self.assertEqual(len(msg), 230)  # this isn't a good test
 
     def test_snappy_compression(self):
         req = protocol.ProduceRequest(compression_type=CompressionType.SNAPPY)
         [req.add_message(m, b'test_snappy', 0) for m in self.test_messages]
         msg = req.get_bytes()
-        self.assertEqual(len(msg), 212)  # this isn't a good test
+        self.assertEqual(len(msg), 240)  # this isn't a good test
 
     def test_partition_error(self):
         # Response has a UnknownTopicOrPartition error for test/0
@@ -226,6 +258,8 @@ class TestFetchAPI(unittest2.TestCase):
             'partition_id': 0,
             'produce_attempt': 0,
             'delivery_report_q': None,
+            'timestamp': 1497393304998,
+            'protocol_version': 1,
             'partition': None
         }, {
             'partition_key': b'test_key',
@@ -235,6 +269,8 @@ class TestFetchAPI(unittest2.TestCase):
             'partition_id': 0,
             'produce_attempt': 0,
             'delivery_report_q': None,
+            'timestamp': 1497393305005,
+            'protocol_version': 1,
             'partition': None
         }, {
             'partition_key': None,
@@ -244,6 +280,30 @@ class TestFetchAPI(unittest2.TestCase):
             'partition_id': 0,
             'produce_attempt': 0,
             'delivery_report_q': None,
+            'timestamp': 1497393305013,
+            'protocol_version': 1,
+            'partition': None
+        }, {
+            'partition_key': b"test_key",
+            'compression_type': 0,
+            'value': b"this has a partition key and a timestamp",
+            'offset': 3,
+            'partition_id': 0,
+            'produce_attempt': 0,
+            'delivery_report_q': None,
+            'timestamp': 1497302164,
+            'protocol_version': 1,
+            'partition': None
+        }, {
+            'partition_key': None,
+            'compression_type': 0,
+            'value': b"this has a timestamp",
+            'offset': 4,
+            'partition_id': 0,
+            'produce_attempt': 0,
+            'delivery_report_q': None,
+            'timestamp': 1497302164,
+            'protocol_version': 1,
             'partition': None
         }]
 
@@ -331,53 +391,27 @@ class TestFetchAPI(unittest2.TestCase):
 
     def test_gzip_decompression(self):
         msg = b''.join([
-            b'\x00\x00\x00\x01'  # len(topics)
-            b'\x00\t'  # len(topic name)
-                b'test_gzip'  # topic name
-            b'\x00\x00\x00\x01'  # len(partitions)
-                b'\x00\x00\x00\x00'  # partition
-                    b'\x00\x00'  # error code
-                    b'\x00\x00\x00\x00\x00\x00\x00\x03'  # highwater mark offset
-                    b'\x00\x00\x00\x9b'  # message set size
-                        b'\x00\x00\x00\x00\x00\x00\x00\x02'  # offset
-                        b'\x00\x00\x00\x8f'  # message size
-                            b'\xbb\xe7\x1f\xb8'  # crc
-                            b'\x00'  # magic byte
-                            b'\x01'  # attributes
-                            b'\xff\xff\xff\xff'  # len(key)
-                            b'\x00\x00\x00\x81'  # len(value)
-                                b'\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x00c`\x80\x03\r\xbe.I\x7f0\x8b%\xb18%\rH\x8b\x95dd\x16+\x00Q\xa2BIjq\x89Bnjqqbz*T=#\x10\x1b\xb2\xf3\xcb\xf4\x81y\x1c \x15\xf1\xd9\xa9\x95@\xb64\\_Nq>v\xcdL@\xac\x7f\xb5(\xd9\x98\x81\xe1?\x10\x00y\x8a`M)\xf9\xa9\xc5y\xea%\n\x19\x89e\xa9@\x9d\x05\x89E%\x99%\x99\xf9y\n@\x93\x01N1\x9f[\xac\x00\x00\x00'  # value
-        ])
-        response = protocol.FetchResponse(msg)
+b'\x00\x00\x00\x00\x00\x00\x00\x01\x00\x0btest_gzip_5\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x02\x17\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00Z\xb1Z\xf4\xc3\x01\x01\x00\x00\x01\\\xa3\x98\x95\xa6\xff\xff\xff\xff\x00\x00\x00D\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x00c`\x80\x03\x03\x97?.{\x19\x81\x0c\xc6\x98\xc53\xa6.\x032X\x12\x8bS\xd2\x80\xb4XIFf\xb1\x02\x10%*\x94\xa4\x16\x97(\xe4\xa6\x16\x17\'\xa6\xa7\x02\x00N\xddm\x92<\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00`\xcdX\t\xed\x01\x01\x00\x00\x01\\\xa3\x98\x95\xad\xff\xff\xff\xff\x00\x00\x00J\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x00c`\x80\x03\xcb%\xf2\x01\x99\x8c@\x06c\xcc\xe2\x19S\xd7\x02\x19\x1c%\xa9\xc5%\xf1\xd9\xa9\x95@\xb6tIFf\xb1\x02\x10%\xe6\x14\xe7+$*\x80\xa4\x14rS\x8b\x8b\x13\xd3S\x01\xfe<~BE\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00b\xba\xb0lN\x01\x01\x00\x00\x01\\\xa3\x98\x95\xb5\xff\xff\xff\xff\x00\x00\x00L\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x00c`\x80\x03s\xfb\xad2\x07\x19\x81\x0c\xc6\x98\xc53\xa6n\xfd\x0f\x04@\x8ebIFf\xb1BJ~jq\x9ez\x89BFbY\xaaB\xa2BAbQIfIf~\x9eBvj%\x00\xc8f?\xe3C\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00l\x9f\xd7)\xa0\x01\x01\x00\x00\x00\x00Y?\x04\x94\xff\xff\xff\xff\x00\x00\x00V\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x00c`\x80\x037\x86wK\x8f0\x82\x99\x91\xf6,S\x80\x14GIjqI|vj%\x90\xadQ\x92\x91Y\xac\x90\x91X\xac\x90\xa8P\x90XT\x92Y\x92\x99\x9f\xa7\x00\x94SH\xccK\x01\x8a\x95d\xe6\x02\x15\'\xe6\x16\x00\x00\xac\xc0O.R\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00S\xd8"\xff7\x01\x01\x00\x00\x00\x00Y?\x04\x94\xff\xff\xff\xff\x00\x00\x00=\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x00c`\x80\x03\xad\x0f\xae\x97^2\x82\x99\x91\xf6,S\xfe\x03\x01\x90)R\x92\x91Y\xac\x90\x91X\xac\x90\xa8P\x92\x99\x9bZ\\\x92\x98[\x00\x00\x83\x0f\xe5\xc16\x00\x00\x00\x00\x00\x00\x00'
+            ])
+        response = protocol.FetchResponse.get_subclass("0.10.1.0")(msg)
         for i in range(len(self.expected_data)):
             self.assertDictEqual(
-                self.msg_to_dict(response.topics[b'test_gzip'][0].messages[i]),
+                self.msg_to_dict(response.topics[b'test_gzip_5'][0].messages[i]),
                 self.expected_data[i])
 
     def test_snappy_decompression(self):
         msg = b''.join([
-            b'\x00\x00\x00\x01'  # len(topics)
-            b'\x00\x0b'  # len(topic name)
-                b'test_snappy'  # topic name
-            b'\x00\x00\x00\x01'  # len(partitions)
-                b'\x00\x00\x00\x00'  # partition
-                    b'\x00\x00'  # error code
-                    b'\x00\x00\x00\x00\x00\x00\x00\x03'  # highwater mark offset
-                    b'\x00\x00\x00\xb5'  # message set size
-                        b'\x00\x00\x00\x00\x00\x00\x00\x02'  # offset
-                        b'\x00\x00\x00\xa9'  # message size
-                            b'\xc1\xf2\xa3\xe1'  # crc
-                            b'\x00'  # magic bytes
-                            b'\x02'  # attributes
-                            b'\xff\xff\xff\xff'  # len(key)
-                            b'\x00\x00\x00\x9b'  # len(value)
-                                b'\x82SNAPPY\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x87\xac\x01\x00\x00\x19\x01\x10(\x0e\x8a\x19O\x05\x0fx\x04asdf\x00\x00\x00\x16this is a test message\x05$(\x00\x00\x01\x00\x00\x001\x07\x0f\x1c\x8e\x05\x10\x00\x08\x01"\x1c_key\x00\x00\x00\x1b\x158\x08lsoV=\x00H\x02\x00\x00\x00/\xd5rc3\x00\x00\xff\xff\xff\xff\x00\x00\x00!\x055ldoesn\'t have a partition key'  # value
+b"\x00\x00\x00\x00\x00\x00\x00\x01\x00\x0btest_snappy\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x02=\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00a\xaa\x92\x19\xe2\x01\x02\x00\x00\x01\\\xa3\xa5\xab/\xff\xff\xff\xff\x00\x00\x00K\x82SNAPPY\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x007<\x00\x00\x19\x01\xc00\x86\xf55\x85\x01\x00\x00\x00\x01\\\xa3\xa5\xab/\x00\x00\x00\x04asdf\x00\x00\x00\x16this is a test message\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00jI\xfc\xe7\xf6\x01\x02\x00\x00\x01\\\xa3\xa5\xab\xa1\xff\xff\xff\xff\x00\x00\x00T\x82SNAPPY\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00@E\x00\x00\x19\x01\xe49\xd4\r\xf8v\x01\x00\x00\x00\x01\\\xa3\xa5\xab\xa1\x00\x00\x00\x08test_key\x00\x00\x00\x1bthis is also a test message\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00h\x80\t0\x95\x01\x02\x00\x00\x01\\\xa3\xa5\xab\xe1\xff\xff\xff\xff\x00\x00\x00R\x82SNAPPY\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00>C\x00\x00\x19\x01\xdc72\x98C\xe8\x01\x00\x00\x00\x01\\\xa3\xa5\xab\xe1\xff\xff\xff\xff\x00\x00\x00!this doesn't have a partition key\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00uJ\xab\xd0\xdf\x01\x02\x00\x00\x00\x00Y?\x04\x94\xff\xff\xff\xff\x00\x00\x00_\x82SNAPPY\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00KR\x00\x00\x19\x01\x14F\x00\xee\xa5\xc4\x01\x05\x10\xecY?\x04\x94\x00\x00\x00\x08test_key\x00\x00\x00(this has a partition key and a timestamp\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00Y\xfb!\x15\xce\x01\x02\x00\x00\x00\x00Y?\x04\x94\xff\xff\xff\xff\x00\x00\x00C\x82SNAPPY\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00/6\x00\x00\x19\x01\x14*\xf0E\xd2\xe9\x01\x05\x10|Y?\x04\x94\xff\xff\xff\xff\x00\x00\x00\x14this has a timestamp\x00\x00\x00\x00"
         ])
-        response = protocol.FetchResponse(msg)
+        response = protocol.FetchResponse.get_subclass("0.10.1.0")(msg)
         for i in range(len(self.expected_data)):
-            self.assertDictEqual(
-                self.msg_to_dict(response.topics[b'test_snappy'][0].messages[i]),
-                self.expected_data[i])
+            returned = self.msg_to_dict(response.topics[b'test_snappy'][0].messages[i])
+            expected = self.expected_data[i]
+            # ignore timestamps if they were auto-set
+            if i <= 2:
+                returned.pop("timestamp")
+                expected.pop("timestamp")
+            self.assertDictEqual(returned, expected)
 
 
 class TestOffsetAPI(unittest2.TestCase):

@@ -27,17 +27,23 @@ from uuid import uuid4
 import weakref
 
 from kazoo.client import KazooClient
-from kazoo.handlers.gevent import SequentialGeventHandler
 from kazoo.exceptions import NoNodeException, NodeExistsError
 from kazoo.recipe.watchers import ChildrenWatch
+try:
+    from kazoo.handlers.gevent import SequentialGeventHandler
+except ImportError:
+    SequentialGeventHandler = None
 from six import reraise
 
 from .common import OffsetType
 from .exceptions import KafkaException, PartitionOwnedError, ConsumerStoppedException
-from .handlers import GEventHandler
 from .simpleconsumer import SimpleConsumer
 from .utils.compat import range, get_bytes, itervalues, iteritems, get_string
 from .utils.error_handlers import valid_int
+try:
+    from .handlers import GEventHandler
+except ImportError:
+    GEventHandler = None
 try:
     from . import rdkafka
 except ImportError:
@@ -189,7 +195,7 @@ class BalancedConsumer(object):
         :type use_rdkafka: bool
         :param compacted_topic: Set to read from a compacted topic. Forces
             consumer to use less stringent message ordering logic because compacted
-            topics do not provide offsets in stict incrementing order.
+            topics do not provide offsets in strict incrementing order.
         :type compacted_topic: bool
         """
         self._cluster = cluster
@@ -225,7 +231,7 @@ class BalancedConsumer(object):
 
         if not rdkafka and use_rdkafka:
             raise ImportError("use_rdkafka requires rdkafka to be installed")
-        if isinstance(self._cluster.handler, GEventHandler) and use_rdkafka:
+        if GEventHandler and isinstance(self._cluster.handler, GEventHandler) and use_rdkafka:
             raise ImportError("use_rdkafka cannot be used with gevent")
         self._use_rdkafka = rdkafka and use_rdkafka
 
@@ -344,7 +350,7 @@ class BalancedConsumer(object):
         :type timeout: int
         """
         kazoo_kwargs = {'timeout': timeout / 1000}
-        if isinstance(self._cluster.handler, GEventHandler):
+        if GEventHandler and isinstance(self._cluster.handler, GEventHandler):
             kazoo_kwargs['handler'] = SequentialGeventHandler()
         self._zookeeper = KazooClient(zookeeper_connect, **kazoo_kwargs)
         self._zookeeper.start()

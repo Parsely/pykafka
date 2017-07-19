@@ -171,7 +171,7 @@ class BrokerConnection(object):
         except (self._handler.SockErr, self._handler.GaiError) as e:
             log.info("Failed to connect to %s:%s", self.host, self.port)
             log.info(e)
-            raise SocketDisconnectedError
+            raise SocketDisconnectedError("<broker {}:{}>".format(self.host, self.port))
         log.debug("Successfully connected to %s:%s", self.host, self.port)
 
     def disconnect(self):
@@ -194,13 +194,13 @@ class BrokerConnection(object):
         """Send a request over the socket connection"""
         bytes_ = request.get_bytes()
         if not self._socket:
-            raise SocketDisconnectedError
+            raise SocketDisconnectedError("<broker {}:{}>".format(self.host, self.port))
         try:
             self._socket.sendall(bytes_)
         except self._handler.SockErr as e:
             log.error("Failed to send data, error: %s" % repr(e))
             self.disconnect()
-            raise SocketDisconnectedError
+            raise SocketDisconnectedError("<broker {}:{}>".format(self.host, self.port))
 
     def response(self):
         """Wait for a response from the broker"""
@@ -214,13 +214,13 @@ class BrokerConnection(object):
             if r is None or len(r) == 0:
                 # Happens when broker has shut down
                 self.disconnect()
-                raise SocketDisconnectedError
+                raise SocketDisconnectedError("<broker {}:{}>".format(self.host, self.port))
             size += r
         size = struct.unpack('!i', size)[0]
         try:
             recvall_into(self._socket, self._buff, size)
         except SocketDisconnectedError:
             self.disconnect()
-            raise
+            raise SocketDisconnectedError("<broker {}:{}>".format(self.host, self.port))
         # Drop CorrelationId => int32
         return buffer(self._buff[4:4 + size])

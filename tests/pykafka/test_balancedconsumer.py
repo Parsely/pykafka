@@ -9,7 +9,10 @@ import unittest2
 from uuid import uuid4
 
 from kazoo.client import KazooClient
-from kazoo.handlers.gevent import SequentialGeventHandler
+try:
+    import gevent
+except ImportError:
+    gevent = None
 
 from pykafka import KafkaClient
 from pykafka.balancedconsumer import BalancedConsumer, OffsetType
@@ -161,6 +164,9 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
     def get_zk(self):
         if not self.USE_GEVENT:
             return KazooClient(self.kafka.zookeeper)
+
+        from kazoo.handlers.gevent import SequentialGeventHandler
+
         return KazooClient(self.kafka.zookeeper, handler=SequentialGeventHandler())
 
     def get_balanced_consumer(self, consumer_group, **kwargs):
@@ -472,7 +478,7 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
 
 
 @patch_subclass(BalancedConsumerIntegrationTests,
-                platform.python_implementation() == "PyPy")
+                platform.python_implementation() == "PyPy" or gevent is None)
 class BalancedConsumerGEventIntegrationTests(unittest2.TestCase):
     USE_GEVENT = True
 
@@ -484,7 +490,7 @@ class ManagedBalancedConsumerIntegrationTests(unittest2.TestCase):
 
 @patch_subclass(
     BalancedConsumerIntegrationTests,
-    platform.python_implementation() == "PyPy" or kafka_version < version_09)
+    platform.python_implementation() == "PyPy" or kafka_version < version_09 or gevent is None)
 class ManagedBalancedConsumerGEventIntegrationTests(unittest2.TestCase):
     MANAGED_CONSUMER = True
     USE_GEVENT = True

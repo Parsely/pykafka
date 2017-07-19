@@ -19,11 +19,14 @@ limitations under the License.
 
 __all__ = ["KafkaClient"]
 
-from .handlers import ThreadingHandler, GEventHandler
 import logging
 
 from .cluster import Cluster
 from .handlers import ThreadingHandler
+try:
+    from .handlers import GEventHandler
+except ImportError:
+    GEventHandler = None
 
 
 log = logging.getLogger(__name__)
@@ -124,6 +127,8 @@ class KafkaClient(object):
         self._source_address = source_address
         self._socket_timeout_ms = socket_timeout_ms
         self._offsets_channel_socket_timeout_ms = offsets_channel_socket_timeout_ms
+        if use_greenlets and not GEventHandler:
+            raise ImportError('use_greenlets can only be used when gevent is installed.')
         self._handler = GEventHandler() if use_greenlets else ThreadingHandler()
         self.cluster = Cluster(
             hosts,

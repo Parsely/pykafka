@@ -563,6 +563,14 @@ Producer_delivery_report_callback(rd_kafka_t *rk,
             logger, "exception", "s", "Failure in delivery callback");
         Py_XDECREF(res);
         PyErr_Clear();
+    } else {
+        // Set timestamp to the one created by librdkafka
+        rd_kafka_timestamp_type_t timestamp_type;
+        int64_t timestamp = rd_kafka_message_timestamp(rkmessage, &timestamp_type);
+        if (timestamp_type != RD_KAFKA_TIMESTAMP_NOT_AVAILABLE) {
+            PyObject* timestamp_o = PyLong_FromUnsignedLongLong(timestamp);
+            PyObject_SetAttrString(message, "timestamp", timestamp_o);
+        }
     }
 
     Py_DECREF(message);  /* We INCREF'd this in Producer_produce() */
@@ -949,6 +957,7 @@ Consumer_consume(RdkHandle *self, PyObject *args)
     PyObject *empty_args = NULL;
     PyObject *kwargs = NULL;
     rd_kafka_message_t *rkmessage;
+    int protocol_version = 0;
 
     if (RdkHandle_safe_lock(self, /* check_running= */ 1)) return NULL;
     Py_BEGIN_ALLOW_THREADS  /* avoid callbacks deadlocking */
@@ -966,17 +975,28 @@ Consumer_consume(RdkHandle *self, PyObject *args)
 
     if (rkmessage->err == RD_KAFKA_RESP_ERR_NO_ERROR) {
         /* Build a pykafka.protocol.Message */
+        rd_kafka_timestamp_type_t timestamp_type;
+        int64_t timestamp = rd_kafka_message_timestamp(rkmessage, &timestamp_type);
+        if (timestamp_type == RD_KAFKA_TIMESTAMP_NOT_AVAILABLE) {
+            timestamp = 0;
+        } else {
+            // infer protocol from presence of timestamp. Fragile, but protocol
+            // not transmitted by librdkafka
+            protocol_version = 1;
+        }
 #if PY_MAJOR_VERSION >= 3
-        const char *format = "{s:y#,s:y#,s:l,s:L}";
+        const char *format = "{s:y#,s:y#,s:l,s:L,s:i,s:L}";
 #else
-        const char *format = "{s:s#,s:s#,s:l,s:L}";
+        const char *format = "{s:s#,s:s#,s:l,s:L,s:i,s:L}";
 #endif
         kwargs = Py_BuildValue(
             format,
             "value", rkmessage->payload, rkmessage->len,
             "partition_key", rkmessage->key, rkmessage->key_len,
             "partition_id", (long)rkmessage->partition,
-            "offset", (PY_LONG_LONG)rkmessage->offset);
+            "offset", (PY_LONG_LONG)rkmessage->offset,
+            "protocol_version", protocol_version,
+            "timestamp", (PY_LONG_LONG)timestamp);
         if (! kwargs) goto cleanup;
         empty_args = PyTuple_New(0);
         if (! empty_args) goto cleanup;
