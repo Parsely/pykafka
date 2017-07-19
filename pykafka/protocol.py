@@ -60,7 +60,6 @@ import struct
 from collections import defaultdict, namedtuple
 from zlib import crc32
 from datetime import datetime
-import types
 from six import integer_types
 from pkg_resources import parse_version
 
