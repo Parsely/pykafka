@@ -116,6 +116,36 @@ def desc_topic(client, args):
     ))
 
 
+def print_consumer_groups(client, args):
+    """Get consumer groups for a Topic.
+
+        :param client: KafkaClient connected to the cluster.
+        :type client:  :class:`pykafka.KafkaClient`
+        :param topic:  Name of the topic.
+        :type topic:  :class:`str`
+    """
+    if args.topic not in client.topics:
+        raise ValueError('Topic {} does not exist.'.format(args.topic))
+    consumer_groups = {}
+    brokers = client.brokers
+    for broker_id, broker in brokers.iteritems():
+        groups = broker.list_groups().groups.keys()
+        groups_metadata = broker.describe_groups(group_ids=groups).groups
+        for group_id, describe_group_response in groups_metadata.iteritems():
+            members = describe_group_response.members
+            for member_id, member in members.iteritems():
+                topics = member.member_metadata.topic_names
+                if args.topic in topics:
+                    consumer_groups[group_id] = describe_group_response
+
+    print('Topic: {}'.format(args.topic))
+    print(tabulate.tabulate(
+        [(group_id, x.state, x.protocol, x.protocol_type)
+         for group_id, x in consumer_groups.iteritems()],
+        headers=['GroupId', 'State', 'Protocol', 'ProtocolType']
+    ))
+
+
 def print_consumer_lag(client, args):
     """Print lag for a topic/consumer group.
 
@@ -306,6 +336,14 @@ def _get_arg_parser():
         help='Print detailed info for a topic.'
     )
     parser.set_defaults(func=desc_topic)
+    _add_topic(parser)
+
+    # Get consumer groups for a topic
+    parser = subparsers.add_parser(
+        'print_consumer_groups',
+        help='Get consumer groups for a topic'
+    )
+    parser.set_defaults(func=print_consumer_groups)
     _add_topic(parser)
 
     # Print Consumer Lag
