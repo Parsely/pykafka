@@ -36,7 +36,7 @@ def fetch_offsets(client, topic, offset):
         return topic.latest_available_offsets()
     else:
         offset = dt.datetime.strptime(offset, "%Y-%m-%dT%H:%M:%S")
-        offset = int(calendar.timegm(offset.utctimetuple())*1000)
+        offset = int(calendar.timegm(offset.utctimetuple()) * 1000)
         return topic.fetch_offset_limits(offset)
 
 
@@ -285,6 +285,7 @@ def _add_limit(parser):
                              '(default: %(default)s)',
                         type=int, default=10)
 
+
 def _add_offset(parser):
     """Add offset to arg parser."""
     parser.add_argument('offset',
@@ -292,6 +293,7 @@ def _add_offset(parser):
                         type=str,
                         help='Offset to fetch. Can be EARLIEST, LATEST, or a '
                              'datetime in the format YYYY-MM-DDTHH:MM:SS.')
+
 
 def _add_outfile(parser):
     """ Add outfile option to arg parser."""
