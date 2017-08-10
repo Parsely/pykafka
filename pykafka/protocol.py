@@ -1353,10 +1353,6 @@ GroupMembershipProtocol = namedtuple(
 )
 
 
-ConsumerGroupProtocol = GroupMembershipProtocol(b"consumer", b"range",
-                                                ConsumerGroupProtocolMetadata())
-
-
 class JoinGroupRequest(Request):
     """A group join request
 
@@ -1371,9 +1367,10 @@ class JoinGroupRequest(Request):
             ProtocolName => string
             ProtocolMetadata => bytes
     """
-    def __init__(self, group_id, member_id, session_timeout=30000):
+    def __init__(self, group_id, member_id, topic_name, session_timeout=30000):
         """Create a new group join request"""
-        self.protocol = ConsumerGroupProtocol
+        metadata = ConsumerGroupProtocolMetadata(topic_names=[topic_name])
+        self.protocol = GroupMembershipProtocol(b"consumer", b"range", metadata)
         self.group_id = group_id
         self.session_timeout = session_timeout
         self.member_id = member_id
