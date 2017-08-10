@@ -416,7 +416,7 @@ class Broker(object):
     #  Group Membership API  #
     ##########################
 
-    def join_group(self, connection_id, consumer_group, member_id):
+    def join_group(self, connection_id, consumer_group, member_id, topic_name):
         """Send a JoinGroupRequest
 
         :param connection_id: The unique identifier of the connection on which to make
@@ -426,11 +426,14 @@ class Broker(object):
         :type consumer_group: bytes
         :param member_id: The ID of the consumer joining the group
         :type member_id: bytes
+        :param topic_name: The name of the topic to which to connect, used in protocol
+            metadata
+        :type topic_name: str
         """
         handler = self._get_unique_req_handler(connection_id)
         if handler is None:
             raise SocketDisconnectedError
-        future = handler.request(JoinGroupRequest(consumer_group, member_id))
+        future = handler.request(JoinGroupRequest(consumer_group, member_id, topic_name))
         self._handler.sleep()
         return future.get(JoinGroupResponse)
 

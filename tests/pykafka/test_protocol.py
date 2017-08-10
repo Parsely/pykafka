@@ -590,7 +590,7 @@ class TestGroupMembershipAPI(unittest2.TestCase):
         )
 
     def test_join_group_request(self):
-        req = protocol.JoinGroupRequest(b'dummygroup', member_id=b'testmember')
+        req = protocol.JoinGroupRequest(b'dummygroup', b'testmember', b'abcdefghij')
         msg = req.get_bytes()
         self.assertEqual(
             msg,
@@ -607,7 +607,7 @@ class TestGroupMembershipAPI(unittest2.TestCase):
                     b'\x00\x05'  # len(protocol name)
                         b'range'  # protocol name
                     b'\x00\x00\x00"'  # len(protocol metadata)
-                        b'\x00\x00\x00\x00\x00\x01\x00\ndummytopic\x00\x00\x00\x0ctestuserdata'  # protocol metadata
+                        b'\x00\x00\x00\x00\x00\x01\x00\nabcdefghij\x00\x00\x00\x0ctestuserdata'  # protocol metadata
             )
         )
 
