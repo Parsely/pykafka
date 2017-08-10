@@ -116,8 +116,8 @@ def desc_topic(client, args):
     ))
 
 
-def print_consumer_groups(client, args):
-    """Get consumer groups for a Topic.
+def print_managed_consumer_groups(client, args):
+    """Get Kafka-managed consumer groups for a topic.
 
         :param client: KafkaClient connected to the cluster.
         :type client:  :class:`pykafka.KafkaClient`
@@ -345,7 +345,7 @@ def _get_arg_parser():
         'print_consumer_groups',
         help='Get consumer groups for a topic'
     )
-    parser.set_defaults(func=print_consumer_groups)
+    parser.set_defaults(func=print_managed_consumer_groups)
     _add_topic(parser)
 
     # Print Consumer Lag
