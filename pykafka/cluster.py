@@ -220,7 +220,15 @@ class Cluster(object):
 
     @property
     def topics(self):
-        """The dict of known topics for this cluster"""
+        """The dict of known topics for this cluster
+
+        NOTE: This dict is an instance of :class:`pykafka.cluster.TopicDict`, which uses
+        weak references and lazy evaluation to avoid instantiating unnecessary
+        `pykafka.Topic` objects. Thus, the values displayed when printing `client.topics`
+        on a freshly created :class:`pykafka.KafkaClient` will be `None`. This simply
+        means that the topic instances have not yet been created, but they will be
+        when `__getitem__` is called on the dictionary.
+        """
         return self._topics
 
     @property
