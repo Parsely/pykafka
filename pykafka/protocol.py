@@ -349,6 +349,8 @@ class MessageSet(Serializable):
             compressed = compression.encode_gzip(buffer(uncompressed))
         elif self.compression_type == CompressionType.SNAPPY:
             compressed = compression.encode_snappy(buffer(uncompressed))
+        elif self.compression_type == CompressionType.LZ4:
+            compressed = compression.encode_lz4(buffer(uncompressed))
         else:
             raise TypeError("Unknown compression: %s" % self.compression_type)
         protocol_version = max((m.protocol_version for m in self._messages))
@@ -820,6 +822,10 @@ class FetchResponse(Response):
                                                     partition_id=partition_id)
             elif message.compression_type == CompressionType.SNAPPY:
                 decompressed = compression.decode_snappy(message.value)
+                messages = self._unpack_message_set(decompressed,
+                                                    partition_id=partition_id)
+            elif message.compression_type == CompressionType.LZ4:
+                decompressed = compression.decode_lz4(message.value)
                 messages = self._unpack_message_set(decompressed,
                                                     partition_id=partition_id)
             if messages[-1].offset < message.offset:

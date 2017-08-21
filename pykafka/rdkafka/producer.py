@@ -103,6 +103,7 @@ class RdKafkaProducer(Producer):
             CompressionType.NONE: "none",
             CompressionType.GZIP: "gzip",
             CompressionType.SNAPPY: "snappy",
+            CompressionType.LZ4: "lz4",
         }
 
         # For documentation purposes, all producer-relevant settings (all those

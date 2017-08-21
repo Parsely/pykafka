@@ -16,7 +16,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-__all__ = ["encode_gzip", "decode_gzip", "encode_snappy", "decode_snappy"]
+__all__ = ["encode_gzip", "decode_gzip", "encode_snappy", "decode_snappy", "encode_lz4", "decode_lz4", "encode_lz4_old_kafka","decode_lz4_old_kafka"]
 import gzip
 from io import BytesIO
 import logging
@@ -29,11 +29,32 @@ try:
 except ImportError:
     snappy = None
 
+try:
+    import lz4.frame as lz4
+except ImportError:
+    lz4 = None
+
+#try:
+#    import lz4f
+#except ImportError:
+#    lz4f = None
+
+try:
+    import xxhash
+except ImportError:
+    xxhash = None
+
 log = logging.getLogger(__name__)
 # constants used in snappy xerial encoding/decoding
 _XERIAL_V1_HEADER = (-126, b'S', b'N', b'A', b'P', b'P', b'Y', 0, 1, 1)
 _XERIAL_V1_FORMAT = 'bccccccBii'
 
+def has_lz4():
+    if lz4 is not None:
+        return True
+    if lz4f is not None:
+        return True
+    return False
 
 def encode_gzip(buff):
     """Encode a buffer using gzip"""
@@ -166,3 +187,79 @@ def _detect_xerial_stream(buff):
         header = struct.unpack('!' + _XERIAL_V1_FORMAT, bytes(buff)[:16])
         return header == _XERIAL_V1_HEADER
     return False
+
+def encode_lz4(buff):
+    frame = lz4.compress(buff, block_mode=1, content_size_header=True)
+    return frame
+
+def decode_lz4(buff):
+    try:
+        return lz4.decompress(buff)
+    except:
+        return lz4.decompress(decode_lz4_old_kafka(buff)) 
+
+"""
+if lz4:
+    encode_lz4 = lz4.compress # pylint: disable-msg=no-member
+else:
+    encode_lz4 = None
+
+if lz4:
+    decode_lz4 = lz4.decompress # pylint: disable-msg=no-member
+else:
+    decode_lz4 = None
+"""
+
+def encode_lz4_old_kafka(buff):
+    """Encode buff for 0.8/0.9 brokers -- requires an incorrect header checksum."""
+    assert xxhash is not None
+    data = encode_lz4(buff)
+    header_size = 7
+    flg = data[4]
+    if not isinstance(flg, int):
+        flg = ord(flg)
+
+    content_size_bit = ((flg >> 3) & 1)
+    if content_size_bit:
+        # Old kafka does not accept the content-size field
+        # so we need to discard it and reset the header flag
+        flg -= 8
+        data = bytearray(data)
+        data[4] = flg
+        data = bytes(data)
+        buff = data[header_size+8:]
+    else:
+        buff = data[header_size:]
+
+    # This is the incorrect hc
+    hc = xxhash.xxh32(data[0:header_size-1]).digest()[-2:-1]  # pylint: disable-msg=no-member
+
+    return b''.join([
+        data[0:header_size-1],
+        hc,
+        buff
+    ])
+
+
+def decode_lz4_old_kafka(buff):
+    assert xxhash is not None
+    # Kafka's LZ4 code has a bug in its header checksum implementation
+    header_size = 7
+    if isinstance(buff[4], int):
+        flg = buff[4]
+    else:
+        flg = ord(buff[4])
+    content_size_bit = ((flg >> 3) & 1)
+    if content_size_bit:
+        header_size += 8
+
+    # This should be the correct hc
+    hc = xxhash.xxh32(buff[4:header_size-1]).digest()[-2:-1]  # pylint: disable-msg=no-member
+
+    munged_buff = b''.join([
+        buff[0:header_size-1],
+        hc,
+        buff[header_size:]
+    ])
+    #return decode_lz4(munged_buff)
+    return munged_buff
