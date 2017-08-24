@@ -51,6 +51,11 @@ class NoMessagesConsumedError(KafkaException):
     pass
 
 
+class MessageSetDecodeFailure(KafkaException):
+    """Indicates a generic failure in the decoding of a MessageSet from the broker"""
+    pass
+
+
 class ProducerQueueFullError(KafkaException):
     """Indicates that one or more of the AsyncProducer's internal queues contain at least max_queued_messages messages"""
     pass
