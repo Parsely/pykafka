@@ -31,6 +31,7 @@ from .exceptions import (ERROR_CODES,
                          GroupCoordinatorNotAvailable,
                          NoBrokersAvailableError,
                          SocketDisconnectedError,
+                         LeaderNotFoundError,
                          LeaderNotAvailable)
 from .protocol import GroupCoordinatorRequest, GroupCoordinatorResponse
 from .topic import Topic
@@ -66,8 +67,8 @@ class TopicDict(dict):
                 meta = self._cluster()._get_metadata([key])
                 try:
                     topic = Topic(self._cluster(), meta.topics[key])
-                except LeaderNotAvailable:
-                    log.warning("LeaderNotAvailable encountered during Topic creation")
+                except LeaderNotFoundError:
+                    log.warning("LeaderNotFoundError encountered during Topic creation")
                     if i == self._cluster()._max_connection_retries - 1:
                         raise
                 else:
@@ -455,8 +456,8 @@ class Cluster(object):
             self._update_brokers(metadata.brokers)
             try:
                 self._topics._update_topics(metadata.topics)
-            except LeaderNotAvailable:
-                log.warning("LeaderNotAvailable encountered. This may be "
+            except LeaderNotFoundError:
+                log.warning("LeaderNotFoundError encountered. This may be "
                             "because one or more partitions have no available replicas.")
                 if i == self._max_connection_retries - 1:
                     raise
