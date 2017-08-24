@@ -27,7 +27,7 @@ from pykafka.protocol import Message
 from pykafka.test.utils import get_cluster, stop_cluster, retry
 from pykafka.common import CompressionType
 from pykafka.producer import OwnedBroker
-
+from tests.pykafka import patch_subclass
 
 kafka_version = os.environ.get('KAFKA_VERSION', '0.8.0')
 
@@ -353,6 +353,11 @@ class ProducerIntegrationTests(unittest2.TestCase):
                 msgs.append(msg)
             assert len(msgs) == 10
         retry(ensure_all_messages_consumed, retry_time=15)
+
+
+@patch_subclass(ProducerIntegrationTests, not RDKAFKA)
+class TestRdKafkaProducer(unittest2.TestCase):
+    USE_RDKAFKA = True
 
 
 @pytest.mark.skipif(platform.python_implementation() == "PyPy" or gevent is None,
