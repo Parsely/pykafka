@@ -9,7 +9,10 @@ import unittest2
 from uuid import uuid4
 
 from kazoo.client import KazooClient
-from kazoo.handlers.gevent import SequentialGeventHandler
+try:
+    import gevent
+except ImportError:
+    gevent = None
 
 from pykafka import KafkaClient
 from pykafka.balancedconsumer import BalancedConsumer, OffsetType
@@ -20,7 +23,8 @@ from pykafka.utils.compat import range, iterkeys, iteritems
 from tests.pykafka import patch_subclass
 
 
-kafka_version = pkg_resources.parse_version(os.environ.get('KAFKA_VERSION', '0.8'))
+kafka_version_string = os.environ.get('KAFKA_VERSION', '0.8')
+kafka_version = pkg_resources.parse_version(kafka_version_string)
 version_09 = pkg_resources.parse_version("0.9.0.0")
 
 
@@ -144,7 +148,9 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
         cls.topic_name = uuid4().hex.encode()
         cls.n_partitions = 3
         cls.kafka.create_topic(cls.topic_name, cls.n_partitions, 2)
-        cls.client = KafkaClient(cls.kafka.brokers, use_greenlets=cls.USE_GEVENT)
+        cls.client = KafkaClient(cls.kafka.brokers,
+                                 use_greenlets=cls.USE_GEVENT,
+                                 broker_version=kafka_version_string)
         cls.prod = cls.client.topics[cls.topic_name].get_producer(
             min_queued_messages=1
         )
@@ -158,6 +164,9 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
     def get_zk(self):
         if not self.USE_GEVENT:
             return KazooClient(self.kafka.zookeeper)
+
+        from kazoo.handlers.gevent import SequentialGeventHandler
+
         return KazooClient(self.kafka.zookeeper, handler=SequentialGeventHandler())
 
     def get_balanced_consumer(self, consumer_group, **kwargs):
@@ -469,7 +478,7 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
 
 
 @patch_subclass(BalancedConsumerIntegrationTests,
-                platform.python_implementation() == "PyPy")
+                platform.python_implementation() == "PyPy" or gevent is None)
 class BalancedConsumerGEventIntegrationTests(unittest2.TestCase):
     USE_GEVENT = True
 
@@ -481,7 +490,7 @@ class ManagedBalancedConsumerIntegrationTests(unittest2.TestCase):
 
 @patch_subclass(
     BalancedConsumerIntegrationTests,
-    platform.python_implementation() == "PyPy" or kafka_version < version_09)
+    platform.python_implementation() == "PyPy" or kafka_version < version_09 or gevent is None)
 class ManagedBalancedConsumerGEventIntegrationTests(unittest2.TestCase):
     MANAGED_CONSUMER = True
     USE_GEVENT = True

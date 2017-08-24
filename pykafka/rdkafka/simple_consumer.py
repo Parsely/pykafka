@@ -1,13 +1,15 @@
 from contextlib import contextmanager
 import logging
+from pkg_resources import parse_version
+import sys
 import time
 
 from pykafka.exceptions import RdKafkaStoppedException, ConsumerStoppedException
 from pykafka.simpleconsumer import SimpleConsumer, OffsetType
 from pykafka.utils.compat import get_bytes
+from pykafka.utils.error_handlers import valid_int
 from . import _rd_kafka
 from . import helpers
-
 
 log = logging.getLogger(__name__)
 
@@ -27,6 +29,9 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
 
     For an overview of how configuration keys are mapped to librdkafka's, see
     _mk_rdkafka_config_lists.
+
+    The `broker_version` argument on `KafkaClient` must be set correctly to use the
+    rdkafka consumer.
     """
     def __init__(self,
                  topic,
@@ -39,6 +44,7 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
                  auto_commit_interval_ms=60 * 1000,
                  queued_max_messages=10**5,  # NB differs from SimpleConsumer
                  fetch_min_bytes=1,
+                 fetch_error_backoff_ms=500,
                  fetch_wait_max_ms=100,
                  offsets_channel_backoff_ms=1000,
                  offsets_commit_max_retries=5,
@@ -54,6 +60,8 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
         self._rdk_consumer = None
         self._poller_thread = None
         self._stop_poller_thread = cluster.handler.Event()
+        self._broker_version = cluster._broker_version
+        self._fetch_error_backoff_ms = valid_int(fetch_error_backoff_ms)
         # super() must come last for the case where auto_start=True
         super(RdKafkaSimpleConsumer, self).__init__(**callargs)
 
@@ -86,6 +94,8 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
                     rdk_handle.poll(timeout_ms=1000)
                 except RdKafkaStoppedException:
                     break
+                except:
+                    self._worker_exception = sys.exc_info()
             log.debug("Exiting RdKafkaSimpleConsumer poller thread cleanly.")
 
         self._stop_poller_thread.clear()
@@ -110,6 +120,7 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
         if msg is not None:
             # set offset in OwnedPartition so the autocommit_worker can find it
             self._partitions_by_id[msg.partition_id].set_offset(msg.offset)
+        self._raise_worker_exceptions()
         return msg
 
     def _consume(self, timeout_ms):
@@ -182,7 +193,7 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
         # marked 'C' or '*') that appear in librdkafka/CONFIGURATION.md should
         # be listed below, in either `conf` or `topic_conf`, even if we do not
         # set them and they are commented out.
-
+        ver10 = parse_version(self._broker_version) >= parse_version("0.10.0")
         conf = {  # destination: rd_kafka_conf_set
             "client.id": "pykafka.rdkafka",
             # Handled via rd_kafka_brokers_add instead:
@@ -237,7 +248,8 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
             "fetch.wait.max.ms": self._fetch_wait_max_ms,
             "fetch.message.max.bytes": self._fetch_message_max_bytes,
             "fetch.min.bytes": self._fetch_min_bytes,
-            ##"fetch.error.backoff.ms"  # currently no real equivalent for it
+            "fetch.error.backoff.ms": self._fetch_error_backoff_ms,
+            "api.version.request": ver10,
 
             # We're outsourcing message fetching, but not offset management or
             # consumer rebalancing to librdkafka.  Thus, consumer-group id
@@ -245,6 +257,9 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
             # instances to the kafka cluster:
             ##"group.id"
             }
+        # broker.version.fallback is incompatible with >-0.10
+        if not ver10:
+            conf["broker.version.fallback"] = self._broker_version
         conf.update(helpers.rdk_ssl_config(self._cluster))
 
         map_offset_types = {

@@ -4,18 +4,40 @@ cache:
   directories:
     - $HOME/.cache/pip
     - $HOME/.ccache
-python:
-    - "2.7"
-    - "3.4"
-    - "3.5"
-    - "pypy"
+matrix:
+  include:
+    - env: TOX_ENV=py27 KAFKA_VERSION=0.8.2.2
+      python: 2.7
+    - env: TOX_ENV=py27 KAFKA_VERSION=0.10.0.1
+      python: 2.7
+    - env: TOX_ENV=py34 KAFKA_VERSION=0.8.2.2
+      python: 3.4
+    - env: TOX_ENV=py34 KAFKA_VERSION=0.10.0.1
+      python: 3.4
+    - env: TOX_ENV=py35 KAFKA_VERSION=0.8.2.2
+      python: 3.5
+    - env: TOX_ENV=py35 KAFKA_VERSION=0.10.0.1
+      python: 3.5
+    - env: TOX_ENV=py36 KAFKA_VERSION=0.8.2.2
+      python: 3.6
+    - env: TOX_ENV=py36 KAFKA_VERSION=0.10.0.1
+      python: 3.6
+    - env: TOX_ENV=pypy KAFKA_VERSION=0.8.2.2
+      python: pypy
+    - env: TOX_ENV=pypy KAFKA_VERSION=0.10.0.1
+      python: pypy
+    - env: TOX_ENV=py27-gevent KAFKA_VERSION=0.8.2.2
+      python: 2.7
+    - env: TOX_ENV=py27-gevent KAFKA_VERSION=0.10.0.1
+      python: 2.7
+    - env: TOX_ENV=py36-gevent KAFKA_VERSION=0.8.2.2
+      python: 3.6
+    - env: TOX_ENV=py36-gevent KAFKA_VERSION=0.10.0.1
+      python: 3.6
 env:
   global:
       - PATH="/usr/lib/ccache:$PATH"
       - KAFKA_BIN="$HOME/kafka-bin"
-  matrix:
-      - KAFKA_VERSION=0.8.2.2
-      - KAFKA_VERSION=0.9.0.1
 
 addons:
   apt:
@@ -39,16 +61,16 @@ install:
           else
             rm -rf "$PYENV_ROOT" && git clone --depth 1 https://github.com/yyuu/pyenv.git "$PYENV_ROOT"
           fi
-          export PYPY_VERSION="4.0.1"
+          export PYPY_VERSION="5.6.0"
           "$PYENV_ROOT/bin/pyenv" install --skip-existing "pypy-$PYPY_VERSION"
           virtualenv --python="$PYENV_ROOT/versions/pypy-$PYPY_VERSION/bin/python" "$HOME/virtualenvs/pypy-$PYPY_VERSION"
           source "$HOME/virtualenvs/pypy-$PYPY_VERSION/bin/activate"
         fi
     - pip install -U pip setuptools
-    - pip install codecov kazoo tox testinstances tox-travis "gevent==1.1"
-    - wget https://github.com/edenhill/librdkafka/archive/0.9.0.99.tar.gz
-    - tar -xzf 0.9.0.99.tar.gz
-    - cd librdkafka-0.9.0.99/ && ./configure --prefix=$HOME
+    - pip install codecov kazoo tox testinstances
+    - wget https://github.com/edenhill/librdkafka/archive/0.9.1.tar.gz
+    - tar -xzf 0.9.1.tar.gz
+    - cd librdkafka-0.9.1/ && ./configure --prefix=$HOME
     - make -j 2 && make -j 2 install && cd -
 
 before_script:
@@ -64,7 +86,7 @@ before_script:
     - export `grep ZOOKEEPER $TEMPFILE`
 
 script:
-    - tox
+    - tox -e $TOX_ENV tests
 
 # Calculate coverage on success
 after_success:

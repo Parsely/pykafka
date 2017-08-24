@@ -17,7 +17,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 __all__ = ["random_partitioner", "BasePartitioner", "HashingPartitioner",
-           "hashing_partitioner"]
+           "hashing_partitioner", "GroupHashingPartitioner"]
 import random
 
 from hashlib import sha1
@@ -83,3 +83,53 @@ class HashingPartitioner(BasePartitioner):
 
 
 hashing_partitioner = HashingPartitioner()
+
+
+class GroupHashingPartitioner(BasePartitioner):
+    """
+    Messages published with the identical keys will be directed to a consistent subset of 'n'
+    partitions from the set of available partitions. For example, if there are 16 partitions and group_size=4,
+    messages with the identical keys will be shared equally between a subset of four partitions, instead of always
+    being directed to the same partition.
+
+    The same guarantee caveats apply as to the :class:`pykafka.base.HashingPartitioner`.
+    """
+    def __init__(self, hash_func, group_size=1):
+        """
+        :param hash_func: A hash function
+        :type hash_func: function
+        :param group_size: Size of the partition group to assign to. For example, if there are 16 partitions, and we
+            want to smooth the distribution of identical keys between a set of 4, use 4 as the group_size.
+        :type group_size: Integer value between (0, total_partition_count)
+        """
+        self.hash_func = hash_func
+        self.group_size = group_size
+        if self.hash_func is None:
+            raise ValueError(
+                'hash_func must be specified when using GroupHashingPartitioner'
+            )
+        if self.group_size < 1:
+            raise ValueError(
+                'group_size cannot be < 1 when using GroupHashingPartitioner'
+            )
+
+    def __call__(self, partitions, key):
+        """
+        :param partitions: The partitions from which to choose
+        :type partitions: sequence of :class:`pykafka.base.BasePartition`
+        :param key: Key used for routing
+        :type key: Any hashable type if using the default :func:`hash`
+            implementation, any valid value for your custom hash function
+        :returns: A partition
+        :rtype: :class:`pykafka.base.BasePartition`
+        """
+        if key is None:
+            raise ValueError(
+                'key cannot be `None` when using hashing partitioner'
+            )
+        if self.group_size > len(partitions):
+            raise ValueError(
+                'group_size cannot be > available partitions'
+            )
+        partitions = sorted(partitions)
+        return partitions[abs(self.hash_func(key) + random.randrange(0, self.group_size)) % len(partitions)]

@@ -23,13 +23,16 @@ from collections import defaultdict
 from .balancedconsumer import BalancedConsumer
 from .common import OffsetType
 from .exceptions import LeaderNotAvailable
-from .handlers import GEventHandler
 from .managedbalancedconsumer import ManagedBalancedConsumer
 from .partition import Partition
 from .producer import Producer
 from .protocol import PartitionOffsetRequest
 from .simpleconsumer import SimpleConsumer
 from .utils.compat import iteritems, itervalues
+try:
+    from .handlers import GEventHandler
+except ImportError:
+    GEventHandler = None
 
 
 log = logging.getLogger(__name__)
@@ -40,7 +43,8 @@ try:
     log.info("Successfully loaded pykafka.rdkafka extension.")
 except ImportError:
     rdkafka = False
-    log.info("Could not load pykafka.rdkafka extension.", exc_info=True)
+    log.info("Could not load pykafka.rdkafka extension.")
+    log.debug("Traceback:", exc_info=True)
 
 
 class Topic(object):
@@ -86,7 +90,7 @@ class Topic(object):
         """
         if not rdkafka and use_rdkafka:
             raise ImportError("use_rdkafka requires rdkafka to be installed")
-        if isinstance(self._cluster.handler, GEventHandler) and use_rdkafka:
+        if GEventHandler and isinstance(self._cluster.handler, GEventHandler) and use_rdkafka:
             raise ImportError("use_rdkafka cannot be used with gevent")
         Cls = Producer
         if rdkafka and use_rdkafka:
@@ -185,7 +189,7 @@ class Topic(object):
         """
         if not rdkafka and use_rdkafka:
             raise ImportError("use_rdkafka requires rdkafka to be installed")
-        if isinstance(self._cluster.handler, GEventHandler) and use_rdkafka:
+        if GEventHandler and isinstance(self._cluster.handler, GEventHandler) and use_rdkafka:
             raise ImportError("use_rdkafka cannot be used with gevent")
         Cls = (rdkafka.RdKafkaSimpleConsumer
                if rdkafka and use_rdkafka else SimpleConsumer)

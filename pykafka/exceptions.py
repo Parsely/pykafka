@@ -51,6 +51,11 @@ class NoMessagesConsumedError(KafkaException):
     pass
 
 
+class MessageSetDecodeFailure(KafkaException):
+    """Indicates a generic failure in the decoding of a MessageSet from the broker"""
+    pass
+
+
 class ProducerQueueFullError(KafkaException):
     """Indicates that one or more of the AsyncProducer's internal queues contain at least max_queued_messages messages"""
     pass
@@ -208,6 +213,13 @@ class RebalanceInProgress(ProtocolClientError):
     ERROR_CODE = 27
 
 
+class TopicAuthorizationFailed(ProtocolClientError):
+    """Returned by the broker when the client is not authorized to access the requested
+        topic.
+    """
+    ERROR_CODE = 29
+
+
 class GroupAuthorizationFailed(ProtocolClientError):
     """Returned by the broker when the client is not authorized to access a particular
     groupId.
@@ -235,6 +247,7 @@ ERROR_CODES = dict(
                 UnknownMemberId,
                 InvalidSessionTimeout,
                 RebalanceInProgress,
+                TopicAuthorizationFailed,
                 GroupAuthorizationFailed)
 )
 

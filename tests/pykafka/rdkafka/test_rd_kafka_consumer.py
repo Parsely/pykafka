@@ -1,6 +1,9 @@
 import platform
 from contextlib import contextmanager
+import platform
 import unittest2
+import pytest
+
 import pytest
 
 from pykafka.exceptions import RdKafkaStoppedException, RdKafkaException

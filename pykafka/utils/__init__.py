@@ -13,6 +13,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+from pkg_resources import parse_version
 
 
 class Serializable(object):
@@ -25,3 +26,9 @@ class Serializable(object):
     def pack_into(self, buff, offset):
         """Pack serialized bytes into buff starting at offset ``offset``"""
         raise NotImplementedError()
+
+
+def msg_protocol_version(broker_version):
+    if parse_version(broker_version) >= parse_version("0.10.0"):
+        return 1
+    return 0

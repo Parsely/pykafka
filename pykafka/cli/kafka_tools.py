@@ -25,9 +25,7 @@ def fetch_offsets(client, topic, offset):
     :type client:  :class:`pykafka.KafkaClient`
     :param topic:  Name of the topic.
     :type topic:  :class:`pykafka.topic.Topic`
-    :param offset: Offset to reset to. Can be earliest, latest or a datetime.
-        Using a datetime will reset the offset to the latest message published
-        *before* the datetime.
+    :param offset: Offset to fetch. Can be earliest, latest or a datetime.
     :type offset: :class:`pykafka.common.OffsetType` or
         :class:`datetime.datetime`
     :returns: {partition_id: :class:`pykafka.protocol.OffsetPartitionResponse`}
@@ -38,7 +36,7 @@ def fetch_offsets(client, topic, offset):
         return topic.latest_available_offsets()
     else:
         offset = dt.datetime.strptime(offset, "%Y-%m-%dT%H:%M:%S")
-        offset = int(calendar.timegm(offset.utctimetuple())*1000)
+        offset = int(calendar.timegm(offset.utctimetuple()) * 1000)
         return topic.fetch_offset_limits(offset)
 
 
@@ -109,12 +107,42 @@ def desc_topic(client, args):
     topic = client.topics[args.topic]
     print('Topic: {}'.format(topic.name))
     print('Partitions: {}'.format(len(topic.partitions)))
-    print('Replicas: {}'.format(len(topic.partitions.values()[0].replicas)))
+    print('Replicas: {}'.format(len(list(topic.partitions.values())[0].replicas)))
     print(tabulate.tabulate(
         [(p.id, p.leader.id, [r.id for r in p.replicas], [r.id for r in p.isr])
          for p in topic.partitions.values()],
         headers=['Partition', 'Leader', 'Replicas', 'ISR'],
         numalign='center',
+    ))
+
+
+def print_managed_consumer_groups(client, args):
+    """Get Kafka-managed consumer groups for a topic.
+
+        :param client: KafkaClient connected to the cluster.
+        :type client:  :class:`pykafka.KafkaClient`
+        :param topic:  Name of the topic.
+        :type topic:  :class:`str`
+    """
+    if args.topic not in client.topics:
+        raise ValueError('Topic {} does not exist.'.format(args.topic))
+    consumer_groups = {}
+    brokers = client.brokers
+    for broker_id, broker in brokers.iteritems():
+        groups = broker.list_groups().groups.keys()
+        groups_metadata = broker.describe_groups(group_ids=groups).groups
+        for group_id, describe_group_response in groups_metadata.iteritems():
+            members = describe_group_response.members
+            for member_id, member in members.iteritems():
+                topics = member.member_metadata.topic_names
+                if args.topic in topics:
+                    consumer_groups[group_id] = describe_group_response
+
+    print('Topic: {}'.format(args.topic))
+    print(tabulate.tabulate(
+        [(group_id, x.state, x.protocol, x.protocol_type)
+         for group_id, x in consumer_groups.iteritems()],
+        headers=['GroupId', 'State', 'Protocol', 'ProtocolType']
     ))
 
 
@@ -147,7 +175,7 @@ def print_consumer_lag(client, args):
 
 
 def print_offsets(client, args):
-    """Print offsets for a topic/consumer group.
+    """Print offsets for a topic
 
     NOTE: Time-based offset lookups are not precise, but are based on segment
           boundaries. If there is only one segment, as when Kafka has just
@@ -223,13 +251,13 @@ def reset_offsets(client, args):
                                          partition_id,
                                          res.offset[0],
                                          tmsp,
-                                         'kafka-tools')
+                                         b'kafka-tools')
             for partition_id, res in iteritems(offsets)]
 
     # Send them to the appropriate broker.
     broker = client.cluster.get_group_coordinator(args.consumer_group)
     broker.commit_consumer_group_offsets(
-        args.consumer_group, 1, 'kafka-tools', reqs
+        args.consumer_group, 1, b'kafka-tools', reqs
     )
 
 
@@ -257,6 +285,7 @@ def _add_limit(parser):
                              '(default: %(default)s)',
                         type=int, default=10)
 
+
 def _add_offset(parser):
     """Add offset to arg parser."""
     parser.add_argument('offset',
@@ -264,6 +293,7 @@ def _add_offset(parser):
                         type=str,
                         help='Offset to fetch. Can be EARLIEST, LATEST, or a '
                              'datetime in the format YYYY-MM-DDTHH:MM:SS.')
+
 
 def _add_outfile(parser):
     """ Add outfile option to arg parser."""
@@ -310,6 +340,14 @@ def _get_arg_parser():
     parser.set_defaults(func=desc_topic)
     _add_topic(parser)
 
+    # Get consumer groups for a topic
+    parser = subparsers.add_parser(
+        'print_consumer_groups',
+        help='Get consumer groups for a topic'
+    )
+    parser.set_defaults(func=print_managed_consumer_groups)
+    _add_topic(parser)
+
     # Print Consumer Lag
     parser = subparsers.add_parser(
         'print_consumer_lag',
@@ -319,10 +357,10 @@ def _get_arg_parser():
     _add_topic(parser)
     _add_consumer_group(parser)
 
-    # Print Offsets
+    # Print Broker Offsets
     parser = subparsers.add_parser(
         'print_offsets',
-        help='Fetch offsets for a topic/consumer group'
+        help='Fetch broker offsets for a topic'
     )
     parser.set_defaults(func=print_offsets)
     _add_topic(parser)

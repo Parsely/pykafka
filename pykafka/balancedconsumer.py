@@ -23,21 +23,27 @@ import logging
 import socket
 import sys
 import time
-import traceback
 from uuid import uuid4
 import weakref
 
 from kazoo.client import KazooClient
-from kazoo.handlers.gevent import SequentialGeventHandler
 from kazoo.exceptions import NoNodeException, NodeExistsError
 from kazoo.recipe.watchers import ChildrenWatch
+try:
+    from kazoo.handlers.gevent import SequentialGeventHandler
+except ImportError:
+    SequentialGeventHandler = None
+from six import reraise
 
 from .common import OffsetType
 from .exceptions import KafkaException, PartitionOwnedError, ConsumerStoppedException
-from .handlers import GEventHandler
 from .simpleconsumer import SimpleConsumer
 from .utils.compat import range, get_bytes, itervalues, iteritems, get_string
 from .utils.error_handlers import valid_int
+try:
+    from .handlers import GEventHandler
+except ImportError:
+    GEventHandler = None
 try:
     from . import rdkafka
 except ImportError:
@@ -78,6 +84,7 @@ class BalancedConsumer(object):
                  auto_commit_interval_ms=60 * 1000,
                  queued_max_messages=2000,
                  fetch_min_bytes=1,
+                 fetch_error_backoff_ms=500,
                  fetch_wait_max_ms=100,
                  offsets_channel_backoff_ms=1000,
                  offsets_commit_max_retries=5,
@@ -124,6 +131,9 @@ class BalancedConsumer(object):
             server should return for a fetch request. If insufficient data is
             available, the request will block until sufficient data is available.
         :type fetch_min_bytes: int
+        :param fetch_error_backoff_ms: *UNUSED*.
+            See :class:`pykafka.simpleconsumer.SimpleConsumer`.
+        :type fetch_error_backoff_ms: int
         :param fetch_wait_max_ms: The maximum amount of time (in milliseconds)
             that the server will block before answering a fetch request if
             there isn't sufficient data to immediately satisfy `fetch_min_bytes`.
@@ -185,7 +195,7 @@ class BalancedConsumer(object):
         :type use_rdkafka: bool
         :param compacted_topic: Set to read from a compacted topic. Forces
             consumer to use less stringent message ordering logic because compacted
-            topics do not provide offsets in stict incrementing order.
+            topics do not provide offsets in strict incrementing order.
         :type compacted_topic: bool
         """
         self._cluster = cluster
@@ -217,16 +227,16 @@ class BalancedConsumer(object):
         self._generation_id = -1
         self._running = False
         self._worker_exception = None
-        self._worker_trace_logged = False
         self._is_compacted_topic = compacted_topic
 
         if not rdkafka and use_rdkafka:
             raise ImportError("use_rdkafka requires rdkafka to be installed")
-        if isinstance(self._cluster.handler, GEventHandler) and use_rdkafka:
+        if GEventHandler and isinstance(self._cluster.handler, GEventHandler) and use_rdkafka:
             raise ImportError("use_rdkafka cannot be used with gevent")
         self._use_rdkafka = rdkafka and use_rdkafka
 
         self._rebalancing_lock = cluster.handler.Lock()
+        self._internal_consumer_running = self._cluster.handler.Event()
         self._consumer = None
         self._consumer_id = get_bytes("{hostname}:{uuid}".format(
             hostname=socket.gethostname(),
@@ -263,12 +273,7 @@ class BalancedConsumer(object):
     def _raise_worker_exceptions(self):
         """Raises exceptions encountered on worker threads"""
         if self._worker_exception is not None:
-            _, ex, tb = self._worker_exception
-            if not self._worker_trace_logged:
-                self._worker_trace_logged = True
-                log.error("Exception encountered in worker thread:\n%s",
-                          "".join(traceback.format_tb(tb)))
-            raise ex
+            reraise(*self._worker_exception)
 
     @property
     def topic(self):
@@ -345,7 +350,7 @@ class BalancedConsumer(object):
         :type timeout: int
         """
         kazoo_kwargs = {'timeout': timeout / 1000}
-        if isinstance(self._cluster.handler, GEventHandler):
+        if GEventHandler and isinstance(self._cluster.handler, GEventHandler):
             kazoo_kwargs['handler'] = SequentialGeventHandler()
         self._zookeeper = KazooClient(zookeeper_connect, **kazoo_kwargs)
         self._zookeeper.start()
@@ -374,6 +379,12 @@ class BalancedConsumer(object):
                         (cns.partitions[id_], offset) for
                         (id_, offset) in iteritems(reset_offsets)])
             self._consumer = cns
+        if self._consumer and self._consumer._running:
+            if not self._internal_consumer_running.is_set():
+                self._internal_consumer_running.set()
+        else:
+            if self._internal_consumer_running.is_set():
+                self._internal_consumer_running.clear()
         return True
 
     def _get_internal_consumer(self, partitions=None, start=True):
@@ -421,7 +432,7 @@ class BalancedConsumer(object):
         """Decide which partitions belong to this consumer.
 
         Uses the consumer rebalancing algorithm described here
-        http://kafka.apache.org/documentation.html
+        https://kafka.apache.org/documentation/#impl_consumerrebalance
 
         It is very important that the participants array is sorted,
         since this algorithm runs on each consumer and indexes into the same
@@ -435,7 +446,9 @@ class BalancedConsumer(object):
             assignment. Defaults to `self._consumer_id`
         """
         # Freeze and sort partitions so we always have the same results
-        p_to_str = lambda p: '-'.join([str(p.topic.name), str(p.leader.id), str(p.id)])
+        def p_to_str(p):
+            return '-'.join([str(p.topic.name), str(p.leader.id), str(p.id)])
+
         all_parts = self._topic.partitions.values()
         all_parts = sorted(all_parts, key=p_to_str)
 
@@ -723,13 +736,18 @@ class BalancedConsumer(object):
         message = None
         self._last_message_time = time.time()
         while message is None and not consumer_timed_out():
-            self._raise_worker_exceptions()
+            if not self._internal_consumer_running.is_set():
+                self._cluster.handler.sleep()
+                self._raise_worker_exceptions()
+                self._internal_consumer_running.wait(self._consumer_timeout_ms / 1000)
             try:
-                message = self._consumer.consume(block=block)
+                # acquire the lock to ensure that we don't start trying to consume from
+                # a _consumer that might soon be replaced by an in-progress rebalance
+                with self._rebalancing_lock:
+                    message = self._consumer.consume(block=block)
             except (ConsumerStoppedException, AttributeError):
                 if not self._running:
                     raise ConsumerStoppedException
-                continue
             if message:
                 self._last_message_time = time.time()
             if not block:
@@ -741,7 +759,7 @@ class BalancedConsumer(object):
         while True:
             message = self.consume(block=True)
             if not message:
-                raise StopIteration
+                return
             yield message
 
     def commit_offsets(self):

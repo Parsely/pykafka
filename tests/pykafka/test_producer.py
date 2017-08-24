@@ -1,11 +1,17 @@
 from __future__ import division
 
+import os
 import platform
 import pytest
 import time
 import types
 import unittest2
 from uuid import uuid4
+
+try:
+    import gevent
+except ImportError:
+    gevent = None
 
 from pykafka import KafkaClient
 from pykafka.common import OffsetType
@@ -15,6 +21,9 @@ from pykafka.protocol import Message
 from pykafka.test.utils import get_cluster, stop_cluster, retry
 from pykafka.common import CompressionType
 from pykafka.producer import OwnedBroker
+
+
+kafka_version = os.environ.get('KAFKA_VERSION', '0.8.0')
 
 
 class ProducerIntegrationTests(unittest2.TestCase):
@@ -27,7 +36,9 @@ class ProducerIntegrationTests(unittest2.TestCase):
         cls.kafka = get_cluster()
         cls.topic_name = b'test-data'
         cls.kafka.create_topic(cls.topic_name, 3, 2)
-        cls.client = KafkaClient(cls.kafka.brokers, use_greenlets=cls.USE_GEVENT)
+        cls.client = KafkaClient(cls.kafka.brokers,
+                                 use_greenlets=cls.USE_GEVENT,
+                                 broker_version=kafka_version)
 
     @classmethod
     def tearDownClass(cls):
@@ -100,6 +111,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
         report = prod.get_delivery_report()
         self.assertEqual(report[0].value, payload)
         self.assertIsNone(report[1])
+        self.assertGreaterEqual(report[0].offset, 0)
 
         message = consumer.consume()
         assert message.value == payload
@@ -297,7 +309,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
         large_payload = b''.join([uuid4().bytes for i in range(50000)])
         assert len(large_payload) / 1024 / 1024 < 1.0
 
-        prod = self._get_producer(delivery_reports=True)
+        prod = self._get_producer(delivery_reports=True, linger_ms=1000)
         prod.produce(large_payload)
 
         report = prod.get_delivery_report()
@@ -335,7 +347,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
         retry(ensure_all_messages_consumed, retry_time=15)
 
 
-@pytest.mark.skipif(platform.python_implementation() == "PyPy",
+@pytest.mark.skipif(platform.python_implementation() == "PyPy" or gevent is None,
                     reason="Unresolved crashes")
 class TestGEventProducer(ProducerIntegrationTests):
     USE_GEVENT = True

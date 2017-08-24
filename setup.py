@@ -38,8 +38,12 @@ def get_version():
                          version_file.read()).group('version')
 
 install_requires = [
+    'six>=1.5',
     'kazoo',
-    'tabulate',
+    'tabulate'
+]
+
+extra_gevent_requires = [
     'gevent>=1.1.0'
 ]
 
@@ -141,9 +145,10 @@ def run_setup(with_rdkafka=True):
         setup_requires=setup_requires,
         extras_require={
             'test': tests_require,
-            'all': install_requires + tests_require,
+            'all': install_requires + tests_require + extra_gevent_requires,
             'docs': ['sphinx'] + tests_require,
-            'lint': lint_requires
+            'lint': lint_requires,
+            'gevent': extra_gevent_requires
         },
         cmdclass={'test': PyTest, 'build_ext': ve_build_ext},
         ext_modules=ext_modules,
@@ -163,6 +168,7 @@ def run_setup(with_rdkafka=True):
             "Programming Language :: Python :: 3",
             "Programming Language :: Python :: 3.4",
             "Programming Language :: Python :: 3.5",
+            "Programming Language :: Python :: 3.6",
             "Topic :: Database",
             "Topic :: Database :: Front-Ends",
             "Topic :: Software Development :: Libraries :: Python Modules",

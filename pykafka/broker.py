@@ -28,10 +28,20 @@ from .protocol import (
     MetadataResponse, OffsetCommitRequest, OffsetCommitResponse, OffsetFetchRequest,
     OffsetFetchResponse, ProduceResponse, JoinGroupRequest, JoinGroupResponse,
     SyncGroupRequest, SyncGroupResponse, HeartbeatRequest, HeartbeatResponse,
-    LeaveGroupRequest, LeaveGroupResponse)
+    LeaveGroupRequest, LeaveGroupResponse, ListGroupsRequest, ListGroupsResponse,
+    DescribeGroupsRequest, DescribeGroupsResponse)
 from .utils.compat import range, iteritems, get_bytes
 
 log = logging.getLogger(__name__)
+
+
+def _check_handler(fn):
+    """Ensures that self._req_handler is not None before calling fn"""
+    def wrapped(self, *args, **kwargs):
+        if self._req_handler is None:
+            raise SocketDisconnectedError
+        return fn(self, *args, **kwargs)
+    return wrapped
 
 
 class Broker(object):
@@ -49,7 +59,8 @@ class Broker(object):
                  buffer_size=1024 * 1024,
                  source_host='',
                  source_port=0,
-                 ssl_config=None):
+                 ssl_config=None,
+                 broker_version="0.9.0"):
         """Create a Broker instance.
 
         :param id_: The id number of this broker
@@ -94,7 +105,12 @@ class Broker(object):
         self._offsets_channel_socket_timeout_ms = offsets_channel_socket_timeout_ms
         self._buffer_size = buffer_size
         self._req_handlers = {}
-        self.connect()
+        self._broker_version = broker_version
+        try:
+            self.connect()
+        except SocketDisconnectedError:
+            log.warning("Failed to connect newly created broker for {host}:{port}".format(
+                host=self._host, port=self._port))
 
     def __repr__(self):
         return "<{module}.{name} at {id_} (host={host}, port={port}, id={my_id})>".format(
@@ -115,7 +131,8 @@ class Broker(object):
                       buffer_size=64 * 1024,
                       source_host='',
                       source_port=0,
-                      ssl_config=None):
+                      ssl_config=None,
+                      broker_version="0.9.0"):
         """Create a Broker using BrokerMetadata
 
         :param metadata: Metadata that describes the broker.
@@ -146,7 +163,8 @@ class Broker(object):
                    buffer_size=buffer_size,
                    source_host=source_host,
                    source_port=source_port,
-                   ssl_config=ssl_config)
+                   ssl_config=ssl_config,
+                   broker_version=broker_version)
 
     @property
     def connected(self):
@@ -256,6 +274,7 @@ class Broker(object):
             self._req_handlers[connection_id] = handler
         return self._req_handlers[connection_id]
 
+    @_check_handler
     def fetch_messages(self,
                        partition_requests,
                        timeout=30000,
@@ -274,14 +293,17 @@ class Broker(object):
             block for up to `timeout` milliseconds.
         :type min_bytes: int
         """
+        response_class = FetchResponse.get_subclass(self._broker_version)
         future = self._req_handler.request(FetchRequest(
             partition_requests=partition_requests,
             timeout=timeout,
             min_bytes=min_bytes,
+            api_version=response_class.api_version,
         ))
         # XXX - this call returns even with less than min_bytes of messages?
-        return future.get(FetchResponse)
+        return future.get(response_class)
 
+    @_check_handler
     def produce_messages(self, produce_request):
         """Produce messages to a set of partitions.
 
@@ -295,6 +317,7 @@ class Broker(object):
             future = self._req_handler.request(produce_request)
             return future.get(ProduceResponse)
 
+    @_check_handler
     def request_offset_limits(self, partition_requests):
         """Request offset information for a set of topic/partitions
 
@@ -306,6 +329,7 @@ class Broker(object):
         future = self._req_handler.request(OffsetRequest(partition_requests))
         return future.get(OffsetResponse)
 
+    @_check_handler
     def request_metadata(self, topics=None):
         """Request cluster metadata
 
@@ -392,7 +416,7 @@ class Broker(object):
     #  Group Membership API  #
     ##########################
 
-    def join_group(self, connection_id, consumer_group, member_id):
+    def join_group(self, connection_id, consumer_group, member_id, topic_name):
         """Send a JoinGroupRequest
 
         :param connection_id: The unique identifier of the connection on which to make
@@ -402,9 +426,14 @@ class Broker(object):
         :type consumer_group: bytes
         :param member_id: The ID of the consumer joining the group
         :type member_id: bytes
+        :param topic_name: The name of the topic to which to connect, used in protocol
+            metadata
+        :type topic_name: str
         """
         handler = self._get_unique_req_handler(connection_id)
-        future = handler.request(JoinGroupRequest(consumer_group, member_id))
+        if handler is None:
+            raise SocketDisconnectedError
+        future = handler.request(JoinGroupRequest(consumer_group, member_id, topic_name))
         self._handler.sleep()
         return future.get(JoinGroupResponse)
 
@@ -420,6 +449,8 @@ class Broker(object):
         :type member_id: bytes
         """
         handler = self._get_unique_req_handler(connection_id)
+        if handler is None:
+            raise SocketDisconnectedError
         future = handler.request(LeaveGroupRequest(consumer_group, member_id))
         return future.get(LeaveGroupResponse)
 
@@ -443,6 +474,8 @@ class Broker(object):
         :type group_assignment: iterable of :class:`pykafka.protocol.MemberAssignment`
         """
         handler = self._get_unique_req_handler(connection_id)
+        if handler is None:
+            raise SocketDisconnectedError
         future = handler.request(
             SyncGroupRequest(consumer_group, generation_id, member_id, group_assignment))
         return future.get(SyncGroupResponse)
@@ -462,7 +495,28 @@ class Broker(object):
         :type member_id: bytes
         """
         handler = self._get_unique_req_handler(connection_id)
+        if handler is None:
+            raise SocketDisconnectedError
         future = handler.request(
             HeartbeatRequest(consumer_group, generation_id, member_id))
         self._handler.sleep()
         return future.get(HeartbeatResponse)
+
+    ########################
+    #  Administrative API  #
+    ########################
+    @_check_handler
+    def list_groups(self):
+        """Send a ListGroupsRequest"""
+        future = self._req_handler.request(ListGroupsRequest())
+        return future.get(ListGroupsResponse)
+
+    @_check_handler
+    def describe_groups(self, group_ids):
+        """Send a DescribeGroupsRequest
+
+        :param group_ids: A sequence of group identifiers for which to return descriptions
+        :type group_ids: sequence of str
+        """
+        future = self._req_handler.request(DescribeGroupsRequest(group_ids))
+        return future.get(DescribeGroupsResponse)

@@ -57,6 +57,7 @@ class ManagedBalancedConsumer(BalancedConsumer):
                  auto_commit_interval_ms=60 * 1000,
                  queued_max_messages=2000,
                  fetch_min_bytes=1,
+                 fetch_error_backoff_ms=500,
                  fetch_wait_max_ms=100,
                  offsets_channel_backoff_ms=1000,
                  offsets_commit_max_retries=5,
@@ -101,6 +102,9 @@ class ManagedBalancedConsumer(BalancedConsumer):
             server should return for a fetch request. If insufficient data is
             available, the request will block until sufficient data is available.
         :type fetch_min_bytes: int
+        :param fetch_error_backoff_ms: *UNUSED*.
+            See :class:`pykafka.simpleconsumer.SimpleConsumer`.
+        :type fetch_error_backoff_ms: int
         :param fetch_wait_max_ms: The maximum amount of time (in milliseconds)
             that the server will block before answering a fetch request if
             there isn't sufficient data to immediately satisfy `fetch_min_bytes`.
@@ -151,7 +155,7 @@ class ManagedBalancedConsumer(BalancedConsumer):
         :type use_rdkafka: bool
         :param compacted_topic: Set to read from a compacted topic. Forces
             consumer to use less stringent message ordering logic because compacted
-            topics do not provide offsets in stict incrementing order.
+            topics do not provide offsets in strict incrementing order.
         :type compacted_topic: bool
         :param heartbeat_interval_ms: The amount of time in milliseconds to wait between
             heartbeat requests
@@ -190,6 +194,7 @@ class ManagedBalancedConsumer(BalancedConsumer):
 
         self._generation_id = -1
         self._rebalancing_lock = cluster.handler.Lock()
+        self._internal_consumer_running = self._cluster.handler.Event()
         # ManagedBalancedConsumers in the same process cannot share connections.
         # This connection hash is passed to Broker calls that use the group
         # membership  API
@@ -197,7 +202,6 @@ class ManagedBalancedConsumer(BalancedConsumer):
         self._consumer = None
         self._group_coordinator = None
         self._consumer_id = b''
-        self._worker_trace_logged = False
         self._worker_exception = None
         self._default_error_handlers = self._build_default_error_handlers()
 
@@ -279,11 +283,12 @@ class ManagedBalancedConsumer(BalancedConsumer):
                 # generate partition assignments for each group member
                 # if this is not the leader, join_result.members will be empty
                 group_assignments = [
-                    MemberAssignment([
+                    (member_id,
+                     MemberAssignment([
                         (self._topic.name,
                          [p.id for p in self._decide_partitions(
-                          iterkeys(members), consumer_id=member_id)])
-                    ], member_id=member_id) for member_id in members]
+                          iterkeys(members), consumer_id=member_id)])])
+                    ) for member_id in members]
 
                 assignment = self._sync_group(group_assignments)
                 self._setup_internal_consumer(
@@ -339,7 +344,8 @@ class ManagedBalancedConsumer(BalancedConsumer):
         for i in range(self._cluster._max_connection_retries):
             join_result = self._group_coordinator.join_group(self._connection_id,
                                                              self._consumer_group,
-                                                             self._consumer_id)
+                                                             self._consumer_id,
+                                                             self._topic.name)
             if join_result.error_code == 0:
                 break
             log.info("Error code %d encountered during JoinGroupRequest for"

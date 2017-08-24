@@ -59,9 +59,13 @@ import logging
 import struct
 from collections import defaultdict, namedtuple
 from zlib import crc32
+from datetime import datetime
+from six import integer_types
+from pkg_resources import parse_version
+
 
 from .common import CompressionType, Message
-from .exceptions import ERROR_CODES, MessageSizeTooLarge
+from .exceptions import ERROR_CODES, MessageSetDecodeFailure
 from .utils import Serializable, compression, struct_helpers
 from .utils.compat import iteritems, itervalues, buffer
 
@@ -146,14 +150,15 @@ class Message(Message, Serializable):
     `partition` is set to the :class:`pykafka.partition.Partition` instance
     from which the message was sent.
 
-    :ivar compression_type: Type of compression to use for the message
+    :ivar compression_type: The compression algorithm used to generate the message's
+        current value. Internal use only - regardless of the algorithm used, this
+        will be `CompressionType.NONE` in any publicly accessible `Message`s.
     :ivar partition_key: Value used to assign this message to a particular partition.
     :ivar value: The payload associated with this message
     :ivar offset: The offset of the message
     :ivar partition_id: The id of the partition to which this message belongs
     :ivar delivery_report_q: For use by :class:`pykafka.producer.Producer`
     """
-    MAGIC = 0
 
     __slots__ = [
         "compression_type",
@@ -163,7 +168,9 @@ class Message(Message, Serializable):
         "partition_id",
         "partition",
         "produce_attempt",
-        "delivery_report_q"
+        "delivery_report_q",
+        "protocol_version",
+        "timestamp"
     ]
 
     def __init__(self,
@@ -173,11 +180,16 @@ class Message(Message, Serializable):
                  offset=-1,
                  partition_id=-1,
                  produce_attempt=0,
+                 protocol_version=0,
+                 timestamp=None,
                  delivery_report_q=None):
         self.compression_type = compression_type
         self.partition_key = partition_key
         self.value = value
         self.offset = offset
+        if timestamp is None and protocol_version > 0:
+            timestamp = datetime.utcnow()
+        self.set_timestamp(timestamp)
         # this is set on decode to expose it to clients that use the protocol
         # implementation but not the consumer
         self.partition_id = partition_id
@@ -186,6 +198,8 @@ class Message(Message, Serializable):
         self.produce_attempt = produce_attempt
         # delivery_report_q is used by the producer
         self.delivery_report_q = delivery_report_q
+        assert protocol_version in (0, 1)
+        self.protocol_version = protocol_version
 
     def __len__(self):
         size = 4 + 1 + 1 + 4 + 4
@@ -193,18 +207,26 @@ class Message(Message, Serializable):
             size += len(self.value)
         if self.partition_key is not None:
             size += len(self.partition_key)
+        if self.protocol_version > 0 and self.timestamp:
+            size += 8
         return size
 
     @classmethod
     def decode(self, buff, msg_offset=-1, partition_id=-1):
-        fmt = 'iBBYY'
-        response = struct_helpers.unpack_from(fmt, buff, 0)
-        crc, _, attr, key, val = response
+        (crc, protocol_version, attr) = struct_helpers.unpack_from('iBB', buff, 0)
+        offset = 6
+        timestamp = 0
+        if protocol_version > 0:
+            (timestamp,) = struct_helpers.unpack_from('Q', buff, offset)
+            offset += 8
+        (key, val) = struct_helpers.unpack_from('YY', buff, offset)
         # TODO: Handle CRC failure
         return Message(val,
                        partition_key=key,
                        compression_type=attr,
                        offset=msg_offset,
+                       protocol_version=protocol_version,
+                       timestamp=timestamp,
                        partition_id=partition_id)
 
     def pack_into(self, buff, offset):
@@ -216,20 +238,50 @@ class Message(Message, Serializable):
         :param offset: The offset to start the write at
         """
         # NB a length of 0 means an empty string, whereas -1 means null
+        # Assuming a CreateTime timestamp, not a LogAppendTime.
         len_key = -1 if self.partition_key is None else len(self.partition_key)
         len_value = -1 if self.value is None else len(self.value)
-        fmt = '!BBi%dsi%ds' % (max(len_key, 0), max(len_value, 0))
-        args = (self.MAGIC,
+        protocol_version = self.protocol_version
+        # Only actually use protocol 1 if timestamp is defined.
+        if self.protocol_version == 1 and self.timestamp:
+            fmt = '!BBQi%dsi%ds' % (max(len_key, 0), max(len_value, 0))
+        else:
+            protocol_version = 0
+            fmt = '!BBi%dsi%ds' % (max(len_key, 0), max(len_value, 0))
+        args = [protocol_version,
                 self.compression_type,
                 len_key,
                 self.partition_key or b"",
                 len_value,
-                self.value or b"")
+                self.value or b""]
+        if protocol_version > 0:
+            args.insert(2, int(self.timestamp))
         struct.pack_into(fmt, buff, offset + 4, *args)
         fmt_size = struct.calcsize(fmt)
         data = buffer(buff[(offset + 4):(offset + 4 + fmt_size)])
         crc = crc32(data) & 0xffffffff
         struct.pack_into('!I', buff, offset, crc)
+
+    @property
+    def timestamp_dt(self):
+        """Get the timestamp as a datetime, if valid"""
+        if self.timestamp > 0:
+            # Assuming a unix epoch
+            return datetime.utcfromtimestamp(self.timestamp / 1000.0)
+
+    @timestamp_dt.setter
+    def timestamp_dt(self, dt):
+        """Set the timestamp from a datetime object"""
+        self.timestamp = int(
+            1000 * (dt - datetime(1970, 1, 1)).total_seconds())
+
+    def set_timestamp(self, ts):
+        if isinstance(ts, integer_types + (float, type(None))):
+            self.timestamp = ts
+        elif isinstance(ts, datetime):
+            self.timestamp_dt = ts
+        else:
+            raise RuntimeError()
 
 
 class MessageSet(Serializable):
@@ -299,7 +351,9 @@ class MessageSet(Serializable):
             compressed = compression.encode_snappy(buffer(uncompressed))
         else:
             raise TypeError("Unknown compression: %s" % self.compression_type)
-        return Message(compressed, compression_type=self.compression_type)
+        protocol_version = max((m.protocol_version for m in self._messages))
+        return Message(compressed, compression_type=self.compression_type,
+                       protocol_version=protocol_version)
 
     @classmethod
     def decode(cls, buff, partition_id=-1):
@@ -325,7 +379,7 @@ class MessageSet(Serializable):
             messages.append(message)
             offset += size
         if len(messages) == 0 and attempted:
-            raise MessageSizeTooLarge(size)
+            raise MessageSetDecodeFailure(size)
         return MessageSet(messages=messages)
 
     def pack_into(self, buff, offset):
@@ -624,7 +678,8 @@ class FetchRequest(Request):
           FetchOffset => int64
           MaxBytes => int32
     """
-    def __init__(self, partition_requests=[], timeout=1000, min_bytes=1024):
+    def __init__(self, partition_requests=[], timeout=1000, min_bytes=1024,
+                 api_version=0):
         """Create a new fetch request
 
         Kafka 0.8 uses long polling for fetch requests, which is different
@@ -642,6 +697,7 @@ class FetchRequest(Request):
         self.timeout = timeout
         self.min_bytes = min_bytes
         self._reqs = defaultdict(dict)
+        self.api_version = api_version
         for req in partition_requests:
             self.add_request(req)
 
@@ -679,7 +735,7 @@ class FetchRequest(Request):
         :rtype: :class:`bytearray`
         """
         output = bytearray(len(self))
-        self._write_header(output)
+        self._write_header(output, api_version=self.api_version)
         offset = self.HEADER_LEN
         struct.pack_into('!iiii', output, offset,
                          -1, self.timeout, self.min_bytes, len(self._reqs))
@@ -716,14 +772,30 @@ class FetchResponse(Response):
           HighwaterMarkOffset => int64
           MessageSetSize => int32
     """
-    def __init__(self, buff):
+    api_version = 0
+
+    @staticmethod
+    def get_subclass(broker_protocol):
+        """Choose which subclass of response to demand and expect. Cf.
+        https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol"""
+        target_version = parse_version(broker_protocol)
+        if target_version >= parse_version("0.10.0"):
+            return FetchResponseV2
+        elif target_version >= parse_version("0.9.0"):
+            return FetchResponseV1
+        else:
+            return FetchResponse
+
+    def __init__(self, buff, offset=0):
         """Deserialize into a new Response
 
         :param buff: Serialized message
         :type buff: :class:`bytearray`
+        :param offset: Offset into the message
+        :type offset: int
         """
         fmt = '[S [ihqY] ]'
-        response = struct_helpers.unpack_from(fmt, buff, 0)
+        response = struct_helpers.unpack_from(fmt, buff, offset)
         self.topics = defaultdict(dict)
         for (topic, partitions) in response:
             for partition in partitions:
@@ -741,15 +813,43 @@ class FetchResponse(Response):
         for message in message_set.messages:
             if message.compression_type == CompressionType.NONE:
                 output.append(message)
+                continue
             elif message.compression_type == CompressionType.GZIP:
                 decompressed = compression.decode_gzip(message.value)
-                output += self._unpack_message_set(decompressed,
-                                                   partition_id=partition_id)
+                messages = self._unpack_message_set(decompressed,
+                                                    partition_id=partition_id)
             elif message.compression_type == CompressionType.SNAPPY:
                 decompressed = compression.decode_snappy(message.value)
-                output += self._unpack_message_set(decompressed,
-                                                   partition_id=partition_id)
+                messages = self._unpack_message_set(decompressed,
+                                                    partition_id=partition_id)
+            if messages[-1].offset < message.offset:
+                # With protocol 1, offsets from compressed messages start at 0
+                assert messages[0].offset == 0
+                delta = message.offset - len(messages) + 1
+                for msg in messages:
+                    msg.offset += delta
+            output += messages
         return output
+
+
+class FetchResponseV1(FetchResponse):
+    api_version = 1
+
+    def __init__(self, buff, offset=0):
+        """Deserialize into a new Response
+
+        :param buff: Serialized message
+        :type buff: :class:`bytearray`
+        :param offset: Offset into the message
+        :type offset: int
+        """
+        # TODO: Use throttle_time
+        self.throttle_time = struct_helpers.unpack_from("i", buff, offset)
+        super(FetchResponseV1, self).__init__(buff, offset + 4)
+
+
+class FetchResponseV2(FetchResponseV1):
+    api_version = 2
 
 
 ##
@@ -1205,10 +1305,10 @@ class ConsumerGroupProtocolMetadata(object):
             Topic => string
         UserData => bytes
     """
-    def __init__(self):
-        self.version = 0
-        self.topic_names = [b"dummytopic"]
-        self.user_data = b"testuserdata"
+    def __init__(self, version=0, topic_names=None, user_data=b"testuserdata"):
+        self.version = version
+        self.topic_names = topic_names or [b"dummytopic"]
+        self.user_data = user_data
 
     def __len__(self):
         # version + len(topic names)
@@ -1235,14 +1335,22 @@ class ConsumerGroupProtocolMetadata(object):
         offset += struct.calcsize(fmt)
         return output
 
+    @classmethod
+    def from_bytestring(cls, buff):
+        if len(buff) == 0:
+            return cls()
+        fmt = 'h [S] Y'
+        response = struct_helpers.unpack_from(fmt, buff, 0)
+
+        version = response[0]
+        topic_names = response[1]
+        user_data = response[2]
+        return cls(version, topic_names, user_data)
+
 
 GroupMembershipProtocol = namedtuple(
     'GroupMembershipProtocol', ['protocol_type', 'protocol_name', 'metadata']
 )
-
-
-ConsumerGroupProtocol = GroupMembershipProtocol(b"consumer", b"pykafkaassignmentstrategy",
-                                                ConsumerGroupProtocolMetadata())
 
 
 class JoinGroupRequest(Request):
@@ -1259,9 +1367,10 @@ class JoinGroupRequest(Request):
             ProtocolName => string
             ProtocolMetadata => bytes
     """
-    def __init__(self, group_id, member_id, session_timeout=30000):
+    def __init__(self, group_id, member_id, topic_name, session_timeout=30000):
         """Create a new group join request"""
-        self.protocol = ConsumerGroupProtocol
+        metadata = ConsumerGroupProtocolMetadata(topic_names=[topic_name])
+        self.protocol = GroupMembershipProtocol(b"consumer", b"range", metadata)
         self.group_id = group_id
         self.session_timeout = session_timeout
         self.member_id = member_id
@@ -1338,8 +1447,8 @@ class JoinGroupResponse(Response):
         self.group_protocol = response[2]
         self.leader_id = response[3]
         self.member_id = response[4]
-        # TODO - parse metadata bytestring into ConsumerGroupProtocolMetadata?
-        self.members = {_id: meta for _id, meta in response[5]}
+        self.members = {_id: ConsumerGroupProtocolMetadata.from_bytestring(meta)
+                        for _id, meta in response[5]}
 
 
 class MemberAssignment(object):
@@ -1353,8 +1462,7 @@ class MemberAssignment(object):
             Partition => int32
         UserData => bytes
     """
-    def __init__(self, partition_assignment, member_id=None, version=1):
-        self.member_id = member_id
+    def __init__(self, partition_assignment, version=1):
         self.version = version
         self.partition_assignment = partition_assignment
 
@@ -1424,9 +1532,9 @@ class SyncGroupRequest(Request):
         # + len(member id) + member id + len(group assignment)
         size += 2 + len(self.member_id) + 4
         # group assignment tuples
-        for member_assignment in self.group_assignment:
+        for member_id, member_assignment in self.group_assignment:
             # + len(member id) + member id + len(member assignment) + member assignment
-            size += 2 + len(member_assignment.member_id) + 4 + len(member_assignment)
+            size += 2 + len(member_id) + 4 + len(member_assignment)
         return size
 
     @property
@@ -1448,12 +1556,11 @@ class SyncGroupRequest(Request):
                          self.generation_id, len(self.member_id), self.member_id,
                          len(self.group_assignment))
         offset += struct.calcsize(fmt)
-        for member_assignment in self.group_assignment:
+        for member_id, member_assignment in self.group_assignment:
             assignment_bytes = bytes(member_assignment.get_bytes())
-            fmt = '!h%dsi%ds' % (len(member_assignment.member_id), len(assignment_bytes))
-            struct.pack_into(fmt, output, offset, len(member_assignment.member_id),
-                             member_assignment.member_id, len(assignment_bytes),
-                             assignment_bytes)
+            fmt = '!h%dsi%ds' % (len(member_id), len(assignment_bytes))
+            struct.pack_into(fmt, output, offset, len(member_id), member_id,
+                             len(assignment_bytes), assignment_bytes)
             offset += struct.calcsize(fmt)
         return output
 
@@ -1603,3 +1710,156 @@ class LeaveGroupResponse(Response):
         fmt = 'h'
         response = struct_helpers.unpack_from(fmt, buff, 0)
         self.error_code = response[0]
+
+
+###
+# Administrative API
+###
+class ListGroupsRequest(Request):
+    """A list groups request
+
+    Specification::
+
+    ListGroupsRequest =>
+    """
+    @property
+    def API_KEY(self):
+        """API_KEY for this request, from the Kafka docs"""
+        return 16
+
+    def get_bytes(self):
+        """Create a new list group request"""
+        output = bytearray(len(self))
+        self._write_header(output)
+        return output
+
+    def __len__(self):
+        """Length of the serialized message, in bytes"""
+        return self.HEADER_LEN
+
+
+GroupListing = namedtuple(
+    'GroupListing',
+    ['group_id', 'protocol_type']
+)
+
+
+class ListGroupsResponse(Response):
+    """A list groups response
+
+    Specification::
+
+    ListGroupsResponse => ErrorCode Groups
+      ErrorCode => int16
+      Groups => [GroupId ProtocolType]
+        GroupId => string
+        ProtocolType => string
+    """
+    def __init__(self, buff):
+        """Deserialize into a new Response
+
+        :param buff: Serialized message
+        :type buff: :class:`bytearray`
+        """
+        fmt = 'h [SS]'
+        response = struct_helpers.unpack_from(fmt, buff, 0)
+
+        self.error = response[0]
+        self.groups = {}
+        for group_info in response[1]:
+            listing = GroupListing(*group_info)
+            self.groups[listing.group_id] = listing
+
+
+class DescribeGroupsRequest(Request):
+    """A describe groups request
+
+    Specification::
+
+    DescribeGroupsRequest => [GroupId]
+      GroupId => string
+    """
+    def __init__(self, group_ids):
+        self.group_ids = group_ids
+
+    @property
+    def API_KEY(self):
+        """API_KEY for this request, from the Kafka docs"""
+        return 15
+
+    def get_bytes(self):
+        """Create a new list group request"""
+        output = bytearray(len(self))
+        self._write_header(output)
+        offset = self.HEADER_LEN
+        fmt = '!i'
+        struct.pack_into(fmt, output, offset, len(self.group_ids))
+        offset += struct.calcsize(fmt)
+        for group_id in self.group_ids:
+            fmt = '!h%ds' % len(group_id)
+            struct.pack_into(fmt, output, offset, len(group_id), group_id)
+            offset += struct.calcsize(fmt)
+        return output
+
+    def __len__(self):
+        """Length of the serialized message, in bytes"""
+        # header + len(group_ids)
+        size = self.HEADER_LEN + 4
+        for group_id in self.group_ids:
+            # len(group_id) + group_id
+            size += 2 + len(group_id)
+        return size
+
+
+GroupMember = namedtuple(
+    'GroupMember',
+    ['member_id', 'client_id', 'client_host', 'member_metadata', 'member_assignment']
+)
+
+
+DescribeGroupResponse = namedtuple(
+    'DescribeGroupResponse',
+    ['error_code', 'group_id', 'state', 'protocol_type', 'protocol', 'members']
+)
+
+
+class DescribeGroupsResponse(Response):
+    """A describe groups response
+
+    Specification::
+
+
+    DescribeGroupsResponse => [ErrorCode GroupId State ProtocolType Protocol Members]
+      ErrorCode => int16
+      GroupId => string
+      State => string
+      ProtocolType => string
+      Protocol => string
+      Members => [MemberId ClientId ClientHost MemberMetadata MemberAssignment]
+        MemberId => string
+        ClientId => string
+        ClientHost => string
+        MemberMetadata => bytes
+        MemberAssignment => bytes
+    """
+    def __init__(self, buff):
+        """Deserialize into a new Response
+
+        :param buff: Serialized message
+        :type buff: :class:`bytearray`
+        """
+        fmt = '[hSSSS [SSSYY ] ]'
+        response = struct_helpers.unpack_from(fmt, buff, 0)
+
+        self.groups = {}
+        for group_info in response:
+            members = {}
+            for member_info in group_info[5]:
+                member_metadata = ConsumerGroupProtocolMetadata.from_bytestring(
+                    member_info[3])
+                member_assignment = MemberAssignment.from_bytestring(member_info[4])
+                member = GroupMember(*(member_info[:3] + (member_metadata,
+                                                          member_assignment)))
+                members[member.member_id] = member
+            group = DescribeGroupResponse(*(group_info[:5] + (members,)))
+            self.groups[group.group_id] = group
