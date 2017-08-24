@@ -65,7 +65,7 @@ from pkg_resources import parse_version
 
 
 from .common import CompressionType, Message
-from .exceptions import ERROR_CODES, MessageSizeTooLarge
+from .exceptions import ERROR_CODES, MessageSetDecodeFailure
 from .utils import Serializable, compression, struct_helpers
 from .utils.compat import iteritems, itervalues, buffer
 
@@ -379,7 +379,7 @@ class MessageSet(Serializable):
             messages.append(message)
             offset += size
         if len(messages) == 0 and attempted:
-            raise MessageSizeTooLarge(size)
+            raise MessageSetDecodeFailure(size)
         return MessageSet(messages=messages)
 
     def pack_into(self, buff, offset):
