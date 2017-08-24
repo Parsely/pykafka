@@ -31,7 +31,8 @@ from .exceptions import (ERROR_CODES,
                          GroupCoordinatorNotAvailable,
                          NoBrokersAvailableError,
                          SocketDisconnectedError,
-                         LeaderNotFoundError)
+                         LeaderNotFoundError,
+                         LeaderNotAvailable)
 from .protocol import GroupCoordinatorRequest, GroupCoordinatorResponse
 from .topic import Topic
 from .utils.compat import iteritems, itervalues, range
