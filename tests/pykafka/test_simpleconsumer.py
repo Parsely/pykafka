@@ -81,8 +81,8 @@ class TestSimpleConsumer(unittest2.TestCase):
         """
         if isinstance(offset_responses, dict):
             offset_responses = iteritems(offset_responses)
-        f1 = lambda off: OffsetType.EARLIEST if off == 0 else off - 1
-        f2 = lambda off: off[0] if isinstance(off, list) else off
+        f1 = lambda off: OffsetType.EARLIEST if off == 0 else off - 1  # noqa
+        f2 = lambda off: off[0] if isinstance(off, list) else off  # noqa
         return {partition_id: f1(f2(offset_response.offset))
                 for partition_id, offset_response in offset_responses}
 
@@ -262,7 +262,7 @@ class TestOwnedPartition(unittest2.TestCase):
         op = OwnedPartition(partition, compacted_topic=True)
         op.enqueue_messages([message1])
         self.assertEqual(op.message_count, 1)
-        consumed_msg = op.consume()
+        op.consume()
         self.assertEqual(op.message_count, 0)
         self.assertEqual(op.last_offset_consumed, last_offset)
 

@@ -77,8 +77,9 @@ class ProducerIntegrationTests(unittest2.TestCase):
         if not self.USE_RDKAFKA:
             # ensure that a crash on a worker thread still raises exception in sync mode
             p = self._get_producer(sync=True)
+
             def stub_send_request(self, message_batch, owned_broker):
-                1/0
+                1 / 0
             p._send_request = types.MethodType(stub_send_request, p)
             with self.assertRaises(ZeroDivisionError):
                 p.produce(b"test")
