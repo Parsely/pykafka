@@ -168,7 +168,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
         self.assertTrue(int(time.time() - start) >= int(linger))
         consumer.consume()
         consumer.consume()
-    test_async_produce_lingers.skip_condition = RDKAFKA
+    test_async_produce_lingers.skip_condition = lambda cls: RDKAFKA
 
     def test_async_produce_thread_exception(self):
         """Ensure that an exception on a worker thread is raised to the main thread"""
