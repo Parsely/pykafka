@@ -13,6 +13,12 @@ try:
 except ImportError:
     gevent = None
 
+try:
+    from pykafka.rdkafka import _rd_kafka  # noqa
+    RDKAFKA = True
+except ImportError:
+    RDKAFKA = False  # C extension not built
+
 from pykafka import KafkaClient
 from pykafka.simpleconsumer import OwnedPartition, OffsetType
 from pykafka.test.utils import get_cluster, stop_cluster
@@ -193,6 +199,7 @@ class TestSimpleConsumer(unittest2.TestCase):
             # If the fetcher thread fell over during the cluster update
             # process, we'd get an exception here:
             self.assertIsNotNone(consumer.consume())
+    test_update_cluster.skip_condition = lambda cls: RDKAFKA
 
     def test_consumer_lag(self):
         """Ensure that after consuming the entire topic, lag is 0"""
