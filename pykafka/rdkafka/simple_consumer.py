@@ -1,6 +1,7 @@
 from contextlib import contextmanager
 import logging
 from pkg_resources import parse_version
+import sys
 import time
 
 from pykafka.exceptions import RdKafkaStoppedException, ConsumerStoppedException
@@ -93,6 +94,8 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
                     rdk_handle.poll(timeout_ms=1000)
                 except RdKafkaStoppedException:
                     break
+                except:
+                    self._worker_exception = sys.exc_info()
             log.debug("Exiting RdKafkaSimpleConsumer poller thread cleanly.")
 
         self._stop_poller_thread.clear()
@@ -117,6 +120,7 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
         if msg is not None:
             # set offset in OwnedPartition so the autocommit_worker can find it
             self._partitions_by_id[msg.partition_id].set_offset(msg.offset)
+        self._raise_worker_exceptions()
         return msg
 
     def _consume(self, timeout_ms):
