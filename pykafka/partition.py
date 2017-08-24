@@ -22,7 +22,7 @@ import time
 import weakref
 
 from .common import OffsetType
-from .exceptions import LeaderNotAvailable
+from .exceptions import LeaderNotFoundError
 from .protocol import PartitionOffsetRequest
 
 log = logging.getLogger(__name__)
@@ -153,6 +153,6 @@ class Partition(object):
                 log.info('Updating in sync replicas list for %s', self)
                 self._isr = [brokers[b] for b in metadata.isr]
         except KeyError:
-            raise LeaderNotAvailable("Replica for partition %s not available. This is "
-                                     "probably because none of its replicas are "
-                                     "available.", self.id)
+            raise LeaderNotFoundError("Replica for partition %s not available. This is "
+                                      "probably because none of its replicas are "
+                                      "available.", self.id)

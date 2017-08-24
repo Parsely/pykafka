@@ -22,7 +22,7 @@ from collections import defaultdict
 
 from .balancedconsumer import BalancedConsumer
 from .common import OffsetType
-from .exceptions import LeaderNotAvailable
+from .exceptions import LeaderNotFoundError
 from .managedbalancedconsumer import ManagedBalancedConsumer
 from .partition import Partition
 from .producer import Producer
@@ -164,7 +164,7 @@ class Topic(object):
             log.info("Adding %d partitions", len(p_metas))
         for id_, meta in iteritems(p_metas):
             if meta.leader not in brokers:
-                raise LeaderNotAvailable()
+                raise LeaderNotFoundError()
             if meta.id not in self._partitions:
                 log.debug('Adding partition %s/%s', self.name, meta.id)
                 self._partitions[meta.id] = Partition(
