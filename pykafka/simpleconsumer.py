@@ -420,7 +420,7 @@ class SimpleConsumer(object):
                 return
             yield message
 
-    def consume(self, block=True):
+    def consume(self, block=True, rebalance_lock=None):
         """Get one message from the consumer.
 
         :param block: Whether to block while waiting for a message
@@ -454,6 +454,8 @@ class SimpleConsumer(object):
                 elif not block or self._consumer_timeout_ms > 0:
                     ret = None
                     break
+            if rebalance_lock and rebalance_lock.locked():
+                return ret
 
         if any(op.message_count <= self._queued_max_messages
                for op in itervalues(self._partitions)):
