@@ -120,7 +120,6 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
         if msg is not None:
             # set offset in OwnedPartition so the autocommit_worker can find it
             self._partitions_by_id[msg.partition_id].set_offset(msg.offset)
-        self._raise_worker_exceptions()
         return msg
 
     def _consume(self, timeout_ms):
@@ -129,6 +128,7 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
 
         if timeout_ms < 0:
             while True:
+                self._raise_worker_exceptions()
                 msg = self._rdk_consumer.consume(inner_timeout_ms)
                 if msg is not None:
                     return msg
