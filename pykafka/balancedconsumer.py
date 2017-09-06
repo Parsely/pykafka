@@ -235,8 +235,8 @@ class BalancedConsumer(object):
             raise ImportError("use_rdkafka cannot be used with gevent")
         self._use_rdkafka = rdkafka and use_rdkafka
 
-        self._rebalance_lock = cluster.handler.Lock()
-        self._rebalancing_in_progress_lock = cluster.handler.Lock()
+        self._rebalancing_lock = cluster.handler.Lock()
+        self._rebalancing_in_progress = self._cluster.handler.Event()
         self._internal_consumer_running = self._cluster.handler.Event()
         self._consumer = None
         self._consumer_id = get_bytes("{hostname}:{uuid}".format(
@@ -320,7 +320,7 @@ class BalancedConsumer(object):
         This method should be called as part of a graceful shutdown process.
         """
         log.debug("Stopping {}".format(self))
-        with self._rebalance_lock:
+        with self._rebalancing_lock:
             # We acquire the lock in order to prevent a race condition where a
             # rebalance that is already underway might re-register the zk
             # nodes that we remove here
@@ -605,17 +605,24 @@ class BalancedConsumer(object):
 
         This method is called whenever a zookeeper watch is triggered.
         """
-        with self._rebalancing_in_progress_lock:
-            if self._consumer is not None:
-                self.commit_offsets()
-            # this is necessary because we can't stop() while the lock is held
-            # (it's not an RLock)
-            with self._rebalance_lock:
-                if not self._running:
-                    raise ConsumerStoppedException
-                log.info('Rebalancing consumer "%s" for topic "%s".' % (
-                    self._consumer_id, self._topic.name))
-                self._update_member_assignment()
+        # This Event is used to notify about rebalance operation to SimpleConsumer's consume().
+        if not self._rebalancing_in_progress.is_set():
+            self._rebalancing_in_progress.set()
+
+        if self._consumer is not None:
+            self.commit_offsets()
+        # this is necessary because we can't stop() while the lock is held
+        # (it's not an RLock)
+        with self._rebalancing_lock:
+            if not self._running:
+                raise ConsumerStoppedException
+            log.info('Rebalancing consumer "%s" for topic "%s".' % (
+                self._consumer_id, self._topic.name))
+            self._update_member_assignment()
+
+        if self._rebalancing_in_progress.is_set():
+            self._rebalancing_in_progress.clear()
+
 
     def _path_from_partition(self, p):
         """Given a partition, return its path in zookeeper.
@@ -743,11 +750,11 @@ class BalancedConsumer(object):
                 self._raise_worker_exceptions()
                 self._internal_consumer_running.wait(self._consumer_timeout_ms / 1000)
             try:
-                if not self._rebalancing_in_progress_lock.locked():
+                if not self._rebalancing_in_progress.is_set():
                     # acquire the lock to ensure that we don't start trying to consume from
                     # a _consumer that might soon be replaced by an in-progress rebalance
-                    with self._rebalance_lock:
-                        message = self._consumer.consume(block=block, rebalance_lock=self._rebalancing_in_progress_lock)
+                    with self._rebalancing_lock:
+                        message = self._consumer.consume(block=block, rebalance_event=self._rebalancing_in_progress)
             except (ConsumerStoppedException, AttributeError):
                 if not self._running:
                     raise ConsumerStoppedException
