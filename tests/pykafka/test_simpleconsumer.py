@@ -5,6 +5,7 @@ import os
 import platform
 import pytest
 import time
+import threading
 import unittest2
 from uuid import uuid4
 
@@ -75,6 +76,29 @@ class TestSimpleConsumer(unittest2.TestCase):
                     # timeout set above
                     break
             self.assertEquals(count, self.total_msgs)
+
+    def test_unblock_event(self):
+        """A call to consume() should return when unblock_event is set()
+
+        To block consume() method indefinitely, all messages in the topic need to
+        be consumed and the timeout should be set to -1.
+        """
+        topic = self.client.topics[self.topic_name]
+        consumer = topic.get_simple_consumer(use_rdkafka=self.USE_RDKAFKA, consumer_timeout_ms=-1)
+
+        # Consume all messages in the topic
+        count = 0
+        for _ in consumer:
+            count += 1
+            if count == self.total_msgs:
+                break
+
+        unblock_event = threading.Event()
+        consume_thread = threading.Thread(target=consumer.consume, kwargs={'unblock_event': unblock_event})
+        consume_thread.start()
+        unblock_event.set()
+        consume_thread.join(10)
+        self.assertFalse(consume_thread.is_alive())
 
     @staticmethod
     def _convert_offsets(offset_responses):
