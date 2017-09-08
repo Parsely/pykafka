@@ -136,6 +136,7 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
             t_start = time.time()
             leftover_ms = timeout_ms
             while leftover_ms > 0:
+                self._raise_worker_exceptions()
                 inner_timeout_ms = int(min(leftover_ms, inner_timeout_ms))
                 msg = self._rdk_consumer.consume(inner_timeout_ms)
                 if msg is not None:
