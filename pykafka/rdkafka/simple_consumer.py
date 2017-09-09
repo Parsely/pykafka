@@ -102,10 +102,10 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
         self._poller_thread = self._cluster.handler.spawn(
             poll, args=(self._rdk_consumer, self._stop_poller_thread))
 
-    def consume(self, block=True):
+    def consume(self, block=True, unblock_event=None):
         timeout_ms = self._consumer_timeout_ms if block else 1
         try:
-            msg = self._consume(timeout_ms)
+            msg = self._consume(timeout_ms, unblock_event)
         # if _rdk_consumer is None we'll catch an AttributeError here
         except (RdKafkaStoppedException, AttributeError) as e:
             if not self._running:
@@ -122,12 +122,14 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
             self._partitions_by_id[msg.partition_id].set_offset(msg.offset)
         return msg
 
-    def _consume(self, timeout_ms):
+    def _consume(self, timeout_ms, unblock_event):
         """Helper to allow catching interrupts around rd_kafka_consume"""
         inner_timeout_ms = 500  # unblock at this interval at least
 
         if timeout_ms < 0:
             while True:
+                if unblock_event and unblock_event.is_set():
+                    return
                 self._raise_worker_exceptions()
                 msg = self._rdk_consumer.consume(inner_timeout_ms)
                 if msg is not None:
@@ -136,6 +138,8 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
             t_start = time.time()
             leftover_ms = timeout_ms
             while leftover_ms > 0:
+                if unblock_event and unblock_event.is_set():
+                    return
                 self._raise_worker_exceptions()
                 inner_timeout_ms = int(min(leftover_ms, inner_timeout_ms))
                 msg = self._rdk_consumer.consume(inner_timeout_ms)
