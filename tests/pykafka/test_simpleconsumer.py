@@ -97,7 +97,7 @@ class TestSimpleConsumer(unittest2.TestCase):
         consume_thread = threading.Thread(target=consumer.consume, kwargs={'unblock_event': unblock_event})
         consume_thread.start()
         unblock_event.set()
-        consume_thread.join(10)
+        consume_thread.join(30)
         self.assertFalse(consume_thread.is_alive())
 
     @staticmethod

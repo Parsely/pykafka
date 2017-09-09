@@ -253,8 +253,8 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
         consumer_b_thread = threading.Thread(target=consumer_b.consume)
         consumer_b_thread.start()
 
-        consumer_a_thread.join(10)
-        consumer_b_thread.join(10)
+        consumer_a_thread.join(30)
+        consumer_b_thread.join(30)
 
         # consumer thread would die in case of any rebalancing errors
         self.assertTrue(consumer_a_thread.is_alive() and consumer_b_thread.is_alive())
