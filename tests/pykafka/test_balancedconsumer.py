@@ -236,6 +236,8 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
 
         https://github.com/Parsely/pykafka/issues/701
         """
+        BalancedConsumerIntegrationTests.tearDownClass()
+        BalancedConsumerIntegrationTests.setUpClass()
         group = b'test_rebalance'
         consumer_a = self.get_balanced_consumer(group, consumer_timeout_ms=-1)
 
