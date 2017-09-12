@@ -230,14 +230,12 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
                 except:
                     pass
 
-    def test_rebalance_unblock_event(self):
+    def test_a_rebalance_unblock_event(self):
         """Adding a new consumer instance to a group should release
         blocking consume() call of any existing consumer instance(s).
 
         https://github.com/Parsely/pykafka/issues/701
         """
-        BalancedConsumerIntegrationTests.tearDownClass()
-        BalancedConsumerIntegrationTests.setUpClass()
         group = b'test_rebalance'
         consumer_a = self.get_balanced_consumer(group, consumer_timeout_ms=-1)
 
