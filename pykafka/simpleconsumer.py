@@ -594,7 +594,7 @@ class SimpleConsumer(object):
             to_retry = [pair for err in itervalues(parts_by_error) for pair in err]
             reqs = [p.build_offset_fetch_request() for p, _ in to_retry]
 
-        if len(parts_by_error) > 1:
+        if len(parts_by_error) > 0:
             raise KafkaException(parts_by_error)
 
     def reset_offsets(self, partition_offsets=None):
