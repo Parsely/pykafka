@@ -455,7 +455,7 @@ class SimpleConsumer(object):
                     ret = None
                     break
             if unblock_event and unblock_event.is_set():
-                return ret
+                return
 
         if any(op.message_count <= self._queued_max_messages
                for op in itervalues(self._partitions)):
