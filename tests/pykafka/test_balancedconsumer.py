@@ -258,6 +258,7 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
 
         # consumer thread would die in case of any rebalancing errors
         self.assertTrue(consumer_a_thread.is_alive() and consumer_b_thread.is_alive())
+    test_a_rebalance_unblock_event.skip_condition = lambda cls: cls.USE_GEVENT
 
     def test_rebalance_callbacks(self):
         def on_rebalance(cns, old_partition_offsets, new_partition_offsets):
