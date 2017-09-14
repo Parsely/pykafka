@@ -754,6 +754,12 @@ class BalancedConsumer(object):
                 # a _consumer that might soon be replaced by an in-progress rebalance
                 with self._rebalancing_lock:
                     message = self._consumer.consume(block=block, unblock_event=self._rebalancing_in_progress)
+
+                # If Gevent is used, waiting to acquire _rebalancing lock introduces a race condition.
+                # This sleep would ensure that the _rebalance method acquires the _rebalancing_lock
+                # Issue: https://github.com/Parsely/pykafka/issues/671
+                if self._rebalancing_in_progress.is_set():
+                    time.sleep(.1)
             except (ConsumerStoppedException, AttributeError):
                 if not self._running:
                     raise ConsumerStoppedException
