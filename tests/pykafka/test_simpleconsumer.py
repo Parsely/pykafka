@@ -93,7 +93,7 @@ class TestSimpleConsumer(unittest2.TestCase):
             if count == self.total_msgs:
                 break
 
-        unblock_event = threading.Event()
+        unblock_event = consumer._cluster.handler.Event()
         consume_thread = threading.Thread(target=consumer.consume, kwargs={'unblock_event': unblock_event})
         consume_thread.start()
         unblock_event.set()
