@@ -425,6 +425,8 @@ class SimpleConsumer(object):
 
         :param block: Whether to block while waiting for a message
         :type block: bool
+        :param unblock_event: Return when the event is set()
+        :type unblock_event: :class:`threading.Event`
         """
         timeout = None
         if block:
