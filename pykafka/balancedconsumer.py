@@ -759,7 +759,7 @@ class BalancedConsumer(object):
                 # This sleep would ensure that the _rebalance method acquires the _rebalancing_lock
                 # Issue: https://github.com/Parsely/pykafka/issues/671
                 if self._rebalancing_in_progress.is_set():
-                    time.sleep(.1)
+                    self._cluster.handler.sleep()
             except (ConsumerStoppedException, AttributeError):
                 if not self._running:
                     raise ConsumerStoppedException
