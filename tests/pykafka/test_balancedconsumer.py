@@ -230,6 +230,8 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
                 except:
                     pass
 
+    # weird name to ensure test execution order, because there is an unintended
+    # interdependency between test_consume_latest and other tests
     def test_a_rebalance_unblock_event(self):
         """Adding a new consumer instance to a group should release
         blocking consume() call of any existing consumer instance(s).
