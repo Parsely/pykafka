@@ -5,6 +5,7 @@ import pkg_resources
 import platform
 import pytest
 import time
+import threading
 import unittest2
 from uuid import uuid4
 
@@ -148,13 +149,14 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
         cls.topic_name = uuid4().hex.encode()
         cls.n_partitions = 3
         cls.kafka.create_topic(cls.topic_name, cls.n_partitions, 2)
+        cls.total_msgs = 1000
         cls.client = KafkaClient(cls.kafka.brokers,
                                  use_greenlets=cls.USE_GEVENT,
                                  broker_version=kafka_version_string)
         cls.prod = cls.client.topics[cls.topic_name].get_producer(
             min_queued_messages=1
         )
-        for i in range(1000):
+        for i in range(cls.total_msgs):
             cls.prod.produce('msg {num}'.format(num=i).encode())
 
     @classmethod
@@ -227,6 +229,36 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
                     consumer.stop()
                 except:
                     pass
+
+    def test_a_rebalance_unblock_event(self):
+        """Adding a new consumer instance to a group should release
+        blocking consume() call of any existing consumer instance(s).
+
+        https://github.com/Parsely/pykafka/issues/701
+        """
+        group = b'test_rebalance'
+        consumer_a = self.get_balanced_consumer(group, consumer_timeout_ms=-1)
+
+        # consume all msgs to block the consume() call
+        count = 0
+        for _ in consumer_a:
+            count += 1
+            if count == self.total_msgs:
+                break
+
+        consumer_a_thread = threading.Thread(target=consumer_a.consume)
+        consumer_a_thread.start()
+
+        consumer_b = self.get_balanced_consumer(group, consumer_timeout_ms=-1)
+        consumer_b_thread = threading.Thread(target=consumer_b.consume)
+        consumer_b_thread.start()
+
+        consumer_a_thread.join(30)
+        consumer_b_thread.join(30)
+
+        # consumer thread would die in case of any rebalancing errors
+        self.assertTrue(consumer_a_thread.is_alive() and consumer_b_thread.is_alive())
+    test_a_rebalance_unblock_event.skip_condition = lambda cls: cls.USE_GEVENT
 
     def test_rebalance_callbacks(self):
         def on_rebalance(cns, old_partition_offsets, new_partition_offsets):
