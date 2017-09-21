@@ -1,6 +1,59 @@
 Changelog
 =========
 
+2.7.0.dev1 (2017-9-21)
+----------------------
+
+`Compare 2.7.0.dev1`_
+
+.. _Compare 2.7.0.dev1: https://github.com/Parsely/pykafka/compare/2.6.0...2.7.0.dev1
+
+Minor Version Features
+----------------------
+
+* Added a `broker_version` kwarg to `Broker.__init__` for the purpose of setting
+  `api_version` in `FetchResponse`
+* Added a `topic_name` argument to `Broker.join_group` for use in protocol metadata,
+  visible via the Administrative API
+* Added a function `print_managed_consumer_groups` to the CLI
+* Added a `timestamp` kwarg to `Producer.produce` to pass on messages when the broker
+  supports newer message formats
+* Changed `Producer.produce` to return the produced `Message` instance
+* Added `protocol_version` and `timestamp` kwargs to `Message`
+* Added support for the `fetch_error_backoff_ms` kwarg on `SimpleConsumer`
+* Added an `unblock_event` kwarg to `SimpleConsumer.consume` used to notify the consumer
+  that its parent `BalancedConsumer` is in the process of rebalancing
+* Added a general-purpose `cleanup` function to `SimpleConsumer`
+
+Bug Fixes
+---------
+
+* Added an `Event` that notifies the internal `SimpleConsumer` of a `BalancedConsumer`
+  that a rebalance is in progress, fixing a bug causing partitions to be unreleased
+* Fixed a bug causing busywaiting in the `BalancedConsumer` when there are no partitions
+  available
+* Updated the protocol implementation to send non-empty `GroupMembershipProtocol`
+  objects and become compatible with the Administrative API
+* Fixed a bytestring bug causing `kafka_tools.reset_offsets` not to work in python 3
+* Added a separate retry limit on connections to the offset manager
+* Improved logging on socket errors
+* Fixed a bug causing API version not to be passed on certain requests
+* Handled new `MessageSet` compression scheme in API v1
+* Fixed a bug in `rdkafka.SimpleConsumer` causing exceptions not to be raised from worker
+  threads
+* Fixed a bug causing `fetch_offsets` not to raise exceptions under certain conditions
+  when it should
+
+Miscellaneous
+-------------
+
+* Separated gevent tests from other builds in Travis
+* Made dependency on gevent optional
+* Added a convenient CLI entry point via `__main__`
+* Fixed exception naming convention to align with naming in the broker
+* Avoided building the `rdkafka` extension on platforms that don't support it
+* Fixed a bug in test harness causing some tests not to be inherited from parent classes
+
 2.6.0 (2017-5-2)
 ----------------
 
