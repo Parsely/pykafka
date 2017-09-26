@@ -602,6 +602,7 @@ class SimpleConsumer(object):
 
         if len(parts_by_error) > 0:
             raise KafkaException(parts_by_error)
+        return success_responses
 
     def reset_offsets(self, partition_offsets=None):
         """Reset offsets for the specified partitions
