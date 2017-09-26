@@ -537,6 +537,8 @@ class SimpleConsumer(object):
         """
         if not self._consumer_group:
             raise Exception("consumer group must be specified to fetch offsets")
+        if not self._partitions:
+            return []
 
         def _handle_success(parts):
             partition_offsets_to_reset = []
