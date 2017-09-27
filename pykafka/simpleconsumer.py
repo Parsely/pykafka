@@ -537,6 +537,8 @@ class SimpleConsumer(object):
         """
         if not self._consumer_group:
             raise Exception("consumer group must be specified to fetch offsets")
+        if not self._partitions:
+            return []
 
         def _handle_success(parts):
             partition_offsets_to_reset = []
@@ -600,6 +602,7 @@ class SimpleConsumer(object):
 
         if len(parts_by_error) > 0:
             raise KafkaException(parts_by_error)
+        return success_responses
 
     def reset_offsets(self, partition_offsets=None):
         """Reset offsets for the specified partitions
