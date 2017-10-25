@@ -400,7 +400,7 @@ class SimpleConsumer(object):
                     if not self._running:
                         break
                     self.fetch()
-                    self._cluster.handler.sleep(.0001)
+                    self._cluster.handler.sleep(.01)
                 except ReferenceError:
                     break
                 except Exception:
