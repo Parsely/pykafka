@@ -254,7 +254,8 @@ def encode_lz4_old_kafka(buff):
 
 
 def decode_lz4_old_kafka(buff):
-    """
+    """Decode buff for 0.8/0.9 brokers
+
     Reference impl: https://github.com/dpkp/kafka-python/blob/a00f9ead161e8b05ac953b460950e42fa0e0b7d6/kafka/codec.py#L258
     """
     assert xxhash is not None

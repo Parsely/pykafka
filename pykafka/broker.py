@@ -299,6 +299,7 @@ class Broker(object):
             timeout=timeout,
             min_bytes=min_bytes,
             api_version=response_class.api_version,
+            broker_version=self._broker_version
         ))
         # XXX - this call returns even with less than min_bytes of messages?
         return future.get(response_class)
