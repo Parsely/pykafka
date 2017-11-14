@@ -192,26 +192,19 @@ def encode_lz4(buff):
     frame = lz4.compress(buff, block_mode=1, content_size_header=True)
     return frame
 
+
 def decode_lz4(buff):
     try:
         return lz4.decompress(buff)
     except:
-        return lz4.decompress(decode_lz4_old_kafka(buff)) 
+        return lz4.decompress(decode_lz4_old_kafka(buff))
 
-"""
-if lz4:
-    encode_lz4 = lz4.compress # pylint: disable-msg=no-member
-else:
-    encode_lz4 = None
-
-if lz4:
-    decode_lz4 = lz4.decompress # pylint: disable-msg=no-member
-else:
-    decode_lz4 = None
-"""
 
 def encode_lz4_old_kafka(buff):
-    """Encode buff for 0.8/0.9 brokers -- requires an incorrect header checksum."""
+    """Encode buff for 0.8/0.9 brokers -- requires an incorrect header checksum.
+
+    Reference impl: https://github.com/dpkp/kafka-python/blob/a00f9ead161e8b05ac953b460950e42fa0e0b7d6/kafka/codec.py#L227
+    """
     assert xxhash is not None
     data = encode_lz4(buff)
     header_size = 7
@@ -242,6 +235,9 @@ def encode_lz4_old_kafka(buff):
 
 
 def decode_lz4_old_kafka(buff):
+    """
+    Reference impl: https://github.com/dpkp/kafka-python/blob/a00f9ead161e8b05ac953b460950e42fa0e0b7d6/kafka/codec.py#L258
+    """
     assert xxhash is not None
     # Kafka's LZ4 code has a bug in its header checksum implementation
     header_size = 7
