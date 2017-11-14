@@ -43,6 +43,7 @@ extra_gevent_requires = [
 
 extra_requires = [
     'lz4==0.10.1',
+    'lz4tools==1.3.1.2',
     'xxhash==1.0.1'
 ] + extra_gevent_requires
 
