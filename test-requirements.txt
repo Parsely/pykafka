@@ -1,6 +1,8 @@
+lz4==0.10.1
 pytest
 pytest-cov
 python-snappy
 mock
 unittest2
+xxhash==1.0.1
 -e git+https://github.com/Parsely/testinstances.git@0.3.0#egg=testinstances

@@ -34,10 +34,10 @@ try:
 except ImportError:
     lz4 = None
 
-#try:
-#    import lz4f
-#except ImportError:
-#    lz4f = None
+try:
+    import lz4f
+except ImportError:
+    lz4f = None
 
 try:
     import xxhash
@@ -188,9 +188,13 @@ def _detect_xerial_stream(buff):
         return header == _XERIAL_V1_HEADER
     return False
 
-def encode_lz4(buff):
-    frame = lz4.compress(buff, block_mode=1, content_size_header=True)
-    return frame
+
+if lz4:
+    encode_lz4 = lz4.compress  # pylint: disable-msg=no-member
+elif lz4f:
+    encode_lz4 = lz4f.compressFrame  # pylint: disable-msg=no-member
+else:
+    encode_lz4 = None
 
 
 def decode_lz4(buff):
@@ -257,5 +261,4 @@ def decode_lz4_old_kafka(buff):
         hc,
         buff[header_size:]
     ])
-    #return decode_lz4(munged_buff)
-    return munged_buff
+    return decode_lz4(munged_buff)

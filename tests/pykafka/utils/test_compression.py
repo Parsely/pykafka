@@ -38,6 +38,27 @@ class CompressionTests(unittest2.TestCase):
         c = compression.encode_snappy(payload)
         self.assertEqual(compression.decode_snappy(c), payload)
 
+    def test_lz4(self):
+        encoded = compression.encode_lz4(self.text)
+        self.assertNotEqual(self.text, encoded)
+
+        decoded = compression.decode_lz4(encoded)
+        self.assertEqual(self.text, decoded)
+
+    def test_lz4f(self):
+        encoded = compression.encode_lz4(self.text)
+        self.assertNotEqual(self.text, encoded)
+
+        decoded = compression.decode_lz4(encoded)
+        self.assertEqual(self.text, decoded)
+
+    def test_lz4_old_kafka(self):
+        encoded = compression.encode_lz4_old_kafka(self.text)
+        self.assertNotEqual(self.text, encoded)
+
+        decoded = compression.decode_lz4_old_kafka(encoded)
+        self.assertEqual(self.text, decoded)
+
 
 if __name__ == '__main__':
     unittest2.main()
