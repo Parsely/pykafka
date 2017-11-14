@@ -1,3 +1,4 @@
+import lz4f
 import platform
 import pytest
 import unittest2
@@ -46,10 +47,10 @@ class CompressionTests(unittest2.TestCase):
         self.assertEqual(self.text, decoded)
 
     def test_lz4f(self):
-        encoded = compression.encode_lz4(self.text)
+        encoded = lz4f.compressFrame(self.text)
         self.assertNotEqual(self.text, encoded)
 
-        decoded = compression.decode_lz4(encoded)
+        decoded = compression.decode_lz4f(encoded)
         self.assertEqual(self.text, decoded)
 
     def test_lz4_old_kafka(self):

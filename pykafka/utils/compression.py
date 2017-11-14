@@ -197,11 +197,26 @@ else:
     encode_lz4 = None
 
 
-def decode_lz4(buff):
-    try:
-        return lz4.decompress(buff)
-    except:
-        return lz4.decompress(decode_lz4_old_kafka(buff))
+def decode_lz4f(buff):
+    """Decode payload using interoperable LZ4 framing. Requires Kafka >= 0.10"""
+    # pylint: disable-msg=no-member
+    ctx = lz4f.createDecompContext()
+    data = lz4f.decompressFrame(buff, ctx)
+    lz4f.freeDecompContext(ctx)
+
+    # lz4f python module does not expose how much of the payload was
+    # actually read if the decompression was only partial.
+    if data['next'] != 0:
+        raise RuntimeError('lz4f unable to decompress full buffer')
+    return data['decomp']
+
+
+if lz4:
+    decode_lz4 = lz4.decompress  # pylint: disable-msg=no-member
+elif lz4f:
+    decode_lz4 = decode_lz4f
+else:
+    decode_lz4 = None
 
 
 def encode_lz4_old_kafka(buff):
