@@ -856,7 +856,7 @@ class FetchResponse(Response):
 class FetchResponseV1(FetchResponse):
     api_version = 1
 
-    def __init__(self, buff, offset=0):
+    def __init__(self, buff, offset=0, broker_version='0.9.0'):
         """Deserialize into a new Response
 
         :param buff: Serialized message
@@ -866,7 +866,8 @@ class FetchResponseV1(FetchResponse):
         """
         # TODO: Use throttle_time
         self.throttle_time = struct_helpers.unpack_from("i", buff, offset)
-        super(FetchResponseV1, self).__init__(buff, offset + 4)
+        super(FetchResponseV1, self).__init__(buff, offset + 4,
+                                              broker_version=broker_version)
 
 
 class FetchResponseV2(FetchResponseV1):
