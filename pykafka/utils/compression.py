@@ -49,12 +49,6 @@ log = logging.getLogger(__name__)
 _XERIAL_V1_HEADER = (-126, b'S', b'N', b'A', b'P', b'P', b'Y', 0, 1, 1)
 _XERIAL_V1_FORMAT = 'bccccccBii'
 
-def has_lz4():
-    if lz4 is not None:
-        return True
-    if lz4f is not None:
-        return True
-    return False
 
 def encode_gzip(buff):
     """Encode a buffer using gzip"""
