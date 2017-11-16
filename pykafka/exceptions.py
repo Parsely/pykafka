@@ -29,6 +29,13 @@ class NoBrokersAvailableError(KafkaException):
     pass
 
 
+class LeaderNotFoundError(KafkaException):
+    """Indicates that the leader broker for a given partition was not found during
+        an update in response to a MetadataRequest
+    """
+    pass
+
+
 class SocketDisconnectedError(KafkaException):
     """Indicates that the socket connecting this client to a kafka broker has
         become disconnected
@@ -48,6 +55,11 @@ class ConsumerStoppedException(KafkaException):
 
 class NoMessagesConsumedError(KafkaException):
     """Indicates that no messages were returned from a MessageSet"""
+    pass
+
+
+class MessageSetDecodeFailure(KafkaException):
+    """Indicates a generic failure in the decoding of a MessageSet from the broker"""
     pass
 
 
@@ -74,8 +86,14 @@ class PartitionOwnedError(KafkaException):
         self.partition = partition
 
 
-# Protocol Client Exceptions
-# https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol#AGuideToTheKafkaProtocol-ErrorCodes
+"""
+Protocol Client Exceptions
+https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol#AGuideToTheKafkaProtocol-ErrorCodes
+
+NOTE: Don't raise these from client code unless it's in direct response to an error
+code from the broker. When that's not the case, the exception raised should instead be
+a subclass of KafkaException.
+"""
 
 
 class ProtocolClientError(KafkaException):

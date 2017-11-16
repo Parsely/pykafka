@@ -215,12 +215,18 @@ If you're interested in contributing code to PyKafka, a good place to start is t
 `"help wanted"`_ issue tag. We also recommend taking a look at the `contribution guide`_.
 
 .. _"help wanted": https://github.com/Parsely/pykafka/issues?q=is%3Aopen+is%3Aissue+label%3A%22help+wanted%22
-.. _contribution guide: https://github.com/Parsely/pykafka/blob/master/CONTRIBUTING.rst
 
 Support
 -------
 
-If you need help using PyKafka or have found a bug, please open a `github issue`_ or use the `Google Group`_.
+If you need help using PyKafka, there are a bunch of resources available.
+For usage questions or common recipes, check out the `StackOverflow tag`_.
+The `Google Group`_ can be useful for more in-depth questions or inquries
+you'd like to send directly to the PyKafka maintainers. If you believe you've
+found a bug in PyKafka, please open a `github issue`_ after reading the
+`contribution guide`_.
 
+.. _StackOverflow tag: https://stackoverflow.com/questions/tagged/pykafka
 .. _github issue: https://github.com/Parsely/pykafka/issues
 .. _Google Group: https://groups.google.com/forum/#!forum/pykafka-user
+.. _contribution guide: https://github.com/Parsely/pykafka/blob/master/CONTRIBUTING.rst

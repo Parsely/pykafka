@@ -1,19 +1,19 @@
-import platform
-import unittest2
-
 import pytest
+import unittest2
 
 from tests.pykafka import test_simpleconsumer, test_balancedconsumer, patch_subclass
 from pykafka.utils.compat import range
+try:
+    from pykafka.rdkafka import _rd_kafka  # noqa
+    RDKAFKA = True
+except ImportError:
+    RDKAFKA = False  # C extension not built
 
 
-@pytest.mark.skipif(platform.python_implementation() == "PyPy",
-                    reason="Unresolved crashes which I cannot reproduce "
-                           "locally (TODO: track this down).")
-class TestRdKafkaSimpleConsumer(test_simpleconsumer.TestSimpleConsumer):
+@patch_subclass(test_simpleconsumer.TestSimpleConsumer, not RDKAFKA)
+class TestRdKafkaSimpleConsumer(unittest2.TestCase):
     USE_RDKAFKA = True
 
-    @pytest.mark.xfail
     def test_update_cluster(self):
         """Won't work because we don't run SimpleConsumer.fetch"""
         super(TestRdKafkaSimpleConsumer, self).test_update_cluster()
@@ -69,7 +69,6 @@ def _latest_partition_offsets_by_reading(consumer, n_reads):
     return latest_offs
 
 
-@patch_subclass(test_balancedconsumer.BalancedConsumerIntegrationTests,
-                platform.python_implementation() == "PyPy")
+@patch_subclass(test_balancedconsumer.BalancedConsumerIntegrationTests, not RDKAFKA)
 class RdkBalancedConsumerIntegrationTests(unittest2.TestCase):
     USE_RDKAFKA = True

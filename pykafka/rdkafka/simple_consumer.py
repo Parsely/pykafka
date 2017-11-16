@@ -1,6 +1,7 @@
 from contextlib import contextmanager
 import logging
 from pkg_resources import parse_version
+import sys
 import time
 
 from pykafka.exceptions import RdKafkaStoppedException, ConsumerStoppedException
@@ -93,16 +94,18 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
                     rdk_handle.poll(timeout_ms=1000)
                 except RdKafkaStoppedException:
                     break
+                except:
+                    self._worker_exception = sys.exc_info()
             log.debug("Exiting RdKafkaSimpleConsumer poller thread cleanly.")
 
         self._stop_poller_thread.clear()
         self._poller_thread = self._cluster.handler.spawn(
             poll, args=(self._rdk_consumer, self._stop_poller_thread))
 
-    def consume(self, block=True):
+    def consume(self, block=True, unblock_event=None):
         timeout_ms = self._consumer_timeout_ms if block else 1
         try:
-            msg = self._consume(timeout_ms)
+            msg = self._consume(timeout_ms, unblock_event)
         # if _rdk_consumer is None we'll catch an AttributeError here
         except (RdKafkaStoppedException, AttributeError) as e:
             if not self._running:
@@ -119,12 +122,15 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
             self._partitions_by_id[msg.partition_id].set_offset(msg.offset)
         return msg
 
-    def _consume(self, timeout_ms):
+    def _consume(self, timeout_ms, unblock_event):
         """Helper to allow catching interrupts around rd_kafka_consume"""
         inner_timeout_ms = 500  # unblock at this interval at least
 
         if timeout_ms < 0:
             while True:
+                self._raise_worker_exceptions()
+                if unblock_event and unblock_event.is_set():
+                    return
                 msg = self._rdk_consumer.consume(inner_timeout_ms)
                 if msg is not None:
                     return msg
@@ -132,6 +138,9 @@ class RdKafkaSimpleConsumer(SimpleConsumer):
             t_start = time.time()
             leftover_ms = timeout_ms
             while leftover_ms > 0:
+                self._raise_worker_exceptions()
+                if unblock_event and unblock_event.is_set():
+                    return
                 inner_timeout_ms = int(min(leftover_ms, inner_timeout_ms))
                 msg = self._rdk_consumer.consume(inner_timeout_ms)
                 if msg is not None:

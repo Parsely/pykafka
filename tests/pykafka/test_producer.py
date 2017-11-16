@@ -13,6 +13,12 @@ try:
 except ImportError:
     gevent = None
 
+try:
+    from pykafka.rdkafka import _rd_kafka  # noqa
+    RDKAFKA = True
+except ImportError:
+    RDKAFKA = False  # C extension not built
+
 from pykafka import KafkaClient
 from pykafka.common import OffsetType
 from pykafka.exceptions import MessageSizeTooLarge, ProducerQueueFullError
@@ -21,7 +27,7 @@ from pykafka.protocol import Message
 from pykafka.test.utils import get_cluster, stop_cluster, retry
 from pykafka.common import CompressionType
 from pykafka.producer import OwnedBroker
-
+from tests.pykafka import patch_subclass
 
 kafka_version = os.environ.get('KAFKA_VERSION', '0.8.0')
 
@@ -77,8 +83,9 @@ class ProducerIntegrationTests(unittest2.TestCase):
         if not self.USE_RDKAFKA:
             # ensure that a crash on a worker thread still raises exception in sync mode
             p = self._get_producer(sync=True)
+
             def stub_send_request(self, message_batch, owned_broker):
-                1/0
+                1 / 0
             p._send_request = types.MethodType(stub_send_request, p)
             with self.assertRaises(ZeroDivisionError):
                 p.produce(b"test")
@@ -162,6 +169,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
         self.assertTrue(int(time.time() - start) >= int(linger))
         consumer.consume()
         consumer.consume()
+    test_async_produce_lingers.skip_condition = lambda cls: RDKAFKA
 
     def test_async_produce_thread_exception(self):
         """Ensure that an exception on a worker thread is raised to the main thread"""
@@ -345,6 +353,11 @@ class ProducerIntegrationTests(unittest2.TestCase):
                 msgs.append(msg)
             assert len(msgs) == 10
         retry(ensure_all_messages_consumed, retry_time=15)
+
+
+@patch_subclass(ProducerIntegrationTests, not RDKAFKA)
+class TestRdKafkaProducer(unittest2.TestCase):
+    USE_RDKAFKA = True
 
 
 @pytest.mark.skipif(platform.python_implementation() == "PyPy" or gevent is None,

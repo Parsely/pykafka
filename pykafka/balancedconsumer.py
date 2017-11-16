@@ -236,6 +236,7 @@ class BalancedConsumer(object):
         self._use_rdkafka = rdkafka and use_rdkafka
 
         self._rebalancing_lock = cluster.handler.Lock()
+        self._rebalancing_in_progress = self._cluster.handler.Event()
         self._internal_consumer_running = self._cluster.handler.Event()
         self._consumer = None
         self._consumer_id = get_bytes("{hostname}:{uuid}".format(
@@ -604,6 +605,10 @@ class BalancedConsumer(object):
 
         This method is called whenever a zookeeper watch is triggered.
         """
+        # This Event is used to notify about rebalance operation to SimpleConsumer's consume().
+        if not self._rebalancing_in_progress.is_set():
+            self._rebalancing_in_progress.set()
+
         if self._consumer is not None:
             self.commit_offsets()
         # this is necessary because we can't stop() while the lock is held
@@ -614,6 +619,10 @@ class BalancedConsumer(object):
             log.info('Rebalancing consumer "%s" for topic "%s".' % (
                 self._consumer_id, self._topic.name))
             self._update_member_assignment()
+
+        if self._rebalancing_in_progress.is_set():
+            self._rebalancing_in_progress.clear()
+
 
     def _path_from_partition(self, p):
         """Given a partition, return its path in zookeeper.
@@ -744,7 +753,13 @@ class BalancedConsumer(object):
                 # acquire the lock to ensure that we don't start trying to consume from
                 # a _consumer that might soon be replaced by an in-progress rebalance
                 with self._rebalancing_lock:
-                    message = self._consumer.consume(block=block)
+                    message = self._consumer.consume(block=block, unblock_event=self._rebalancing_in_progress)
+
+                # If Gevent is used, waiting to acquire _rebalancing lock introduces a race condition.
+                # This sleep would ensure that the _rebalance method acquires the _rebalancing_lock
+                # Issue: https://github.com/Parsely/pykafka/issues/671
+                if self._rebalancing_in_progress.is_set():
+                    self._cluster.handler.sleep()
             except (ConsumerStoppedException, AttributeError):
                 if not self._running:
                     raise ConsumerStoppedException

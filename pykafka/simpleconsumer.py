@@ -400,7 +400,7 @@ class SimpleConsumer(object):
                     if not self._running:
                         break
                     self.fetch()
-                    self._cluster.handler.sleep(.0001)
+                    self._cluster.handler.sleep(.01)
                 except ReferenceError:
                     break
                 except Exception:
@@ -420,11 +420,13 @@ class SimpleConsumer(object):
                 return
             yield message
 
-    def consume(self, block=True):
+    def consume(self, block=True, unblock_event=None):
         """Get one message from the consumer.
 
         :param block: Whether to block while waiting for a message
         :type block: bool
+        :param unblock_event: Return when the event is set()
+        :type unblock_event: :class:`threading.Event`
         """
         timeout = None
         if block:
@@ -454,6 +456,8 @@ class SimpleConsumer(object):
                 elif not block or self._consumer_timeout_ms > 0:
                     ret = None
                     break
+            if unblock_event and unblock_event.is_set():
+                return
 
         if any(op.message_count <= self._queued_max_messages
                for op in itervalues(self._partitions)):
@@ -533,6 +537,8 @@ class SimpleConsumer(object):
         """
         if not self._consumer_group:
             raise Exception("consumer group must be specified to fetch offsets")
+        if not self._partitions:
+            return []
 
         def _handle_success(parts):
             partition_offsets_to_reset = []
@@ -594,8 +600,9 @@ class SimpleConsumer(object):
             to_retry = [pair for err in itervalues(parts_by_error) for pair in err]
             reqs = [p.build_offset_fetch_request() for p, _ in to_retry]
 
-        if len(parts_by_error) > 1:
+        if len(parts_by_error) > 0:
             raise KafkaException(parts_by_error)
+        return success_responses
 
     def reset_offsets(self, partition_offsets=None):
         """Reset offsets for the specified partitions

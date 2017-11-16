@@ -311,6 +311,9 @@ class Producer(object):
         :param partition_key: The key to use when deciding which partition to send this
             message to
         :type partition_key: bytes
+        :param timestamp: The timestamp at which the message is produced (requires
+            broker_version >= 0.10.0)
+        :type timestamp: `datetime.datetime`
         :return: The :class:`pykafka.protocol.Message` instance that was
             added to the internal message queue
         """

@@ -342,7 +342,7 @@ def _get_arg_parser():
 
     # Get consumer groups for a topic
     parser = subparsers.add_parser(
-        'print_consumer_groups',
+        'print_managed_consumer_groups',
         help='Get consumer groups for a topic'
     )
     parser.set_defaults(func=print_managed_consumer_groups)

@@ -5,6 +5,7 @@ import os
 import platform
 import pytest
 import time
+import threading
 import unittest2
 from uuid import uuid4
 
@@ -12,6 +13,12 @@ try:
     import gevent
 except ImportError:
     gevent = None
+
+try:
+    from pykafka.rdkafka import _rd_kafka  # noqa
+    RDKAFKA = True
+except ImportError:
+    RDKAFKA = False  # C extension not built
 
 from pykafka import KafkaClient
 from pykafka.simpleconsumer import OwnedPartition, OffsetType
@@ -70,6 +77,29 @@ class TestSimpleConsumer(unittest2.TestCase):
                     break
             self.assertEquals(count, self.total_msgs)
 
+    def test_unblock_event(self):
+        """A call to consume() should return when unblock_event is set()
+
+        To block consume() method indefinitely, all messages in the topic need to
+        be consumed and the timeout should be set to -1.
+        """
+        topic = self.client.topics[self.topic_name]
+        consumer = topic.get_simple_consumer(use_rdkafka=self.USE_RDKAFKA, consumer_timeout_ms=-1)
+
+        # Consume all messages in the topic
+        count = 0
+        for _ in consumer:
+            count += 1
+            if count == self.total_msgs:
+                break
+
+        unblock_event = consumer._cluster.handler.Event()
+        consume_thread = threading.Thread(target=consumer.consume, kwargs={'unblock_event': unblock_event})
+        consume_thread.start()
+        unblock_event.set()
+        consume_thread.join(30)
+        self.assertFalse(consume_thread.is_alive())
+
     @staticmethod
     def _convert_offsets(offset_responses):
         """Helper function to translate Offset(Fetch)PartitionResponse
@@ -81,8 +111,8 @@ class TestSimpleConsumer(unittest2.TestCase):
         """
         if isinstance(offset_responses, dict):
             offset_responses = iteritems(offset_responses)
-        f1 = lambda off: OffsetType.EARLIEST if off == 0 else off - 1
-        f2 = lambda off: off[0] if isinstance(off, list) else off
+        f1 = lambda off: OffsetType.EARLIEST if off == 0 else off - 1  # noqa
+        f2 = lambda off: off[0] if isinstance(off, list) else off  # noqa
         return {partition_id: f1(f2(offset_response.offset))
                 for partition_id, offset_response in offset_responses}
 
@@ -193,6 +223,7 @@ class TestSimpleConsumer(unittest2.TestCase):
             # If the fetcher thread fell over during the cluster update
             # process, we'd get an exception here:
             self.assertIsNotNone(consumer.consume())
+    test_update_cluster.skip_condition = lambda cls: RDKAFKA
 
     def test_consumer_lag(self):
         """Ensure that after consuming the entire topic, lag is 0"""
@@ -262,7 +293,7 @@ class TestOwnedPartition(unittest2.TestCase):
         op = OwnedPartition(partition, compacted_topic=True)
         op.enqueue_messages([message1])
         self.assertEqual(op.message_count, 1)
-        consumed_msg = op.consume()
+        op.consume()
         self.assertEqual(op.message_count, 0)
         self.assertEqual(op.last_offset_consumed, last_offset)
 

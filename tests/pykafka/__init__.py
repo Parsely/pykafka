@@ -33,12 +33,18 @@ def patch_subclass(parent, skip_condition):
                 return method(self)
             return _wrapper
 
-        # two passes required so that skips have access to all class attributes
+        # two passes over parent required so that skips have access to all class
+        # attributes
         for attr in parent.__dict__:
             if attr in cls.__dict__:
                 continue
             if not attr.startswith("test_"):
                 setattr(cls, attr, parent.__dict__[attr])
+
+        for attr in cls.__dict__:
+            if attr.startswith("test_"):
+                setattr(cls, attr, build_skipped_method(cls.__dict__[attr],
+                                                        cls, skip_condition))
 
         for attr in parent.__dict__:
             if attr.startswith("test_"):
