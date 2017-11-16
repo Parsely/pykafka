@@ -399,7 +399,8 @@ class Producer(object):
         req = ProduceRequest(
             compression_type=self._compression,
             required_acks=self._required_acks,
-            timeout=self._ack_timeout_ms
+            timeout=self._ack_timeout_ms,
+            broker_version=self._cluster._broker_version
         )
         req.delivered = 0
         for msg in message_batch:

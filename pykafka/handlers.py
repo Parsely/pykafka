@@ -64,7 +64,7 @@ class ResponseFuture(object):
         self.error = error
         self._ready.set()
 
-    def get(self, response_cls=None, timeout=None):
+    def get(self, response_cls=None, timeout=None, **response_kwargs):
         """Block until data is ready and return.
 
         Raises an exception if there was an error.
@@ -73,7 +73,7 @@ class ResponseFuture(object):
         if self.error:
             raise self.error
         if response_cls:
-            return response_cls(self.response)
+            return response_cls(self.response, **response_kwargs)
         else:
             return self.response
 

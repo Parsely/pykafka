@@ -298,10 +298,10 @@ class Broker(object):
             partition_requests=partition_requests,
             timeout=timeout,
             min_bytes=min_bytes,
-            api_version=response_class.api_version,
+            api_version=response_class.api_version
         ))
         # XXX - this call returns even with less than min_bytes of messages?
-        return future.get(response_class)
+        return future.get(response_class, broker_version=self._broker_version)
 
     @_check_handler
     def produce_messages(self, produce_request):

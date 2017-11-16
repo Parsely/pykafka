@@ -46,6 +46,7 @@ class CompressionType(object):
     NONE = 0
     GZIP = 1
     SNAPPY = 2
+    LZ4 = 3
 
 
 class OffsetType(object):

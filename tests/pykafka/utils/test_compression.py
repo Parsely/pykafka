@@ -1,3 +1,4 @@
+import lz4f
 import platform
 import pytest
 import unittest2
@@ -37,6 +38,29 @@ class CompressionTests(unittest2.TestCase):
         payload = b''.join([uuid4().bytes for i in range(10)])
         c = compression.encode_snappy(payload)
         self.assertEqual(compression.decode_snappy(c), payload)
+
+    def test_lz4(self):
+        encoded = compression.encode_lz4(self.text)
+        self.assertNotEqual(self.text, encoded)
+
+        decoded = compression.decode_lz4(encoded)
+        self.assertEqual(self.text, decoded)
+
+    @pytest.mark.skipif(platform.python_implementation() == "PyPy",
+                        reason="lz4f is currently unsupported with PyPy")
+    def test_lz4f(self):
+        encoded = lz4f.compressFrame(self.text)
+        self.assertNotEqual(self.text, encoded)
+
+        decoded = compression.decode_lz4f(encoded)
+        self.assertEqual(self.text, decoded)
+
+    def test_lz4_old_kafka(self):
+        encoded = compression.encode_lz4_old_kafka(self.text)
+        self.assertNotEqual(self.text, encoded)
+
+        decoded = compression.decode_lz4_old_kafka(encoded)
+        self.assertEqual(self.text, decoded)
 
 
 if __name__ == '__main__':

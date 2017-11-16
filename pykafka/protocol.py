@@ -301,15 +301,21 @@ class MessageSet(Serializable):
     :ivar messages: The list of messages currently in the MessageSet
     :ivar compression_type: compression to use for the messages
     """
-    def __init__(self, compression_type=CompressionType.NONE, messages=None):
+    def __init__(self,
+                 compression_type=CompressionType.NONE,
+                 messages=None,
+                 broker_version='0.9.0'):
         """Create a new MessageSet
 
         :param compression_type: Compression to use on the messages
         :param messages: An initial list of messages for the set
+        :param broker_version: The highest broker version with which this MessageSet is
+            compatible
         """
         self.compression_type = compression_type
         self._messages = messages or []
         self._compressed = None  # compressed Message if using compression
+        self._broker_version = broker_version
 
     def __len__(self):
         """Length of the serialized message, in bytes
@@ -349,6 +355,11 @@ class MessageSet(Serializable):
             compressed = compression.encode_gzip(buffer(uncompressed))
         elif self.compression_type == CompressionType.SNAPPY:
             compressed = compression.encode_snappy(buffer(uncompressed))
+        elif self.compression_type == CompressionType.LZ4:
+            if parse_version(self._broker_version) >= parse_version('0.10.0'):
+                compressed = compression.encode_lz4(buffer(uncompressed))
+            else:
+                compressed = compression.encode_lz4_old_kafka(buffer(uncompressed))
         else:
             raise TypeError("Unknown compression: %s" % self.compression_type)
         protocol_version = max((m.protocol_version for m in self._messages))
@@ -516,7 +527,8 @@ class ProduceRequest(Request):
     def __init__(self,
                  compression_type=CompressionType.NONE,
                  required_acks=1,
-                 timeout=10000):
+                 timeout=10000,
+                 broker_version='0.9.0'):
         """Create a new ProduceRequest
 
         ``required_acks`` determines how many acknowledgement the server waits
@@ -537,7 +549,8 @@ class ProduceRequest(Request):
         # {topic_name: {partition_id: MessageSet}}
         self.msets = defaultdict(
             lambda: defaultdict(
-                lambda: MessageSet(compression_type=compression_type)
+                lambda: MessageSet(compression_type=compression_type,
+                                   broker_version=broker_version)
             ))
         self.required_acks = required_acks
         self.timeout = timeout
@@ -786,7 +799,7 @@ class FetchResponse(Response):
         else:
             return FetchResponse
 
-    def __init__(self, buff, offset=0):
+    def __init__(self, buff, offset=0, broker_version='0.9.0'):
         """Deserialize into a new Response
 
         :param buff: Serialized message
@@ -802,11 +815,12 @@ class FetchResponse(Response):
                 self.topics[topic][partition[0]] = FetchPartitionResponse(
                     partition[2],
                     self._unpack_message_set(partition[3],
-                                             partition_id=partition[0]),
+                                             partition_id=partition[0],
+                                             broker_version=broker_version),
                     partition[1]
                 )
 
-    def _unpack_message_set(self, buff, partition_id=-1):
+    def _unpack_message_set(self, buff, partition_id=-1, broker_version='0.9.0'):
         """MessageSets can be nested. Get just the Messages out of it."""
         output = []
         message_set = MessageSet.decode(buff, partition_id=partition_id)
@@ -822,6 +836,13 @@ class FetchResponse(Response):
                 decompressed = compression.decode_snappy(message.value)
                 messages = self._unpack_message_set(decompressed,
                                                     partition_id=partition_id)
+            elif message.compression_type == CompressionType.LZ4:
+                if parse_version(broker_version) >= parse_version('0.10.0'):
+                    decompressed = compression.decode_lz4(message.value)
+                else:
+                    decompressed = compression.decode_lz4_old_kafka(message.value)
+                messages = self._unpack_message_set(decompressed,
+                                                    partition_id=partition_id)
             if messages[-1].offset < message.offset:
                 # With protocol 1, offsets from compressed messages start at 0
                 assert messages[0].offset == 0
@@ -835,7 +856,7 @@ class FetchResponse(Response):
 class FetchResponseV1(FetchResponse):
     api_version = 1
 
-    def __init__(self, buff, offset=0):
+    def __init__(self, buff, offset=0, broker_version='0.9.0'):
         """Deserialize into a new Response
 
         :param buff: Serialized message
@@ -845,7 +866,8 @@ class FetchResponseV1(FetchResponse):
         """
         # TODO: Use throttle_time
         self.throttle_time = struct_helpers.unpack_from("i", buff, offset)
-        super(FetchResponseV1, self).__init__(buff, offset + 4)
+        super(FetchResponseV1, self).__init__(buff, offset + 4,
+                                              broker_version=broker_version)
 
 
 class FetchResponseV2(FetchResponseV1):

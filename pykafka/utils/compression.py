@@ -16,7 +16,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-__all__ = ["encode_gzip", "decode_gzip", "encode_snappy", "decode_snappy"]
+__all__ = ["encode_gzip", "decode_gzip", "encode_snappy", "decode_snappy", "encode_lz4", "decode_lz4", "encode_lz4_old_kafka","decode_lz4_old_kafka"]
 import gzip
 from io import BytesIO
 import logging
@@ -28,6 +28,21 @@ try:
     import snappy
 except ImportError:
     snappy = None
+
+try:
+    import lz4.frame as lz4
+except ImportError:
+    lz4 = None
+
+try:
+    import lz4f
+except ImportError:
+    lz4f = None
+
+try:
+    import xxhash
+except ImportError:
+    xxhash = None
 
 log = logging.getLogger(__name__)
 # constants used in snappy xerial encoding/decoding
@@ -166,3 +181,94 @@ def _detect_xerial_stream(buff):
         header = struct.unpack('!' + _XERIAL_V1_FORMAT, bytes(buff)[:16])
         return header == _XERIAL_V1_HEADER
     return False
+
+
+if lz4:
+    encode_lz4 = lz4.compress  # pylint: disable-msg=no-member
+elif lz4f:
+    encode_lz4 = lz4f.compressFrame  # pylint: disable-msg=no-member
+else:
+    encode_lz4 = None
+
+
+def decode_lz4f(buff):
+    """Decode payload using interoperable LZ4 framing. Requires Kafka >= 0.10"""
+    # pylint: disable-msg=no-member
+    ctx = lz4f.createDecompContext()
+    data = lz4f.decompressFrame(buff, ctx)
+    lz4f.freeDecompContext(ctx)
+
+    # lz4f python module does not expose how much of the payload was
+    # actually read if the decompression was only partial.
+    if data['next'] != 0:
+        raise RuntimeError('lz4f unable to decompress full buffer')
+    return data['decomp']
+
+
+if lz4:
+    decode_lz4 = lz4.decompress  # pylint: disable-msg=no-member
+elif lz4f:
+    decode_lz4 = decode_lz4f
+else:
+    decode_lz4 = None
+
+
+def encode_lz4_old_kafka(buff):
+    """Encode buff for 0.8/0.9 brokers -- requires an incorrect header checksum.
+
+    Reference impl: https://github.com/dpkp/kafka-python/blob/a00f9ead161e8b05ac953b460950e42fa0e0b7d6/kafka/codec.py#L227
+    """
+    assert xxhash is not None
+    data = encode_lz4(buff)
+    header_size = 7
+    flg = data[4]
+    if not isinstance(flg, int):
+        flg = ord(flg)
+
+    content_size_bit = ((flg >> 3) & 1)
+    if content_size_bit:
+        # Old kafka does not accept the content-size field
+        # so we need to discard it and reset the header flag
+        flg -= 8
+        data = bytearray(data)
+        data[4] = flg
+        data = bytes(data)
+        buff = data[header_size+8:]
+    else:
+        buff = data[header_size:]
+
+    # This is the incorrect hc
+    hc = xxhash.xxh32(data[0:header_size-1]).digest()[-2:-1]  # pylint: disable-msg=no-member
+
+    return b''.join([
+        data[0:header_size-1],
+        hc,
+        buff
+    ])
+
+
+def decode_lz4_old_kafka(buff):
+    """Decode buff for 0.8/0.9 brokers
+
+    Reference impl: https://github.com/dpkp/kafka-python/blob/a00f9ead161e8b05ac953b460950e42fa0e0b7d6/kafka/codec.py#L258
+    """
+    assert xxhash is not None
+    # Kafka's LZ4 code has a bug in its header checksum implementation
+    header_size = 7
+    if isinstance(buff[4], int):
+        flg = buff[4]
+    else:
+        flg = ord(buff[4])
+    content_size_bit = ((flg >> 3) & 1)
+    if content_size_bit:
+        header_size += 8
+
+    # This should be the correct hc
+    hc = xxhash.xxh32(buff[4:header_size-1]).digest()[-2:-1]  # pylint: disable-msg=no-member
+
+    munged_buff = b''.join([
+        buff[0:header_size-1],
+        hc,
+        buff[header_size:]
+    ])
+    return decode_lz4(munged_buff)

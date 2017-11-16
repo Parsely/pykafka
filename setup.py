@@ -47,6 +47,12 @@ extra_gevent_requires = [
     'gevent>=1.1.0'
 ]
 
+extra_requires = [
+    'lz4==0.10.1',
+    'lz4tools==1.3.1.2',
+    'xxhash==1.0.1'
+] + extra_gevent_requires
+
 lint_requires = [
     'pep8',
     'pyflakes'
@@ -145,7 +151,7 @@ def run_setup(with_rdkafka=True):
         setup_requires=setup_requires,
         extras_require={
             'test': tests_require,
-            'all': install_requires + tests_require + extra_gevent_requires,
+            'all': install_requires + tests_require + extra_requires,
             'docs': ['sphinx'] + tests_require,
             'lint': lint_requires,
             'gevent': extra_gevent_requires
