@@ -17,7 +17,7 @@ limitations under the License.
 """
 Author: Keith Bourgoin, Emmett Butler
 
-Protocol implementation for Kafka 0.8
+Protocol implementation for Kafka>=0.8.2
 
 The implementation has been done with an attempt to minimize memory
 allocations in order to improve performance. With the exception of
@@ -297,9 +297,6 @@ class MessageSet(Serializable):
         MessageSet => [Offset MessageSize Message]
           Offset => int64
           MessageSize => int32
-
-    :ivar messages: The list of messages currently in the MessageSet
-    :ivar compression_type: compression to use for the messages
     """
     def __init__(self,
                  compression_type=CompressionType.NONE,
@@ -309,8 +306,7 @@ class MessageSet(Serializable):
 
         :param compression_type: Compression to use on the messages
         :param messages: An initial list of messages for the set
-        :param broker_version: The highest broker version with which this MessageSet is
-            compatible
+        :param broker_version: A broker version with which this MessageSet is compatible
         """
         self.compression_type = compression_type
         self._messages = messages or []

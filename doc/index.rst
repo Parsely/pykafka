@@ -8,7 +8,6 @@ Help Documents
     :maxdepth: 1
 
     usage.rst
-    roadmap.rst
 
 *****************
 API Documentation
