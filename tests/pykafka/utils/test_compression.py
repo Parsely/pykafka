@@ -46,6 +46,8 @@ class CompressionTests(unittest2.TestCase):
         decoded = compression.decode_lz4(encoded)
         self.assertEqual(self.text, decoded)
 
+    @pytest.mark.skipif(platform.python_implementation() == "PyPy",
+                        reason="lz4f is currently unsupported with PyPy")
     def test_lz4f(self):
         encoded = lz4f.compressFrame(self.text)
         self.assertNotEqual(self.text, encoded)
