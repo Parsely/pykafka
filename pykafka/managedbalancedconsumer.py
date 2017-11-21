@@ -78,7 +78,9 @@ class ManagedBalancedConsumer(BalancedConsumer):
         :param cluster: The cluster to which this consumer should connect
         :type cluster: :class:`pykafka.cluster.Cluster`
         :param consumer_group: The name of the consumer group this consumer
-            should join.
+            should join. Consumer group names are namespaced at the cluster level,
+            meaning that two consumers consuming different topics with the same group name
+            will be treated as part of the same group.
         :type consumer_group: bytes
         :param fetch_message_max_bytes: The number of bytes of messages to
             attempt to fetch with each fetch request
