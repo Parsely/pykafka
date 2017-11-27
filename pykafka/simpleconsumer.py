@@ -74,7 +74,8 @@ class SimpleConsumer(object):
                  reset_offset_on_start=False,
                  compacted_topic=False,
                  generation_id=-1,
-                 consumer_id=b''):
+                 consumer_id=b'',
+                 reset_offsets_on_consume=True):
         """Create a SimpleConsumer.
 
         Settings and default values are taken from the Scala
@@ -155,6 +156,9 @@ class SimpleConsumer(object):
         :param consumer_id: The identifying string to use for this consumer on group
             requests
         :type consumer_id: bytes
+        :param reset_offsets_on_consume: Whether to update the offsets when consuming.
+               Disable for read-only use cases to prevent side-effects.
+        :type reset_offsets_on_consume: bool
         """
         self._running = False
         self._cluster = cluster
@@ -219,6 +223,7 @@ class SimpleConsumer(object):
         self.partition_cycle = itertools.cycle(self._partitions.values())
 
         self._default_error_handlers = self._build_default_error_handlers()
+        self.reset_offsets_on_consume = reset_offsets_on_consume
 
         if self._auto_start:
             self.start()
@@ -583,7 +588,7 @@ class SimpleConsumer(object):
             parts_by_error = handle_partition_responses(
                 self._default_error_handlers,
                 response=res,
-                success_handler=_handle_success,
+                success_handler=_handle_success if self.reset_offsets_on_consume else None,
                 partitions_by_id=self._partitions_by_id)
 
             success_responses.extend([(op.partition.id, r)
