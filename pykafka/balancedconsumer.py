@@ -431,6 +431,33 @@ class BalancedConsumer(object):
             consumer_id=self._consumer_id
         )
 
+    def _decide_partitions_rr(self, participants, consumer_id=None):
+        # Freeze and sort partitions so we always have the same results
+        def p_to_str(p):
+            return '-'.join([str(p.topic.name), str(p.leader.id), str(p.id)])
+
+        if consumer_id is None:
+            consumer_id = self._consumer_id
+        partitions = self._topic.partitions.values()
+        partitions = sorted(partitions, key=p_to_str)
+        participants = sorted(participants)
+
+        shorter = partitions if len(partitions) <= len(participants) else participants
+        longer = partitions if len(partitions) > len(participants) else participants
+        pairs = itertools.izip(longer, itertools.cycle(shorter))
+
+        new_partitions = set()
+        for partition, participant in pairs:
+            if participant == consumer_id:
+                new_partitions.add(partition)
+        new_partitions = set(partition for partition, participant in pairs
+                             if participant == consumer_id)
+        log.info('%s: Balancing %i participants for %i partitions. Owning %i partitions.',
+                 consumer_id, len(participants), len(partitions),
+                 len(new_partitions))
+        log.debug('My partitions: %s', [p_to_str(p) for p in new_partitions])
+        return new_partitions
+
     def _decide_partitions(self, participants, consumer_id=None):
         """Decide which partitions belong to this consumer.
 
