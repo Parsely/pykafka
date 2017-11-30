@@ -416,7 +416,12 @@ class Broker(object):
     #  Group Membership API  #
     ##########################
 
-    def join_group(self, connection_id, consumer_group, member_id, topic_name):
+    def join_group(self,
+                   connection_id,
+                   consumer_group,
+                   member_id,
+                   topic_name,
+                   membership_protocol):
         """Send a JoinGroupRequest
 
         :param connection_id: The unique identifier of the connection on which to make
@@ -429,11 +434,15 @@ class Broker(object):
         :param topic_name: The name of the topic to which to connect, used in protocol
             metadata
         :type topic_name: str
+        :param membership_protocol: The group membership protocol to which this request
+            should adhere
+        :type membership_protocol: :class:`pykafka.membershipprotocol.GroupMembershipProtocol`
         """
         handler = self._get_unique_req_handler(connection_id)
         if handler is None:
             raise SocketDisconnectedError
-        future = handler.request(JoinGroupRequest(consumer_group, member_id, topic_name))
+        future = handler.request(JoinGroupRequest(consumer_group, member_id, topic_name,
+                                                  membership_protocol))
         self._handler.sleep()
         return future.get(JoinGroupResponse)
 

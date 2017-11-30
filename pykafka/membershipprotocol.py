@@ -9,7 +9,7 @@ GroupMembershipProtocol = namedtuple(
                                 'protocol_name',
                                 'metadata',
                                 'decide_partitions'])
-
+__metadata = ConsumerGroupProtocolMetadata(topic_names=[topic_name])
 
 def decide_partitions_range(participants, partitions, consumer_id):
     # Freeze and sort partitions so we always have the same results
@@ -39,7 +39,7 @@ def decide_partitions_range(participants, partitions, consumer_id):
 
 RangeProtocol = GroupMembershipProtocol(b"consumer",
                                         b"range",
-                                        None,
+                                        __metadata,
                                         decide_partitions_range)
 
 
@@ -70,5 +70,5 @@ def decide_partitions_roundrobin(participants, partitions, consumer_id):
 
 RoundRobinProtocol = GroupMembershipProtocol(b"consumer",
                                              b"roundrobin",
-                                             None,
+                                             __metadata,
                                              decide_partitions_roundrobin)

@@ -37,6 +37,7 @@ from six import reraise
 
 from .common import OffsetType
 from .exceptions import KafkaException, PartitionOwnedError, ConsumerStoppedException
+from .membershipprotocol import RangeProtocol
 from .simpleconsumer import SimpleConsumer
 from .utils.compat import range, get_bytes, itervalues, iteritems, get_string
 from .utils.error_handlers import valid_int
@@ -99,7 +100,8 @@ class BalancedConsumer(object):
                  reset_offset_on_start=False,
                  post_rebalance_callback=None,
                  use_rdkafka=False,
-                 compacted_topic=False):
+                 compacted_topic=False,
+                 membership_protocol=RangeProtocol):
         """Create a BalancedConsumer instance
 
         :param topic: The topic this consumer should consume
@@ -199,6 +201,9 @@ class BalancedConsumer(object):
             consumer to use less stringent message ordering logic because compacted
             topics do not provide offsets in strict incrementing order.
         :type compacted_topic: bool
+        :param membership_protocol: The group membership protocol to which this consumer
+            should adhere
+        :type membership_protocol: :class:`pykafka.membershipprotocol.GroupMembershipProtocol`
         """
         self._cluster = cluster
         if not isinstance(consumer_group, bytes):
@@ -230,6 +235,7 @@ class BalancedConsumer(object):
         self._running = False
         self._worker_exception = None
         self._is_compacted_topic = compacted_topic
+        self._membership_protocol = membership_protocol
 
         if not rdkafka and use_rdkafka:
             raise ImportError("use_rdkafka requires rdkafka to be installed")
@@ -604,7 +610,8 @@ class BalancedConsumer(object):
                     self._add_self()
                     participants.append(self._consumer_id)
 
-                new_partitions = self._decide_partitions(participants)
+                new_partitions = self._membership_protocol.decide_partitions(
+                    participants, self._topic.partitions, self._consumer_id)
                 if not new_partitions:
                     log.warning("No partitions assigned to consumer %s",
                                 self._consumer_id)
