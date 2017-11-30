@@ -1,19 +1,17 @@
 PyKafka Usage Guide
 ===================
 
-This document contains prose explanations and examples of common patterns of PyKafka
-usage.
+This document contains explanations and examples of common patterns of PyKafka usage.
 
 Consumer Patterns
------------------
+=================
 
 Setting the initial offset
 --------------------------
 
-This section applies to both the `SimpleConsumer` and the `BalancedConsumer`.
-
 When a PyKafka consumer starts fetching messages from a topic, its starting position in
-the log is defined by two keyword arguments: `auto_offset_reset` and `reset_offset_on_start`.
+the log is defined by two keyword arguments: `auto_offset_reset` and
+`reset_offset_on_start`.
 
 .. sourcecode:: python
 
@@ -74,6 +72,17 @@ This behavior is based on the `auto.offset.reset` section of the `Kafka document
 .. _Kafka documentation: http://kafka.apache.org/documentation.html
 
 Producer Patterns
------------------
+=================
 
-TODO
+Producing to multiple topics
+----------------------------
+
+Avoid repeated calls to the relatively `get_producer` when possible. If producing to
+multiple topics from a single process, it's helpful to keep the `Producer` objects in
+memory instead of letting them be garbage collected and reinstantiated repeatedly.
+
+.. sourcecode:: python
+
+    topic_producers = {topic.name: topic.get_producer() for topic in topics_to_produce_to}
+    for destination_topic, message in consumed_messages:
+        topic_producers[destination_topic.name].produce(message)
