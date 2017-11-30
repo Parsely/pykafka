@@ -25,6 +25,12 @@ You can install PyKafka from PyPI with
 
     $ pip install pykafka
 
+or from conda-forge with
+
+::
+
+    $ conda install -c conda-forge pykafka
+
 Full documentation and usage examples for PyKafka can be found on `readthedocs`_.
 
 You can install PyKafka for local development and testing by cloning this repository and

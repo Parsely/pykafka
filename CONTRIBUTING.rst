@@ -87,3 +87,19 @@ version number, and the tag and branch should be pushed to github. After the rel
 has been created, the branch should be deleted so that only the tagged release remains.
 
 .. _semantic versioning specification: http://semver.org/
+
+Release Process
+---------------
+
+* Verify that all tests pass on master
+* Add and commit updates to the `changelog`_
+* Increment the `version`_ according to SemVer, commit and tag with the version string
+* Use the GitHub `release UI`_ to create a new release
+* Push to PyPI with ``python setup.py sdist upload``
+* Update conda-forge version string and `SHA`_ with a pull request `here`_
+
+.. _changelog: https://github.com/Parsely/pykafka/blob/master/CHANGES.rst
+.. _version: https://github.com/Parsely/pykafka/blob/7de2ce209cfca5e0609b54f1d7b937f359f34628/pykafka/__init__.py#L12
+.. _release UI: https://github.com/Parsely/pykafka/releases/new
+.. _here: https://github.com/conda-forge/pykafka-feedstock/blob/abc608b8f8b8ea2b04e39c909408b3d1a1f10d9c/recipe/meta.yaml#L2-L3
+.. _SHA: https://pypi.org/project/pykafka/#files
