@@ -457,7 +457,8 @@ class BalancedConsumer(object):
 
         # get start point, # of partitions, and remainder
         participants = sorted(participants)  # just make sure it's sorted.
-        idx = participants.index(consumer_id or self._consumer_id)
+        consumer_id = consumer_id or self._consumer_id
+        idx = participants.index(consumer_id)
         parts_per_consumer = len(all_parts) // len(participants)
         remainder_ppc = len(all_parts) % len(participants)
 
@@ -468,7 +469,7 @@ class BalancedConsumer(object):
         new_partitions = itertools.islice(all_parts, start, start + num_parts)
         new_partitions = set(new_partitions)
         log.info('%s: Balancing %i participants for %i partitions. Owning %i partitions.',
-                 self._consumer_id, len(participants), len(all_parts),
+                 consumer_id, len(participants), len(all_parts),
                  len(new_partitions))
         log.debug('My partitions: %s', [p_to_str(p) for p in new_partitions])
         return new_partitions
