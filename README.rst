@@ -143,8 +143,8 @@ topic has partitions. If they are all connected to the same zookeeper instance,
 they will communicate with it to automatically balance the partitions between
 themselves.
 
-You can also use the Kafka 0.9 Group Membership API with the `managed`
-keyword argument on `get_balanced_consumer`.
+You can also use the Kafka 0.9 Group Membership API with the ``managed``
+keyword argument on ``get_balanced_consumer``.
 
 Using the librdkafka extension
 ------------------------------
