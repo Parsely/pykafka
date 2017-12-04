@@ -194,7 +194,7 @@ class ManagedBalancedConsumer(BalancedConsumer):
         self._post_rebalance_callback = post_rebalance_callback
         self._is_compacted_topic = compacted_topic
         self._membership_protocol = membership_protocol
-        self._membership_protocol.topic_names = [self._topic.name]
+        self._membership_protocol.metadata.topic_names = [self._topic.name]
         self._heartbeat_interval_ms = valid_int(heartbeat_interval_ms)
         if use_rdkafka is True:
             raise ImportError("use_rdkafka is not available for {}".format(
