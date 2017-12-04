@@ -12,7 +12,27 @@ GroupMembershipProtocol = namedtuple(
                                 'metadata',
                                 'decide_partitions'])
 
+
 def decide_partitions_range(participants, partitions, consumer_id):
+    """Decide which partitions belong to this consumer_id.
+
+    Uses the consumer rebalancing algorithm described here
+    https://kafka.apache.org/documentation/#impl_consumerrebalance
+
+    It is very important that the participants array is sorted,
+    since this algorithm runs on each consumer and indexes into the same
+    array. The same array index operation must return the same
+    result on each consumer.
+
+    :param participants: Sorted list of ids of all consumers in this
+        consumer group.
+    :type participants: Iterable of `bytes`
+    :param partitions: List of all partitions on the topic being consumed
+    :type partitions: Iterable of :class:`pykafka.partition.Partition`
+    :param consumer_id: The ID of the consumer for which to generate a partition
+        assignment.
+    :type consumer_id: bytes
+    """
     # Freeze and sort partitions so we always have the same results
     def p_to_str(p):
         return '-'.join([str(p.topic.name), str(p.leader.id), str(p.id)])
@@ -45,6 +65,20 @@ RangeProtocol = GroupMembershipProtocol(b"consumer",
 
 
 def decide_partitions_roundrobin(participants, partitions, consumer_id):
+    """Decide which partitions belong to this consumer_id.
+
+    Uses the "roundrobin" strategy described here
+    https://kafka.apache.org/documentation/#oldconsumerconfigs
+
+    :param participants: Sorted list of ids of all consumers in this
+        consumer group.
+    :type participants: Iterable of `bytes`
+    :param partitions: List of all partitions on the topic being consumed
+    :type partitions: Iterable of :class:`pykafka.partition.Partition`
+    :param consumer_id: The ID of the consumer for which to generate a partition
+        assignment.
+    :type consumer_id: bytes
+    """
     # Freeze and sort partitions so we always have the same results
     def p_to_str(p):
         return '-'.join([str(p.topic.name), str(p.leader.id), str(p.id)])

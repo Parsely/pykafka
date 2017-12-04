@@ -18,7 +18,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 __all__ = ["BalancedConsumer"]
-import itertools
 import logging
 import socket
 import sys
@@ -437,76 +436,6 @@ class BalancedConsumer(object):
             consumer_id=self._consumer_id
         )
 
-    def _decide_partitions_rr(self, participants, consumer_id=None):
-        # Freeze and sort partitions so we always have the same results
-        def p_to_str(p):
-            return '-'.join([str(p.topic.name), str(p.leader.id), str(p.id)])
-
-        if consumer_id is None:
-            consumer_id = self._consumer_id
-        partitions = self._topic.partitions.values()
-        partitions = sorted(partitions, key=p_to_str)
-        participants = sorted(participants)
-
-        shorter = partitions if len(partitions) <= len(participants) else participants
-        longer = partitions if len(partitions) > len(participants) else participants
-        pairs = itertools.izip(longer, itertools.cycle(shorter))
-
-        new_partitions = set()
-        for partition, participant in pairs:
-            if participant == consumer_id:
-                new_partitions.add(partition)
-        new_partitions = set(partition for partition, participant in pairs
-                             if participant == consumer_id)
-        log.info('%s: Balancing %i participants for %i partitions. Owning %i partitions.',
-                 consumer_id, len(participants), len(partitions),
-                 len(new_partitions))
-        log.debug('My partitions: %s', [p_to_str(p) for p in new_partitions])
-        return new_partitions
-
-    def _decide_partitions(self, participants, consumer_id=None):
-        """Decide which partitions belong to this consumer.
-
-        Uses the consumer rebalancing algorithm described here
-        https://kafka.apache.org/documentation/#impl_consumerrebalance
-
-        It is very important that the participants array is sorted,
-        since this algorithm runs on each consumer and indexes into the same
-        array. The same array index operation must return the same
-        result on each consumer.
-
-        :param participants: Sorted list of ids of all other consumers in this
-            consumer group.
-        :type participants: Iterable of `bytes`
-        :param consumer_id: The ID of the consumer for which to generate a partition
-            assignment. Defaults to `self._consumer_id`
-        """
-        # Freeze and sort partitions so we always have the same results
-        def p_to_str(p):
-            return '-'.join([str(p.topic.name), str(p.leader.id), str(p.id)])
-
-        all_parts = self._topic.partitions.values()
-        all_parts = sorted(all_parts, key=p_to_str)
-
-        # get start point, # of partitions, and remainder
-        participants = sorted(participants)  # just make sure it's sorted.
-        consumer_id = consumer_id or self._consumer_id
-        idx = participants.index(consumer_id)
-        parts_per_consumer = len(all_parts) // len(participants)
-        remainder_ppc = len(all_parts) % len(participants)
-
-        start = parts_per_consumer * idx + min(idx, remainder_ppc)
-        num_parts = parts_per_consumer + (0 if (idx + 1 > remainder_ppc) else 1)
-
-        # assign partitions from i*N to (i+1)*N - 1 to consumer Ci
-        new_partitions = itertools.islice(all_parts, start, start + num_parts)
-        new_partitions = set(new_partitions)
-        log.info('%s: Balancing %i participants for %i partitions. Owning %i partitions.',
-                 consumer_id, len(participants), len(all_parts),
-                 len(new_partitions))
-        log.debug('My partitions: %s', [p_to_str(p) for p in new_partitions])
-        return new_partitions
-
     def _get_participants(self):
         """Use zookeeper to get the other consumers of this topic.
 
@@ -659,7 +588,6 @@ class BalancedConsumer(object):
 
         if self._rebalancing_in_progress.is_set():
             self._rebalancing_in_progress.clear()
-
 
     def _path_from_partition(self, p):
         """Given a partition, return its path in zookeeper.
