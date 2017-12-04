@@ -78,7 +78,7 @@ class TestBalancedConsumer(unittest2.TestCase):
         with self.assertRaises(ConsumerStoppedException):
             consumer.consume()
 
-    def test_decide_partitions(self):
+    def test_decide_partitions_range(self):
         """Test partition assignment for a number of partitions/consumers."""
         # 100 test iterations
         for i in range(100):
@@ -114,6 +114,9 @@ class TestBalancedConsumer(unittest2.TestCase):
             all_partitions = sorted(all_partitions, key=lambda x: x.id)
             assigned_parts = sorted(assigned_parts, key=lambda x: x.id)
             self.assertListEqual(assigned_parts, all_partitions)
+
+    def test_decide_partitions_roundrobin(self):
+        self.assertTrue(False)
 
 
 class TestManagedBalancedConsumer(TestBalancedConsumer):
