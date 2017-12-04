@@ -196,7 +196,7 @@ class KafkaInstance(ManagedInstance):
         log.info('Downloading Kafka.')
         curr_dir = os.getcwd()
         os.chdir(self._bin_dir)
-        url_fmt = 'http://mirror.reverse.net/pub/apache/kafka/{kafka_version}/kafka_{scala_version}-{kafka_version}.tgz'
+        url_fmt = 'https://archive.apache.org/dist/kafka/{kafka_version}/kafka_{scala_version}-{kafka_version}.tgz'
         url = url_fmt.format(
             scala_version=self._scala_version,
             kafka_version=self._kafka_version
