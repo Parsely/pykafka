@@ -2,6 +2,8 @@ import itertools
 import logging
 from collections import namedtuple
 
+from .protocol import ConsumerGroupProtocolMetadata
+
 log = logging.getLogger(__name__)
 
 GroupMembershipProtocol = namedtuple(
