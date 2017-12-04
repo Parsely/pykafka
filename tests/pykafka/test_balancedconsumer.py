@@ -19,6 +19,7 @@ from pykafka import KafkaClient
 from pykafka.balancedconsumer import BalancedConsumer, OffsetType
 from pykafka.exceptions import ConsumerStoppedException
 from pykafka.managedbalancedconsumer import ManagedBalancedConsumer
+from pykafka.membershipprotocol import GroupMembershipProtocol
 from pykafka.test.utils import get_cluster, stop_cluster
 from pykafka.utils.compat import range, iterkeys, iteritems
 from tests.pykafka import patch_subclass
@@ -95,7 +96,8 @@ class TestBalancedConsumer(unittest2.TestCase):
                 cns._consumer_id = participants[p_id]  # override consumer id
 
                 # Decide partitions then validate
-                partitions = cns._decide_partitions(participants)
+                partitions = cns._membership_protocol.decide_partitions(
+                    participants, cns._topic.partitions, cns._consumer_id)
                 assigned_parts.extend(partitions)
 
                 remainder_ppc = num_partitions % num_participants
@@ -430,7 +432,7 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
     def test_no_partitions(self):
         """Ensure a consumer assigned no partitions doesn't fail"""
 
-        def _decide_dummy(p, consumer_id=None):
+        def _decide_dummy(participants, partitions, consumer_id):
             return set()
         consumer = self.get_balanced_consumer(
             b'test_no_partitions',
@@ -439,7 +441,12 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
             consumer_timeout_ms=50,
             use_rdkafka=self.USE_RDKAFKA)
 
-        consumer._decide_partitions = _decide_dummy
+        consumer._membership_protocol = GroupMembershipProtocol(
+            consumer._membership_protocol.protocol_type,
+            consumer._membership_protocol.protocol_name,
+            consumer._membership_protocol.metadata,
+            _decide_dummy
+        )
         consumer.start()
         res = consumer.consume()
         self.assertEqual(res, None)
