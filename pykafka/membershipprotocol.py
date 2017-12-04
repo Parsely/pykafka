@@ -86,16 +86,17 @@ def decide_partitions_roundrobin(participants, partitions, consumer_id):
     partitions = sorted(partitions.values(), key=p_to_str)
     participants = sorted(participants)
 
-    shorter = partitions if len(partitions) <= len(participants) else participants
-    longer = partitions if len(partitions) > len(participants) else participants
-    pairs = itertools.izip(longer, itertools.cycle(shorter))
-
     new_partitions = set()
-    for partition, participant in pairs:
-        if participant == consumer_id:
-            new_partitions.add(partition)
-    new_partitions = set(partition for partition, participant in pairs
-                         if participant == consumer_id)
+    partitions_idx = 0
+    participants_idx = 0
+    for _ in range(len(partitions)):
+        if participants[participants_idx] == consumer_id:
+            new_partitions.add(partitions[partitions_idx])
+        partitions_idx += 1
+        participants_idx += 1
+        partitions_idx %= len(partitions)
+        participants_idx %= len(participants)
+
     log.info('%s: Balancing %i participants for %i partitions. Owning %i partitions.',
              consumer_id, len(participants), len(partitions),
              len(new_partitions))
