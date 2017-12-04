@@ -87,15 +87,12 @@ def decide_partitions_roundrobin(participants, partitions, consumer_id):
     participants = sorted(participants)
 
     new_partitions = set()
-    partitions_idx = 0
-    participants_idx = 0
+    partitions_idx = participants_idx = 0
     for _ in range(len(partitions)):
         if participants[participants_idx] == consumer_id:
             new_partitions.add(partitions[partitions_idx])
-        partitions_idx += 1
-        participants_idx += 1
-        partitions_idx %= len(partitions)
-        participants_idx %= len(participants)
+        partitions_idx = (partitions_idx + 1) % len(partitions)
+        participants_idx = (participants_idx + 1) % len(participants)
 
     log.info('%s: Balancing %i participants for %i partitions. Owning %i partitions.',
              consumer_id, len(participants), len(partitions),
