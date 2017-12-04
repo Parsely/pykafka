@@ -355,7 +355,8 @@ class ManagedBalancedConsumer(BalancedConsumer):
             join_result = self._group_coordinator.join_group(self._connection_id,
                                                              self._consumer_group,
                                                              self._consumer_id,
-                                                             self._topic.name)
+                                                             self._topic.name,
+                                                             self._membership_protocol)
             if join_result.error_code == 0:
                 break
             log.info("Error code %d encountered during JoinGroupRequest for"
