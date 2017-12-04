@@ -3,6 +3,8 @@ import unittest2
 
 from pykafka import protocol
 from pykafka.common import CompressionType
+from pykafka.membershipprotocol import RangeProtocol
+from pykafka.protocol import ConsumerGroupProtocolMetadata
 from pykafka.utils.compat import buffer
 
 
@@ -590,7 +592,11 @@ class TestGroupMembershipAPI(unittest2.TestCase):
         )
 
     def test_join_group_request(self):
-        req = protocol.JoinGroupRequest(b'dummygroup', b'testmember', b'abcdefghij')
+        topic_name = b'abcdefghij'
+        membership_protocol = RangeProtocol
+        membership_protocol.metadata.topic_names = [topic_name]
+        req = protocol.JoinGroupRequest(b'dummygroup', b'testmember', topic_name,
+                                        membership_protocol)
         msg = req.get_bytes()
         self.assertEqual(
             msg,

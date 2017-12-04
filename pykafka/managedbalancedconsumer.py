@@ -27,6 +27,7 @@ from .balancedconsumer import BalancedConsumer
 from .common import OffsetType
 from .exceptions import (IllegalGeneration, RebalanceInProgress, NotCoordinatorForGroup,
                          GroupCoordinatorNotAvailable, ERROR_CODES, GroupLoadInProgress)
+from .membershipprotocol import RangeProtocol
 from .protocol import MemberAssignment
 from .utils.compat import iterkeys
 from .utils.error_handlers import valid_int
@@ -70,7 +71,8 @@ class ManagedBalancedConsumer(BalancedConsumer):
                  post_rebalance_callback=None,
                  use_rdkafka=False,
                  compacted_topic=True,
-                 heartbeat_interval_ms=3000):
+                 heartbeat_interval_ms=3000,
+                 membership_protocol=RangeProtocol):
         """Create a ManagedBalancedConsumer instance
 
         :param topic: The topic this consumer should consume
@@ -162,6 +164,9 @@ class ManagedBalancedConsumer(BalancedConsumer):
         :param heartbeat_interval_ms: The amount of time in milliseconds to wait between
             heartbeat requests
         :type heartbeat_interval_ms: int
+        :param membership_protocol: The group membership protocol to which this consumer
+            should adhere
+        :type membership_protocol: :class:`pykafka.membershipprotocol.GroupMembershipProtocol`
         """
 
         self._cluster = cluster
@@ -188,6 +193,8 @@ class ManagedBalancedConsumer(BalancedConsumer):
         self._rebalance_backoff_ms = valid_int(rebalance_backoff_ms)
         self._post_rebalance_callback = post_rebalance_callback
         self._is_compacted_topic = compacted_topic
+        self._membership_protocol = membership_protocol
+        self._membership_protocol.metadata.topic_names = [self._topic.name]
         self._heartbeat_interval_ms = valid_int(heartbeat_interval_ms)
         if use_rdkafka is True:
             raise ImportError("use_rdkafka is not available for {}".format(
@@ -289,8 +296,8 @@ class ManagedBalancedConsumer(BalancedConsumer):
                     (member_id,
                      MemberAssignment([
                         (self._topic.name,
-                         [p.id for p in self._decide_partitions(
-                          iterkeys(members), consumer_id=member_id)])])
+                         [p.id for p in self._membership_protocol.decide_partitions(
+                          iterkeys(members), self._topic.partitions, member_id)])])
                     ) for member_id in members]
 
                 assignment = self._sync_group(group_assignments)
@@ -348,7 +355,8 @@ class ManagedBalancedConsumer(BalancedConsumer):
             join_result = self._group_coordinator.join_group(self._connection_id,
                                                              self._consumer_group,
                                                              self._consumer_id,
-                                                             self._topic.name)
+                                                             self._topic.name,
+                                                             self._membership_protocol)
             if join_result.error_code == 0:
                 break
             log.info("Error code %d encountered during JoinGroupRequest for"

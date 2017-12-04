@@ -1,3 +1,5 @@
+from __future__ import division
+
 import math
 import mock
 import os
@@ -19,6 +21,8 @@ from pykafka import KafkaClient
 from pykafka.balancedconsumer import BalancedConsumer, OffsetType
 from pykafka.exceptions import ConsumerStoppedException
 from pykafka.managedbalancedconsumer import ManagedBalancedConsumer
+from pykafka.membershipprotocol import (GroupMembershipProtocol, RoundRobinProtocol,
+                                        RangeProtocol)
 from pykafka.test.utils import get_cluster, stop_cluster
 from pykafka.utils.compat import range, iterkeys, iteritems
 from tests.pykafka import patch_subclass
@@ -77,41 +81,38 @@ class TestBalancedConsumer(unittest2.TestCase):
         with self.assertRaises(ConsumerStoppedException):
             consumer.consume()
 
-    def test_decide_partitions(self):
-        """Test partition assignment for a number of partitions/consumers."""
-        # 100 test iterations
+    def _test_decide_partitions(self, membership_protocol):
         for i in range(100):
-            # Set up partitions, cluster, etc
             num_participants = i + 1
             num_partitions = 100 - i
             participants = sorted(['test-debian:{p}'.format(p=p)
                                    for p in range(num_participants)])
             cns, topic = self.buildMockConsumer(num_partitions=num_partitions,
                                                 num_participants=num_participants)
-
-            # Simulate each participant to ensure they're correct
+            cns._membership_protocol = membership_protocol
             assigned_parts = []
-            for p_id in range(num_participants):
-                cns._consumer_id = participants[p_id]  # override consumer id
-
-                # Decide partitions then validate
-                partitions = cns._decide_partitions(participants)
+            for consumer_id in participants:
+                partitions = cns._membership_protocol.decide_partitions(
+                    participants, topic.partitions, consumer_id)
                 assigned_parts.extend(partitions)
 
                 remainder_ppc = num_partitions % num_participants
-                idx = participants.index(cns._consumer_id)
-                parts_per_consumer = num_partitions / num_participants
-                parts_per_consumer = math.floor(parts_per_consumer)
-
+                idx = participants.index(consumer_id)
+                parts_per_consumer = math.floor(num_partitions / num_participants)
                 num_parts = parts_per_consumer + (0 if (idx + 1 > remainder_ppc) else 1)
 
                 self.assertEqual(len(partitions), int(num_parts))
 
             # Validate all partitions were assigned once and only once
-            all_partitions = topic.partitions.values()
-            all_partitions = sorted(all_partitions, key=lambda x: x.id)
+            all_partitions = sorted(topic.partitions.values(), key=lambda x: x.id)
             assigned_parts = sorted(assigned_parts, key=lambda x: x.id)
             self.assertListEqual(assigned_parts, all_partitions)
+
+    def test_decide_partitions_range(self):
+        self._test_decide_partitions(RangeProtocol)
+
+    def test_decide_partitions_roundrobin(self):
+        self._test_decide_partitions(RoundRobinProtocol)
 
 
 class TestManagedBalancedConsumer(TestBalancedConsumer):
@@ -430,7 +431,7 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
     def test_no_partitions(self):
         """Ensure a consumer assigned no partitions doesn't fail"""
 
-        def _decide_dummy(p, consumer_id=None):
+        def _decide_dummy(participants, partitions, consumer_id):
             return set()
         consumer = self.get_balanced_consumer(
             b'test_no_partitions',
@@ -439,7 +440,12 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
             consumer_timeout_ms=50,
             use_rdkafka=self.USE_RDKAFKA)
 
-        consumer._decide_partitions = _decide_dummy
+        consumer._membership_protocol = GroupMembershipProtocol(
+            consumer._membership_protocol.protocol_type,
+            consumer._membership_protocol.protocol_name,
+            consumer._membership_protocol.metadata,
+            _decide_dummy
+        )
         consumer.start()
         res = consumer.consume()
         self.assertEqual(res, None)

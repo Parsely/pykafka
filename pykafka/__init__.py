@@ -8,10 +8,11 @@ from .connection import SslConfig
 from .client import KafkaClient
 from .balancedconsumer import BalancedConsumer
 from .managedbalancedconsumer import ManagedBalancedConsumer
+from .membershipprotocol import RangeProtocol, RoundRobinProtocol
 
 __version__ = '2.7.0.dev1'
 
 
 __all__ = ["Broker", "SimpleConsumer", "Cluster", "Partition", "Producer",
            "Topic", "SslConfig", "KafkaClient", "BalancedConsumer",
-           "ManagedBalancedConsumer"]
+           "ManagedBalancedConsumer", "RangeProtocol", "RoundRobinProtocol"]
