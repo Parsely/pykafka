@@ -1918,3 +1918,32 @@ class CreateTopicsResponse(Response):
     """
     def __init__(self, buff):
         pass
+
+
+class DeleteTopicsRequest(Request):
+    """A delete topics request
+
+    Specification::
+
+    DeleteTopics Request (Version: 0) => [topics] timeout
+        topics => STRING
+        timeout => INT32
+    """
+    @property
+    def API_KEY(self):
+        """API_KEY for this request, from the Kafka docs"""
+        return 20
+
+
+class DeleteTopicsResponse(Response):
+    """A delete topics response
+
+    Specification::
+
+    DeleteTopics Response (Version: 0) => [topic_error_codes]
+        topic_error_codes => topic error_code
+            topic => STRING
+            error_code => INT16
+    """
+    def __init__(self, buff):
+        pass
