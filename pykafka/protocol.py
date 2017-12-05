@@ -1880,3 +1880,41 @@ class DescribeGroupsResponse(Response):
                 members[member.member_id] = member
             group = DescribeGroupResponse(*(group_info[:5] + (members,)))
             self.groups[group.group_id] = group
+
+
+class CreateTopicsRequest(Request):
+    """A create topics request
+
+    Specification::
+
+    CreateTopics Request (Version: 0) => [create_topic_requests] timeout
+        create_topic_requests => topic num_partitions replication_factor [replica_assignment] [config_entries]
+            topic => STRING
+            num_partitions => INT32
+            replication_factor => INT16
+            replica_assignment => partition [replicas]
+                partition => INT32
+                replicas => INT32
+            config_entries => config_name config_value
+                config_name => STRING
+                config_value => NULLABLE_STRING
+        timeout => INT32
+    """
+    @property
+    def API_KEY(self):
+        """API_KEY for this request, from the Kafka docs"""
+        return 19
+
+
+class CreateTopicsResponse(Response):
+    """A create topics response
+
+    Specification::
+
+    CreateTopics Response (Version: 0) => [topic_errors]
+        topic_errors => topic error_code
+            topic => STRING
+            error_code => INT16
+    """
+    def __init__(self, buff):
+        pass
