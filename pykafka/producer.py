@@ -317,13 +317,13 @@ class Producer(object):
         :return: The :class:`pykafka.protocol.Message` instance that was
             added to the internal message queue
         """
-        if not (isinstance(partition_key, bytes) or partition_key is None):
+        if partition_key is not None and type(partition_key) is not bytes:
             raise TypeError("Producer.produce accepts a bytes object as partition_key, "
                             "but it got '%s'", type(partition_key))
-        if not (isinstance(message, bytes) or message is None):
+        if message is not None and type(message) is not bytes:
             raise TypeError("Producer.produce accepts a bytes object as message, but it "
                             "got '%s'", type(message))
-        if self._protocol_version < 1 and timestamp:
+        if timestamp is not None and self._protocol_version < 1:
             raise RuntimeError("Producer.produce got a timestamp with protocol 0")
         if not self._running:
             raise ProducerStoppedException()
