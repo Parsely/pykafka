@@ -261,6 +261,12 @@ def reset_offsets(client, args):
     )
 
 
+def create_topic(client, args):
+    broker = client.cluster.brokers[client.cluster.brokers.keys()[0]]
+    broker.create_topics([args.topic], args.num_partitions, args.replication_factor,
+                         args.replica_assignment, args.config_entries, args.timeout)
+
+
 def _encode_utf8(string):
     """Converts argument to UTF-8-encoded bytes.
 
@@ -284,6 +290,13 @@ def _add_limit(parser):
                         help='Number of messages to consume '
                              '(default: %(default)s)',
                         type=int, default=10)
+
+
+def _add_timeout(parser):
+    parser.add_argument('-t', '--timeout',
+                        help='Time in ms to wait for the operation to complete'
+                             '(default: %(default)s)',
+                        type=int, default=0)
 
 
 def _add_offset(parser):
@@ -382,6 +395,33 @@ def _get_arg_parser():
     _add_topic(parser)
     _add_consumer_group(parser)
     _add_offset(parser)
+
+    parser = subparsers.add_parser(
+        'create_topic',
+        help='Create a topic'
+    )
+    parser.set_defaults(func=create_topic)
+    _add_topic(parser)
+    _add_timeout(parser)
+    parser.add_argument('-p', '--num_partitions',
+                        help='Number of partitions to be created. -1 indicates unset. '
+                             '(default: %(default)s)',
+                        type=int, default=1)
+    parser.add_argument('-r', '--replication_factor',
+                        help='Replication factor for the topic. -1 indicates unset. '
+                             '(default: %(default)s)',
+                        type=int, default=1)
+    parser.add_argument('-a', '--replica_assignment',
+                        help='Replica assignment among kafka brokers for this topic '
+                             'partitions. If this is set num_partitions and '
+                             'replication_factor must be unset. Represent as a JSON '
+                             'object with partition IDs as keys as lists of node IDs '
+                             'as values',
+                        type=_encode_utf8)
+    parser.add_argument('-c', '--config_entries',
+                        help='Topic level configuration for topic to be set. Represent '
+                             'as a JSON object.',
+                        type=_encode_utf8)
 
     return output
 
