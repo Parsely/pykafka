@@ -16,16 +16,11 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-__all__ = ["random_partitioner", "BasePartitioner", "HashingPartitioner",
+__all__ = ["RandomPartitioner", "BasePartitioner", "HashingPartitioner",
            "hashing_partitioner", "GroupHashingPartitioner"]
 import random
 
 from hashlib import sha1
-
-
-def random_partitioner(partitions, key):
-    """Returns a random partition out of all of the available partitions."""
-    return random.choice(partitions)
 
 
 class BasePartitioner(object):
@@ -37,6 +32,20 @@ class BasePartitioner(object):
     def __call__(self, partitions, key=None):
         raise NotImplementedError('Subclasses must define their own '
                                   ' partitioner implementation')
+
+
+class RandomPartitioner(BasePartitioner):
+    """Returns a random partition out of all of the available partitions.
+
+    Uses a non-random incrementing counter to provide even distribution across partitions
+    without wasting CPU cycles
+    """
+    def __init__(self):
+        self.idx = 0
+
+    def __call__(self, partitions, key):
+        self.idx = (self.idx + 1) % len(partitions)
+        return partitions[self.idx]
 
 
 class HashingPartitioner(BasePartitioner):

@@ -2,7 +2,7 @@ import logging
 from pkg_resources import parse_version
 
 from pykafka.exceptions import RdKafkaStoppedException, ProducerStoppedException
-from pykafka.producer import Producer, CompressionType, random_partitioner
+from pykafka.producer import Producer, CompressionType
 from pykafka.utils.compat import get_bytes
 from . import _rd_kafka
 from . import helpers
@@ -37,7 +37,7 @@ class RdKafkaProducer(Producer):
     def __init__(self,
                  cluster,
                  topic,
-                 partitioner=random_partitioner,
+                 partitioner=None,
                  compression=CompressionType.NONE,
                  max_retries=3,
                  retry_backoff_ms=100,

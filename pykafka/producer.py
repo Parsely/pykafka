@@ -41,7 +41,7 @@ from .exceptions import (
     ProducerStoppedException,
     SocketDisconnectedError,
 )
-from .partitioners import random_partitioner
+from .partitioners import RandomPartitioner
 from .protocol import Message, ProduceRequest
 from .utils.compat import iteritems, itervalues, Empty
 from .utils.error_handlers import valid_int
@@ -62,7 +62,7 @@ class Producer(object):
     def __init__(self,
                  cluster,
                  topic,
-                 partitioner=random_partitioner,
+                 partitioner=None,
                  compression=CompressionType.NONE,
                  max_retries=3,
                  retry_backoff_ms=100,
@@ -160,7 +160,7 @@ class Producer(object):
         self._cluster = cluster
         self._protocol_version = msg_protocol_version(cluster._broker_version)
         self._topic = topic
-        self._partitioner = partitioner
+        self._partitioner = partitioner or RandomPartitioner()
         self._compression = compression
         if self._compression == CompressionType.SNAPPY and \
                 platform.python_implementation == "PyPy":
@@ -317,13 +317,13 @@ class Producer(object):
         :return: The :class:`pykafka.protocol.Message` instance that was
             added to the internal message queue
         """
-        if not (isinstance(partition_key, bytes) or partition_key is None):
+        if partition_key is not None and type(partition_key) is not bytes:
             raise TypeError("Producer.produce accepts a bytes object as partition_key, "
                             "but it got '%s'", type(partition_key))
-        if not (isinstance(message, bytes) or message is None):
+        if message is not None and type(message) is not bytes:
             raise TypeError("Producer.produce accepts a bytes object as message, but it "
                             "got '%s'", type(message))
-        if self._protocol_version < 1 and timestamp:
+        if timestamp is not None and self._protocol_version < 1:
             raise RuntimeError("Producer.produce got a timestamp with protocol 0")
         if not self._running:
             raise ProducerStoppedException()
