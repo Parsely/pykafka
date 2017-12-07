@@ -41,7 +41,7 @@ from .exceptions import (
     ProducerStoppedException,
     SocketDisconnectedError,
 )
-from .partitioners import random_partitioner
+from .partitioners import RandomPartitioner
 from .protocol import Message, ProduceRequest
 from .utils.compat import iteritems, itervalues, Empty
 from .utils.error_handlers import valid_int
@@ -62,7 +62,7 @@ class Producer(object):
     def __init__(self,
                  cluster,
                  topic,
-                 partitioner=random_partitioner,
+                 partitioner=None,
                  compression=CompressionType.NONE,
                  max_retries=3,
                  retry_backoff_ms=100,
@@ -160,7 +160,7 @@ class Producer(object):
         self._cluster = cluster
         self._protocol_version = msg_protocol_version(cluster._broker_version)
         self._topic = topic
-        self._partitioner = partitioner
+        self._partitioner = partitioner or RandomPartitioner()
         self._compression = compression
         if self._compression == CompressionType.SNAPPY and \
                 platform.python_implementation == "PyPy":
