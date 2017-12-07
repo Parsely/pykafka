@@ -29,7 +29,8 @@ from .protocol import (
     OffsetFetchResponse, ProduceResponse, JoinGroupRequest, JoinGroupResponse,
     SyncGroupRequest, SyncGroupResponse, HeartbeatRequest, HeartbeatResponse,
     LeaveGroupRequest, LeaveGroupResponse, ListGroupsRequest, ListGroupsResponse,
-    DescribeGroupsRequest, DescribeGroupsResponse)
+    DescribeGroupsRequest, DescribeGroupsResponse, CreateTopicsRequest,
+    CreateTopicsResponse, CreateTopicRequest)
 from .utils.compat import range, iteritems, get_bytes
 
 log = logging.getLogger(__name__)
@@ -529,3 +530,28 @@ class Broker(object):
         """
         future = self._req_handler.request(DescribeGroupsRequest(group_ids))
         return future.get(DescribeGroupsResponse)
+
+    ############################
+    # Create/Delete Topics API #
+    ############################
+    @_check_handler
+    def create_topics(self,
+                      topics,
+                      num_partitions=1,
+                      replication_factor=1,
+                      replica_assignment=None,
+                      config_entries=None,
+                      timeout=0):
+        topic_reqs = []
+        for topic in topics:
+            topic_req = CreateTopicRequest(topic, num_partitions, replication_factor,
+                                           replica_assignment or [],
+                                           config_entries or [])
+            topic_reqs.append(topic_req)
+        future = self._req_handler.request(CreateTopicsRequest(topic_reqs,
+                                                               timeout=timeout))
+        return future.get(CreateTopicsResponse)
+
+    @_check_handler
+    def delete_topic(self):
+        pass
