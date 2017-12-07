@@ -172,6 +172,7 @@ class Message(Message, Serializable):
         "protocol_version",
         "timestamp"
     ]
+    VALID_TS_TYPES = integer_types + (float, type(None))
 
     def __init__(self,
                  value,
@@ -276,9 +277,9 @@ class Message(Message, Serializable):
             1000 * (dt - datetime(1970, 1, 1)).total_seconds())
 
     def set_timestamp(self, ts):
-        if isinstance(ts, integer_types + (float, type(None))):
+        if type(ts) in self.VALID_TS_TYPES:
             self.timestamp = ts
-        elif isinstance(ts, datetime):
+        elif type(ts) == datetime:
             self.timestamp_dt = ts
         else:
             raise RuntimeError()
