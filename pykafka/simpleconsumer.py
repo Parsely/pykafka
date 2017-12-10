@@ -588,7 +588,7 @@ class SimpleConsumer(object):
 
             success_responses.extend([(op.partition.id, r)
                                       for op, r in parts_by_error.get(0, [])])
-            if len(parts_by_error) == 1 and 0 in parts_by_error:
+            if len(reqs) == 0 or (len(parts_by_error) == 1 and 0 in parts_by_error):
                 return success_responses
             log.error("Error fetching offsets for topic '%s' (errors: %s)",
                       self._topic.name,
@@ -600,9 +600,7 @@ class SimpleConsumer(object):
             to_retry = [pair for err in itervalues(parts_by_error) for pair in err]
             reqs = [p.build_offset_fetch_request() for p, _ in to_retry]
 
-        if len(parts_by_error) > 0:
-            raise KafkaException(parts_by_error)
-        return success_responses
+        raise KafkaException(parts_by_error)
 
     def reset_offsets(self, partition_offsets=None):
         """Reset offsets for the specified partitions
