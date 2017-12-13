@@ -535,4 +535,4 @@ class Broker(object):
     def fetch_api_versions(self):
         """Send an ApiVersionsRequest"""
         future = self._req_handler.request(ApiVersionsRequest())
-        return future.get(ApiVersionsResponse.get_subclass(self.broker_version))
+        return future.get(ApiVersionsResponse.get_subclass(self._broker_version))
