@@ -91,10 +91,13 @@ class Broker(object):
         :type source_port: int
         :param ssl_config: Config object for SSL connection
         :type ssl_config: :class:`pykafka.connection.SslConfig`
-        :param broker_version:
-        :type broker_version:
-        :param api_versions:
-        :type api_versions:
+        :param broker_version: The protocol version of the cluster being connected to.
+            If this parameter doesn't match the actual broker version, some pykafka
+            features may not work properly.
+        :type broker_version: str
+        :param api_versions: A sequence of :class:`pykafka.protocol.ApiVersionsSpec`
+            objects indicating the API version compatibility of this broker
+        :type api_versions: Iterable of :class:`pykafka.protocol.ApiVersionsSpec`
         """
         self._connection = None
         self._offsets_channel_connection = None
@@ -164,10 +167,13 @@ class Broker(object):
         :type source_port: int
         :param ssl_config: Config object for SSL connection
         :type ssl_config: :class:`pykafka.connection.SslConfig`
-        :param broker_version:
-        :type broker_version:
-        :param api_versions:
-        :type api_versions:
+        :param broker_version: The protocol version of the cluster being connected to.
+            If this parameter doesn't match the actual broker version, some pykafka
+            features may not work properly.
+        :type broker_version: str
+        :param api_versions: A sequence of :class:`pykafka.protocol.ApiVersionsSpec`
+            objects indicating the API version compatibility of this broker
+        :type api_versions: Iterable of :class:`pykafka.protocol.ApiVersionsSpec`
         """
         return cls(metadata.id, metadata.host,
                    metadata.port, handler, socket_timeout_ms,

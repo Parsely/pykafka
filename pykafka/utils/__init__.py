@@ -32,8 +32,40 @@ VERSIONS_CACHE = {}
 
 
 class ApiVersionAware(object):
+    """Mixin class that facilitates standardized discovery of supported protocol versions
+    """
     @classmethod
     def get_version_impl(cls, api_versions):
+        """
+        Return the class from `pykafka.protocol` implementing support for the highest
+        version of the API supported by `cls` supported by both the calling Broker and
+        pykafka itself.
+
+        This method requires that `cls` implements the following attributes:
+        * cls.get_versions() - a @classmethod taking no arguments aside from `cls` and
+            returning a dictionary mapping integer API version numbers to the classes
+            from `pykafka.protocol` implementing support for those versions of the
+            request or response. For example:
+                @classmethod
+                def get_versions(cls):
+                    return {0: FetchResponse, 1: FetchResponseV1, 2: FetchResponseV2}
+            indicates that `FetchResponse` implements support for v0 of the fetch
+            response, `FetchResponseV1` implements support for v1 of the fetch response,
+            et cetera.
+        * cls.API_KEY - a class attribute indicating the API key of the request or
+            response. Note that `Response` instances require this attribute despite
+            responses not explicitly containing the API key as defined by the Kafka
+            protocol.
+
+        :param api_versions: A sequence of :class:`pykafka.protocol.ApiVersionsSpec`
+            objects indicating the API version compatibility of the calling Broker
+        :type api_versions: Iterable of :class:`pykafka.protocol.ApiVersionsSpec`
+        :type return: An object of the same parent class as `cls` (either
+            :class:`pykafka.protocol.Request` or :class:`pykafka.protocol.Response`)
+        """
+        if not hasattr(cls, "get_versions") or not hasattr(cls, "API_KEY"):
+            raise AttributeError("get_version_impl requires that {} implement both "
+                                 "get_versions() and API_KEY.")
         cached_version = VERSIONS_CACHE.get(cls)
         if cached_version:
             return cached_version
