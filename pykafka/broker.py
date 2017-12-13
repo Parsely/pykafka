@@ -29,7 +29,8 @@ from .protocol import (
     OffsetFetchResponse, ProduceResponse, JoinGroupRequest, JoinGroupResponse,
     SyncGroupRequest, SyncGroupResponse, HeartbeatRequest, HeartbeatResponse,
     LeaveGroupRequest, LeaveGroupResponse, ListGroupsRequest, ListGroupsResponse,
-    DescribeGroupsRequest, DescribeGroupsResponse)
+    DescribeGroupsRequest, DescribeGroupsResponse, ApiVersionsRequest,
+    ApiVersionsResponse)
 from .utils.compat import range, iteritems, get_bytes
 
 log = logging.getLogger(__name__)
@@ -529,3 +530,9 @@ class Broker(object):
         """
         future = self._req_handler.request(DescribeGroupsRequest(group_ids))
         return future.get(DescribeGroupsResponse)
+
+    @_check_handler
+    def fetch_api_versions(self):
+        """Send an ApiVersionsRequest"""
+        future = self._req_handler.request(ApiVersionsRequest())
+        return future.get(ApiVersionsResponse.get_subclass(self.broker_version))
