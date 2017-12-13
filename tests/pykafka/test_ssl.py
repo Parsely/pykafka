@@ -1,3 +1,4 @@
+import os
 import unittest
 from uuid import uuid4
 
@@ -5,6 +6,9 @@ import pytest
 
 from pykafka import KafkaClient, SslConfig
 from pykafka.test.utils import get_cluster, stop_cluster
+
+
+kafka_version = os.environ.get('KAFKA_VERSION', '0.8.0')
 
 
 class SslIntegrationTests(unittest.TestCase):
@@ -40,7 +44,8 @@ class SslIntegrationTests(unittest.TestCase):
     def test_ca_only(self):
         """Connect with CA cert only (ie no client cert)"""
         config = SslConfig(cafile=self.kafka.certs.root_cert)
-        client = KafkaClient(self.kafka.brokers_ssl, ssl_config=config)
+        client = KafkaClient(self.kafka.brokers_ssl, ssl_config=config,
+                             broker_version=kafka_version)
         self.roundtrip_test(client)
 
     def test_client_cert(self):
@@ -53,12 +58,14 @@ class SslIntegrationTests(unittest.TestCase):
                            certfile=certs.client_cert,
                            keyfile=certs.client_key,
                            password=certs.client_pass)
-        client = KafkaClient(self.kafka.brokers_ssl, ssl_config=config)
+        client = KafkaClient(self.kafka.brokers_ssl, ssl_config=config,
+                             broker_version=kafka_version)
         self.roundtrip_test(client)
 
     def test_legacy_wrap_socket(self):
         """Test socket-wrapping without SSLContext"""
         config = SslConfig(cafile=self.kafka.certs.root_cert)
         config._wrap_socket = config._legacy_wrap_socket()
-        client = KafkaClient(self.kafka.brokers_ssl, ssl_config=config)
+        client = KafkaClient(self.kafka.brokers_ssl, ssl_config=config,
+                             broker_version=kafka_version)
         self.roundtrip_test(client)
