@@ -65,7 +65,7 @@ class ApiVersionAware(object):
         """
         if not hasattr(cls, "get_versions") or not hasattr(cls, "API_KEY"):
             raise AttributeError("get_version_impl requires that {} implement both "
-                                 "get_versions() and API_KEY.")
+                                 "get_versions() and API_KEY.".format(cls))
         cached_version = VERSIONS_CACHE.get(cls)
         if cached_version:
             return cached_version
