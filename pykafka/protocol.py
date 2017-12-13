@@ -426,6 +426,8 @@ class MetadataRequest(Request):
         MetadataRequest => [TopicName]
             TopicName => string
     """
+    API_KEY = 3
+
     def __init__(self, topics=None):
         """Create a new MetadataRequest
 
@@ -436,11 +438,6 @@ class MetadataRequest(Request):
     def __len__(self):
         """Length of the serialized message, in bytes"""
         return self.HEADER_LEN + 4 + sum(len(t) + 2 for t in self.topics)
-
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 3
 
     def get_bytes(self):
         """Serialize the message
@@ -522,6 +519,8 @@ class ProduceRequest(Request):
           Partition => int32
           MessageSetSize => int32
     """
+    API_KEY = 0
+
     def __init__(self,
                  compression_type=CompressionType.NONE,
                  required_acks=1,
@@ -563,11 +562,6 @@ class ProduceRequest(Request):
             # partition + mset size + len(mset)
             size += sum(4 + 4 + len(mset) for mset in itervalues(parts))
         return size
-
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 0
 
     @property
     def messages(self):
@@ -902,6 +896,8 @@ class OffsetRequest(Request):
           Time => int64
           MaxNumberOfOffsets => int32
     """
+    API_KEY = 2
+
     def __init__(self, partition_requests):
         """Create a new offset request"""
         self._reqs = defaultdict(dict)
@@ -919,11 +915,6 @@ class OffsetRequest(Request):
             # partition + fetch offset + max bytes => for each partition
             size += (4 + 8 + 4) * len(parts)
         return size
-
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 2
 
     def get_bytes(self):
         """Serialize the message
@@ -990,6 +981,8 @@ class GroupCoordinatorRequest(Request):
         GroupCoordinatorRequest => ConsumerGroup
             ConsumerGroup => string
     """
+    API_KEY = 10
+
     def __init__(self, consumer_group):
         """Create a new group coordinator request"""
         self.consumer_group = consumer_group
@@ -998,11 +991,6 @@ class GroupCoordinatorRequest(Request):
         """Length of the serialized message, in bytes"""
         # Header + len(self.consumer_group)
         return self.HEADER_LEN + 2 + len(self.consumer_group)
-
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 10
 
     def get_bytes(self):
         """Serialize the message
@@ -1079,6 +1067,8 @@ class OffsetCommitRequest(Request):
             TimeStamp => int64
             Metadata => string
     """
+    API_KEY = 8
+
     def __init__(self,
                  consumer_group,
                  consumer_group_generation_id,
@@ -1114,11 +1104,6 @@ class OffsetCommitRequest(Request):
             for partition, (_, _, metadata) in iteritems(parts):
                 size += 2 + len(metadata)
         return size
-
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 8
 
     def get_bytes(self):
         """Serialize the message
@@ -1215,6 +1200,8 @@ class OffsetFetchRequest(Request):
             TopicName => string
             Partition => int32
     """
+    API_KEY = 9
+
     def __init__(self, consumer_group, partition_requests=[]):
         """Create a new offset fetch request
 
@@ -1237,11 +1224,6 @@ class OffsetFetchRequest(Request):
             # partition => for each partition
             size += 4 * len(parts)
         return size
-
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 9
 
     def get_bytes(self):
         """Serialize the message
@@ -1376,6 +1358,8 @@ class JoinGroupRequest(Request):
             ProtocolName => string
             ProtocolMetadata => bytes
     """
+    API_KEY = 11
+
     def __init__(self,
                  group_id,
                  member_id,
@@ -1401,11 +1385,6 @@ class JoinGroupRequest(Request):
         for name, metadata in self.group_protocols:
             size += 2 + len(name) + 4 + len(metadata)
         return size
-
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 11
 
     def get_bytes(self):
         """Serialize the message
@@ -1531,6 +1510,8 @@ class SyncGroupRequest(Request):
             MemberId => string
             MemberAssignment => bytes
     """
+    API_KEY = 14
+
     def __init__(self, group_id, generation_id, member_id, group_assignment):
         """Create a new group join request"""
         self.group_id = group_id
@@ -1549,11 +1530,6 @@ class SyncGroupRequest(Request):
             # + len(member id) + member id + len(member assignment) + member assignment
             size += 2 + len(member_id) + 4 + len(member_assignment)
         return size
-
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 14
 
     def get_bytes(self):
         """Serialize the message
@@ -1609,6 +1585,8 @@ class HeartbeatRequest(Request):
         GenerationId => int32
         MemberId => string
     """
+    API_KEY = 12
+
     def __init__(self, group_id, generation_id, member_id):
         """Create a new heartbeat request"""
         self.group_id = group_id
@@ -1622,11 +1600,6 @@ class HeartbeatRequest(Request):
         # + len(member id) + member id
         size += 2 + len(self.member_id)
         return size
-
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 12
 
     def get_bytes(self):
         """Serialize the message
@@ -1672,6 +1645,8 @@ class LeaveGroupRequest(Request):
         GroupId => string
         MemberId => string
     """
+    API_KEY = 13
+
     def __init__(self, group_id, member_id):
         """Create a new group join request"""
         self.group_id = group_id
@@ -1684,11 +1659,6 @@ class LeaveGroupRequest(Request):
         # + len(member id) + member id
         size += 2 + len(self.member_id)
         return size
-
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 13
 
     def get_bytes(self):
         """Serialize the message
@@ -1735,10 +1705,7 @@ class ListGroupsRequest(Request):
 
     ListGroupsRequest =>
     """
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 16
+    API_KEY = 16
 
     def get_bytes(self):
         """Create a new list group request"""
@@ -1792,13 +1759,10 @@ class DescribeGroupsRequest(Request):
     DescribeGroupsRequest => [GroupId]
       GroupId => string
     """
+    API_KEY = 15
+
     def __init__(self, group_ids):
         self.group_ids = group_ids
-
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 15
 
     def get_bytes(self):
         """Create a new list group request"""
@@ -1885,10 +1849,7 @@ class ApiVersionsRequest(Request):
 
         ApiVersions Request (Version: 0) =>
     """
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 18
+    API_KEY = 18
 
     def get_bytes(self):
         """Create a new api versions request"""
