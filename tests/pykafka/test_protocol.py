@@ -857,7 +857,14 @@ class TestAdministrativeAPI(unittest2.TestCase):
                          [(b'testtopic_replicated', [0, 1, 2, 8, 3, 9, 4, 5, 6, 7])])
 
     def test_api_versions_request(self):
-        self.assertTrue(False)
+        req = protocol.ApiVersionsRequest()
+        msg = req.get_bytes()
+        self.assertEqual(
+            msg,
+            bytearray(
+                b'\x00\x00\x00\x11\x00\x12\x00\x00\x00\x00\x00\x00\x00\x07pykafka'  # header
+            )
+        )
 
     def test_api_versions_response(self):
         self.assertTrue(False)
