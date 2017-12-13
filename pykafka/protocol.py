@@ -66,17 +66,19 @@ from pkg_resources import parse_version
 
 from .common import CompressionType, Message
 from .exceptions import ERROR_CODES, MessageSetDecodeFailure
-from .utils import Serializable, compression, struct_helpers
+from .utils import Serializable, compression, struct_helpers, ApiVersionAware
 from .utils.compat import iteritems, itervalues, buffer
 
 
 log = logging.getLogger(__name__)
 
 
-class Request(Serializable):
+class Request(Serializable, ApiVersionAware):
     """Base class for all Requests. Handles writing header information"""
     HEADER_LEN = 21  # constant for all messages
     CLIENT_ID = b'pykafka'
+    API_KEY = -1
+    VERSIONS = {}
 
     def _write_header(self, buff, api_version=0, correlation_id=0):
         """Write the header for an outgoing message.
@@ -99,10 +101,6 @@ class Request(Serializable):
                          len(self.CLIENT_ID),
                          self.CLIENT_ID)
 
-    def API_KEY(self):
-        """API key for this request, from the Kafka docs"""
-        raise NotImplementedError()
-
     def get_bytes(self):
         """Serialize the message
 
@@ -112,8 +110,11 @@ class Request(Serializable):
         raise NotImplementedError()
 
 
-class Response(object):
+class Response(ApiVersionAware):
     """Base class for Response objects."""
+    API_KEY = -1
+    VERSIONS = {}
+
     def raise_error(self, err_code, response):
         """Raise an error based on the Kafka error code
 
@@ -688,6 +689,12 @@ class FetchRequest(Request):
           FetchOffset => int64
           MaxBytes => int32
     """
+    API_KEY = 1
+
+    @classmethod
+    def get_versions(cls):
+        return {0: FetchRequest, 1: FetchRequest}
+
     def __init__(self, partition_requests=[], timeout=1000, min_bytes=1024,
                  api_version=0):
         """Create a new fetch request
@@ -733,11 +740,6 @@ class FetchRequest(Request):
             size += (4 + 8 + 4) * len(parts)
         return size
 
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 1
-
     def get_bytes(self):
         """Serialize the message
 
@@ -782,19 +784,12 @@ class FetchResponse(Response):
           HighwaterMarkOffset => int64
           MessageSetSize => int32
     """
-    api_version = 0
+    API_VERSION = 0
+    API_KEY = 1
 
-    @staticmethod
-    def get_subclass(broker_protocol):
-        """Choose which subclass of response to demand and expect. Cf.
-        https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol"""
-        target_version = parse_version(broker_protocol)
-        if target_version >= parse_version("0.10.0"):
-            return FetchResponseV2
-        elif target_version >= parse_version("0.9.0"):
-            return FetchResponseV1
-        else:
-            return FetchResponse
+    @classmethod
+    def get_versions(cls):
+        return {0: FetchResponse, 1: FetchResponseV1, 2: FetchResponseV2}
 
     def __init__(self, buff, offset=0, broker_version='0.9.0'):
         """Deserialize into a new Response
@@ -851,7 +846,7 @@ class FetchResponse(Response):
 
 
 class FetchResponseV1(FetchResponse):
-    api_version = 1
+    API_VERSION = 1
 
     def __init__(self, buff, offset=0, broker_version='0.9.0'):
         """Deserialize into a new Response
@@ -868,7 +863,7 @@ class FetchResponseV1(FetchResponse):
 
 
 class FetchResponseV2(FetchResponseV1):
-    api_version = 2
+    API_VERSION = 2
 
 
 ##

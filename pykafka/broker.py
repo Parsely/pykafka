@@ -305,12 +305,13 @@ class Broker(object):
             block for up to `timeout` milliseconds.
         :type min_bytes: int
         """
-        response_class = FetchResponse.get_subclass(self._broker_version)
-        future = self._req_handler.request(FetchRequest(
+        request_class = FetchRequest.get_version_impl(self._api_versions)
+        response_class = FetchResponse.get_version_impl(self._api_versions)
+        future = self._req_handler.request(request_class(
             partition_requests=partition_requests,
             timeout=timeout,
             min_bytes=min_bytes,
-            api_version=response_class.api_version
+            api_version=response_class.API_VERSION
         ))
         # XXX - this call returns even with less than min_bytes of messages?
         return future.get(response_class, broker_version=self._broker_version)
