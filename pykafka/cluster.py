@@ -203,6 +203,7 @@ class Cluster(object):
         self._max_connection_retries = 3
         self._max_connection_retries_offset_mgr = 8
         self._broker_version = broker_version
+        self._api_versions = None
         if ':' in self._source_address:
             self._source_port = int(self._source_address.split(':')[1])
         self.update()
@@ -250,8 +251,11 @@ class Cluster(object):
         :param broker_connects: The set of brokers to which to attempt to connect
         :type broker_connects: Iterable of two-element sequences of the format
             (broker_host, broker_port)
-        :param req_fn:
-        :param req_args:
+        :param req_fn: A function accepting a :class:`pykafka.broker.Broker` as its
+            sole argument that returns a :class:`pykafka.protocol.Response`. The
+            argument to this function will be the each of the brokers discoverable
+            via `broker_connects` in turn.
+        :type req_fn: function
         """
         for i in range(self._max_connection_retries):
             for host, port in broker_connects:
@@ -263,7 +267,8 @@ class Cluster(object):
                                     source_host=self._source_host,
                                     source_port=self._source_port,
                                     ssl_config=self._ssl_config,
-                                    broker_version=self._broker_version)
+                                    broker_version=self._broker_version,
+                                    api_versions=self._api_versions)
                     response = req_fn(broker)
                     if response is not None:
                         return response
@@ -378,7 +383,8 @@ class Cluster(object):
                     source_host=self._source_host,
                     source_port=self._source_port,
                     ssl_config=self._ssl_config,
-                    broker_version=self._broker_version)
+                    broker_version=self._broker_version,
+                    api_versions=self._api_versions)
             elif not self._brokers[id_].connected:
                 log.info('Reconnecting to broker id %s: %s:%s', id_, meta.host, meta.port)
                 try:
@@ -466,7 +472,7 @@ class Cluster(object):
             response = self._request_random_broker(broker_connects,
                                                    lambda b: b.fetch_api_versions())
             if response.api_versions:
-                self.api_versions = response.api_versions
+                self._api_versions = response.api_versions
                 return
 
     def update(self):

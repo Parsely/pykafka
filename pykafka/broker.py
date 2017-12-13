@@ -61,7 +61,8 @@ class Broker(object):
                  source_host='',
                  source_port=0,
                  ssl_config=None,
-                 broker_version="0.9.0"):
+                 broker_version="0.9.0",
+                 api_versions=None):
         """Create a Broker instance.
 
         :param id_: The id number of this broker
@@ -90,6 +91,10 @@ class Broker(object):
         :type source_port: int
         :param ssl_config: Config object for SSL connection
         :type ssl_config: :class:`pykafka.connection.SslConfig`
+        :param broker_version:
+        :type broker_version:
+        :param api_versions:
+        :type api_versions:
         """
         self._connection = None
         self._offsets_channel_connection = None
@@ -107,6 +112,7 @@ class Broker(object):
         self._buffer_size = buffer_size
         self._req_handlers = {}
         self._broker_version = broker_version
+        self._api_versions = api_versions
         try:
             self.connect()
         except SocketDisconnectedError:
@@ -133,7 +139,8 @@ class Broker(object):
                       source_host='',
                       source_port=0,
                       ssl_config=None,
-                      broker_version="0.9.0"):
+                      broker_version="0.9.0",
+                      api_versions=None):
         """Create a Broker using BrokerMetadata
 
         :param metadata: Metadata that describes the broker.
@@ -157,6 +164,10 @@ class Broker(object):
         :type source_port: int
         :param ssl_config: Config object for SSL connection
         :type ssl_config: :class:`pykafka.connection.SslConfig`
+        :param broker_version:
+        :type broker_version:
+        :param api_versions:
+        :type api_versions:
         """
         return cls(metadata.id, metadata.host,
                    metadata.port, handler, socket_timeout_ms,
