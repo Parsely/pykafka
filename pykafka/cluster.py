@@ -238,13 +238,20 @@ class Cluster(object):
         return self._handler
 
     def _request_metadata(self, broker_connects, topics):
-        """Request broker metadata from a set of brokers
+        def req_fn(broker):
+            return broker.request_metadata(topics)
+        return self._request_random_broker(broker_connects, req_fn)
 
-        Returns the result of the first successful metadata request
+    def _request_random_broker(self, broker_connects, req_fn):
+        """Make a request to any broker in broker_connects
+
+        Returns the result of the first successful request
 
         :param broker_connects: The set of brokers to which to attempt to connect
         :type broker_connects: Iterable of two-element sequences of the format
             (broker_host, broker_port)
+        :param req_fn:
+        :param req_args:
         """
         for i in range(self._max_connection_retries):
             for host, port in broker_connects:
@@ -257,11 +264,11 @@ class Cluster(object):
                                     source_port=self._source_port,
                                     ssl_config=self._ssl_config,
                                     broker_version=self._broker_version)
-                    response = broker.request_metadata(topics)
+                    response = req_fn(broker)
                     if response is not None:
                         return response
                 except SocketDisconnectedError:
-                    log.error("Socket disconnected during metadata request for "
+                    log.error("Socket disconnected during request for "
                               "broker %s:%s. Continuing.", host, port)
                 except Exception as e:
                     log.error('Unable to connect to broker %s:%s. Continuing.', host, port)
@@ -276,24 +283,29 @@ class Cluster(object):
                 response = broker.request_metadata(topics)
                 if response is not None:
                     return response
-        else:  # try seed hosts
-            if self._zookeeper_connect is not None:
-                broker_connects = self._get_brokers_from_zookeeper(
-                    self._zookeeper_connect)
-                metadata = self._request_metadata(broker_connects, topics)
-                if metadata is not None:
-                    return metadata
-            else:
-                broker_connects = [
-                    [broker_str.split(":")[0], broker_str.split(":")[1].split("/")[0]]
-                    for broker_str in self._seed_hosts.split(',')]
-                metadata = self._request_metadata(broker_connects, topics)
-                if metadata is not None:
-                    return metadata
+        else:
+            broker_connects = self._get_broker_connection_info()
+            metadata = self._request_metadata(broker_connects, topics)
+            if metadata is not None:
+                return metadata
 
         # Couldn't connect anywhere. Raise an error.
         raise NoBrokersAvailableError(
             'Unable to connect to a broker to fetch metadata. See logs.')
+
+    def _get_broker_connection_info(self):
+        """Get a list of host:port pairs representing possible broker connections
+
+        For use only when self.brokers is not populated (ie at startup)
+        """
+        broker_connects = []
+        if self._zookeeper_connect is not None:
+            broker_connects = self._get_brokers_from_zookeeper(self._zookeeper_connect)
+        else:
+            broker_connects = [
+                [broker_str.split(":")[0], broker_str.split(":")[1].split("/")[0]]
+                for broker_str in self._seed_hosts.split(',')]
+        return broker_connects
 
     def _get_brokers_from_zookeeper(self, zk_connect):
         """Build a list of broker connection pairs from a ZooKeeper host
