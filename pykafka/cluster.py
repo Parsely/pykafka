@@ -239,9 +239,8 @@ class Cluster(object):
         return self._handler
 
     def _request_metadata(self, broker_connects, topics):
-        def req_fn(broker):
-            return broker.request_metadata(topics)
-        return self._request_random_broker(broker_connects, req_fn)
+        return self._request_random_broker(broker_connects,
+                                           lambda b: b.request_metadata(topics))
 
     def _request_random_broker(self, broker_connects, req_fn):
         """Make a request to any broker in broker_connects
@@ -461,13 +460,11 @@ class Cluster(object):
                         "discovery")
             return
 
-        def req_fn(broker):
-            return broker.fetch_api_versions()
-
         log.info("Requesting API version information")
         for i in range(self._max_connection_retries):
             broker_connects = self._get_broker_connection_info()
-            response = self._request_random_broker(broker_connects, req_fn)
+            response = self._request_random_broker(broker_connects,
+                                                   lambda b: b.fetch_api_versions())
             if response.api_versions:
                 self.api_versions = response.api_versions
                 return
