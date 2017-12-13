@@ -1908,6 +1908,9 @@ class ApiVersionsRequest(Request):
         return size
 
 
+ApiVersionsSpec = namedtuple('ApiVersionsSpec', ['key', 'min', 'max'])
+
+
 class ApiVersionsResponse(Response):
     """
     Specification::
@@ -1938,7 +1941,7 @@ class ApiVersionsResponse(Response):
 
         self.api_versions = {}
         for api_key, min_v, max_v in response[1]:
-            self.api_versions[api_key] = (min_v, max_v)
+            self.api_versions[api_key] = ApiVersionsSpec(api_key, min_v, max_v)
 
 
 class ApiVersionsResponseV1(ApiVersionsResponse):
@@ -1966,5 +1969,5 @@ class ApiVersionsResponseV1(ApiVersionsResponse):
 
         self.api_versions = {}
         for api_key, min_v, max_v in response[1]:
-            self.api_versions[api_key] = (min_v, max_v)
+            self.api_versions[api_key] = ApiVersionsSpec(api_key, min_v, max_v)
         self.throttle_time = response[2]
