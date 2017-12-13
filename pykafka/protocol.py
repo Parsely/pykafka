@@ -1881,3 +1881,90 @@ class DescribeGroupsResponse(Response):
                 members[member.member_id] = member
             group = DescribeGroupResponse(*(group_info[:5] + (members,)))
             self.groups[group.group_id] = group
+
+
+class ApiVersionsRequest(Request):
+    """An api versions request
+
+    Specification::
+
+        ApiVersions Request (Version: 0) =>
+    """
+    @property
+    def API_KEY(self):
+        """API_KEY for this request, from the Kafka docs"""
+        return 18
+
+    def get_bytes(self):
+        """Create a new api versions request"""
+        output = bytearray(len(self))
+        self._write_header(output)
+        return output
+
+    def __len__(self):
+        """Length of the serialized message, in bytes"""
+        # header
+        size = self.HEADER_LEN
+        return size
+
+
+class ApiVersionsResponse(Response):
+    """
+    Specification::
+
+    ApiVersions Response (Version: 0) => error_code [api_versions]
+        error_code => INT16
+        api_versions => api_key min_version max_version
+            api_key => INT16
+            min_version => INT16
+            max_version => INT16
+    """
+    @classmethod
+    def get_subclass(self, broker_version):
+        target_version = parse_version(broker_version)
+        if target_version >= parse_version("0.10.0"):
+            return ApiVersionsResponseV1
+        else:
+            return ApiVersionsResponse
+
+    def __init__(self, buff):
+        """Deserialize into a new Response
+
+        :param buff: Serialized message
+        :type buff: :class:`bytearray`
+        """
+        fmt = 'h [hhh]'
+        response = struct_helpers.unpack_from(fmt, buff, 0)
+
+        self.api_versions = {}
+        for api_key, min_v, max_v in response[1]:
+            self.api_versions[api_key] = (min_v, max_v)
+
+
+class ApiVersionsResponseV1(ApiVersionsResponse):
+    """
+    Specification::
+
+    ApiVersions Response (Version: 1) => error_code [api_versions] throttle_time_ms
+        error_code => INT16
+        api_versions => api_key min_version max_version
+            api_key => INT16
+            min_version => INT16
+            max_version => INT16
+        throttle_time_ms => INT32
+    """
+    api_version = 1
+
+    def __init__(self, buff):
+        """Deserialize into a new Response
+
+        :param buff: Serialized message
+        :type buff: :class:`bytearray`
+        """
+        fmt = 'h [hhh]i'
+        response = struct_helpers.unpack_from(fmt, buff, 0)
+
+        self.api_versions = {}
+        for api_key, min_v, max_v in response[1]:
+            self.api_versions[api_key] = (min_v, max_v)
+        self.throttle_time = response[2]
