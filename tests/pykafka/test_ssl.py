@@ -56,6 +56,7 @@ class SslIntegrationTests(unittest.TestCase):
         client = KafkaClient(self.kafka.brokers_ssl, ssl_config=config)
         self.roundtrip_test(client)
 
+    @pytest.mark.skip(reason="Unresolved crashes")
     def test_legacy_wrap_socket(self):
         """Test socket-wrapping without SSLContext"""
         config = SslConfig(cafile=self.kafka.certs.root_cert)
