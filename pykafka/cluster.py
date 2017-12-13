@@ -206,6 +206,7 @@ class Cluster(object):
         self._api_versions = None
         if ':' in self._source_address:
             self._source_port = int(self._source_address.split(':')[1])
+        self.fetch_api_versions()
         self.update()
 
     def __repr__(self):
@@ -467,8 +468,8 @@ class Cluster(object):
             return
 
         log.info("Requesting API version information")
+        broker_connects = self._get_broker_connection_info()
         for i in range(self._max_connection_retries):
-            broker_connects = self._get_broker_connection_info()
             response = self._request_random_broker(broker_connects,
                                                    lambda b: b.fetch_api_versions())
             if response.api_versions:
@@ -478,7 +479,6 @@ class Cluster(object):
 
     def update(self):
         """Update known brokers and topics."""
-        self.fetch_api_versions()
         for i in range(self._max_connection_retries):
             log.debug("Updating cluster, attempt {}/{}".format(i + 1, self._max_connection_retries))
             metadata = self._get_metadata()
