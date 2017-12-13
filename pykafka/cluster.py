@@ -23,6 +23,7 @@ import logging
 import random
 import time
 import weakref
+from pkg_resources import parse_version
 
 from kazoo.client import KazooClient
 
@@ -454,12 +455,16 @@ class Cluster(object):
                     return coordinator
 
     def fetch_api_versions(self):
-        """Get API version info from an available broker and save it
+        """Get API version info from an available broker and save it"""
+        if parse_version(self._broker_version) < parse_version('0.10.0'):
+            log.warning("Broker version is too old to use automatic API version "
+                        "discovery")
+            return
 
-        """
         def req_fn(broker):
             return broker.fetch_api_versions()
 
+        log.info("Requesting API version information")
         for i in range(self._max_connection_retries):
             broker_connects = self._get_broker_connection_info()
             response = self._request_random_broker(broker_connects, req_fn)
