@@ -28,6 +28,24 @@ class Serializable(object):
         raise NotImplementedError()
 
 
+VERSIONS_CACHE = {}
+
+
+class ApiVersionAware(object):
+    @classmethod
+    def get_version_impl(cls, api_versions):
+        cached_version = VERSIONS_CACHE.get(cls)
+        if cached_version:
+            return cached_version
+        sorted_versions = sorted(cls.get_versions().keys(), reverse=True)
+        broker_max = api_versions[cls.API_KEY].max if api_versions else 0
+        for version in sorted_versions:
+            if version <= broker_max:
+                highest_client_supported = cls.get_versions()[version]
+                VERSIONS_CACHE[cls] = highest_client_supported
+                return highest_client_supported
+
+
 def msg_protocol_version(broker_version):
     if parse_version(broker_version) >= parse_version("0.10.0"):
         return 1
