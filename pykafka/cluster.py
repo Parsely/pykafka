@@ -453,8 +453,23 @@ class Cluster(object):
                     log.info("Found coordinator broker with id %s", res.coordinator_id)
                     return coordinator
 
+    def fetch_api_versions(self):
+        """Get API version info from an available broker and save it
+
+        """
+        def req_fn(broker):
+            return broker.fetch_api_versions()
+
+        for i in range(self._max_connection_retries):
+            broker_connects = self._get_broker_connection_info()
+            response = self._request_random_broker(broker_connects, req_fn)
+            if response.api_versions:
+                self.api_versions = response.api_versions
+                return
+
     def update(self):
         """Update known brokers and topics."""
+        self.fetch_api_versions()
         for i in range(self._max_connection_retries):
             log.debug("Updating cluster, attempt {}/{}".format(i + 1, self._max_connection_retries))
             metadata = self._get_metadata()
