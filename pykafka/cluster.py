@@ -473,6 +473,7 @@ class Cluster(object):
                                                    lambda b: b.fetch_api_versions())
             if response.api_versions:
                 self._api_versions = response.api_versions
+                log.info("Got api version info: {}".format(self._api_versions))
                 return
 
     def update(self):

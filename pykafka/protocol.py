@@ -1884,13 +1884,11 @@ class ApiVersionsResponse(Response):
             min_version => INT16
             max_version => INT16
     """
+    API_KEY = 18
+
     @classmethod
-    def get_subclass(self, broker_version):
-        target_version = parse_version(broker_version)
-        if target_version >= parse_version("0.10.0"):
-            return ApiVersionsResponseV1
-        else:
-            return ApiVersionsResponse
+    def get_versions(cls):
+        return {0: ApiVersionsResponse, 1: ApiVersionsResponseV1}
 
     def __init__(self, buff):
         """Deserialize into a new Response
@@ -1918,8 +1916,6 @@ class ApiVersionsResponseV1(ApiVersionsResponse):
             max_version => INT16
         throttle_time_ms => INT32
     """
-    api_version = 1
-
     def __init__(self, buff):
         """Deserialize into a new Response
 
