@@ -866,7 +866,39 @@ class TestAdministrativeAPI(unittest2.TestCase):
         )
 
     def test_api_versions_response(self):
-        self.assertTrue(False)
+        response = protocol.ApiVersionsResponse(
+            bytearray(
+                b'\x00\x00'  # error_code
+                b'\x00\x00\x00\x15'  # len(api_versions)
+                    b'\x00\x00\x00\x00\x00\x02'  # api_key, min_version, max_version # noqa
+                    b'\x00\x01\x00\x00\x00\x03'
+                    b'\x00\x02\x00\x00\x00\x01'
+                    b'\x00\x03\x00\x00\x00\x02'
+                    b'\x00\x04\x00\x00\x00\x00'
+                    b'\x00\x05\x00\x00\x00\x00'
+                    b'\x00\x06\x00\x00\x00\x02'
+                    b'\x00\x07\x00\x01\x00\x01'
+                    b'\x00\x08\x00\x00\x00\x02'
+                    b'\x00\t\x00\x00\x00\x01'
+                    b'\x00\n\x00\x00\x00\x00'
+                    b'\x00\x0b\x00\x00\x00\x01'
+                    b'\x00\x0c\x00\x00\x00\x00'
+                    b'\x00\r\x00\x00\x00\x00'
+                    b'\x00\x0e\x00\x00\x00\x00'
+                    b'\x00\x0f\x00\x00\x00\x00'
+                    b'\x00\x10\x00\x00\x00\x00'
+                    b'\x00\x11\x00\x00\x00\x00'
+                    b'\x00\x12\x00\x00\x00\x00'
+                    b'\x00\x13\x00\x00\x00\x00'
+                    b'\x00\x14\x00\x00\x00\x00'
+                    b'\x00\x00\x00\x00'  # ???
+            )
+        )
+        self.assertEqual(len(response.api_versions), 21)
+        self.assertEqual(response.api_versions[1].max, 3)
+        self.assertEqual(response.api_versions[5].min, 0)
+        self.assertEqual(response.api_versions[12].key, 12)
+
 
 if __name__ == '__main__':
     unittest2.main()
