@@ -78,7 +78,10 @@ class Request(Serializable, ApiVersionAware):
     HEADER_LEN = 21  # constant for all messages
     CLIENT_ID = b'pykafka'
     API_KEY = -1
-    VERSIONS = {}
+
+    @classmethod
+    def get_versions(cls):
+        return {}
 
     def _write_header(self, buff, api_version=0, correlation_id=0):
         """Write the header for an outgoing message.
@@ -113,7 +116,10 @@ class Request(Serializable, ApiVersionAware):
 class Response(ApiVersionAware):
     """Base class for Response objects."""
     API_KEY = -1
-    VERSIONS = {}
+
+    @classmethod
+    def get_versions(cls):
+        return {}
 
     def raise_error(self, err_code, response):
         """Raise an error based on the Kafka error code
