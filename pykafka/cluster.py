@@ -34,7 +34,8 @@ from .exceptions import (ERROR_CODES,
                          SocketDisconnectedError,
                          LeaderNotFoundError,
                          LeaderNotAvailable)
-from .protocol import GroupCoordinatorRequest, GroupCoordinatorResponse
+from .protocol import (GroupCoordinatorRequest, GroupCoordinatorResponse,
+                       API_VERSIONS_090, API_VERSIONS_080)
 from .topic import Topic
 from .utils.compat import iteritems, itervalues, range
 
@@ -462,9 +463,14 @@ class Cluster(object):
 
     def fetch_api_versions(self):
         """Get API version info from an available broker and save it"""
-        if parse_version(self._broker_version) < parse_version('0.10.0'):
+        version = parse_version(self._broker_version)
+        if version < parse_version('0.10.0'):
             log.warning("Broker version is too old to use automatic API version "
-                        "discovery")
+                        "discovery. Falling back to hardcoded versions list.")
+            if version >= parse_version('0.9.0'):
+                self._api_versions = API_VERSIONS_090
+            else:
+                self._api_versions = API_VERSIONS_080
             return
 
         log.info("Requesting API version information")

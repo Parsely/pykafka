@@ -1929,3 +1929,44 @@ class ApiVersionsResponseV1(ApiVersionsResponse):
         for api_key, min_v, max_v in response[1]:
             self.api_versions[api_key] = ApiVersionsSpec(api_key, min_v, max_v)
         self.throttle_time = response[2]
+
+
+# Hardcoded API version specifiers for brokers that don't support ApiVersionsRequest
+API_VERSIONS_080 = {
+    0: ApiVersionsSpec(0, 0, 0),
+    1: ApiVersionsSpec(1, 0, 0),
+    2: ApiVersionsSpec(2, 0, 0),
+    3: ApiVersionsSpec(3, 0, 0),
+    4: ApiVersionsSpec(4, 0, 0),
+    5: ApiVersionsSpec(5, 0, 0),
+    6: ApiVersionsSpec(6, 0, 0),
+    7: ApiVersionsSpec(7, 0, 0),
+    8: ApiVersionsSpec(8, 0, 0),
+    9: ApiVersionsSpec(9, 0, 1),
+    10: ApiVersionsSpec(10, 0, 0),
+    11: ApiVersionsSpec(11, 0, 0),
+    12: ApiVersionsSpec(12, 0, 0),
+    13: ApiVersionsSpec(13, 0, 0),
+    14: ApiVersionsSpec(14, 0, 0),
+    15: ApiVersionsSpec(15, 0, 0),
+    16: ApiVersionsSpec(16, 0, 0)
+}
+API_VERSIONS_090 = {
+    0: ApiVersionsSpec(0, 0, 0),
+    1: ApiVersionsSpec(1, 0, 1),
+    2: ApiVersionsSpec(2, 0, 0),
+    3: ApiVersionsSpec(3, 0, 0),
+    4: ApiVersionsSpec(4, 0, 0),
+    5: ApiVersionsSpec(5, 0, 0),
+    6: ApiVersionsSpec(6, 0, 0),
+    7: ApiVersionsSpec(7, 0, 0),
+    8: ApiVersionsSpec(8, 0, 0),
+    9: ApiVersionsSpec(9, 0, 1),
+    10: ApiVersionsSpec(10, 0, 0),
+    11: ApiVersionsSpec(11, 0, 0),
+    12: ApiVersionsSpec(12, 0, 0),
+    13: ApiVersionsSpec(13, 0, 0),
+    14: ApiVersionsSpec(14, 0, 0),
+    15: ApiVersionsSpec(15, 0, 0),
+    16: ApiVersionsSpec(16, 0, 0)
+}
