@@ -262,9 +262,10 @@ def reset_offsets(client, args):
 
 
 def create_topic(client, args):
-    broker = client.cluster.brokers[client.cluster.brokers.keys()[0]]
-    broker.create_topics([args.topic], args.num_partitions, args.replication_factor,
-                         args.replica_assignment, args.config_entries, args.timeout)
+    client.cluster.controller_broker.create_topics([args.topic], args.num_partitions,
+                                                   args.replication_factor,
+                                                   args.replica_assignment,
+                                                   args.config_entries, args.timeout)
 
 
 def _encode_utf8(string):
