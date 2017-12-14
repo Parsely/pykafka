@@ -66,17 +66,22 @@ from pkg_resources import parse_version
 
 from .common import CompressionType, Message
 from .exceptions import ERROR_CODES, MessageSetDecodeFailure
-from .utils import Serializable, compression, struct_helpers
+from .utils import Serializable, compression, struct_helpers, ApiVersionAware
 from .utils.compat import iteritems, itervalues, buffer
 
 
 log = logging.getLogger(__name__)
 
 
-class Request(Serializable):
+class Request(Serializable, ApiVersionAware):
     """Base class for all Requests. Handles writing header information"""
     HEADER_LEN = 21  # constant for all messages
     CLIENT_ID = b'pykafka'
+    API_KEY = -1
+
+    @classmethod
+    def get_versions(cls):
+        return {}
 
     def _write_header(self, buff, api_version=0, correlation_id=0):
         """Write the header for an outgoing message.
@@ -99,10 +104,6 @@ class Request(Serializable):
                          len(self.CLIENT_ID),
                          self.CLIENT_ID)
 
-    def API_KEY(self):
-        """API key for this request, from the Kafka docs"""
-        raise NotImplementedError()
-
     def get_bytes(self):
         """Serialize the message
 
@@ -112,8 +113,14 @@ class Request(Serializable):
         raise NotImplementedError()
 
 
-class Response(object):
+class Response(ApiVersionAware):
     """Base class for Response objects."""
+    API_KEY = -1
+
+    @classmethod
+    def get_versions(cls):
+        return {}
+
     def raise_error(self, err_code, response):
         """Raise an error based on the Kafka error code
 
@@ -425,6 +432,8 @@ class MetadataRequest(Request):
         MetadataRequest => [TopicName]
             TopicName => string
     """
+    API_KEY = 3
+
     def __init__(self, topics=None):
         """Create a new MetadataRequest
 
@@ -435,11 +444,6 @@ class MetadataRequest(Request):
     def __len__(self):
         """Length of the serialized message, in bytes"""
         return self.HEADER_LEN + 4 + sum(len(t) + 2 for t in self.topics)
-
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 3
 
     def get_bytes(self):
         """Serialize the message
@@ -521,6 +525,8 @@ class ProduceRequest(Request):
           Partition => int32
           MessageSetSize => int32
     """
+    API_KEY = 0
+
     def __init__(self,
                  compression_type=CompressionType.NONE,
                  required_acks=1,
@@ -562,11 +568,6 @@ class ProduceRequest(Request):
             # partition + mset size + len(mset)
             size += sum(4 + 4 + len(mset) for mset in itervalues(parts))
         return size
-
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 0
 
     @property
     def messages(self):
@@ -688,6 +689,12 @@ class FetchRequest(Request):
           FetchOffset => int64
           MaxBytes => int32
     """
+    API_KEY = 1
+
+    @classmethod
+    def get_versions(cls):
+        return {0: FetchRequest, 1: FetchRequest}
+
     def __init__(self, partition_requests=[], timeout=1000, min_bytes=1024,
                  api_version=0):
         """Create a new fetch request
@@ -733,11 +740,6 @@ class FetchRequest(Request):
             size += (4 + 8 + 4) * len(parts)
         return size
 
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 1
-
     def get_bytes(self):
         """Serialize the message
 
@@ -782,19 +784,12 @@ class FetchResponse(Response):
           HighwaterMarkOffset => int64
           MessageSetSize => int32
     """
-    api_version = 0
+    API_VERSION = 0
+    API_KEY = 1
 
-    @staticmethod
-    def get_subclass(broker_protocol):
-        """Choose which subclass of response to demand and expect. Cf.
-        https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol"""
-        target_version = parse_version(broker_protocol)
-        if target_version >= parse_version("0.10.0"):
-            return FetchResponseV2
-        elif target_version >= parse_version("0.9.0"):
-            return FetchResponseV1
-        else:
-            return FetchResponse
+    @classmethod
+    def get_versions(cls):
+        return {0: FetchResponse, 1: FetchResponseV1, 2: FetchResponseV2}
 
     def __init__(self, buff, offset=0, broker_version='0.9.0'):
         """Deserialize into a new Response
@@ -851,7 +846,7 @@ class FetchResponse(Response):
 
 
 class FetchResponseV1(FetchResponse):
-    api_version = 1
+    API_VERSION = 1
 
     def __init__(self, buff, offset=0, broker_version='0.9.0'):
         """Deserialize into a new Response
@@ -868,7 +863,7 @@ class FetchResponseV1(FetchResponse):
 
 
 class FetchResponseV2(FetchResponseV1):
-    api_version = 2
+    API_VERSION = 2
 
 
 ##
@@ -907,6 +902,8 @@ class OffsetRequest(Request):
           Time => int64
           MaxNumberOfOffsets => int32
     """
+    API_KEY = 2
+
     def __init__(self, partition_requests):
         """Create a new offset request"""
         self._reqs = defaultdict(dict)
@@ -924,11 +921,6 @@ class OffsetRequest(Request):
             # partition + fetch offset + max bytes => for each partition
             size += (4 + 8 + 4) * len(parts)
         return size
-
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 2
 
     def get_bytes(self):
         """Serialize the message
@@ -995,6 +987,8 @@ class GroupCoordinatorRequest(Request):
         GroupCoordinatorRequest => ConsumerGroup
             ConsumerGroup => string
     """
+    API_KEY = 10
+
     def __init__(self, consumer_group):
         """Create a new group coordinator request"""
         self.consumer_group = consumer_group
@@ -1003,11 +997,6 @@ class GroupCoordinatorRequest(Request):
         """Length of the serialized message, in bytes"""
         # Header + len(self.consumer_group)
         return self.HEADER_LEN + 2 + len(self.consumer_group)
-
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 10
 
     def get_bytes(self):
         """Serialize the message
@@ -1084,6 +1073,8 @@ class OffsetCommitRequest(Request):
             TimeStamp => int64
             Metadata => string
     """
+    API_KEY = 8
+
     def __init__(self,
                  consumer_group,
                  consumer_group_generation_id,
@@ -1119,11 +1110,6 @@ class OffsetCommitRequest(Request):
             for partition, (_, _, metadata) in iteritems(parts):
                 size += 2 + len(metadata)
         return size
-
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 8
 
     def get_bytes(self):
         """Serialize the message
@@ -1220,6 +1206,8 @@ class OffsetFetchRequest(Request):
             TopicName => string
             Partition => int32
     """
+    API_KEY = 9
+
     def __init__(self, consumer_group, partition_requests=[]):
         """Create a new offset fetch request
 
@@ -1242,11 +1230,6 @@ class OffsetFetchRequest(Request):
             # partition => for each partition
             size += 4 * len(parts)
         return size
-
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 9
 
     def get_bytes(self):
         """Serialize the message
@@ -1381,6 +1364,8 @@ class JoinGroupRequest(Request):
             ProtocolName => string
             ProtocolMetadata => bytes
     """
+    API_KEY = 11
+
     def __init__(self,
                  group_id,
                  member_id,
@@ -1406,11 +1391,6 @@ class JoinGroupRequest(Request):
         for name, metadata in self.group_protocols:
             size += 2 + len(name) + 4 + len(metadata)
         return size
-
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 11
 
     def get_bytes(self):
         """Serialize the message
@@ -1536,6 +1516,8 @@ class SyncGroupRequest(Request):
             MemberId => string
             MemberAssignment => bytes
     """
+    API_KEY = 14
+
     def __init__(self, group_id, generation_id, member_id, group_assignment):
         """Create a new group join request"""
         self.group_id = group_id
@@ -1554,11 +1536,6 @@ class SyncGroupRequest(Request):
             # + len(member id) + member id + len(member assignment) + member assignment
             size += 2 + len(member_id) + 4 + len(member_assignment)
         return size
-
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 14
 
     def get_bytes(self):
         """Serialize the message
@@ -1614,6 +1591,8 @@ class HeartbeatRequest(Request):
         GenerationId => int32
         MemberId => string
     """
+    API_KEY = 12
+
     def __init__(self, group_id, generation_id, member_id):
         """Create a new heartbeat request"""
         self.group_id = group_id
@@ -1627,11 +1606,6 @@ class HeartbeatRequest(Request):
         # + len(member id) + member id
         size += 2 + len(self.member_id)
         return size
-
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 12
 
     def get_bytes(self):
         """Serialize the message
@@ -1677,6 +1651,8 @@ class LeaveGroupRequest(Request):
         GroupId => string
         MemberId => string
     """
+    API_KEY = 13
+
     def __init__(self, group_id, member_id):
         """Create a new group join request"""
         self.group_id = group_id
@@ -1689,11 +1665,6 @@ class LeaveGroupRequest(Request):
         # + len(member id) + member id
         size += 2 + len(self.member_id)
         return size
-
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 13
 
     def get_bytes(self):
         """Serialize the message
@@ -1740,10 +1711,7 @@ class ListGroupsRequest(Request):
 
     ListGroupsRequest =>
     """
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 16
+    API_KEY = 16
 
     def get_bytes(self):
         """Create a new list group request"""
@@ -1797,13 +1765,10 @@ class DescribeGroupsRequest(Request):
     DescribeGroupsRequest => [GroupId]
       GroupId => string
     """
+    API_KEY = 15
+
     def __init__(self, group_ids):
         self.group_ids = group_ids
-
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 15
 
     def get_bytes(self):
         """Create a new list group request"""
@@ -1881,3 +1846,127 @@ class DescribeGroupsResponse(Response):
                 members[member.member_id] = member
             group = DescribeGroupResponse(*(group_info[:5] + (members,)))
             self.groups[group.group_id] = group
+
+
+class ApiVersionsRequest(Request):
+    """An api versions request
+
+    Specification::
+
+        ApiVersions Request (Version: 0) =>
+    """
+    API_KEY = 18
+
+    def get_bytes(self):
+        """Create a new api versions request"""
+        output = bytearray(len(self))
+        self._write_header(output)
+        return output
+
+    def __len__(self):
+        """Length of the serialized message, in bytes"""
+        # header
+        size = self.HEADER_LEN
+        return size
+
+
+ApiVersionsSpec = namedtuple('ApiVersionsSpec', ['key', 'min', 'max'])
+
+
+class ApiVersionsResponse(Response):
+    """
+    Specification::
+
+    ApiVersions Response (Version: 0) => error_code [api_versions]
+        error_code => INT16
+        api_versions => api_key min_version max_version
+            api_key => INT16
+            min_version => INT16
+            max_version => INT16
+    """
+    API_KEY = 18
+
+    @classmethod
+    def get_versions(cls):
+        return {0: ApiVersionsResponse, 1: ApiVersionsResponseV1}
+
+    def __init__(self, buff):
+        """Deserialize into a new Response
+
+        :param buff: Serialized message
+        :type buff: :class:`bytearray`
+        """
+        fmt = 'h [hhh]'
+        response = struct_helpers.unpack_from(fmt, buff, 0)
+
+        self.api_versions = {}
+        for api_key, min_v, max_v in response[1]:
+            self.api_versions[api_key] = ApiVersionsSpec(api_key, min_v, max_v)
+
+
+class ApiVersionsResponseV1(ApiVersionsResponse):
+    """
+    Specification::
+
+    ApiVersions Response (Version: 1) => error_code [api_versions] throttle_time_ms
+        error_code => INT16
+        api_versions => api_key min_version max_version
+            api_key => INT16
+            min_version => INT16
+            max_version => INT16
+        throttle_time_ms => INT32
+    """
+    def __init__(self, buff):
+        """Deserialize into a new Response
+
+        :param buff: Serialized message
+        :type buff: :class:`bytearray`
+        """
+        fmt = 'h [hhh]i'
+        response = struct_helpers.unpack_from(fmt, buff, 0)
+
+        self.api_versions = {}
+        for api_key, min_v, max_v in response[1]:
+            self.api_versions[api_key] = ApiVersionsSpec(api_key, min_v, max_v)
+        self.throttle_time = response[2]
+
+
+# Hardcoded API version specifiers for brokers that don't support ApiVersionsRequest
+API_VERSIONS_080 = {
+    0: ApiVersionsSpec(0, 0, 0),
+    1: ApiVersionsSpec(1, 0, 0),
+    2: ApiVersionsSpec(2, 0, 0),
+    3: ApiVersionsSpec(3, 0, 0),
+    4: ApiVersionsSpec(4, 0, 0),
+    5: ApiVersionsSpec(5, 0, 0),
+    6: ApiVersionsSpec(6, 0, 0),
+    7: ApiVersionsSpec(7, 0, 0),
+    8: ApiVersionsSpec(8, 0, 0),
+    9: ApiVersionsSpec(9, 0, 1),
+    10: ApiVersionsSpec(10, 0, 0),
+    11: ApiVersionsSpec(11, 0, 0),
+    12: ApiVersionsSpec(12, 0, 0),
+    13: ApiVersionsSpec(13, 0, 0),
+    14: ApiVersionsSpec(14, 0, 0),
+    15: ApiVersionsSpec(15, 0, 0),
+    16: ApiVersionsSpec(16, 0, 0)
+}
+API_VERSIONS_090 = {
+    0: ApiVersionsSpec(0, 0, 0),
+    1: ApiVersionsSpec(1, 0, 1),
+    2: ApiVersionsSpec(2, 0, 0),
+    3: ApiVersionsSpec(3, 0, 0),
+    4: ApiVersionsSpec(4, 0, 0),
+    5: ApiVersionsSpec(5, 0, 0),
+    6: ApiVersionsSpec(6, 0, 0),
+    7: ApiVersionsSpec(7, 0, 0),
+    8: ApiVersionsSpec(8, 0, 0),
+    9: ApiVersionsSpec(9, 0, 1),
+    10: ApiVersionsSpec(10, 0, 0),
+    11: ApiVersionsSpec(11, 0, 0),
+    12: ApiVersionsSpec(12, 0, 0),
+    13: ApiVersionsSpec(13, 0, 0),
+    14: ApiVersionsSpec(14, 0, 0),
+    15: ApiVersionsSpec(15, 0, 0),
+    16: ApiVersionsSpec(16, 0, 0)
+}
