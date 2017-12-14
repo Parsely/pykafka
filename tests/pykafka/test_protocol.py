@@ -132,6 +132,367 @@ class TestMetadataAPI(unittest2.TestCase):
         self.assertEqual(response.topics[b'test'].err, 3)
 
 
+class TestMetadataAPIV1(unittest2.TestCase):
+    maxDiff = None
+
+    def test_request(self):
+        req = protocol.MetadataRequestV1()
+        msg = req.get_bytes()
+        self.assertEqual(
+            msg,
+            bytearray(
+                # header
+                b'\x00\x00\x00\x15'  # len(buffer)
+                b'\x00\x03'  # ApiKey
+                b'\x00\x01'  # api version
+                b'\x00\x00\x00\x00'  # correlation id
+                b'\x00\x07'  # len(client id)
+                    b'pykafka'  # client id  # noqa
+                # end header
+
+                b'\xff\xff\xff\xff'  # len(topics)
+            )
+        )
+
+    def test_response(self):
+        cluster = protocol.MetadataResponseV1(
+            buffer(
+                b'\x00\x00\x00\x01'  # len(brokers)
+                    b'\x00\x00\x00\x00'  # node id # noqa
+                    b'\x00\x09'  # len(host)
+                        b'localhost'  # host
+                    b'\x00\x00#\x84'  # port
+                    b'\xff\xff'  # len(rack)
+                b'\x00\x00\x00\x00'  # controller_id
+                b'\x00\x00\x00\x01'  # len(topic metadata)
+                    b'\x00\x00'  # error code
+                    b'\x00\x04'  # len(topic name)
+                        b'test'  # topic name
+                    b'\x00'  # is_internal
+                    b'\x00\x00\x00\x02'  # len(partition metadata)
+                        b'\x00\x00'  # partition error code
+                            b'\x00\x00\x00\x00'  # partition id
+                            b'\x00\x00\x00\x00'  # leader
+                            b'\x00\x00\x00\x01'  # len(replicas)
+                                b'\x00\x00\x00\x00'  # replica
+                            b'\x00\x00\x00\x01'  # len(isr)
+                                b'\x00\x00\x00\x00'  # isr
+                        b'\x00\x00'  # partition error code
+                            b'\x00\x00\x00\x01'  # partition id
+                            b'\x00\x00\x00\x00'  # leader
+                            b'\x00\x00\x00\x01'  # len(replicas)
+                                b'\x00\x00\x00\x00'  # replicas
+                            b'\x00\x00\x00\x01'  # len(isr)
+                                b'\x00\x00\x00\x00'  # isr
+            )
+        )
+        self.assertEqual(cluster.brokers[0].host, b'localhost')
+        self.assertEqual(cluster.brokers[0].port, 9092)
+        self.assertEqual(cluster.topics[b'test'].partitions[0].leader,
+                         cluster.brokers[0].id)
+        self.assertEqual(cluster.topics[b'test'].partitions[0].replicas,
+                         [cluster.brokers[0].id])
+        self.assertEqual(cluster.topics[b'test'].partitions[0].isr,
+                         [cluster.brokers[0].id])
+        self.assertEqual(cluster.brokers[0].rack, None)
+        self.assertEqual(cluster.controller_id, 0)
+        self.assertEqual(cluster.topics[b'test'].is_internal, False)
+
+
+class TestMetadataAPIV2(unittest2.TestCase):
+    maxDiff = None
+
+    def test_request(self):
+        req = protocol.MetadataRequestV2()
+        msg = req.get_bytes()
+        self.assertEqual(
+            msg,
+            bytearray(
+                # header
+                b'\x00\x00\x00\x15'  # len(buffer)
+                b'\x00\x03'  # ApiKey
+                b'\x00\x02'  # api version
+                b'\x00\x00\x00\x00'  # correlation id
+                b'\x00\x07'  # len(client id)
+                    b'pykafka'  # client id  # noqa
+                # end header
+
+                b'\xff\xff\xff\xff'  # len(topics)
+            )
+        )
+
+    def test_response(self):
+        cluster = protocol.MetadataResponseV2(
+            buffer(
+                b'\x00\x00\x00\x01'  # len(brokers)
+                    b'\x00\x00\x00\x00'  # node id # noqa
+                    b'\x00\x09'  # len(host)
+                        b'localhost'  # host
+                    b'\x00\x00#\x84'  # port
+                    b'\xff\xff'  # len(rack)
+                b'\x00\x01'  # len(cluster_id)
+                    b'a'  # cluster_id
+                b'\x00\x00\x00\x00'  # controller_id
+                b'\x00\x00\x00\x01'  # len(topic metadata)
+                    b'\x00\x00'  # error code
+                    b'\x00\x04'  # len(topic name)
+                        b'test'  # topic name
+                    b'\x00'  # is_internal
+                    b'\x00\x00\x00\x02'  # len(partition metadata)
+                        b'\x00\x00'  # partition error code
+                            b'\x00\x00\x00\x00'  # partition id
+                            b'\x00\x00\x00\x00'  # leader
+                            b'\x00\x00\x00\x01'  # len(replicas)
+                                b'\x00\x00\x00\x00'  # replica
+                            b'\x00\x00\x00\x01'  # len(isr)
+                                b'\x00\x00\x00\x00'  # isr
+                        b'\x00\x00'  # partition error code
+                            b'\x00\x00\x00\x01'  # partition id
+                            b'\x00\x00\x00\x00'  # leader
+                            b'\x00\x00\x00\x01'  # len(replicas)
+                                b'\x00\x00\x00\x00'  # replicas
+                            b'\x00\x00\x00\x01'  # len(isr)
+                                b'\x00\x00\x00\x00'  # isr
+            )
+        )
+        self.assertEqual(cluster.brokers[0].host, b'localhost')
+        self.assertEqual(cluster.brokers[0].port, 9092)
+        self.assertEqual(cluster.topics[b'test'].partitions[0].leader,
+                         cluster.brokers[0].id)
+        self.assertEqual(cluster.topics[b'test'].partitions[0].replicas,
+                         [cluster.brokers[0].id])
+        self.assertEqual(cluster.topics[b'test'].partitions[0].isr,
+                         [cluster.brokers[0].id])
+        self.assertEqual(cluster.brokers[0].rack, None)
+        self.assertEqual(cluster.controller_id, 0)
+        self.assertEqual(cluster.cluster_id, b"a")
+        self.assertEqual(cluster.topics[b'test'].is_internal, False)
+
+
+class TestMetadataAPIV3(unittest2.TestCase):
+    maxDiff = None
+
+    def test_request(self):
+        req = protocol.MetadataRequestV3()
+        msg = req.get_bytes()
+        self.assertEqual(
+            msg,
+            bytearray(
+                # header
+                b'\x00\x00\x00\x15'  # len(buffer)
+                b'\x00\x03'  # ApiKey
+                b'\x00\x03'  # api version
+                b'\x00\x00\x00\x00'  # correlation id
+                b'\x00\x07'  # len(client id)
+                    b'pykafka'  # client id  # noqa
+                # end header
+
+                b'\xff\xff\xff\xff'  # len(topics)
+            )
+        )
+
+    def test_response(self):
+        cluster = protocol.MetadataResponseV3(
+            buffer(
+                b'\x00\x00\x00\x00'  # throttle_time_ms
+                b'\x00\x00\x00\x01'  # len(brokers)
+                    b'\x00\x00\x00\x00'  # node id # noqa
+                    b'\x00\x09'  # len(host)
+                        b'localhost'  # host
+                    b'\x00\x00#\x84'  # port
+                    b'\xff\xff'  # len(rack)
+                b'\x00\x01'  # len(cluster_id)
+                    b'a'  # cluster_id
+                b'\x00\x00\x00\x00'  # controller_id
+                b'\x00\x00\x00\x01'  # len(topic metadata)
+                    b'\x00\x00'  # error code
+                    b'\x00\x04'  # len(topic name)
+                        b'test'  # topic name
+                    b'\x00'  # is_internal
+                    b'\x00\x00\x00\x02'  # len(partition metadata)
+                        b'\x00\x00'  # partition error code
+                            b'\x00\x00\x00\x00'  # partition id
+                            b'\x00\x00\x00\x00'  # leader
+                            b'\x00\x00\x00\x01'  # len(replicas)
+                                b'\x00\x00\x00\x00'  # replica
+                            b'\x00\x00\x00\x01'  # len(isr)
+                                b'\x00\x00\x00\x00'  # isr
+                        b'\x00\x00'  # partition error code
+                            b'\x00\x00\x00\x01'  # partition id
+                            b'\x00\x00\x00\x00'  # leader
+                            b'\x00\x00\x00\x01'  # len(replicas)
+                                b'\x00\x00\x00\x00'  # replicas
+                            b'\x00\x00\x00\x01'  # len(isr)
+                                b'\x00\x00\x00\x00'  # isr
+            )
+        )
+        self.assertEqual(cluster.brokers[0].host, b'localhost')
+        self.assertEqual(cluster.brokers[0].port, 9092)
+        self.assertEqual(cluster.topics[b'test'].partitions[0].leader,
+                         cluster.brokers[0].id)
+        self.assertEqual(cluster.topics[b'test'].partitions[0].replicas,
+                         [cluster.brokers[0].id])
+        self.assertEqual(cluster.topics[b'test'].partitions[0].isr,
+                         [cluster.brokers[0].id])
+        self.assertEqual(cluster.brokers[0].rack, None)
+        self.assertEqual(cluster.throttle_time_ms, 0)
+        self.assertEqual(cluster.controller_id, 0)
+        self.assertEqual(cluster.cluster_id, b"a")
+        self.assertEqual(cluster.topics[b'test'].is_internal, False)
+
+
+class TestMetadataAPIV4(unittest2.TestCase):
+    maxDiff = None
+
+    def test_request(self):
+        req = protocol.MetadataRequestV4()
+        msg = req.get_bytes()
+        self.assertEqual(
+            msg,
+            bytearray(
+                # header
+                b'\x00\x00\x00\x16'  # len(buffer)
+                b'\x00\x03'  # ApiKey
+                b'\x00\x04'  # api version
+                b'\x00\x00\x00\x00'  # correlation id
+                b'\x00\x07'  # len(client id)
+                    b'pykafka'  # client id  # noqa
+                # end header
+
+                b'\xff\xff\xff\xff'  # len(topics)
+                b'\x01'  # allow_topic_autocreation
+            )
+        )
+
+    def test_response(self):
+        cluster = protocol.MetadataResponseV4(
+            buffer(
+                b'\x00\x00\x00\x00'  # throttle_time_ms
+                b'\x00\x00\x00\x01'  # len(brokers)
+                    b'\x00\x00\x00\x00'  # node id # noqa
+                    b'\x00\x09'  # len(host)
+                        b'localhost'  # host
+                    b'\x00\x00#\x84'  # port
+                    b'\xff\xff'  # len(rack)
+                b'\x00\x01'  # len(cluster_id)
+                    b'a'  # cluster_id
+                b'\x00\x00\x00\x00'  # controller_id
+                b'\x00\x00\x00\x01'  # len(topic metadata)
+                    b'\x00\x00'  # error code
+                    b'\x00\x04'  # len(topic name)
+                        b'test'  # topic name
+                    b'\x00'  # is_internal
+                    b'\x00\x00\x00\x02'  # len(partition metadata)
+                        b'\x00\x00'  # partition error code
+                            b'\x00\x00\x00\x00'  # partition id
+                            b'\x00\x00\x00\x00'  # leader
+                            b'\x00\x00\x00\x01'  # len(replicas)
+                                b'\x00\x00\x00\x00'  # replica
+                            b'\x00\x00\x00\x01'  # len(isr)
+                                b'\x00\x00\x00\x00'  # isr
+                        b'\x00\x00'  # partition error code
+                            b'\x00\x00\x00\x01'  # partition id
+                            b'\x00\x00\x00\x00'  # leader
+                            b'\x00\x00\x00\x01'  # len(replicas)
+                                b'\x00\x00\x00\x00'  # replicas
+                            b'\x00\x00\x00\x01'  # len(isr)
+                                b'\x00\x00\x00\x00'  # isr
+            )
+        )
+        self.assertEqual(cluster.brokers[0].host, b'localhost')
+        self.assertEqual(cluster.brokers[0].port, 9092)
+        self.assertEqual(cluster.topics[b'test'].partitions[0].leader,
+                         cluster.brokers[0].id)
+        self.assertEqual(cluster.topics[b'test'].partitions[0].replicas,
+                         [cluster.brokers[0].id])
+        self.assertEqual(cluster.topics[b'test'].partitions[0].isr,
+                         [cluster.brokers[0].id])
+        self.assertEqual(cluster.brokers[0].rack, None)
+        self.assertEqual(cluster.throttle_time_ms, 0)
+        self.assertEqual(cluster.controller_id, 0)
+        self.assertEqual(cluster.cluster_id, b"a")
+        self.assertEqual(cluster.topics[b'test'].is_internal, False)
+
+
+class TestMetadataAPIV5(unittest2.TestCase):
+    maxDiff = None
+
+    def test_request(self):
+        req = protocol.MetadataRequestV5()
+        msg = req.get_bytes()
+        self.assertEqual(
+            msg,
+            bytearray(
+                # header
+                b'\x00\x00\x00\x16'  # len(buffer)
+                b'\x00\x03'  # ApiKey
+                b'\x00\x05'  # api version
+                b'\x00\x00\x00\x00'  # correlation id
+                b'\x00\x07'  # len(client id)
+                    b'pykafka'  # client id  # noqa
+                # end header
+
+                b'\xff\xff\xff\xff'  # len(topics)
+                b'\x01'  # allow_topic_autocreation
+            )
+        )
+
+    def test_response(self):
+        cluster = protocol.MetadataResponseV5(
+            buffer(
+                b'\x00\x00\x00\x00'  # throttle_time_ms
+                b'\x00\x00\x00\x01'  # len(brokers)
+                    b'\x00\x00\x00\x00'  # node id # noqa
+                    b'\x00\x09'  # len(host)
+                        b'localhost'  # host
+                    b'\x00\x00#\x84'  # port
+                    b'\xff\xff'  # len(rack)
+                b'\x00\x01'  # len(cluster_id)
+                    b'a'  # cluster_id
+                b'\x00\x00\x00\x00'  # controller_id
+                b'\x00\x00\x00\x01'  # len(topic metadata)
+                    b'\x00\x00'  # error code
+                    b'\x00\x04'  # len(topic name)
+                        b'test'  # topic name
+                    b'\x00'  # is_internal
+                    b'\x00\x00\x00\x02'  # len(partition metadata)
+                        b'\x00\x00'  # partition error code
+                            b'\x00\x00\x00\x00'  # partition id
+                            b'\x00\x00\x00\x00'  # leader
+                            b'\x00\x00\x00\x01'  # len(replicas)
+                                b'\x00\x00\x00\x00'  # replica
+                            b'\x00\x00\x00\x01'  # len(isr)
+                                b'\x00\x00\x00\x00'  # isr
+                            b'\x00\x00\x00\x01'  # len(offline_replicas)
+                                b'\x00\x00\x00\x00'  # offline_replicas
+                        b'\x00\x00'  # partition error code
+                            b'\x00\x00\x00\x01'  # partition id
+                            b'\x00\x00\x00\x00'  # leader
+                            b'\x00\x00\x00\x01'  # len(replicas)
+                                b'\x00\x00\x00\x00'  # replicas
+                            b'\x00\x00\x00\x01'  # len(isr)
+                                b'\x00\x00\x00\x00'  # isr
+                            b'\x00\x00\x00\x01'  # len(offline_replicas)
+                                b'\x00\x00\x00\x00'  # offline_replicas
+            )
+        )
+        self.assertEqual(cluster.brokers[0].host, b'localhost')
+        self.assertEqual(cluster.brokers[0].port, 9092)
+        self.assertEqual(cluster.topics[b'test'].partitions[0].leader,
+                         cluster.brokers[0].id)
+        self.assertEqual(cluster.topics[b'test'].partitions[0].replicas,
+                         [cluster.brokers[0].id])
+        self.assertEqual(cluster.topics[b'test'].partitions[0].isr,
+                         [cluster.brokers[0].id])
+        self.assertEqual(cluster.topics[b'test'].partitions[0].offline_replicas,
+                         [cluster.brokers[0].id])
+        self.assertEqual(cluster.brokers[0].rack, None)
+        self.assertEqual(cluster.throttle_time_ms, 0)
+        self.assertEqual(cluster.controller_id, 0)
+        self.assertEqual(cluster.cluster_id, b"a")
+        self.assertEqual(cluster.topics[b'test'].is_internal, False)
+
+
 class TestProduceAPI(unittest2.TestCase):
     maxDiff = None
 
