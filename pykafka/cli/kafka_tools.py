@@ -297,7 +297,7 @@ def _add_timeout(parser):
     parser.add_argument('-t', '--timeout',
                         help='Time in ms to wait for the operation to complete'
                              '(default: %(default)s)',
-                        type=int, default=0)
+                        type=int, default=5000)
 
 
 def _add_offset(parser):
