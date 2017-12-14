@@ -5,6 +5,7 @@ import calendar
 import datetime as dt
 import sys
 import time
+from pkg_resources import parse_version
 
 import tabulate
 
@@ -262,6 +263,9 @@ def reset_offsets(client, args):
 
 
 def create_topic(client, args):
+    if parse_version(args.broker_version) < parse_version('0.10.0'):
+        raise ValueError("The topic creation API is not usable on brokers older than "
+                         "0.10.0. Use --broker_version to specify the version")
     client.cluster.controller_broker.create_topics([args.topic], args.num_partitions,
                                                    args.replication_factor,
                                                    args.replica_assignment,
@@ -334,6 +338,11 @@ def _get_arg_parser():
                         dest='host',
                         help='host:port of any Kafka broker. '
                              '[default: localhost:9092]')
+    output.add_argument('-o', '--broker_version',
+                        required=False,
+                        default='0.9.0',
+                        dest='broker_version',
+                        help="The version string of the broker with which to communicate")
 
     subparsers = output.add_subparsers(help='Commands', dest='command')
 
@@ -431,7 +440,7 @@ def main():
     parser = _get_arg_parser()
     args = parser.parse_args()
     if args.command:
-        client = pykafka.KafkaClient(hosts=args.host)
+        client = pykafka.KafkaClient(hosts=args.host, broker_version=args.broker_version)
         args.func(client, args)
     else:
         parser.print_help()
