@@ -432,9 +432,15 @@ class MetadataRequest(Request):
         MetadataRequest => [TopicName]
             TopicName => string
     """
+    API_VERSION = 0
     API_KEY = 3
 
-    def __init__(self, topics=None):
+    @classmethod
+    def get_versions(cls):
+        return {0: MetadataRequest, 1: MetadataRequestV1, 2: MetadataRequestV2,
+                3: MetadataRequestV3, 4: MetadataRequestV4, 5: MetadataRequestV5}
+
+    def __init__(self, topics=None, *kwargs):
         """Create a new MetadataRequest
 
         :param topics: Topics to query. Leave empty for all available topics.
@@ -445,21 +451,72 @@ class MetadataRequest(Request):
         """Length of the serialized message, in bytes"""
         return self.HEADER_LEN + 4 + sum(len(t) + 2 for t in self.topics)
 
-    def get_bytes(self):
-        """Serialize the message
-
-        :returns: Serialized message
-        :rtype: :class:`bytearray`
-        """
+    def _serialize(self):
         output = bytearray(len(self))
-        self._write_header(output)
+        self._write_header(output, api_version=self.API_VERSION)
         struct.pack_into('!i', output, self.HEADER_LEN, len(self.topics))
         offset = self.HEADER_LEN + 4
         for t in self.topics:
             tlen = len(t)
             struct.pack_into('!h%ds' % tlen, output, offset, tlen, t)
             offset += 2 + tlen
+        return output, offset
+
+    def get_bytes(self):
+        """Serialize the message
+
+        :returns: Serialized message
+        :rtype: :class:`bytearray`
+        """
+        output, _ = self._serialize()
         return output
+
+
+class MetadataRequestV1(MetadataRequest):
+    API_VERSION = 1
+
+
+class MetadataRequestV2(MetadataRequest):
+    API_VERSION = 2
+
+
+class MetadataRequestV3(MetadataRequest):
+    API_VERSION = 3
+
+
+class MetadataRequestV4(MetadataRequest):
+    """Metadata Request
+
+    Specification::
+
+    Metadata Request (Version: 4) => [topics] allow_auto_topic_creation
+        topics => STRING
+        allow_auto_topic_creation => BOOLEAN
+    """
+    API_VERSION = 4
+
+    def __init__(self, topics=None, allow_topic_autocreation=True):
+        """Create a new MetadataRequest
+
+        :param topics: Topics to query. Leave empty for all available topics.
+        :param allow_topic_autocreation: If this and the broker config
+            'auto.create.topics.enable' are true, topics that don't exist will be created
+            by the broker. Otherwise, no topics will be created by the broker.
+        """
+        super(MetadataRequestV4, self).__init__(topics=topics)
+        self.allow_topic_autocreation = allow_topic_autocreation
+
+    def __len__(self):
+        return super(MetadataRequestV4, self).__len__() + 1
+
+    def get_bytes(self):
+        output, offset = self._serialize()
+        struct.pack_into('!b', output, offset, self.allow_topic_autocreation)
+        return output
+
+
+class MetadataRequestV5(MetadataRequestV4):
+    API_VERSION = 5
 
 
 BrokerMetadata = namedtuple('BrokerMetadata', ['id', 'host', 'port'])
