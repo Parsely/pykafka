@@ -451,10 +451,13 @@ class MetadataRequest(Request):
         """Length of the serialized message, in bytes"""
         return self.HEADER_LEN + 4 + sum(len(t) + 2 for t in self.topics)
 
+    def _topics_len(self):
+        return len(self.topics)
+
     def _serialize(self):
         output = bytearray(len(self))
         self._write_header(output, api_version=self.API_VERSION)
-        struct.pack_into('!i', output, self.HEADER_LEN, len(self.topics))
+        struct.pack_into('!i', output, self.HEADER_LEN, self._topics_len())
         offset = self.HEADER_LEN + 4
         for t in self.topics:
             tlen = len(t)
@@ -475,16 +478,20 @@ class MetadataRequest(Request):
 class MetadataRequestV1(MetadataRequest):
     API_VERSION = 1
 
+    def _topics_len(self):
+        # v1 and higher require a null array, not an empty array, to select all topics
+        return len(self.topics) or -1
 
-class MetadataRequestV2(MetadataRequest):
+
+class MetadataRequestV2(MetadataRequestV1):
     API_VERSION = 2
 
 
-class MetadataRequestV3(MetadataRequest):
+class MetadataRequestV3(MetadataRequestV2):
     API_VERSION = 3
 
 
-class MetadataRequestV4(MetadataRequest):
+class MetadataRequestV4(MetadataRequestV3):
     """Metadata Request
 
     Specification::
