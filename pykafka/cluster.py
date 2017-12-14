@@ -205,6 +205,7 @@ class Cluster(object):
         self._max_connection_retries_offset_mgr = 8
         self._broker_version = broker_version
         self._api_versions = None
+        self.controller_broker = None
         if ':' in self._source_address:
             self._source_port = int(self._source_address.split(':')[1])
         self.fetch_api_versions()
@@ -357,12 +358,14 @@ class Cluster(object):
                 log.exception(e)
                 return []
 
-    def _update_brokers(self, broker_metadata):
+    def _update_brokers(self, broker_metadata, controller_id):
         """Update brokers with fresh metadata.
 
         :param broker_metadata: Metadata for all brokers.
         :type broker_metadata: Dict of `{name: metadata}` where `metadata` is
             :class:`pykafka.protocol.BrokerMetadata` and `name` is str.
+        :param controller_id: The ID of the cluster's controller broker, if applicable
+        :type controller_id: int
         """
         # FIXME: A cluster with no topics returns no brokers in metadata
         # Remove old brokers
@@ -404,6 +407,11 @@ class Cluster(object):
                 #       Figure out and implement update/disconnect/reconnect if
                 #       needed.
                 raise Exception('Broker host/port change detected! %s', broker)
+        if controller_id is not None:
+            if controller_id not in self._brokers:
+                raise KeyError("Controller ID {} not present in cluster".format(
+                    controller_id))
+            self.controller_broker = self._brokers[controller_id]
 
     def get_managed_group_descriptions(self):
         """Return detailed descriptions of all managed consumer groups on this cluster
@@ -495,7 +503,7 @@ class Cluster(object):
                             'a topic in the cluster. See '
                             'https://issues.apache.org/jira/browse/KAFKA-2154 '
                             'for information.')
-            self._update_brokers(metadata.brokers)
+            self._update_brokers(metadata.brokers, metadata.controller_id)
             try:
                 self._topics._update_topics(metadata.topics)
             except LeaderNotFoundError:

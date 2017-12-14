@@ -355,6 +355,9 @@ class Broker(object):
         :param topics: The topic names for which to request metadata
         :type topics: Iterable of `bytes`
         """
+        request_class = MetadataRequest.get_version_impl(self._api_versions)
+        response_class = MetadataResponse.get_version_impl(self._api_versions)
+
         max_retries = 3
         for i in range(max_retries):
             if i > 0:
@@ -362,8 +365,8 @@ class Broker(object):
             time.sleep(i)
 
             try:
-                future = self._req_handler.request(MetadataRequest(topics=topics))
-                response = future.get(MetadataResponse)
+                future = self._req_handler.request(request_class(topics=topics))
+                response = future.get(response_class)
             except SocketDisconnectedError:
                 log.warning("Encountered SocketDisconnectedError while requesting "
                             "metadata from broker %s:%s. Continuing.",
