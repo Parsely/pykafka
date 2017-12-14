@@ -567,6 +567,26 @@ class MetadataResponse(Response):
             self.topics[name] = TopicMetadata(name, part_metas, err)
 
 
+class MetadataResponseV1(Response):
+    pass
+
+
+class MetadataResponseV2(Response):
+    pass
+
+
+class MetadataResponseV3(Response):
+    pass
+
+
+class MetadataResponseV4(Response):
+    pass
+
+
+class MetadataResponseV5(Response):
+    pass
+
+
 ##
 # Produce API
 ##
