@@ -29,8 +29,8 @@ from .protocol import (
     OffsetFetchResponse, ProduceResponse, JoinGroupRequest, JoinGroupResponse,
     SyncGroupRequest, SyncGroupResponse, HeartbeatRequest, HeartbeatResponse,
     LeaveGroupRequest, LeaveGroupResponse, ListGroupsRequest, ListGroupsResponse,
-    DescribeGroupsRequest, DescribeGroupsResponse, CreateTopicsRequest,
-    CreateTopicsResponse, CreateTopicRequest)
+    DescribeGroupsRequest, DescribeGroupsResponse, ApiVersionsRequest,
+    ApiVersionsResponse, CreateTopicsRequest, CreateTopicsResponse, CreateTopicRequest)
 from .utils.compat import range, iteritems, get_bytes
 
 log = logging.getLogger(__name__)
@@ -61,7 +61,8 @@ class Broker(object):
                  source_host='',
                  source_port=0,
                  ssl_config=None,
-                 broker_version="0.9.0"):
+                 broker_version="0.9.0",
+                 api_versions=None):
         """Create a Broker instance.
 
         :param id_: The id number of this broker
@@ -90,6 +91,13 @@ class Broker(object):
         :type source_port: int
         :param ssl_config: Config object for SSL connection
         :type ssl_config: :class:`pykafka.connection.SslConfig`
+        :param broker_version: The protocol version of the cluster being connected to.
+            If this parameter doesn't match the actual broker version, some pykafka
+            features may not work properly.
+        :type broker_version: str
+        :param api_versions: A sequence of :class:`pykafka.protocol.ApiVersionsSpec`
+            objects indicating the API version compatibility of this broker
+        :type api_versions: Iterable of :class:`pykafka.protocol.ApiVersionsSpec`
         """
         self._connection = None
         self._offsets_channel_connection = None
@@ -107,6 +115,7 @@ class Broker(object):
         self._buffer_size = buffer_size
         self._req_handlers = {}
         self._broker_version = broker_version
+        self._api_versions = api_versions
         try:
             self.connect()
         except SocketDisconnectedError:
@@ -133,7 +142,8 @@ class Broker(object):
                       source_host='',
                       source_port=0,
                       ssl_config=None,
-                      broker_version="0.9.0"):
+                      broker_version="0.9.0",
+                      api_versions=None):
         """Create a Broker using BrokerMetadata
 
         :param metadata: Metadata that describes the broker.
@@ -157,6 +167,13 @@ class Broker(object):
         :type source_port: int
         :param ssl_config: Config object for SSL connection
         :type ssl_config: :class:`pykafka.connection.SslConfig`
+        :param broker_version: The protocol version of the cluster being connected to.
+            If this parameter doesn't match the actual broker version, some pykafka
+            features may not work properly.
+        :type broker_version: str
+        :param api_versions: A sequence of :class:`pykafka.protocol.ApiVersionsSpec`
+            objects indicating the API version compatibility of this broker
+        :type api_versions: Iterable of :class:`pykafka.protocol.ApiVersionsSpec`
         """
         return cls(metadata.id, metadata.host,
                    metadata.port, handler, socket_timeout_ms,
@@ -294,12 +311,13 @@ class Broker(object):
             block for up to `timeout` milliseconds.
         :type min_bytes: int
         """
-        response_class = FetchResponse.get_subclass(self._broker_version)
-        future = self._req_handler.request(FetchRequest(
+        request_class = FetchRequest.get_version_impl(self._api_versions)
+        response_class = FetchResponse.get_version_impl(self._api_versions)
+        future = self._req_handler.request(request_class(
             partition_requests=partition_requests,
             timeout=timeout,
             min_bytes=min_bytes,
-            api_version=response_class.api_version
+            api_version=response_class.API_VERSION
         ))
         # XXX - this call returns even with less than min_bytes of messages?
         return future.get(response_class, broker_version=self._broker_version)
@@ -337,6 +355,9 @@ class Broker(object):
         :param topics: The topic names for which to request metadata
         :type topics: Iterable of `bytes`
         """
+        request_class = MetadataRequest.get_version_impl(self._api_versions)
+        response_class = MetadataResponse.get_version_impl(self._api_versions)
+
         max_retries = 3
         for i in range(max_retries):
             if i > 0:
@@ -344,8 +365,8 @@ class Broker(object):
             time.sleep(i)
 
             try:
-                future = self._req_handler.request(MetadataRequest(topics=topics))
-                response = future.get(MetadataResponse)
+                future = self._req_handler.request(request_class(topics=topics))
+                response = future.get(response_class)
             except SocketDisconnectedError:
                 log.warning("Encountered SocketDisconnectedError while requesting "
                             "metadata from broker %s:%s. Continuing.",
@@ -555,3 +576,9 @@ class Broker(object):
     @_check_handler
     def delete_topic(self):
         pass
+
+    @_check_handler
+    def fetch_api_versions(self):
+        """Send an ApiVersionsRequest"""
+        future = self._req_handler.request(ApiVersionsRequest())
+        return future.get(ApiVersionsResponse.get_version_impl(self._api_versions))

@@ -4,7 +4,6 @@ import unittest2
 from pykafka import protocol
 from pykafka.common import CompressionType
 from pykafka.membershipprotocol import RangeProtocol
-from pykafka.protocol import ConsumerGroupProtocolMetadata
 from pykafka.utils.compat import buffer
 
 
@@ -23,7 +22,7 @@ class TestMetadataAPI(unittest2.TestCase):
                 b'\x00\x00'  # api version
                 b'\x00\x00\x00\x00'  # correlation id
                 b'\x00\x07'  # len(client id)
-                    b'pykafka'  # client id
+                    b'pykafka'  # client id  # noqa
                 # end header
 
                 b'\x00\x00\x00\x00'  # len(topics)
@@ -34,7 +33,7 @@ class TestMetadataAPI(unittest2.TestCase):
         cluster = protocol.MetadataResponse(
             buffer(
                 b'\x00\x00\x00\x01'  # len(brokers)
-                    b'\x00\x00\x00\x00'  # node id
+                    b'\x00\x00\x00\x00'  # node id # noqa
                     b'\x00\x09'  # len(host)
                         b'localhost'  # host
                     b'\x00\x00#\x84'  # port
@@ -73,7 +72,7 @@ class TestMetadataAPI(unittest2.TestCase):
         response = protocol.MetadataResponse(
             buffer(
                 b'\x00\x00\x00\x01'  # len(brokers)
-                    b'\x00\x00\x00\x00'  # node is
+                    b'\x00\x00\x00\x00'  # node is # noqa
                     b'\x00\x09'  # len(host)
                         b'localhost'  # host
                     b'\x00\x00#\x84'  # port
@@ -105,7 +104,7 @@ class TestMetadataAPI(unittest2.TestCase):
         response = protocol.MetadataResponse(
             buffer(
                 b'\x00\x00\x00\x01'  # len(brokers)
-                    b'\x00\x00\x00\x00'  # node id
+                    b'\x00\x00\x00\x00'  # node id  # noqa
                     b'\x00\x09'  # len(host)
                         b'localhost'  # host
                     b'\x00\x00#\x84'  # port
@@ -133,6 +132,367 @@ class TestMetadataAPI(unittest2.TestCase):
         self.assertEqual(response.topics[b'test'].err, 3)
 
 
+class TestMetadataAPIV1(unittest2.TestCase):
+    maxDiff = None
+
+    def test_request(self):
+        req = protocol.MetadataRequestV1()
+        msg = req.get_bytes()
+        self.assertEqual(
+            msg,
+            bytearray(
+                # header
+                b'\x00\x00\x00\x15'  # len(buffer)
+                b'\x00\x03'  # ApiKey
+                b'\x00\x01'  # api version
+                b'\x00\x00\x00\x00'  # correlation id
+                b'\x00\x07'  # len(client id)
+                    b'pykafka'  # client id  # noqa
+                # end header
+
+                b'\xff\xff\xff\xff'  # len(topics)
+            )
+        )
+
+    def test_response(self):
+        cluster = protocol.MetadataResponseV1(
+            buffer(
+                b'\x00\x00\x00\x01'  # len(brokers)
+                    b'\x00\x00\x00\x00'  # node id # noqa
+                    b'\x00\x09'  # len(host)
+                        b'localhost'  # host
+                    b'\x00\x00#\x84'  # port
+                    b'\xff\xff'  # len(rack)
+                b'\x00\x00\x00\x00'  # controller_id
+                b'\x00\x00\x00\x01'  # len(topic metadata)
+                    b'\x00\x00'  # error code
+                    b'\x00\x04'  # len(topic name)
+                        b'test'  # topic name
+                    b'\x00'  # is_internal
+                    b'\x00\x00\x00\x02'  # len(partition metadata)
+                        b'\x00\x00'  # partition error code
+                            b'\x00\x00\x00\x00'  # partition id
+                            b'\x00\x00\x00\x00'  # leader
+                            b'\x00\x00\x00\x01'  # len(replicas)
+                                b'\x00\x00\x00\x00'  # replica
+                            b'\x00\x00\x00\x01'  # len(isr)
+                                b'\x00\x00\x00\x00'  # isr
+                        b'\x00\x00'  # partition error code
+                            b'\x00\x00\x00\x01'  # partition id
+                            b'\x00\x00\x00\x00'  # leader
+                            b'\x00\x00\x00\x01'  # len(replicas)
+                                b'\x00\x00\x00\x00'  # replicas
+                            b'\x00\x00\x00\x01'  # len(isr)
+                                b'\x00\x00\x00\x00'  # isr
+            )
+        )
+        self.assertEqual(cluster.brokers[0].host, b'localhost')
+        self.assertEqual(cluster.brokers[0].port, 9092)
+        self.assertEqual(cluster.topics[b'test'].partitions[0].leader,
+                         cluster.brokers[0].id)
+        self.assertEqual(cluster.topics[b'test'].partitions[0].replicas,
+                         [cluster.brokers[0].id])
+        self.assertEqual(cluster.topics[b'test'].partitions[0].isr,
+                         [cluster.brokers[0].id])
+        self.assertEqual(cluster.brokers[0].rack, None)
+        self.assertEqual(cluster.controller_id, 0)
+        self.assertEqual(cluster.topics[b'test'].is_internal, False)
+
+
+class TestMetadataAPIV2(unittest2.TestCase):
+    maxDiff = None
+
+    def test_request(self):
+        req = protocol.MetadataRequestV2()
+        msg = req.get_bytes()
+        self.assertEqual(
+            msg,
+            bytearray(
+                # header
+                b'\x00\x00\x00\x15'  # len(buffer)
+                b'\x00\x03'  # ApiKey
+                b'\x00\x02'  # api version
+                b'\x00\x00\x00\x00'  # correlation id
+                b'\x00\x07'  # len(client id)
+                    b'pykafka'  # client id  # noqa
+                # end header
+
+                b'\xff\xff\xff\xff'  # len(topics)
+            )
+        )
+
+    def test_response(self):
+        cluster = protocol.MetadataResponseV2(
+            buffer(
+                b'\x00\x00\x00\x01'  # len(brokers)
+                    b'\x00\x00\x00\x00'  # node id # noqa
+                    b'\x00\x09'  # len(host)
+                        b'localhost'  # host
+                    b'\x00\x00#\x84'  # port
+                    b'\xff\xff'  # len(rack)
+                b'\x00\x01'  # len(cluster_id)
+                    b'a'  # cluster_id
+                b'\x00\x00\x00\x00'  # controller_id
+                b'\x00\x00\x00\x01'  # len(topic metadata)
+                    b'\x00\x00'  # error code
+                    b'\x00\x04'  # len(topic name)
+                        b'test'  # topic name
+                    b'\x00'  # is_internal
+                    b'\x00\x00\x00\x02'  # len(partition metadata)
+                        b'\x00\x00'  # partition error code
+                            b'\x00\x00\x00\x00'  # partition id
+                            b'\x00\x00\x00\x00'  # leader
+                            b'\x00\x00\x00\x01'  # len(replicas)
+                                b'\x00\x00\x00\x00'  # replica
+                            b'\x00\x00\x00\x01'  # len(isr)
+                                b'\x00\x00\x00\x00'  # isr
+                        b'\x00\x00'  # partition error code
+                            b'\x00\x00\x00\x01'  # partition id
+                            b'\x00\x00\x00\x00'  # leader
+                            b'\x00\x00\x00\x01'  # len(replicas)
+                                b'\x00\x00\x00\x00'  # replicas
+                            b'\x00\x00\x00\x01'  # len(isr)
+                                b'\x00\x00\x00\x00'  # isr
+            )
+        )
+        self.assertEqual(cluster.brokers[0].host, b'localhost')
+        self.assertEqual(cluster.brokers[0].port, 9092)
+        self.assertEqual(cluster.topics[b'test'].partitions[0].leader,
+                         cluster.brokers[0].id)
+        self.assertEqual(cluster.topics[b'test'].partitions[0].replicas,
+                         [cluster.brokers[0].id])
+        self.assertEqual(cluster.topics[b'test'].partitions[0].isr,
+                         [cluster.brokers[0].id])
+        self.assertEqual(cluster.brokers[0].rack, None)
+        self.assertEqual(cluster.controller_id, 0)
+        self.assertEqual(cluster.cluster_id, b"a")
+        self.assertEqual(cluster.topics[b'test'].is_internal, False)
+
+
+class TestMetadataAPIV3(unittest2.TestCase):
+    maxDiff = None
+
+    def test_request(self):
+        req = protocol.MetadataRequestV3()
+        msg = req.get_bytes()
+        self.assertEqual(
+            msg,
+            bytearray(
+                # header
+                b'\x00\x00\x00\x15'  # len(buffer)
+                b'\x00\x03'  # ApiKey
+                b'\x00\x03'  # api version
+                b'\x00\x00\x00\x00'  # correlation id
+                b'\x00\x07'  # len(client id)
+                    b'pykafka'  # client id  # noqa
+                # end header
+
+                b'\xff\xff\xff\xff'  # len(topics)
+            )
+        )
+
+    def test_response(self):
+        cluster = protocol.MetadataResponseV3(
+            buffer(
+                b'\x00\x00\x00\x00'  # throttle_time_ms
+                b'\x00\x00\x00\x01'  # len(brokers)
+                    b'\x00\x00\x00\x00'  # node id # noqa
+                    b'\x00\x09'  # len(host)
+                        b'localhost'  # host
+                    b'\x00\x00#\x84'  # port
+                    b'\xff\xff'  # len(rack)
+                b'\x00\x01'  # len(cluster_id)
+                    b'a'  # cluster_id
+                b'\x00\x00\x00\x00'  # controller_id
+                b'\x00\x00\x00\x01'  # len(topic metadata)
+                    b'\x00\x00'  # error code
+                    b'\x00\x04'  # len(topic name)
+                        b'test'  # topic name
+                    b'\x00'  # is_internal
+                    b'\x00\x00\x00\x02'  # len(partition metadata)
+                        b'\x00\x00'  # partition error code
+                            b'\x00\x00\x00\x00'  # partition id
+                            b'\x00\x00\x00\x00'  # leader
+                            b'\x00\x00\x00\x01'  # len(replicas)
+                                b'\x00\x00\x00\x00'  # replica
+                            b'\x00\x00\x00\x01'  # len(isr)
+                                b'\x00\x00\x00\x00'  # isr
+                        b'\x00\x00'  # partition error code
+                            b'\x00\x00\x00\x01'  # partition id
+                            b'\x00\x00\x00\x00'  # leader
+                            b'\x00\x00\x00\x01'  # len(replicas)
+                                b'\x00\x00\x00\x00'  # replicas
+                            b'\x00\x00\x00\x01'  # len(isr)
+                                b'\x00\x00\x00\x00'  # isr
+            )
+        )
+        self.assertEqual(cluster.brokers[0].host, b'localhost')
+        self.assertEqual(cluster.brokers[0].port, 9092)
+        self.assertEqual(cluster.topics[b'test'].partitions[0].leader,
+                         cluster.brokers[0].id)
+        self.assertEqual(cluster.topics[b'test'].partitions[0].replicas,
+                         [cluster.brokers[0].id])
+        self.assertEqual(cluster.topics[b'test'].partitions[0].isr,
+                         [cluster.brokers[0].id])
+        self.assertEqual(cluster.brokers[0].rack, None)
+        self.assertEqual(cluster.throttle_time_ms, 0)
+        self.assertEqual(cluster.controller_id, 0)
+        self.assertEqual(cluster.cluster_id, b"a")
+        self.assertEqual(cluster.topics[b'test'].is_internal, False)
+
+
+class TestMetadataAPIV4(unittest2.TestCase):
+    maxDiff = None
+
+    def test_request(self):
+        req = protocol.MetadataRequestV4()
+        msg = req.get_bytes()
+        self.assertEqual(
+            msg,
+            bytearray(
+                # header
+                b'\x00\x00\x00\x16'  # len(buffer)
+                b'\x00\x03'  # ApiKey
+                b'\x00\x04'  # api version
+                b'\x00\x00\x00\x00'  # correlation id
+                b'\x00\x07'  # len(client id)
+                    b'pykafka'  # client id  # noqa
+                # end header
+
+                b'\xff\xff\xff\xff'  # len(topics)
+                b'\x01'  # allow_topic_autocreation
+            )
+        )
+
+    def test_response(self):
+        cluster = protocol.MetadataResponseV4(
+            buffer(
+                b'\x00\x00\x00\x00'  # throttle_time_ms
+                b'\x00\x00\x00\x01'  # len(brokers)
+                    b'\x00\x00\x00\x00'  # node id # noqa
+                    b'\x00\x09'  # len(host)
+                        b'localhost'  # host
+                    b'\x00\x00#\x84'  # port
+                    b'\xff\xff'  # len(rack)
+                b'\x00\x01'  # len(cluster_id)
+                    b'a'  # cluster_id
+                b'\x00\x00\x00\x00'  # controller_id
+                b'\x00\x00\x00\x01'  # len(topic metadata)
+                    b'\x00\x00'  # error code
+                    b'\x00\x04'  # len(topic name)
+                        b'test'  # topic name
+                    b'\x00'  # is_internal
+                    b'\x00\x00\x00\x02'  # len(partition metadata)
+                        b'\x00\x00'  # partition error code
+                            b'\x00\x00\x00\x00'  # partition id
+                            b'\x00\x00\x00\x00'  # leader
+                            b'\x00\x00\x00\x01'  # len(replicas)
+                                b'\x00\x00\x00\x00'  # replica
+                            b'\x00\x00\x00\x01'  # len(isr)
+                                b'\x00\x00\x00\x00'  # isr
+                        b'\x00\x00'  # partition error code
+                            b'\x00\x00\x00\x01'  # partition id
+                            b'\x00\x00\x00\x00'  # leader
+                            b'\x00\x00\x00\x01'  # len(replicas)
+                                b'\x00\x00\x00\x00'  # replicas
+                            b'\x00\x00\x00\x01'  # len(isr)
+                                b'\x00\x00\x00\x00'  # isr
+            )
+        )
+        self.assertEqual(cluster.brokers[0].host, b'localhost')
+        self.assertEqual(cluster.brokers[0].port, 9092)
+        self.assertEqual(cluster.topics[b'test'].partitions[0].leader,
+                         cluster.brokers[0].id)
+        self.assertEqual(cluster.topics[b'test'].partitions[0].replicas,
+                         [cluster.brokers[0].id])
+        self.assertEqual(cluster.topics[b'test'].partitions[0].isr,
+                         [cluster.brokers[0].id])
+        self.assertEqual(cluster.brokers[0].rack, None)
+        self.assertEqual(cluster.throttle_time_ms, 0)
+        self.assertEqual(cluster.controller_id, 0)
+        self.assertEqual(cluster.cluster_id, b"a")
+        self.assertEqual(cluster.topics[b'test'].is_internal, False)
+
+
+class TestMetadataAPIV5(unittest2.TestCase):
+    maxDiff = None
+
+    def test_request(self):
+        req = protocol.MetadataRequestV5()
+        msg = req.get_bytes()
+        self.assertEqual(
+            msg,
+            bytearray(
+                # header
+                b'\x00\x00\x00\x16'  # len(buffer)
+                b'\x00\x03'  # ApiKey
+                b'\x00\x05'  # api version
+                b'\x00\x00\x00\x00'  # correlation id
+                b'\x00\x07'  # len(client id)
+                    b'pykafka'  # client id  # noqa
+                # end header
+
+                b'\xff\xff\xff\xff'  # len(topics)
+                b'\x01'  # allow_topic_autocreation
+            )
+        )
+
+    def test_response(self):
+        cluster = protocol.MetadataResponseV5(
+            buffer(
+                b'\x00\x00\x00\x00'  # throttle_time_ms
+                b'\x00\x00\x00\x01'  # len(brokers)
+                    b'\x00\x00\x00\x00'  # node id # noqa
+                    b'\x00\x09'  # len(host)
+                        b'localhost'  # host
+                    b'\x00\x00#\x84'  # port
+                    b'\xff\xff'  # len(rack)
+                b'\x00\x01'  # len(cluster_id)
+                    b'a'  # cluster_id
+                b'\x00\x00\x00\x00'  # controller_id
+                b'\x00\x00\x00\x01'  # len(topic metadata)
+                    b'\x00\x00'  # error code
+                    b'\x00\x04'  # len(topic name)
+                        b'test'  # topic name
+                    b'\x00'  # is_internal
+                    b'\x00\x00\x00\x02'  # len(partition metadata)
+                        b'\x00\x00'  # partition error code
+                            b'\x00\x00\x00\x00'  # partition id
+                            b'\x00\x00\x00\x00'  # leader
+                            b'\x00\x00\x00\x01'  # len(replicas)
+                                b'\x00\x00\x00\x00'  # replica
+                            b'\x00\x00\x00\x01'  # len(isr)
+                                b'\x00\x00\x00\x00'  # isr
+                            b'\x00\x00\x00\x01'  # len(offline_replicas)
+                                b'\x00\x00\x00\x00'  # offline_replicas
+                        b'\x00\x00'  # partition error code
+                            b'\x00\x00\x00\x01'  # partition id
+                            b'\x00\x00\x00\x00'  # leader
+                            b'\x00\x00\x00\x01'  # len(replicas)
+                                b'\x00\x00\x00\x00'  # replicas
+                            b'\x00\x00\x00\x01'  # len(isr)
+                                b'\x00\x00\x00\x00'  # isr
+                            b'\x00\x00\x00\x01'  # len(offline_replicas)
+                                b'\x00\x00\x00\x00'  # offline_replicas
+            )
+        )
+        self.assertEqual(cluster.brokers[0].host, b'localhost')
+        self.assertEqual(cluster.brokers[0].port, 9092)
+        self.assertEqual(cluster.topics[b'test'].partitions[0].leader,
+                         cluster.brokers[0].id)
+        self.assertEqual(cluster.topics[b'test'].partitions[0].replicas,
+                         [cluster.brokers[0].id])
+        self.assertEqual(cluster.topics[b'test'].partitions[0].isr,
+                         [cluster.brokers[0].id])
+        self.assertEqual(cluster.topics[b'test'].partitions[0].offline_replicas,
+                         [cluster.brokers[0].id])
+        self.assertEqual(cluster.brokers[0].rack, None)
+        self.assertEqual(cluster.throttle_time_ms, 0)
+        self.assertEqual(cluster.controller_id, 0)
+        self.assertEqual(cluster.cluster_id, b"a")
+        self.assertEqual(cluster.topics[b'test'].is_internal, False)
+
+
 class TestProduceAPI(unittest2.TestCase):
     maxDiff = None
 
@@ -156,7 +516,7 @@ class TestProduceAPI(unittest2.TestCase):
                 b'\x00\x01'  # required acks
                 b'\x00\x00\'\x10'  # timeout
                 b'\x00\x00\x00\x01'  # len(topics)
-                    b'\x00\x04'  # len(topic name)
+                    b'\x00\x04'  # len(topic name) # noqa
                         b'test'  # topic name
                     b'\x00\x00\x00\x01'  # len (partitions)
                         b'\x00\x00\x00\x00'  # partition
@@ -185,7 +545,7 @@ class TestProduceAPI(unittest2.TestCase):
                 b'\x00\x01'  # required acks
                 b"\x00\x00\'\x10"  # timeout
                 b"\x00\x00\x00\x01"  # len(topics)
-                    b"\x00\x04"  # len(topic name)
+                    b"\x00\x04"  # len(topic name) # noqa
                         b"test"  # topic name
                     b"\x00\x00\x00\x01"  # len(partitions)
                         b"\x00\x00\x00\x00"  # partition
@@ -220,7 +580,7 @@ class TestProduceAPI(unittest2.TestCase):
         response = protocol.ProduceResponse(
             buffer(
                 b'\x00\x00\x00\x01'  # len(topics)
-                    b'\x00\x04'  # len(topic name)
+                    b'\x00\x04'  # len(topic name) # noqa
                         b'test'  # topic name
                     b'\x00\x00\x00\x01'  # len(partitions)
                         b'\x00\x00\x00\x00'  # partition
@@ -234,7 +594,7 @@ class TestProduceAPI(unittest2.TestCase):
         response = protocol.ProduceResponse(
             buffer(
                 b'\x00\x00\x00\x01'  # len(topics)
-                    b'\x00\x04'  # len(topic name)
+                    b'\x00\x04'  # len(topic name) # noqa
                         b'test'  # topic name
                     b'\x00\x00\x00\x01'  # len(partitions)
                         b'\x00\x00\x00\x00'  # partition
@@ -327,7 +687,7 @@ class TestFetchAPI(unittest2.TestCase):
                 b'\x00\x00\x03\xe8'  # max wait time
                 b'\x00\x00\x04\x00'  # min bytes
                 b'\x00\x00\x00\x01'  # len(topics)
-                    b'\x00\x04'  # len(topic name)
+                    b'\x00\x04'  # len(topic name) # noqa
                         b'test'  # topic name
                     b'\x00\x00\x00\x01'  # len(partitions)
                         b'\x00\x00\x00\x00'  # partition
@@ -341,7 +701,7 @@ class TestFetchAPI(unittest2.TestCase):
         response = protocol.FetchResponse(
             buffer(
                 b'\x00\x00\x00\x01'  # len(topics)
-                    b'\x00\x04'  # len(topic name)
+                    b'\x00\x04'  # len(topic name) # noqa
                         b'test'  # len(topic)
                 b'\x00\x00\x00\x01'  # len (partitions)
                     b'\x00\x00\x00\x00'  # partition id
@@ -365,7 +725,7 @@ class TestFetchAPI(unittest2.TestCase):
         resp = protocol.FetchResponse(
             buffer(
                 b'\x00\x00\x00\x01'  # len(topics)
-                    b'\x00\x04'  # len(topic name)
+                    b'\x00\x04'  # len(topic name) # noqa
                         b'test'  # len(topic)
                 b'\x00\x00\x00\x01'  # len (partitions)
                     b'\x00\x00\x00\x00'  # partition id
@@ -393,9 +753,9 @@ class TestFetchAPI(unittest2.TestCase):
 
     def test_gzip_decompression(self):
         msg = b''.join([
-b'\x00\x00\x00\x00\x00\x00\x00\x01\x00\x0btest_gzip_5\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x02\x17\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00Z\xb1Z\xf4\xc3\x01\x01\x00\x00\x01\\\xa3\x98\x95\xa6\xff\xff\xff\xff\x00\x00\x00D\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x00c`\x80\x03\x03\x97?.{\x19\x81\x0c\xc6\x98\xc53\xa6.\x032X\x12\x8bS\xd2\x80\xb4XIFf\xb1\x02\x10%*\x94\xa4\x16\x97(\xe4\xa6\x16\x17\'\xa6\xa7\x02\x00N\xddm\x92<\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00`\xcdX\t\xed\x01\x01\x00\x00\x01\\\xa3\x98\x95\xad\xff\xff\xff\xff\x00\x00\x00J\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x00c`\x80\x03\xcb%\xf2\x01\x99\x8c@\x06c\xcc\xe2\x19S\xd7\x02\x19\x1c%\xa9\xc5%\xf1\xd9\xa9\x95@\xb6tIFf\xb1\x02\x10%\xe6\x14\xe7+$*\x80\xa4\x14rS\x8b\x8b\x13\xd3S\x01\xfe<~BE\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00b\xba\xb0lN\x01\x01\x00\x00\x01\\\xa3\x98\x95\xb5\xff\xff\xff\xff\x00\x00\x00L\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x00c`\x80\x03s\xfb\xad2\x07\x19\x81\x0c\xc6\x98\xc53\xa6n\xfd\x0f\x04@\x8ebIFf\xb1BJ~jq\x9ez\x89BFbY\xaaB\xa2BAbQIfIf~\x9eBvj%\x00\xc8f?\xe3C\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00l\x9f\xd7)\xa0\x01\x01\x00\x00\x00\x00Y?\x04\x94\xff\xff\xff\xff\x00\x00\x00V\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x00c`\x80\x037\x86wK\x8f0\x82\x99\x91\xf6,S\x80\x14GIjqI|vj%\x90\xadQ\x92\x91Y\xac\x90\x91X\xac\x90\xa8P\x90XT\x92Y\x92\x99\x9f\xa7\x00\x94SH\xccK\x01\x8a\x95d\xe6\x02\x15\'\xe6\x16\x00\x00\xac\xc0O.R\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00S\xd8"\xff7\x01\x01\x00\x00\x00\x00Y?\x04\x94\xff\xff\xff\xff\x00\x00\x00=\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x00c`\x80\x03\xad\x0f\xae\x97^2\x82\x99\x91\xf6,S\xfe\x03\x01\x90)R\x92\x91Y\xac\x90\x91X\xac\x90\xa8P\x92\x99\x9bZ\\\x92\x98[\x00\x00\x83\x0f\xe5\xc16\x00\x00\x00\x00\x00\x00\x00'
+b'\x00\x00\x00\x00\x00\x00\x00\x01\x00\x0btest_gzip_5\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x02\x17\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00Z\xb1Z\xf4\xc3\x01\x01\x00\x00\x01\\\xa3\x98\x95\xa6\xff\xff\xff\xff\x00\x00\x00D\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x00c`\x80\x03\x03\x97?.{\x19\x81\x0c\xc6\x98\xc53\xa6.\x032X\x12\x8bS\xd2\x80\xb4XIFf\xb1\x02\x10%*\x94\xa4\x16\x97(\xe4\xa6\x16\x17\'\xa6\xa7\x02\x00N\xddm\x92<\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00`\xcdX\t\xed\x01\x01\x00\x00\x01\\\xa3\x98\x95\xad\xff\xff\xff\xff\x00\x00\x00J\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x00c`\x80\x03\xcb%\xf2\x01\x99\x8c@\x06c\xcc\xe2\x19S\xd7\x02\x19\x1c%\xa9\xc5%\xf1\xd9\xa9\x95@\xb6tIFf\xb1\x02\x10%\xe6\x14\xe7+$*\x80\xa4\x14rS\x8b\x8b\x13\xd3S\x01\xfe<~BE\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00b\xba\xb0lN\x01\x01\x00\x00\x01\\\xa3\x98\x95\xb5\xff\xff\xff\xff\x00\x00\x00L\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x00c`\x80\x03s\xfb\xad2\x07\x19\x81\x0c\xc6\x98\xc53\xa6n\xfd\x0f\x04@\x8ebIFf\xb1BJ~jq\x9ez\x89BFbY\xaaB\xa2BAbQIfIf~\x9eBvj%\x00\xc8f?\xe3C\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00l\x9f\xd7)\xa0\x01\x01\x00\x00\x00\x00Y?\x04\x94\xff\xff\xff\xff\x00\x00\x00V\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x00c`\x80\x037\x86wK\x8f0\x82\x99\x91\xf6,S\x80\x14GIjqI|vj%\x90\xadQ\x92\x91Y\xac\x90\x91X\xac\x90\xa8P\x90XT\x92Y\x92\x99\x9f\xa7\x00\x94SH\xccK\x01\x8a\x95d\xe6\x02\x15\'\xe6\x16\x00\x00\xac\xc0O.R\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00S\xd8"\xff7\x01\x01\x00\x00\x00\x00Y?\x04\x94\xff\xff\xff\xff\x00\x00\x00=\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x00c`\x80\x03\xad\x0f\xae\x97^2\x82\x99\x91\xf6,S\xfe\x03\x01\x90)R\x92\x91Y\xac\x90\x91X\xac\x90\xa8P\x92\x99\x9bZ\\\x92\x98[\x00\x00\x83\x0f\xe5\xc16\x00\x00\x00\x00\x00\x00\x00' # noqa
             ])
-        response = protocol.FetchResponse.get_subclass("0.10.1.0")(msg)
+        response = protocol.FetchResponseV2(msg)
         for i in range(len(self.expected_data)):
             self.assertDictEqual(
                 self.msg_to_dict(response.topics[b'test_gzip_5'][0].messages[i]),
@@ -403,9 +763,9 @@ b'\x00\x00\x00\x00\x00\x00\x00\x01\x00\x0btest_gzip_5\x00\x00\x00\x01\x00\x00\x0
 
     def test_snappy_decompression(self):
         msg = b''.join([
-b"\x00\x00\x00\x00\x00\x00\x00\x01\x00\x0btest_snappy\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x02=\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00a\xaa\x92\x19\xe2\x01\x02\x00\x00\x01\\\xa3\xa5\xab/\xff\xff\xff\xff\x00\x00\x00K\x82SNAPPY\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x007<\x00\x00\x19\x01\xc00\x86\xf55\x85\x01\x00\x00\x00\x01\\\xa3\xa5\xab/\x00\x00\x00\x04asdf\x00\x00\x00\x16this is a test message\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00jI\xfc\xe7\xf6\x01\x02\x00\x00\x01\\\xa3\xa5\xab\xa1\xff\xff\xff\xff\x00\x00\x00T\x82SNAPPY\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00@E\x00\x00\x19\x01\xe49\xd4\r\xf8v\x01\x00\x00\x00\x01\\\xa3\xa5\xab\xa1\x00\x00\x00\x08test_key\x00\x00\x00\x1bthis is also a test message\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00h\x80\t0\x95\x01\x02\x00\x00\x01\\\xa3\xa5\xab\xe1\xff\xff\xff\xff\x00\x00\x00R\x82SNAPPY\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00>C\x00\x00\x19\x01\xdc72\x98C\xe8\x01\x00\x00\x00\x01\\\xa3\xa5\xab\xe1\xff\xff\xff\xff\x00\x00\x00!this doesn't have a partition key\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00uJ\xab\xd0\xdf\x01\x02\x00\x00\x00\x00Y?\x04\x94\xff\xff\xff\xff\x00\x00\x00_\x82SNAPPY\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00KR\x00\x00\x19\x01\x14F\x00\xee\xa5\xc4\x01\x05\x10\xecY?\x04\x94\x00\x00\x00\x08test_key\x00\x00\x00(this has a partition key and a timestamp\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00Y\xfb!\x15\xce\x01\x02\x00\x00\x00\x00Y?\x04\x94\xff\xff\xff\xff\x00\x00\x00C\x82SNAPPY\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00/6\x00\x00\x19\x01\x14*\xf0E\xd2\xe9\x01\x05\x10|Y?\x04\x94\xff\xff\xff\xff\x00\x00\x00\x14this has a timestamp\x00\x00\x00\x00"
+b"\x00\x00\x00\x00\x00\x00\x00\x01\x00\x0btest_snappy\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x02=\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00a\xaa\x92\x19\xe2\x01\x02\x00\x00\x01\\\xa3\xa5\xab/\xff\xff\xff\xff\x00\x00\x00K\x82SNAPPY\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x007<\x00\x00\x19\x01\xc00\x86\xf55\x85\x01\x00\x00\x00\x01\\\xa3\xa5\xab/\x00\x00\x00\x04asdf\x00\x00\x00\x16this is a test message\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00jI\xfc\xe7\xf6\x01\x02\x00\x00\x01\\\xa3\xa5\xab\xa1\xff\xff\xff\xff\x00\x00\x00T\x82SNAPPY\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00@E\x00\x00\x19\x01\xe49\xd4\r\xf8v\x01\x00\x00\x00\x01\\\xa3\xa5\xab\xa1\x00\x00\x00\x08test_key\x00\x00\x00\x1bthis is also a test message\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00h\x80\t0\x95\x01\x02\x00\x00\x01\\\xa3\xa5\xab\xe1\xff\xff\xff\xff\x00\x00\x00R\x82SNAPPY\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00>C\x00\x00\x19\x01\xdc72\x98C\xe8\x01\x00\x00\x00\x01\\\xa3\xa5\xab\xe1\xff\xff\xff\xff\x00\x00\x00!this doesn't have a partition key\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00uJ\xab\xd0\xdf\x01\x02\x00\x00\x00\x00Y?\x04\x94\xff\xff\xff\xff\x00\x00\x00_\x82SNAPPY\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00KR\x00\x00\x19\x01\x14F\x00\xee\xa5\xc4\x01\x05\x10\xecY?\x04\x94\x00\x00\x00\x08test_key\x00\x00\x00(this has a partition key and a timestamp\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00Y\xfb!\x15\xce\x01\x02\x00\x00\x00\x00Y?\x04\x94\xff\xff\xff\xff\x00\x00\x00C\x82SNAPPY\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00/6\x00\x00\x19\x01\x14*\xf0E\xd2\xe9\x01\x05\x10|Y?\x04\x94\xff\xff\xff\xff\x00\x00\x00\x14this has a timestamp\x00\x00\x00\x00" # noqa
         ])
-        response = protocol.FetchResponse.get_subclass("0.10.1.0")(msg)
+        response = protocol.FetchResponseV2(msg)
         for i in range(len(self.expected_data)):
             returned = self.msg_to_dict(response.topics[b'test_snappy'][0].messages[i])
             expected = self.expected_data[i]
@@ -429,7 +789,7 @@ class TestOffsetAPI(unittest2.TestCase):
                 b'\x00\x00\x003\x00\x02\x00\x00\x00\x00\x00\x00\x00\x07pykafka'  # header
                 b'\xff\xff\xff\xff'  # replica id
                 b'\x00\x00\x00\x01'  # len(topics)
-                    b'\x00\x04'  # len(topic name)
+                    b'\x00\x04'  # len(topic name) # noqa
                         b'test'  # topic name
                     b'\x00\x00\x00\x01'  # len(partitions)
                         b'\x00\x00\x00\x00'  # partition
@@ -443,7 +803,7 @@ class TestOffsetAPI(unittest2.TestCase):
         response = protocol.OffsetResponse(
             buffer(
                 b'\x00\x00\x00\x01'  # len(topics)
-                    b'\x00\x04'  # len(topic name)
+                    b'\x00\x04'  # len(topic name) # noqa
                         b'test'  # topic name
                     b'\x00\x00\x00\x01'  # len(partitions)
                         b'\x00\x00\x00\x00'  # partitoin
@@ -458,7 +818,7 @@ class TestOffsetAPI(unittest2.TestCase):
         resp = protocol.OffsetResponse(
             buffer(
                 b'\x00\x00\x00\x01'  # len(topics)
-                    b'\x00\x04'  # len(topic name)
+                    b'\x00\x04'  # len(topic name) # noqa
                         b'test'  # topic name
                     b'\x00\x00\x00\x01'  # len(partitions)
                         b'\x00\x00\x00\x00'  # partitoin
@@ -481,7 +841,7 @@ class TestOffsetCommitFetchAPI(unittest2.TestCase):
             bytearray(
                 b'\x00\x00\x00\x17\x00\n\x00\x00\x00\x00\x00\x00\x00\x07pykafka'  # header
                 b'\x00\x04'  # len(group id)
-                    b'test'  # group id
+                    b'test'  # group id # noqa
             )
         )
 
@@ -491,7 +851,7 @@ class TestOffsetCommitFetchAPI(unittest2.TestCase):
                 b'\x00\x00'  # error code
                 b'\x00\x00\x00\x00'  # coordinator id
                 b'\x00\r'  # len(coordinator host)
-                    b'emmett-debian'  # coordinator host
+                    b'emmett-debian'  # coordinator host # noqa
                 b'\x00\x00#\x84'  # coordinator port
             )
         )
@@ -510,7 +870,7 @@ class TestOffsetCommitFetchAPI(unittest2.TestCase):
             bytearray(
                 b'\x00\x00\x00T\x00\x08\x00\x01\x00\x00\x00\x00\x00\x07pykafka'
                 b'\x00\x04'  # len(consumer group id)
-                    b'test'  # consumer group id
+                    b'test'  # consumer group id # noqa
                 b'\x00\x00\x00\x01'  # consumer group generation id
                 b'\x00\x07'  # len(consumer id)
                     b'pykafka'  # consumer id
@@ -530,7 +890,7 @@ class TestOffsetCommitFetchAPI(unittest2.TestCase):
         response = protocol.OffsetCommitResponse(
             buffer(
                 b'\x00\x00\x00\x01'  # len(topics)
-                    b'\x00\x0c'  # len(topic name)
+                    b'\x00\x0c'  # len(topic name) # noqa
                         b'emmett.dummy'  # topic name
                     b'\x00\x00\x00\x01'  # len(partitions)
                         b'\x00\x00\x00\x00'  # partition
@@ -548,7 +908,7 @@ class TestOffsetCommitFetchAPI(unittest2.TestCase):
             bytearray(
                 b'\x00\x00\x00.\x00\t\x00\x01\x00\x00\x00\x00\x00\x07pykafka'  # header
                 b'\x00\x04'  # len(consumer group)
-                    b'test'  # consumer group
+                    b'test'  # consumer group # noqa
                 b'\x00\x00\x00\x01'  # len(topics)
                     b'\x00\t'  # len(topic name)
                         b'testtopic'  # topic name
@@ -561,7 +921,7 @@ class TestOffsetCommitFetchAPI(unittest2.TestCase):
         response = protocol.OffsetFetchResponse(
             buffer(
                 b'\x00\x00\x00\x01'  # len(topics)
-                    b'\x00\x0c'  # len(topic name)
+                    b'\x00\x0c'  # len(topic name) # noqa
                         b'emmett.dummy'  # topic name
                     b'\x00\x00\x00\x01'  # len(partitions)
                         b'\x00\x00\x00\x00'  # partition
@@ -585,7 +945,7 @@ class TestGroupMembershipAPI(unittest2.TestCase):
             bytearray(
                 b'\x00\x00\x00\x00'  # version
                 b'\x00\x01'  # len(subscription)
-                    b'\x00\n'  # len(topic name)
+                    b'\x00\n'  # len(topic name) # noqa
                         b'dummytopic'  # topic name
                     b'\x00\x00\x00\x0c'  # len(userdata)
                         b'testuserdata')  # userdata
@@ -603,7 +963,7 @@ class TestGroupMembershipAPI(unittest2.TestCase):
             bytearray(
                 b'\x00\x00\x00h\x00\x0b\x00\x00\x00\x00\x00\x00\x00\x07pykafka'  # header
                 b'\x00\n'  # len(groupid)
-                    b'dummygroup'  # groupid
+                    b'dummygroup'  # groupid # noqa
                 b'\x00\x00u0'  # session timeout
                 b'\x00\n'  # len(memberid)
                     b'testmember'  # memberid
@@ -623,7 +983,7 @@ class TestGroupMembershipAPI(unittest2.TestCase):
                 b'\x00\x00'  # error code
                 b'\x00\x00\x00\x01'  # generation id
                 b'\x00\x17'  # len (group protocol)
-                    b'dummyassignmentstrategy'  # group protocol
+                    b'dummyassignmentstrategy'  # group protocol # noqa
                 b'\x00,'  # len(leader id)
                     b'pykafka-b2361322-674c-4e26-9194-305962636e57'  # leader id
                 b'\x00,'  # len(member id)
@@ -655,7 +1015,7 @@ class TestGroupMembershipAPI(unittest2.TestCase):
             bytearray(
                 b'\x00\x01'  # version
                 b'\x00\x00\x00\x02'  # len(partition assignment)
-                    b'\x00\x08'  # len(topic)
+                    b'\x00\x08'  # len(topic) # noqa
                         b'mytopic1'  # topic
                     b'\x00\x00\x00\x04'  # len(partitions)
                         b'\x00\x00\x00\x03'  # partition
@@ -687,7 +1047,7 @@ class TestGroupMembershipAPI(unittest2.TestCase):
             bytearray(
                 b'\x00\x00\x00\xc4\x00\x0e\x00\x00\x00\x00\x00\x00\x00\x07pykafka'  # header
                 b'\x00\n'  # len(group id)
-                    b'dummygroup'  # group id
+                    b'dummygroup'  # group id # noqa
                 b'\x00\x00\x00\x01'  # generation id
                 b'\x00\x0b'  # len(member id)
                     b'testmember1'  # member id
@@ -708,7 +1068,7 @@ class TestGroupMembershipAPI(unittest2.TestCase):
             bytearray(
                 b'\x00\x00'  # error code
                 b'\x00\x00\x00H'  # len(member assignment)
-                    b'\x00\x01\x00\x00\x00\x01\x00\x14testtopic_replicated\x00\x00\x00\n\x00\x00\x00\x06\x00\x00\x00\x07\x00\x00\x00\x08\x00\x00\x00\t\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x02\x00\x00\x00\x03\x00\x00\x00\x04\x00\x00\x00\x05,pyk'  # member assignment
+                    b'\x00\x01\x00\x00\x00\x01\x00\x14testtopic_replicated\x00\x00\x00\n\x00\x00\x00\x06\x00\x00\x00\x07\x00\x00\x00\x08\x00\x00\x00\t\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x02\x00\x00\x00\x03\x00\x00\x00\x04\x00\x00\x00\x05,pyk'  # member assignment # noqa
             )
         )
         self.assertEqual(response.error_code, 0)
@@ -724,7 +1084,7 @@ class TestGroupMembershipAPI(unittest2.TestCase):
             bytearray(
                 b'\x00\x00\x00-\x00\x0c\x00\x00\x00\x00\x00\x00\x00\x07pykafka'  # header
                 b'\x00\n'  # len(group id)
-                    b'dummygroup'  # group id
+                    b'dummygroup'  # group id # noqa
                 b'\x00\x00\x00\x01'  # generation id
                 b'\x00\n'  # len(member id)
                     b'testmember'  # member id
@@ -747,7 +1107,7 @@ class TestGroupMembershipAPI(unittest2.TestCase):
             bytearray(
                 b'\x00\x00\x00)\x00\r\x00\x00\x00\x00\x00\x00\x00\x07pykafka'  # header
                 b'\x00\n'  # len(group id)
-                    b'dummygroup'  # group id
+                    b'dummygroup'  # group id # noqa
                 b'\x00\n'  # len(member id)
                     b'testmember'  # member id
             )
@@ -780,7 +1140,7 @@ class TestAdministrativeAPI(unittest2.TestCase):
             bytearray(
                 b'\x00\x00'  # error code
                 b'\x00\x00\x00\x01'  # len(groups)
-                    b'\x00\t'  # len(group_id)
+                    b'\x00\t'  # len(group_id) # noqa
                         b'testgroup'  # group_id
                     b'\x00\x08'  # len(protocol_type)
                         b'consumer'  # protocol_type
@@ -799,7 +1159,7 @@ class TestAdministrativeAPI(unittest2.TestCase):
             bytearray(
                 b'\x00\x00\x00 \x00\x0f\x00\x00\x00\x00\x00\x00\x00\x07pykafka'  # header
                 b'\x00\x00\x00\x01'  # len(group_ids)
-                    b'\x00\t'  # len(group_id)
+                    b'\x00\t'  # len(group_id) # noqa
                         b'testgroup'  # group_id
             )
         )
@@ -808,7 +1168,7 @@ class TestAdministrativeAPI(unittest2.TestCase):
         response = protocol.DescribeGroupsResponse(
             bytearray(
                 b'\x00\x00\x00\x01'  # len(groups)
-                    b'\x00\x00'  # error code
+                    b'\x00\x00'  # error code # noqa
                     b'\x00\t'  # len(group_id)
                         b'testgroup'  # group_id
                     b'\x00\x06'  # len(state)
@@ -855,6 +1215,50 @@ class TestAdministrativeAPI(unittest2.TestCase):
         self.assertEqual(assignment.version, 1)
         self.assertEqual(assignment.partition_assignment,
                          [(b'testtopic_replicated', [0, 1, 2, 8, 3, 9, 4, 5, 6, 7])])
+
+    def test_api_versions_request(self):
+        req = protocol.ApiVersionsRequest()
+        msg = req.get_bytes()
+        self.assertEqual(
+            msg,
+            bytearray(
+                b'\x00\x00\x00\x11\x00\x12\x00\x00\x00\x00\x00\x00\x00\x07pykafka'  # header
+            )
+        )
+
+    def test_api_versions_response(self):
+        response = protocol.ApiVersionsResponse(
+            bytearray(
+                b'\x00\x00'  # error_code
+                b'\x00\x00\x00\x15'  # len(api_versions)
+                    b'\x00\x00\x00\x00\x00\x02'  # api_key, min_version, max_version # noqa
+                    b'\x00\x01\x00\x00\x00\x03'
+                    b'\x00\x02\x00\x00\x00\x01'
+                    b'\x00\x03\x00\x00\x00\x02'
+                    b'\x00\x04\x00\x00\x00\x00'
+                    b'\x00\x05\x00\x00\x00\x00'
+                    b'\x00\x06\x00\x00\x00\x02'
+                    b'\x00\x07\x00\x01\x00\x01'
+                    b'\x00\x08\x00\x00\x00\x02'
+                    b'\x00\t\x00\x00\x00\x01'
+                    b'\x00\n\x00\x00\x00\x00'
+                    b'\x00\x0b\x00\x00\x00\x01'
+                    b'\x00\x0c\x00\x00\x00\x00'
+                    b'\x00\r\x00\x00\x00\x00'
+                    b'\x00\x0e\x00\x00\x00\x00'
+                    b'\x00\x0f\x00\x00\x00\x00'
+                    b'\x00\x10\x00\x00\x00\x00'
+                    b'\x00\x11\x00\x00\x00\x00'
+                    b'\x00\x12\x00\x00\x00\x00'
+                    b'\x00\x13\x00\x00\x00\x00'
+                    b'\x00\x14\x00\x00\x00\x00'
+                    b'\x00\x00\x00\x00'  # ???
+            )
+        )
+        self.assertEqual(len(response.api_versions), 21)
+        self.assertEqual(response.api_versions[1].max, 3)
+        self.assertEqual(response.api_versions[5].min, 0)
+        self.assertEqual(response.api_versions[12].key, 12)
 
 
 if __name__ == '__main__':

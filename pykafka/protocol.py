@@ -66,17 +66,22 @@ from pkg_resources import parse_version
 
 from .common import CompressionType, Message
 from .exceptions import ERROR_CODES, MessageSetDecodeFailure
-from .utils import Serializable, compression, struct_helpers
+from .utils import Serializable, compression, struct_helpers, ApiVersionAware
 from .utils.compat import iteritems, itervalues, buffer
 
 
 log = logging.getLogger(__name__)
 
 
-class Request(Serializable):
+class Request(Serializable, ApiVersionAware):
     """Base class for all Requests. Handles writing header information"""
     HEADER_LEN = 21  # constant for all messages
     CLIENT_ID = b'pykafka'
+    API_KEY = -1
+
+    @classmethod
+    def get_versions(cls):
+        return {}
 
     def _write_header(self, buff, api_version=0, correlation_id=0):
         """Write the header for an outgoing message.
@@ -99,10 +104,6 @@ class Request(Serializable):
                          len(self.CLIENT_ID),
                          self.CLIENT_ID)
 
-    def API_KEY(self):
-        """API key for this request, from the Kafka docs"""
-        raise NotImplementedError()
-
     def get_bytes(self):
         """Serialize the message
 
@@ -112,8 +113,14 @@ class Request(Serializable):
         raise NotImplementedError()
 
 
-class Response(object):
+class Response(ApiVersionAware):
     """Base class for Response objects."""
+    API_KEY = -1
+
+    @classmethod
+    def get_versions(cls):
+        return {}
+
     def raise_error(self, err_code, response):
         """Raise an error based on the Kafka error code
 
@@ -425,7 +432,15 @@ class MetadataRequest(Request):
         MetadataRequest => [TopicName]
             TopicName => string
     """
-    def __init__(self, topics=None):
+    API_VERSION = 0
+    API_KEY = 3
+
+    @classmethod
+    def get_versions(cls):
+        return {0: MetadataRequest, 1: MetadataRequestV1, 2: MetadataRequestV2,
+                3: MetadataRequestV3, 4: MetadataRequestV4, 5: MetadataRequestV5}
+
+    def __init__(self, topics=None, *kwargs):
         """Create a new MetadataRequest
 
         :param topics: Topics to query. Leave empty for all available topics.
@@ -436,10 +451,19 @@ class MetadataRequest(Request):
         """Length of the serialized message, in bytes"""
         return self.HEADER_LEN + 4 + sum(len(t) + 2 for t in self.topics)
 
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 3
+    def _topics_len(self):
+        return len(self.topics)
+
+    def _serialize(self):
+        output = bytearray(len(self))
+        self._write_header(output, api_version=self.API_VERSION)
+        struct.pack_into('!i', output, self.HEADER_LEN, self._topics_len())
+        offset = self.HEADER_LEN + 4
+        for t in self.topics:
+            tlen = len(t)
+            struct.pack_into('!h%ds' % tlen, output, offset, tlen, t)
+            offset += 2 + tlen
+        return output, offset
 
     def get_bytes(self):
         """Serialize the message
@@ -447,21 +471,71 @@ class MetadataRequest(Request):
         :returns: Serialized message
         :rtype: :class:`bytearray`
         """
-        output = bytearray(len(self))
-        self._write_header(output)
-        struct.pack_into('!i', output, self.HEADER_LEN, len(self.topics))
-        offset = self.HEADER_LEN + 4
-        for t in self.topics:
-            tlen = len(t)
-            struct.pack_into('!h%ds' % tlen, output, offset, tlen, t)
-            offset += 2 + tlen
+        output, _ = self._serialize()
         return output
 
 
+class MetadataRequestV1(MetadataRequest):
+    API_VERSION = 1
+
+    def _topics_len(self):
+        # v1 and higher require a null array, not an empty array, to select all topics
+        return len(self.topics) or -1
+
+
+class MetadataRequestV2(MetadataRequestV1):
+    API_VERSION = 2
+
+
+class MetadataRequestV3(MetadataRequestV2):
+    API_VERSION = 3
+
+
+class MetadataRequestV4(MetadataRequestV3):
+    """Metadata Request
+
+    Specification::
+
+    Metadata Request (Version: 4) => [topics] allow_auto_topic_creation
+        topics => STRING
+        allow_auto_topic_creation => BOOLEAN
+    """
+    API_VERSION = 4
+
+    def __init__(self, topics=None, allow_topic_autocreation=True):
+        """Create a new MetadataRequest
+
+        :param topics: Topics to query. Leave empty for all available topics.
+        :param allow_topic_autocreation: If this and the broker config
+            'auto.create.topics.enable' are true, topics that don't exist will be created
+            by the broker. Otherwise, no topics will be created by the broker.
+        """
+        super(MetadataRequestV4, self).__init__(topics=topics)
+        self.allow_topic_autocreation = allow_topic_autocreation
+
+    def __len__(self):
+        return super(MetadataRequestV4, self).__len__() + 1
+
+    def get_bytes(self):
+        output, offset = self._serialize()
+        struct.pack_into('!b', output, offset, self.allow_topic_autocreation)
+        return output
+
+
+class MetadataRequestV5(MetadataRequestV4):
+    API_VERSION = 5
+
+
 BrokerMetadata = namedtuple('BrokerMetadata', ['id', 'host', 'port'])
+BrokerMetadataV1 = namedtuple('BrokerMetadataV1', ['id', 'host', 'port', 'rack'])
 TopicMetadata = namedtuple('TopicMetadata', ['name', 'partitions', 'err'])
+TopicMetadataV1 = namedtuple('TopicMetadataV1', ['name', 'is_internal', 'partitions',
+                                                 'err'])
 PartitionMetadata = namedtuple('PartitionMetadata',
                                ['id', 'leader', 'replicas', 'isr', 'err'])
+PartitionMetadataV5 = namedtuple('PartitionMetadataV5',
+                                 ['id', 'leader', 'replicas', 'isr', 'offline_replicas',
+                                  'err'])
 
 
 class MetadataResponse(Response):
@@ -469,20 +543,28 @@ class MetadataResponse(Response):
 
     Specification::
 
-        MetadataResponse => [Broker][TopicMetadata]
-          Broker => NodeId Host Port
-          NodeId => int32
-          Host => string
-          Port => int32
-          TopicMetadata => TopicErrorCode TopicName [PartitionMetadata]
-          TopicErrorCode => int16
-          PartitionMetadata => PartitionErrorCode PartitionId Leader Replicas Isr
-          PartitionErrorCode => int16
-          PartitionId => int32
-          Leader => int32
-          Replicas => [int32]
-          Isr => [int32]
+    Metadata Response (Version: 0) => [brokers] [topic_metadata]
+        brokers => node_id host port
+            node_id => INT32
+            host => STRING
+            port => INT32
+        topic_metadata => error_code topic [partition_metadata]
+            error_code => INT16
+            topic => STRING
+            partition_metadata => error_code partition leader [replicas] [isr]
+                error_code => INT16
+                partition => INT32
+                leader => INT32
+                replicas => INT32
+                isr => INT32
     """
+    API_KEY = 3
+
+    @classmethod
+    def get_versions(cls):
+        return {0: MetadataResponse, 1: MetadataResponseV1, 2: MetadataResponseV2,
+                3: MetadataResponseV3, 4: MetadataResponseV4, 5: MetadataResponseV5}
+
     def __init__(self, buff):
         """Deserialize into a new Response
 
@@ -492,18 +574,215 @@ class MetadataResponse(Response):
         fmt = '[iSi] [hS [hii [i] [i] ] ]'
         response = struct_helpers.unpack_from(fmt, buff, 0)
         broker_info, topics = response
+        self._populate(broker_info, topics)
 
+    def _populate(self,
+                  broker_info,
+                  topics,
+                  controller_id=None,
+                  cluster_id=None,
+                  throttle_time_ms=0):
+        self.throttle_time_ms = throttle_time_ms
+        self._build_broker_metas(broker_info)
+        self.cluster_id = cluster_id
+        self.controller_id = controller_id
+        self._build_topic_metas(topics)
+
+    def _build_topic_metas(self, topics):
+        self.topics = {}
+        for (err, name, partitions) in topics:
+            self.topics[name] = TopicMetadata(name,
+                                              self._build_partition_metas(partitions),
+                                              err)
+
+    def _build_partition_metas(self, partitions):
+        part_metas = {}
+        for (p_err, id_, leader, replicas, isr) in partitions:
+            part_metas[id_] = PartitionMetadata(id_, leader, replicas,
+                                                isr, p_err)
+        return part_metas
+
+    def _build_broker_metas(self, broker_info):
         self.brokers = {}
         for (id_, host, port) in broker_info:
             self.brokers[id_] = BrokerMetadata(id_, host, port)
 
+
+class MetadataResponseV1(MetadataResponse):
+    """Response from MetadataRequest
+
+    Specification::
+
+    Metadata Response (Version: 1) => [brokers] controller_id [topic_metadata]
+        brokers => node_id host port rack
+            node_id => INT32
+            host => STRING
+            port => INT32
+            rack => NULLABLE_STRING  (new since v0)
+        controller_id => INT32  (new since v0)
+        topic_metadata => error_code topic is_internal [partition_metadata]
+            error_code => INT16
+            topic => STRING
+            is_internal => BOOLEAN  (new since v0)
+            partition_metadata => error_code partition leader [replicas] [isr]
+                error_code => INT16
+                partition => INT32
+                leader => INT32
+                replicas => INT32
+                isr => INT32
+    """
+    def __init__(self, buff):
+        fmt = '[iSiS] i [hSb [hii [i] [i] ] ]'
+        response = struct_helpers.unpack_from(fmt, buff, 0)
+        broker_info, controller_id, topics = response
+        self._populate(broker_info, topics, controller_id=controller_id)
+
+    def _build_topic_metas(self, topics):
         self.topics = {}
-        for (err, name, partitions) in topics:
-            part_metas = {}
-            for (p_err, id_, leader, replicas, isr) in partitions:
-                part_metas[id_] = PartitionMetadata(id_, leader, replicas,
-                                                    isr, p_err)
-            self.topics[name] = TopicMetadata(name, part_metas, err)
+        for (err, name, is_internal, partitions) in topics:
+            self.topics[name] = TopicMetadataV1(name,
+                                                is_internal,
+                                                self._build_partition_metas(partitions),
+                                                err)
+
+    def _build_broker_metas(self, broker_info):
+        self.brokers = {}
+        for (id_, host, port, rack) in broker_info:
+            self.brokers[id_] = BrokerMetadataV1(id_, host, port, rack)
+
+
+class MetadataResponseV2(MetadataResponseV1):
+    """Response from MetadataRequest
+
+    Specification::
+
+    Metadata Response (Version: 2) => [brokers] cluster_id controller_id [topic_metadata]
+        brokers => node_id host port rack
+            node_id => INT32
+            host => STRING
+            port => INT32
+            rack => NULLABLE_STRING
+        cluster_id => NULLABLE_STRING  (new since v1)
+        controller_id => INT32
+        topic_metadata => error_code topic is_internal [partition_metadata]
+            error_code => INT16
+            topic => STRING
+            is_internal => BOOLEAN
+            partition_metadata => error_code partition leader [replicas] [isr]
+                error_code => INT16
+                partition => INT32
+                leader => INT32
+                replicas => INT32
+                isr => INT32
+    """
+    def __init__(self, buff):
+        fmt = '[iSiS] Si [hSb [hii [i] [i] ] ]'
+        response = struct_helpers.unpack_from(fmt, buff, 0)
+        broker_info, cluster_id, controller_id, topics = response
+        self._populate(broker_info, topics, controller_id=controller_id,
+                       cluster_id=cluster_id)
+
+
+class MetadataResponseV3(MetadataResponseV2):
+    """Response from MetadataRequest
+
+    Specification::
+
+    Metadata Response (Version: 3) => throttle_time_ms [brokers] cluster_id controller_id [topic_metadata]
+        throttle_time_ms => INT32  (new since v2)
+        brokers => node_id host port rack
+            node_id => INT32
+            host => STRING
+            port => INT32
+            rack => NULLABLE_STRING
+        cluster_id => NULLABLE_STRING
+        controller_id => INT32
+        topic_metadata => error_code topic is_internal [partition_metadata]
+            error_code => INT16
+            topic => STRING
+            is_internal => BOOLEAN
+            partition_metadata => error_code partition leader [replicas] [isr]
+                error_code => INT16
+                partition => INT32
+                leader => INT32
+                replicas => INT32
+                isr => INT32
+    """
+    def __init__(self, buff):
+        fmt = 'i [iSiS] Si [hSb [hii [i] [i] ] ]'
+        response = struct_helpers.unpack_from(fmt, buff, 0)
+        throttle_time_ms, broker_info, cluster_id, controller_id, topics = response
+        self._populate(broker_info, topics, controller_id=controller_id,
+                       cluster_id=cluster_id, throttle_time_ms=throttle_time_ms)
+
+
+class MetadataResponseV4(MetadataResponseV3):
+    """Response from MetadataRequest
+
+    Specification::
+
+    Metadata Response (Version: 4) => throttle_time_ms [brokers] cluster_id controller_id [topic_metadata]
+        throttle_time_ms => INT32
+        brokers => node_id host port rack
+            node_id => INT32
+            host => STRING
+            port => INT32
+            rack => NULLABLE_STRING
+        cluster_id => NULLABLE_STRING
+        controller_id => INT32
+        topic_metadata => error_code topic is_internal [partition_metadata]
+            error_code => INT16
+            topic => STRING
+            is_internal => BOOLEAN
+            partition_metadata => error_code partition leader [replicas] [isr]
+                error_code => INT16
+                partition => INT32
+                leader => INT32
+                replicas => INT32
+                isr => INT32
+    """
+    pass
+
+
+class MetadataResponseV5(MetadataResponseV4):
+    """Response from MetadataRequest
+
+    Specification::
+
+    Metadata Response (Version: 5) => throttle_time_ms [brokers] cluster_id controller_id [topic_metadata]
+        throttle_time_ms => INT32
+        brokers => node_id host port rack
+            node_id => INT32
+            host => STRING
+            port => INT32
+            rack => NULLABLE_STRING
+        cluster_id => NULLABLE_STRING
+        controller_id => INT32
+        topic_metadata => error_code topic is_internal [partition_metadata]
+            error_code => INT16
+            topic => STRING
+            is_internal => BOOLEAN
+            partition_metadata => error_code partition leader [replicas] [isr] [offline_replicas]
+                error_code => INT16
+                partition => INT32
+                leader => INT32
+                replicas => INT32
+                isr => INT32
+                offline_replicas => INT32  (new since v4)
+    """
+    def __init__(self, buff):
+        fmt = 'i [iSiS] Si [hSb [hii [i] [i] [i]] ]'
+        response = struct_helpers.unpack_from(fmt, buff, 0)
+        throttle_time_ms, broker_info, cluster_id, controller_id, topics = response
+        self._populate(broker_info, topics, controller_id=controller_id,
+                       cluster_id=cluster_id, throttle_time_ms=throttle_time_ms)
+
+    def _build_partition_metas(self, partitions):
+        part_metas = {}
+        for (p_err, id_, leader, replicas, isr, offline_replicas) in partitions:
+            part_metas[id_] = PartitionMetadataV5(id_, leader, replicas,
+                                                  isr, offline_replicas, p_err)
+        return part_metas
 
 
 ##
@@ -521,6 +800,8 @@ class ProduceRequest(Request):
           Partition => int32
           MessageSetSize => int32
     """
+    API_KEY = 0
+
     def __init__(self,
                  compression_type=CompressionType.NONE,
                  required_acks=1,
@@ -562,11 +843,6 @@ class ProduceRequest(Request):
             # partition + mset size + len(mset)
             size += sum(4 + 4 + len(mset) for mset in itervalues(parts))
         return size
-
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 0
 
     @property
     def messages(self):
@@ -688,6 +964,12 @@ class FetchRequest(Request):
           FetchOffset => int64
           MaxBytes => int32
     """
+    API_KEY = 1
+
+    @classmethod
+    def get_versions(cls):
+        return {0: FetchRequest, 1: FetchRequest}
+
     def __init__(self, partition_requests=[], timeout=1000, min_bytes=1024,
                  api_version=0):
         """Create a new fetch request
@@ -733,11 +1015,6 @@ class FetchRequest(Request):
             size += (4 + 8 + 4) * len(parts)
         return size
 
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 1
-
     def get_bytes(self):
         """Serialize the message
 
@@ -782,19 +1059,12 @@ class FetchResponse(Response):
           HighwaterMarkOffset => int64
           MessageSetSize => int32
     """
-    api_version = 0
+    API_VERSION = 0
+    API_KEY = 1
 
-    @staticmethod
-    def get_subclass(broker_protocol):
-        """Choose which subclass of response to demand and expect. Cf.
-        https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol"""
-        target_version = parse_version(broker_protocol)
-        if target_version >= parse_version("0.10.0"):
-            return FetchResponseV2
-        elif target_version >= parse_version("0.9.0"):
-            return FetchResponseV1
-        else:
-            return FetchResponse
+    @classmethod
+    def get_versions(cls):
+        return {0: FetchResponse, 1: FetchResponseV1, 2: FetchResponseV2}
 
     def __init__(self, buff, offset=0, broker_version='0.9.0'):
         """Deserialize into a new Response
@@ -851,7 +1121,7 @@ class FetchResponse(Response):
 
 
 class FetchResponseV1(FetchResponse):
-    api_version = 1
+    API_VERSION = 1
 
     def __init__(self, buff, offset=0, broker_version='0.9.0'):
         """Deserialize into a new Response
@@ -868,7 +1138,7 @@ class FetchResponseV1(FetchResponse):
 
 
 class FetchResponseV2(FetchResponseV1):
-    api_version = 2
+    API_VERSION = 2
 
 
 ##
@@ -907,6 +1177,8 @@ class OffsetRequest(Request):
           Time => int64
           MaxNumberOfOffsets => int32
     """
+    API_KEY = 2
+
     def __init__(self, partition_requests):
         """Create a new offset request"""
         self._reqs = defaultdict(dict)
@@ -924,11 +1196,6 @@ class OffsetRequest(Request):
             # partition + fetch offset + max bytes => for each partition
             size += (4 + 8 + 4) * len(parts)
         return size
-
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 2
 
     def get_bytes(self):
         """Serialize the message
@@ -995,6 +1262,8 @@ class GroupCoordinatorRequest(Request):
         GroupCoordinatorRequest => ConsumerGroup
             ConsumerGroup => string
     """
+    API_KEY = 10
+
     def __init__(self, consumer_group):
         """Create a new group coordinator request"""
         self.consumer_group = consumer_group
@@ -1003,11 +1272,6 @@ class GroupCoordinatorRequest(Request):
         """Length of the serialized message, in bytes"""
         # Header + len(self.consumer_group)
         return self.HEADER_LEN + 2 + len(self.consumer_group)
-
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 10
 
     def get_bytes(self):
         """Serialize the message
@@ -1084,6 +1348,8 @@ class OffsetCommitRequest(Request):
             TimeStamp => int64
             Metadata => string
     """
+    API_KEY = 8
+
     def __init__(self,
                  consumer_group,
                  consumer_group_generation_id,
@@ -1119,11 +1385,6 @@ class OffsetCommitRequest(Request):
             for partition, (_, _, metadata) in iteritems(parts):
                 size += 2 + len(metadata)
         return size
-
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 8
 
     def get_bytes(self):
         """Serialize the message
@@ -1220,6 +1481,8 @@ class OffsetFetchRequest(Request):
             TopicName => string
             Partition => int32
     """
+    API_KEY = 9
+
     def __init__(self, consumer_group, partition_requests=[]):
         """Create a new offset fetch request
 
@@ -1242,11 +1505,6 @@ class OffsetFetchRequest(Request):
             # partition => for each partition
             size += 4 * len(parts)
         return size
-
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 9
 
     def get_bytes(self):
         """Serialize the message
@@ -1381,6 +1639,8 @@ class JoinGroupRequest(Request):
             ProtocolName => string
             ProtocolMetadata => bytes
     """
+    API_KEY = 11
+
     def __init__(self,
                  group_id,
                  member_id,
@@ -1406,11 +1666,6 @@ class JoinGroupRequest(Request):
         for name, metadata in self.group_protocols:
             size += 2 + len(name) + 4 + len(metadata)
         return size
-
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 11
 
     def get_bytes(self):
         """Serialize the message
@@ -1536,6 +1791,8 @@ class SyncGroupRequest(Request):
             MemberId => string
             MemberAssignment => bytes
     """
+    API_KEY = 14
+
     def __init__(self, group_id, generation_id, member_id, group_assignment):
         """Create a new group join request"""
         self.group_id = group_id
@@ -1554,11 +1811,6 @@ class SyncGroupRequest(Request):
             # + len(member id) + member id + len(member assignment) + member assignment
             size += 2 + len(member_id) + 4 + len(member_assignment)
         return size
-
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 14
 
     def get_bytes(self):
         """Serialize the message
@@ -1614,6 +1866,8 @@ class HeartbeatRequest(Request):
         GenerationId => int32
         MemberId => string
     """
+    API_KEY = 12
+
     def __init__(self, group_id, generation_id, member_id):
         """Create a new heartbeat request"""
         self.group_id = group_id
@@ -1627,11 +1881,6 @@ class HeartbeatRequest(Request):
         # + len(member id) + member id
         size += 2 + len(self.member_id)
         return size
-
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 12
 
     def get_bytes(self):
         """Serialize the message
@@ -1677,6 +1926,8 @@ class LeaveGroupRequest(Request):
         GroupId => string
         MemberId => string
     """
+    API_KEY = 13
+
     def __init__(self, group_id, member_id):
         """Create a new group join request"""
         self.group_id = group_id
@@ -1689,11 +1940,6 @@ class LeaveGroupRequest(Request):
         # + len(member id) + member id
         size += 2 + len(self.member_id)
         return size
-
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 13
 
     def get_bytes(self):
         """Serialize the message
@@ -1740,10 +1986,7 @@ class ListGroupsRequest(Request):
 
     ListGroupsRequest =>
     """
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 16
+    API_KEY = 16
 
     def get_bytes(self):
         """Create a new list group request"""
@@ -1797,13 +2040,10 @@ class DescribeGroupsRequest(Request):
     DescribeGroupsRequest => [GroupId]
       GroupId => string
     """
+    API_KEY = 15
+
     def __init__(self, group_ids):
         self.group_ids = group_ids
-
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 15
 
     def get_bytes(self):
         """Create a new list group request"""
@@ -2037,3 +2277,127 @@ class DeleteTopicsResponse(Response):
     """
     def __init__(self, buff):
         pass
+
+
+class ApiVersionsRequest(Request):
+    """An api versions request
+
+    Specification::
+
+        ApiVersions Request (Version: 0) =>
+    """
+    API_KEY = 18
+
+    def get_bytes(self):
+        """Create a new api versions request"""
+        output = bytearray(len(self))
+        self._write_header(output)
+        return output
+
+    def __len__(self):
+        """Length of the serialized message, in bytes"""
+        # header
+        size = self.HEADER_LEN
+        return size
+
+
+ApiVersionsSpec = namedtuple('ApiVersionsSpec', ['key', 'min', 'max'])
+
+
+class ApiVersionsResponse(Response):
+    """
+    Specification::
+
+    ApiVersions Response (Version: 0) => error_code [api_versions]
+        error_code => INT16
+        api_versions => api_key min_version max_version
+            api_key => INT16
+            min_version => INT16
+            max_version => INT16
+    """
+    API_KEY = 18
+
+    @classmethod
+    def get_versions(cls):
+        return {0: ApiVersionsResponse, 1: ApiVersionsResponseV1}
+
+    def __init__(self, buff):
+        """Deserialize into a new Response
+
+        :param buff: Serialized message
+        :type buff: :class:`bytearray`
+        """
+        fmt = 'h [hhh]'
+        response = struct_helpers.unpack_from(fmt, buff, 0)
+
+        self.api_versions = {}
+        for api_key, min_v, max_v in response[1]:
+            self.api_versions[api_key] = ApiVersionsSpec(api_key, min_v, max_v)
+
+
+class ApiVersionsResponseV1(ApiVersionsResponse):
+    """
+    Specification::
+
+    ApiVersions Response (Version: 1) => error_code [api_versions] throttle_time_ms
+        error_code => INT16
+        api_versions => api_key min_version max_version
+            api_key => INT16
+            min_version => INT16
+            max_version => INT16
+        throttle_time_ms => INT32
+    """
+    def __init__(self, buff):
+        """Deserialize into a new Response
+
+        :param buff: Serialized message
+        :type buff: :class:`bytearray`
+        """
+        fmt = 'h [hhh]i'
+        response = struct_helpers.unpack_from(fmt, buff, 0)
+
+        self.api_versions = {}
+        for api_key, min_v, max_v in response[1]:
+            self.api_versions[api_key] = ApiVersionsSpec(api_key, min_v, max_v)
+        self.throttle_time = response[2]
+
+
+# Hardcoded API version specifiers for brokers that don't support ApiVersionsRequest
+API_VERSIONS_080 = {
+    0: ApiVersionsSpec(0, 0, 0),
+    1: ApiVersionsSpec(1, 0, 0),
+    2: ApiVersionsSpec(2, 0, 0),
+    3: ApiVersionsSpec(3, 0, 0),
+    4: ApiVersionsSpec(4, 0, 0),
+    5: ApiVersionsSpec(5, 0, 0),
+    6: ApiVersionsSpec(6, 0, 0),
+    7: ApiVersionsSpec(7, 0, 0),
+    8: ApiVersionsSpec(8, 0, 1),
+    9: ApiVersionsSpec(9, 0, 0),
+    10: ApiVersionsSpec(10, 0, 0),
+    11: ApiVersionsSpec(11, 0, 0),
+    12: ApiVersionsSpec(12, 0, 0),
+    13: ApiVersionsSpec(13, 0, 0),
+    14: ApiVersionsSpec(14, 0, 0),
+    15: ApiVersionsSpec(15, 0, 0),
+    16: ApiVersionsSpec(16, 0, 0)
+}
+API_VERSIONS_090 = {
+    0: ApiVersionsSpec(0, 0, 0),
+    1: ApiVersionsSpec(1, 0, 1),
+    2: ApiVersionsSpec(2, 0, 0),
+    3: ApiVersionsSpec(3, 0, 0),
+    4: ApiVersionsSpec(4, 0, 0),
+    5: ApiVersionsSpec(5, 0, 0),
+    6: ApiVersionsSpec(6, 0, 0),
+    7: ApiVersionsSpec(7, 0, 0),
+    8: ApiVersionsSpec(8, 0, 1),
+    9: ApiVersionsSpec(9, 0, 0),
+    10: ApiVersionsSpec(10, 0, 0),
+    11: ApiVersionsSpec(11, 0, 0),
+    12: ApiVersionsSpec(12, 0, 0),
+    13: ApiVersionsSpec(13, 0, 0),
+    14: ApiVersionsSpec(14, 0, 0),
+    15: ApiVersionsSpec(15, 0, 0),
+    16: ApiVersionsSpec(16, 0, 0)
+}

@@ -23,6 +23,7 @@ import logging
 import random
 import time
 import weakref
+from pkg_resources import parse_version
 
 from kazoo.client import KazooClient
 
@@ -33,7 +34,8 @@ from .exceptions import (ERROR_CODES,
                          SocketDisconnectedError,
                          LeaderNotFoundError,
                          LeaderNotAvailable)
-from .protocol import GroupCoordinatorRequest, GroupCoordinatorResponse
+from .protocol import (GroupCoordinatorRequest, GroupCoordinatorResponse,
+                       API_VERSIONS_090, API_VERSIONS_080)
 from .topic import Topic
 from .utils.compat import iteritems, itervalues, range
 
@@ -202,8 +204,11 @@ class Cluster(object):
         self._max_connection_retries = 3
         self._max_connection_retries_offset_mgr = 8
         self._broker_version = broker_version
+        self._api_versions = None
+        self.controller_broker = None
         if ':' in self._source_address:
             self._source_port = int(self._source_address.split(':')[1])
+        self.fetch_api_versions()
         self.update()
 
     def __repr__(self):
@@ -238,13 +243,22 @@ class Cluster(object):
         return self._handler
 
     def _request_metadata(self, broker_connects, topics):
-        """Request broker metadata from a set of brokers
+        return self._request_random_broker(broker_connects,
+                                           lambda b: b.request_metadata(topics))
 
-        Returns the result of the first successful metadata request
+    def _request_random_broker(self, broker_connects, req_fn):
+        """Make a request to any broker in broker_connects
+
+        Returns the result of the first successful request
 
         :param broker_connects: The set of brokers to which to attempt to connect
         :type broker_connects: Iterable of two-element sequences of the format
             (broker_host, broker_port)
+        :param req_fn: A function accepting a :class:`pykafka.broker.Broker` as its
+            sole argument that returns a :class:`pykafka.protocol.Response`. The
+            argument to this function will be the each of the brokers discoverable
+            via `broker_connects` in turn.
+        :type req_fn: function
         """
         for i in range(self._max_connection_retries):
             for host, port in broker_connects:
@@ -256,12 +270,13 @@ class Cluster(object):
                                     source_host=self._source_host,
                                     source_port=self._source_port,
                                     ssl_config=self._ssl_config,
-                                    broker_version=self._broker_version)
-                    response = broker.request_metadata(topics)
+                                    broker_version=self._broker_version,
+                                    api_versions=self._api_versions)
+                    response = req_fn(broker)
                     if response is not None:
                         return response
                 except SocketDisconnectedError:
-                    log.error("Socket disconnected during metadata request for "
+                    log.error("Socket disconnected during request for "
                               "broker %s:%s. Continuing.", host, port)
                 except Exception as e:
                     log.error('Unable to connect to broker %s:%s. Continuing.', host, port)
@@ -276,24 +291,29 @@ class Cluster(object):
                 response = broker.request_metadata(topics)
                 if response is not None:
                     return response
-        else:  # try seed hosts
-            if self._zookeeper_connect is not None:
-                broker_connects = self._get_brokers_from_zookeeper(
-                    self._zookeeper_connect)
-                metadata = self._request_metadata(broker_connects, topics)
-                if metadata is not None:
-                    return metadata
-            else:
-                broker_connects = [
-                    [broker_str.split(":")[0], broker_str.split(":")[1].split("/")[0]]
-                    for broker_str in self._seed_hosts.split(',')]
-                metadata = self._request_metadata(broker_connects, topics)
-                if metadata is not None:
-                    return metadata
+        else:
+            broker_connects = self._get_broker_connection_info()
+            metadata = self._request_metadata(broker_connects, topics)
+            if metadata is not None:
+                return metadata
 
         # Couldn't connect anywhere. Raise an error.
         raise NoBrokersAvailableError(
             'Unable to connect to a broker to fetch metadata. See logs.')
+
+    def _get_broker_connection_info(self):
+        """Get a list of host:port pairs representing possible broker connections
+
+        For use only when self.brokers is not populated (ie at startup)
+        """
+        broker_connects = []
+        if self._zookeeper_connect is not None:
+            broker_connects = self._get_brokers_from_zookeeper(self._zookeeper_connect)
+        else:
+            broker_connects = [
+                [broker_str.split(":")[0], broker_str.split(":")[1].split("/")[0]]
+                for broker_str in self._seed_hosts.split(',')]
+        return broker_connects
 
     def _get_brokers_from_zookeeper(self, zk_connect):
         """Build a list of broker connection pairs from a ZooKeeper host
@@ -338,12 +358,14 @@ class Cluster(object):
                 log.exception(e)
                 return []
 
-    def _update_brokers(self, broker_metadata):
+    def _update_brokers(self, broker_metadata, controller_id):
         """Update brokers with fresh metadata.
 
         :param broker_metadata: Metadata for all brokers.
         :type broker_metadata: Dict of `{name: metadata}` where `metadata` is
             :class:`pykafka.protocol.BrokerMetadata` and `name` is str.
+        :param controller_id: The ID of the cluster's controller broker, if applicable
+        :type controller_id: int
         """
         # FIXME: A cluster with no topics returns no brokers in metadata
         # Remove old brokers
@@ -366,7 +388,8 @@ class Cluster(object):
                     source_host=self._source_host,
                     source_port=self._source_port,
                     ssl_config=self._ssl_config,
-                    broker_version=self._broker_version)
+                    broker_version=self._broker_version,
+                    api_versions=self._api_versions)
             elif not self._brokers[id_].connected:
                 log.info('Reconnecting to broker id %s: %s:%s', id_, meta.host, meta.port)
                 try:
@@ -384,6 +407,11 @@ class Cluster(object):
                 #       Figure out and implement update/disconnect/reconnect if
                 #       needed.
                 raise Exception('Broker host/port change detected! %s', broker)
+        if controller_id is not None:
+            if controller_id not in self._brokers:
+                raise KeyError("Controller ID {} not present in cluster".format(
+                    controller_id))
+            self.controller_broker = self._brokers[controller_id]
 
     def get_managed_group_descriptions(self):
         """Return detailed descriptions of all managed consumer groups on this cluster
@@ -441,6 +469,28 @@ class Cluster(object):
                     log.info("Found coordinator broker with id %s", res.coordinator_id)
                     return coordinator
 
+    def fetch_api_versions(self):
+        """Get API version info from an available broker and save it"""
+        version = parse_version(self._broker_version)
+        if version < parse_version('0.10.0'):
+            log.warning("Broker version is too old to use automatic API version "
+                        "discovery. Falling back to hardcoded versions list.")
+            if version >= parse_version('0.9.0'):
+                self._api_versions = API_VERSIONS_090
+            else:
+                self._api_versions = API_VERSIONS_080
+            return
+
+        log.info("Requesting API version information")
+        broker_connects = self._get_broker_connection_info()
+        for i in range(self._max_connection_retries):
+            response = self._request_random_broker(broker_connects,
+                                                   lambda b: b.fetch_api_versions())
+            if response.api_versions:
+                self._api_versions = response.api_versions
+                log.info("Got api version info: {}".format(self._api_versions))
+                return
+
     def update(self):
         """Update known brokers and topics."""
         for i in range(self._max_connection_retries):
@@ -453,7 +503,7 @@ class Cluster(object):
                             'a topic in the cluster. See '
                             'https://issues.apache.org/jira/browse/KAFKA-2154 '
                             'for information.')
-            self._update_brokers(metadata.brokers)
+            self._update_brokers(metadata.brokers, metadata.controller_id)
             try:
                 self._topics._update_topics(metadata.topics)
             except LeaderNotFoundError:
