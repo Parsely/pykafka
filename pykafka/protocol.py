@@ -520,7 +520,10 @@ class MetadataRequestV5(MetadataRequestV4):
 
 
 BrokerMetadata = namedtuple('BrokerMetadata', ['id', 'host', 'port'])
+BrokerMetadataV1 = namedtuple('BrokerMetadataV1', ['id', 'host', 'port', 'rack'])
 TopicMetadata = namedtuple('TopicMetadata', ['name', 'partitions', 'err'])
+TopicMetadataV1 = namedtuple('TopicMetadataV1', ['name', 'is_internal', 'partitions',
+                                                 'err'])
 PartitionMetadata = namedtuple('PartitionMetadata',
                                ['id', 'leader', 'replicas', 'isr', 'err'])
 PartitionMetadataV5 = namedtuple('PartitionMetadataV5',
@@ -550,6 +553,11 @@ class MetadataResponse(Response):
     """
     API_KEY = 3
 
+    @classmethod
+    def get_versions(cls):
+        return {0: MetadataResponse, 1: MetadataResponseV1, 2: MetadataResponseV2,
+                3: MetadataResponseV3, 4: MetadataResponseV4, 5: MetadataResponseV5}
+
     def __init__(self, buff):
         """Deserialize into a new Response
 
@@ -568,14 +576,12 @@ class MetadataResponse(Response):
                   cluster_id=None,
                   throttle_time_ms=0):
         self.throttle_time_ms = throttle_time_ms
-
-        self.brokers = {}
-        for (id_, host, port) in broker_info:
-            self.brokers[id_] = BrokerMetadata(id_, host, port)
-
+        self._build_broker_metas(broker_info)
         self.cluster_id = cluster_id
         self.controller_id = controller_id
+        self._build_topic_metas(topics)
 
+    def _build_topic_metas(self, topics):
         self.topics = {}
         for (err, name, partitions) in topics:
             self.topics[name] = TopicMetadata(name,
@@ -588,6 +594,11 @@ class MetadataResponse(Response):
             part_metas[id_] = PartitionMetadata(id_, leader, replicas,
                                                 isr, p_err)
         return part_metas
+
+    def _build_broker_metas(self, broker_info):
+        self.brokers = {}
+        for (id_, host, port) in broker_info:
+            self.brokers[id_] = BrokerMetadata(id_, host, port)
 
 
 class MetadataResponseV1(MetadataResponse):
@@ -618,6 +629,19 @@ class MetadataResponseV1(MetadataResponse):
         response = struct_helpers.unpack_from(fmt, buff, 0)
         broker_info, controller_id, topics = response
         self._populate(broker_info, topics, controller_id=controller_id)
+
+    def _build_topic_metas(self, topics):
+        self.topics = {}
+        for (err, name, is_internal, partitions) in topics:
+            self.topics[name] = TopicMetadataV1(name,
+                                                is_internal,
+                                                self._build_partition_metas(partitions),
+                                                err)
+
+    def _build_broker_metas(self, broker_info):
+        self.brokers = {}
+        for (id_, host, port, rack) in broker_info:
+            self.brokers[id_] = BrokerMetadataV1(id_, host, port, rack)
 
 
 class MetadataResponseV2(MetadataResponseV1):
