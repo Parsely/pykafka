@@ -407,10 +407,11 @@ class Cluster(object):
                 #       Figure out and implement update/disconnect/reconnect if
                 #       needed.
                 raise Exception('Broker host/port change detected! %s', broker)
-        if controller_id not in self._brokers:
-            raise KeyError("Controller ID {} not present in cluster".format(
-                controller_id))
-        self.controller_broker = self._brokers[controller_id]
+        if controller_id is not None:
+            if controller_id not in self._brokers:
+                raise KeyError("Controller ID {} not present in cluster".format(
+                    controller_id))
+            self.controller_broker = self._brokers[controller_id]
 
     def get_managed_group_descriptions(self):
         """Return detailed descriptions of all managed consumer groups on this cluster
