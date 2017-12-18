@@ -2123,6 +2123,201 @@ class DescribeGroupsResponse(Response):
             self.groups[group.group_id] = group
 
 
+_CreateTopicRequest = namedtuple(
+    'CreateTopicRequest',
+    ['topic_name', 'num_partitions', 'replication_factor', 'replica_assignment',
+     'config_entries']
+)
+
+
+class CreateTopicRequest(_CreateTopicRequest):
+    def __new__(cls,
+                topic_name,
+                num_partitions,
+                replication_factor,
+                replica_assignment,
+                config_entries):
+        return super(CreateTopicRequest, cls).__new__(
+            cls, topic_name, num_partitions, replication_factor, replica_assignment,
+            config_entries)
+
+
+class CreateTopicsRequest(Request):
+    """A create topics request
+
+    Specification::
+
+    CreateTopics Request (Version: 0) => [create_topic_requests] timeout
+        create_topic_requests => topic num_partitions replication_factor [replica_assignment] [config_entries]
+            topic => STRING
+            num_partitions => INT32
+            replication_factor => INT16
+            replica_assignment => partition [replicas]
+                partition => INT32
+                replicas => INT32
+            config_entries => config_name config_value
+                config_name => STRING
+                config_value => NULLABLE_STRING
+        timeout => INT32
+    """
+    API_KEY = 19
+
+    def __init__(self, topic_requests, timeout=0):
+        self.topic_requests = topic_requests
+        self.timeout = timeout
+
+    def __len__(self):
+        """Length of the serialized message, in bytes"""
+        # header + len(topic_reqs)
+        size = self.HEADER_LEN + 4
+        for topic_req in self.topic_requests:
+            # len(topic_name) + topic_name
+            size += 2 + len(topic_req.topic_name)
+            # num_partitions + replication_factor + len(replica_assignment)
+            size += 4 + 2 + 4
+            for partition, replicas in topic_req.replica_assignment:
+                # partition + len(replicas) + replicas
+                size += 4 + 4 + 4 * len(replicas)
+            # len(config_entries)
+            size += 4
+            for config_name, config_value in topic_req.config_entries:
+                # len(config_name) + config_name + len(config_value) + config_value
+                size += 2 + len(config_name) + 2 + len(config_value)
+        # timeout
+        size += 4
+        return size
+
+    def get_bytes(self):
+        """Create a new create topics request"""
+        output = bytearray(len(self))
+        self._write_header(output)
+        offset = self.HEADER_LEN
+        fmt = '!i'
+        struct.pack_into(fmt, output, offset, len(self.topic_requests))
+        offset += struct.calcsize(fmt)
+        for topic_req in self.topic_requests:
+            fmt = '!h%dsihi' % len(topic_req.topic_name)
+            struct.pack_into(fmt, output, offset, len(topic_req.topic_name),
+                             topic_req.topic_name, topic_req.num_partitions,
+                             topic_req.replication_factor,
+                             len(topic_req.replica_assignment))
+            offset += struct.calcsize(fmt)
+            for partition, replicas in topic_req.replica_assignment:
+                fmt = '!ii'
+                struct.pack_into(fmt, output, offset, partition, len(replicas))
+                offset += struct.calcsize(fmt)
+                for replica in replicas:
+                    fmt = '!i'
+                    struct.pack_into(fmt, output, offset, replica)
+                    offset += struct.calcsize(fmt)
+            fmt = '!i'
+            struct.pack_into(fmt, output, offset, len(topic_req.config_entries))
+            offset += struct.calcsize(fmt)
+            for config_name, config_value in topic_req.config_entries:
+                fmt = '!h%dsh%ds' % (len(config_name), len(config_value))
+                struct.pack_into(fmt, output, offset, len(config_name), config_name,
+                                 len(config_value), config_value)
+                offset += struct.calcsize(fmt)
+        fmt = '!i'
+        struct.pack_into(fmt, output, offset, self.timeout)
+        offset += struct.calcsize(fmt)
+        return output
+
+
+class CreateTopicsResponse(Response):
+    """A create topics response
+
+    Specification::
+
+    CreateTopics Response (Version: 0) => [topic_errors]
+        topic_errors => topic error_code
+            topic => STRING
+            error_code => INT16
+    """
+    API_KEY = 19
+
+    def __init__(self, buff):
+        """Deserialize into a new Response
+
+        :param buff: Serialized message
+        :type buff: :class:`bytearray`
+        """
+        fmt = '[Sh]'
+        response = struct_helpers.unpack_from(fmt, buff, 0)
+        for _, error_code in response:
+            if error_code != 0:
+                self.raise_error(error_code, response)
+
+
+class DeleteTopicsRequest(Request):
+    """A delete topics request
+
+    Specification::
+
+    DeleteTopics Request (Version: 0) => [topics] timeout
+        topics => STRING
+        timeout => INT32
+    """
+    API_KEY = 20
+
+    def __init__(self, topics, timeout=0):
+        self.topics = topics
+        self.timeout = timeout
+
+    def __len__(self):
+        """Length of the serialized message, in bytes"""
+        # header + len(topics)
+        size = self.HEADER_LEN + 4
+        for topic in self.topics:
+            # len(topic) + group_id
+            size += 2 + len(topic)
+        # timeout
+        size += 4
+        return size
+
+    def get_bytes(self):
+        """Create a new delete topics request"""
+        output = bytearray(len(self))
+        self._write_header(output)
+        offset = self.HEADER_LEN
+        fmt = '!i'
+        struct.pack_into(fmt, output, offset, len(self.topics))
+        offset += struct.calcsize(fmt)
+        for topic in self.topics:
+            fmt = '!h%ds' % len(topic)
+            struct.pack_into(fmt, output, offset, len(topic), topic)
+            offset += struct.calcsize(fmt)
+        fmt = '!i'
+        struct.pack_into(fmt, output, offset, self.timeout)
+        offset += struct.calcsize(fmt)
+        return output
+
+
+class DeleteTopicsResponse(Response):
+    """A delete topics response
+
+    Specification::
+
+    DeleteTopics Response (Version: 0) => [topic_error_codes]
+        topic_error_codes => topic error_code
+            topic => STRING
+            error_code => INT16
+    """
+    API_KEY = 20
+
+    def __init__(self, buff):
+        """Deserialize into a new Response
+
+        :param buff: Serialized message
+        :type buff: :class:`bytearray`
+        """
+        fmt = '[Sh]'
+        response = struct_helpers.unpack_from(fmt, buff, 0)
+        for _, error_code in response:
+            if error_code != 0:
+                self.raise_error(error_code, response)
+
+
 class ApiVersionsRequest(Request):
     """An api versions request
 

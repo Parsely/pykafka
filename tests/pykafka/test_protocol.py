@@ -1216,6 +1216,59 @@ class TestAdministrativeAPI(unittest2.TestCase):
         self.assertEqual(assignment.partition_assignment,
                          [(b'testtopic_replicated', [0, 1, 2, 8, 3, 9, 4, 5, 6, 7])])
 
+    def test_create_topics_request(self):
+        req = protocol.CreateTopicsRequest([protocol.CreateTopicRequest('mycooltopic', 4,
+                                                                        2, [], [])])
+        msg = req.get_bytes()
+        self.assertEqual(
+            msg,
+            bytearray(
+                b'\x00\x00\x004\x00\x13\x00\x00\x00\x00\x00\x00\x00\x07pykafka'  # header
+                b'\x00\x00\x00\x01'  # len(topic_reqs)
+                    b'\x00\x0b'  # len(topic)  # noqa
+                        b'mycooltopic'  # topic
+                    b'\x00\x00\x00\x04'  # num_partitions
+                    b'\x00\x02'  # replication_factor
+                    b'\x00\x00\x00\x00'  # len(replica_assignment)
+                    b'\x00\x00\x00\x00'  # len(config_entries)
+                b'\x00\x00\x00\x00'  # timeout
+            )
+        )
+
+    def test_create_topics_response(self):
+        response = protocol.CreateTopicsResponse(  # noqa
+            bytearray(
+                b'\x00\x00\x00\x01'  # len(topic_errors)
+                    b'\x00\t'  # len(topic) # noqa
+                        b'testtopic'  # topic_name
+                    b'\x00\x00'  # error_code
+            )
+        )
+
+    def test_delete_topics_request(self):
+        req = protocol.DeleteTopicsRequest(['mycooltopic'])
+        msg = req.get_bytes()
+        self.assertEqual(
+            msg,
+            bytearray(
+                b'\x00\x00\x00&\x00\x14\x00\x00\x00\x00\x00\x00\x00\x07pykafka'  # header
+                b'\x00\x00\x00\x01'  # len(topic_error_codes)  # noqa
+                    b'\x00\x0b'  # len(topic)
+                        b'mycooltopic'  # topic
+                b'\x00\x00\x00\x00'  # timeout
+            )
+        )
+
+    def test_delete_topics_response(self):
+        response = protocol.DeleteTopicsResponse(  # noqa
+            bytearray(
+                b'\x00\x00\x00\x01'  # len(topic_errors)
+                    b'\x00\t'  # len(topic) # noqa
+                        b'testtopic'  # topic_name
+                    b'\x00\x00'  # error_code
+            )
+        )
+
     def test_api_versions_request(self):
         req = protocol.ApiVersionsRequest()
         msg = req.get_bytes()

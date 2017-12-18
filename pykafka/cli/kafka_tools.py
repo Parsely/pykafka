@@ -5,12 +5,13 @@ import calendar
 import datetime as dt
 import sys
 import time
+from pkg_resources import parse_version
 
 import tabulate
 
 import pykafka
 from pykafka.common import OffsetType
-from pykafka.protocol import PartitionOffsetCommitRequest
+from pykafka.protocol import PartitionOffsetCommitRequest, CreateTopicRequest
 from pykafka.utils.compat import PY3, iteritems
 
 #
@@ -261,6 +262,24 @@ def reset_offsets(client, args):
     )
 
 
+def create_topic(client, args):
+    if parse_version(args.broker_version) < parse_version('0.10.0'):
+        raise ValueError("The topic creation API is not usable on brokers older than "
+                         "0.10.0. Use --broker_version to specify the version")
+    topic_req = CreateTopicRequest(args.topic, args.num_partitions,
+                                   args.replication_factor,
+                                   args.replica_assignment or [],
+                                   args.config_entries or [])
+    client.cluster.controller_broker.create_topics([topic_req], args.timeout)
+
+
+def delete_topic(client, args):
+    if parse_version(args.broker_version) < parse_version('0.10.0'):
+        raise ValueError("The topic deletoin API is not usable on brokers older than "
+                         "0.10.0. Use --broker_version to specify the version")
+    client.cluster.controller_broker.delete_topics([args.topic], args.timeout)
+
+
 def _encode_utf8(string):
     """Converts argument to UTF-8-encoded bytes.
 
@@ -284,6 +303,13 @@ def _add_limit(parser):
                         help='Number of messages to consume '
                              '(default: %(default)s)',
                         type=int, default=10)
+
+
+def _add_timeout(parser):
+    parser.add_argument('-t', '--timeout',
+                        help='Time in ms to wait for the operation to complete'
+                             '(default: %(default)s)',
+                        type=int, default=5000)
 
 
 def _add_offset(parser):
@@ -320,6 +346,11 @@ def _get_arg_parser():
                         dest='host',
                         help='host:port of any Kafka broker. '
                              '[default: localhost:9092]')
+    output.add_argument('-o', '--broker_version',
+                        required=False,
+                        default='0.9.0',
+                        dest='broker_version',
+                        help="The version string of the broker with which to communicate")
 
     subparsers = output.add_subparsers(help='Commands', dest='command')
 
@@ -383,6 +414,41 @@ def _get_arg_parser():
     _add_consumer_group(parser)
     _add_offset(parser)
 
+    parser = subparsers.add_parser(
+        'create_topic',
+        help='Create a topic'
+    )
+    parser.set_defaults(func=create_topic)
+    _add_topic(parser)
+    _add_timeout(parser)
+    parser.add_argument('-p', '--num_partitions',
+                        help='Number of partitions to be created. -1 indicates unset. '
+                             '(default: %(default)s)',
+                        type=int, default=1)
+    parser.add_argument('-r', '--replication_factor',
+                        help='Replication factor for the topic. -1 indicates unset. '
+                             '(default: %(default)s)',
+                        type=int, default=1)
+    parser.add_argument('-a', '--replica_assignment',
+                        help='Replica assignment among kafka brokers for this topic '
+                             'partitions. If this is set num_partitions and '
+                             'replication_factor must be unset. Represent as a JSON '
+                             'object with partition IDs as keys as lists of node IDs '
+                             'as values',
+                        type=_encode_utf8)
+    parser.add_argument('-c', '--config_entries',
+                        help='Topic level configuration for topic to be set. Represent '
+                             'as a JSON object.',
+                        type=_encode_utf8)
+
+    parser = subparsers.add_parser(
+        'delete_topic',
+        help='Delete a topic'
+    )
+    parser.set_defaults(func=delete_topic)
+    _add_topic(parser)
+    _add_timeout(parser)
+
     return output
 
 
@@ -390,7 +456,7 @@ def main():
     parser = _get_arg_parser()
     args = parser.parse_args()
     if args.command:
-        client = pykafka.KafkaClient(hosts=args.host)
+        client = pykafka.KafkaClient(hosts=args.host, broker_version=args.broker_version)
         args.func(client, args)
     else:
         parser.print_help()
