@@ -1,6 +1,54 @@
 Changelog
 =========
 
+2.7.0.dev1 (2017-12-18)
+-----------------------
+
+`Compare 2.7.0-dev.2`_
+
+.. _Compare 2.7.0-dev.2: https://github.com/Parsely/pykafka/compare/2.7.0.dev1...2.7.0-dev.2
+
+Minor Version Features
+----------------------
+
+* Added a `membership_protocol` kwarg to `BalancedConsumer` that allows switchable and
+  user-defined membership protocols to be used
+* Implemented `GroupMembershipProtocol` objects for the two standard partition assignment
+  strategies
+* Added an `api_versions` kwarg to `Broker` to facilitate switchable API protocol versions
+* Added support for all versions of the `MetadataRequest` to `Broker`
+* Added the `controller_broker` attribute to `Cluster`
+* Added `create_topics` and `delete_topics` to `Broker`
+* Added `fetch_api_versions` to `Broker` and `Cluster`
+* Added a CLI for creating and deleting topics on the cluster to `kafka_tools`
+* Added support for LZ4 compression to the `Producer` and `SimpleConsumer`
+
+Bug Fixes
+---------
+
+* Adjusted `Cluster` to become aware of supported API versions immediately upon
+  instantiation
+* Refactored code in `Cluster` related to metadata requests to make logic reusable for
+  pre-bootstrap communication with the cluster
+* Added the ability to pass arguments to `protocol.Response` instances when waiting
+  on a future
+* Adjusted the `RandomPartitioner` to avoid actually calling `random.choice` to improve
+  performance
+* Removed some calls in `Producer.procuce` to `isinstance` to improve performance
+* Simplified retry logic in `SimpleConsumer.fetch_offsets`
+
+Miscellaneous
+-------------
+
+* Used `sudo: required` to get around dead Travis machines
+* Upgraded Travis tests to use Kafka 1.0.0
+* Added Code of Conduct
+* Documented release process
+* Made PyKafka available via conda-forge
+* Fleshed out the beginning of the usage guide
+* Made `kafka_instance` fetch its binary from `archive.apache.org` instead of
+  `mirror.reverse.net` because the latter removed old versions of Kafka
+
 2.7.0.dev1 (2017-9-21)
 ----------------------
 
