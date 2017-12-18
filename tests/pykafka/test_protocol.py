@@ -1217,7 +1217,7 @@ class TestAdministrativeAPI(unittest2.TestCase):
                          [(b'testtopic_replicated', [0, 1, 2, 8, 3, 9, 4, 5, 6, 7])])
 
     def test_create_topics_request(self):
-        req = protocol.CreateTopicsRequest([protocol.CreateTopicRequest('mycooltopic', 4,
+        req = protocol.CreateTopicsRequest([protocol.CreateTopicRequest(b'mycooltopic', 4,
                                                                         2, [], [])])
         msg = req.get_bytes()
         self.assertEqual(
@@ -1246,7 +1246,7 @@ class TestAdministrativeAPI(unittest2.TestCase):
         )
 
     def test_delete_topics_request(self):
-        req = protocol.DeleteTopicsRequest(['mycooltopic'])
+        req = protocol.DeleteTopicsRequest([b'mycooltopic'])
         msg = req.get_bytes()
         self.assertEqual(
             msg,
