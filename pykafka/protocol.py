@@ -2160,14 +2160,11 @@ class CreateTopicsRequest(Request):
                 config_value => NULLABLE_STRING
         timeout => INT32
     """
+    API_KEY = 19
+
     def __init__(self, topic_requests, timeout=0):
         self.topic_requests = topic_requests
         self.timeout = timeout
-
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 19
 
     def __len__(self):
         """Length of the serialized message, in bytes"""
@@ -2237,6 +2234,8 @@ class CreateTopicsResponse(Response):
             topic => STRING
             error_code => INT16
     """
+    API_KEY = 19
+
     def __init__(self, buff):
         """Deserialize into a new Response
 
@@ -2259,10 +2258,39 @@ class DeleteTopicsRequest(Request):
         topics => STRING
         timeout => INT32
     """
-    @property
-    def API_KEY(self):
-        """API_KEY for this request, from the Kafka docs"""
-        return 20
+    API_KEY = 20
+
+    def __init__(self, topics, timeout=0):
+        self.topics = topics
+        self.timeout = timeout
+
+    def __len__(self):
+        """Length of the serialized message, in bytes"""
+        # header + len(topics)
+        size = self.HEADER_LEN + 4
+        for topic in self.topics:
+            # len(topic) + group_id
+            size += 2 + len(topic)
+        # timeout
+        size += 4
+        return size
+
+    def get_bytes(self):
+        """Create a new delete topics request"""
+        output = bytearray(len(self))
+        self._write_header(output)
+        offset = self.HEADER_LEN
+        fmt = '!i'
+        struct.pack_into(fmt, output, offset, len(self.topics))
+        offset += struct.calcsize(fmt)
+        for topic in self.topics:
+            fmt = '!h%ds' % len(topic)
+            struct.pack_into(fmt, output, offset, len(topic), topic)
+            offset += struct.calcsize(fmt)
+        fmt = '!i'
+        struct.pack_into(fmt, output, offset, self.timeout)
+        offset += struct.calcsize(fmt)
+        return output
 
 
 class DeleteTopicsResponse(Response):
@@ -2275,8 +2303,19 @@ class DeleteTopicsResponse(Response):
             topic => STRING
             error_code => INT16
     """
+    API_KEY = 20
+
     def __init__(self, buff):
-        pass
+        """Deserialize into a new Response
+
+        :param buff: Serialized message
+        :type buff: :class:`bytearray`
+        """
+        fmt = '[Sh]'
+        response = struct_helpers.unpack_from(fmt, buff, 0)
+        for _, error_code in response:
+            if error_code != 0:
+                self.raise_error(error_code, response)
 
 
 class ApiVersionsRequest(Request):
