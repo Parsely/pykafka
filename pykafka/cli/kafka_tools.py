@@ -11,7 +11,7 @@ import tabulate
 
 import pykafka
 from pykafka.common import OffsetType
-from pykafka.protocol import PartitionOffsetCommitRequest
+from pykafka.protocol import PartitionOffsetCommitRequest, CreateTopicRequest
 from pykafka.utils.compat import PY3, iteritems
 
 #
@@ -266,10 +266,18 @@ def create_topic(client, args):
     if parse_version(args.broker_version) < parse_version('0.10.0'):
         raise ValueError("The topic creation API is not usable on brokers older than "
                          "0.10.0. Use --broker_version to specify the version")
-    client.cluster.controller_broker.create_topics([args.topic], args.num_partitions,
-                                                   args.replication_factor,
-                                                   args.replica_assignment,
-                                                   args.config_entries, args.timeout)
+    topic_req = CreateTopicRequest(args.topic, args.num_partitions,
+                                   args.replication_factor,
+                                   args.replica_assignment or [],
+                                   args.config_entries or [])
+    client.cluster.controller_broker.create_topics([topic_req], args.timeout)
+
+
+def delete_topic(client, args):
+    if parse_version(args.broker_version) < parse_version('0.10.0'):
+        raise ValueError("The topic deletoin API is not usable on brokers older than "
+                         "0.10.0. Use --broker_version to specify the version")
+    client.cluster.controller_broker.delete_topics([args.topic], args.timeout)
 
 
 def _encode_utf8(string):
@@ -432,6 +440,14 @@ def _get_arg_parser():
                         help='Topic level configuration for topic to be set. Represent '
                              'as a JSON object.',
                         type=_encode_utf8)
+
+    parser = subparsers.add_parser(
+        'delete_topic',
+        help='Delete a topic'
+    )
+    parser.set_defaults(func=delete_topic)
+    _add_topic(parser)
+    _add_timeout(parser)
 
     return output
 
