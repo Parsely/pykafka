@@ -30,7 +30,8 @@ from .protocol import (
     SyncGroupRequest, SyncGroupResponse, HeartbeatRequest, HeartbeatResponse,
     LeaveGroupRequest, LeaveGroupResponse, ListGroupsRequest, ListGroupsResponse,
     DescribeGroupsRequest, DescribeGroupsResponse, ApiVersionsRequest,
-    ApiVersionsResponse, CreateTopicsRequest, CreateTopicsResponse, CreateTopicRequest)
+    ApiVersionsResponse, CreateTopicsRequest, CreateTopicsResponse, DeleteTopicsRequest,
+    DeleteTopicsResponse)
 from .utils.compat import range, iteritems, get_bytes
 
 log = logging.getLogger(__name__)
@@ -556,29 +557,34 @@ class Broker(object):
     # Create/Delete Topics API #
     ############################
     @_check_handler
-    def create_topics(self,
-                      topics,
-                      num_partitions=1,
-                      replication_factor=1,
-                      replica_assignment=None,
-                      config_entries=None,
-                      timeout=0):
-        topic_reqs = []
-        for topic in topics:
-            topic_req = CreateTopicRequest(topic, num_partitions, replication_factor,
-                                           replica_assignment or [],
-                                           config_entries or [])
-            topic_reqs.append(topic_req)
+    def create_topics(self, topic_reqs, timeout=0):
+        """Create topics via the Topic Creation API
+
+        :param topic_reqs: The topic creation requests to issue
+        :type topics: Iterable of :class:`pykafka.protocol.CreateTopicRequest`
+        :param timeout: The time in ms to wait for a topic to be completely created.
+            Values <= 0 will trigger topic creation and return immediately.
+        :type timeout: int
+        """
         future = self._req_handler.request(CreateTopicsRequest(topic_reqs,
                                                                timeout=timeout))
         return future.get(CreateTopicsResponse)
 
     @_check_handler
-    def delete_topic(self):
-        pass
+    def delete_topics(self, topics, timeout=0):
+        """Delete topics viaa the Topic Deletion API
+
+        :param topics: The names of the topics to delete
+        :type topics: Iterable of str
+        :param timeout: The time in ms to wait for a topic to be completely deleted.
+            Values <= 0 will trigger topic deletion and return immediately.
+        :type timeout: int
+        """
+        future = self._req_handler.request(DeleteTopicsRequest(topics, timeout=timeout))
+        return future.get(DeleteTopicsResponse)
 
     @_check_handler
     def fetch_api_versions(self):
-        """Send an ApiVersionsRequest"""
+        """Fetch supported API versions from this broker"""
         future = self._req_handler.request(ApiVersionsRequest())
         return future.get(ApiVersionsResponse.get_version_impl(self._api_versions))
