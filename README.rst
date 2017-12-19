@@ -147,7 +147,10 @@ this, you can use the `BalancedConsumer`.
 You can have as many `BalancedConsumer` instances consuming a topic as that
 topic has partitions. If they are all connected to the same zookeeper instance,
 they will communicate with it to automatically balance the partitions between
-themselves.
+themselves. The partition assignment strategy used by the `BalancedConsumer` is
+the "range" strategy by default. The strategy is switchable via the `membership_protocol`
+keyword argument, and can be either an object exposed by `pykafka.membershipprotocol` or
+a custom instance of `pykafka.membershipprotocol.GroupMembershipProtocol`.
 
 You can also use the Kafka 0.9 Group Membership API with the ``managed``
 keyword argument on ``get_balanced_consumer``.
