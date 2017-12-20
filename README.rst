@@ -198,18 +198,6 @@ or after installing PyKafka via setuptools or pip:
 
 .. _CLI tools: https://github.com/Parsely/pykafka/blob/master/pykafka/cli/kafka_tools.py
 
-What happened to Samsa?
------------------------
-
-This project used to be called samsa. It has been renamed PyKafka and has been
-fully overhauled to support Kafka 0.8.2. We chose to target 0.8.2 because the offset
-Commit/Fetch API stabilized on that release.
-
-The Samsa `PyPI package`_  will stay up for the foreseeable future and tags for
-previous versions will always be available in this repo.
-
-.. _PyPI package: https://pypi.python.org/pypi/samsa/0.3.11
-
 PyKafka or kafka-python?
 ------------------------
 
