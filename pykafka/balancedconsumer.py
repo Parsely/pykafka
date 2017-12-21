@@ -205,9 +205,7 @@ class BalancedConsumer(object):
         :type membership_protocol: :class:`pykafka.membershipprotocol.GroupMembershipProtocol`
         """
         self._cluster = cluster
-        if not isinstance(consumer_group, bytes):
-            raise TypeError("consumer_group must be a bytes object")
-        self._consumer_group = consumer_group
+        self._consumer_group = consumer_group.encode('ascii')
         self._topic = topic
 
         self._auto_commit_enable = auto_commit_enable

@@ -158,9 +158,7 @@ class SimpleConsumer(object):
         """
         self._running = False
         self._cluster = cluster
-        if not (isinstance(consumer_group, bytes) or consumer_group is None):
-            raise TypeError("consumer_group must be a bytes object")
-        self._consumer_group = consumer_group
+        self._consumer_group = consumer_group.encode('ascii') if consumer_group else None
         self._topic = topic
         self._fetch_message_max_bytes = valid_int(fetch_message_max_bytes)
         self._fetch_min_bytes = valid_int(fetch_min_bytes)
