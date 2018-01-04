@@ -25,7 +25,6 @@ import struct
 import sys
 import threading
 import weakref
-from pkg_resources import parse_version
 
 from six import reraise
 
@@ -35,7 +34,6 @@ from .exceptions import (
     KafkaException,
     InvalidMessageSize,
     MessageSizeTooLarge,
-    NoBrokersAvailableError,
     NotLeaderForPartition,
     ProducerQueueFullError,
     ProducerStoppedException,
