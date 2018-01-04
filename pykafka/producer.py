@@ -309,7 +309,9 @@ class Producer(object):
         :param message: The message to produce (use None to send null)
         :type message: bytes
         :param partition_key: The key to use when deciding which partition to send this
-            message to
+            message to. This key is passed to the `partitioner`, which may or may not
+            use it in deciding the partition. The default `RandomPartitioner` does not
+            use this key, but the optional `HashingPartitioner` does.
         :type partition_key: bytes
         :param timestamp: The timestamp at which the message is produced (requires
             broker_version >= 0.10.0)
