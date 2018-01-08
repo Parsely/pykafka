@@ -26,7 +26,8 @@ import weakref
 from .balancedconsumer import BalancedConsumer
 from .common import OffsetType
 from .exceptions import (IllegalGeneration, RebalanceInProgress, NotCoordinatorForGroup,
-                         GroupCoordinatorNotAvailable, ERROR_CODES, GroupLoadInProgress)
+                         GroupCoordinatorNotAvailable, ERROR_CODES, GroupLoadInProgress,
+                         UnicodeException)
 from .membershipprotocol import RangeProtocol
 from .protocol import MemberAssignment
 from .utils.compat import iterkeys
@@ -170,7 +171,11 @@ class ManagedBalancedConsumer(BalancedConsumer):
         """
 
         self._cluster = cluster
-        self._consumer_group = consumer_group.encode('ascii')
+        try:
+            self._consumer_group = consumer_group.encode('ascii')
+        except UnicodeEncodeError:
+            raise UnicodeException("Consumer group name '{}' contains non-ascii "
+                                   "characters".format(consumer_group))
         self._topic = topic
 
         self._auto_commit_enable = auto_commit_enable

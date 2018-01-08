@@ -33,7 +33,8 @@ from .exceptions import (ERROR_CODES,
                          NoBrokersAvailableError,
                          SocketDisconnectedError,
                          LeaderNotFoundError,
-                         LeaderNotAvailable)
+                         LeaderNotAvailable,
+                         UnicodeException)
 from .protocol import (GroupCoordinatorRequest, GroupCoordinatorResponse,
                        API_VERSIONS_090, API_VERSIONS_080)
 from .topic import Topic
@@ -54,7 +55,11 @@ class TopicDict(dict):
         return [self[key] for key in self]
 
     def __getitem__(self, key):
-        key = key.encode('ascii')
+        try:
+            key = key.encode('ascii')
+        except UnicodeEncodeError:
+            raise UnicodeException("Topic name '{}' contains non-ascii "
+                                   "characters".format(key))
         if self._should_exclude_topic(key):
             raise KeyError("You have configured KafkaClient/Cluster to hide "
                            "double-underscored, internal topics")

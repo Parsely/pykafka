@@ -35,7 +35,8 @@ except ImportError:
 from six import reraise
 
 from .common import OffsetType
-from .exceptions import KafkaException, PartitionOwnedError, ConsumerStoppedException
+from .exceptions import (KafkaException, PartitionOwnedError, ConsumerStoppedException,
+                         UnicodeException)
 from .membershipprotocol import RangeProtocol
 from .simpleconsumer import SimpleConsumer
 from .utils.compat import range, get_bytes, itervalues, iteritems, get_string
@@ -205,7 +206,11 @@ class BalancedConsumer(object):
         :type membership_protocol: :class:`pykafka.membershipprotocol.GroupMembershipProtocol`
         """
         self._cluster = cluster
-        self._consumer_group = consumer_group.encode('ascii')
+        try:
+            self._consumer_group = consumer_group.encode('ascii')
+        except UnicodeEncodeError:
+            raise UnicodeException("Consumer group name '{}' contains non-ascii "
+                                   "characters".format(consumer_group))
         self._topic = topic
 
         self._auto_commit_enable = auto_commit_enable

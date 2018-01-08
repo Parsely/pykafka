@@ -39,7 +39,7 @@ from .exceptions import (UnknownError, OffsetOutOfRangeError, UnknownTopicOrPart
                          ConsumerStoppedException, KafkaException,
                          NotLeaderForPartition, OffsetRequestFailedError,
                          RequestTimedOut, UnknownMemberId, RebalanceInProgress,
-                         IllegalGeneration, ERROR_CODES)
+                         IllegalGeneration, ERROR_CODES, UnicodeException)
 from .protocol import (PartitionFetchRequest, PartitionOffsetCommitRequest,
                        PartitionOffsetFetchRequest, PartitionOffsetRequest)
 from .utils.error_handlers import (handle_partition_responses, raise_error,
@@ -158,7 +158,13 @@ class SimpleConsumer(object):
         """
         self._running = False
         self._cluster = cluster
-        self._consumer_group = consumer_group.encode('ascii') if consumer_group else None
+        self._consumer_group = None
+        if consumer_group:
+            try:
+                self._consumer_group = consumer_group.encode('ascii')
+            except UnicodeEncodeError:
+                raise UnicodeException("Consumer group name '{}' contains non-ascii "
+                                       "characters".format(consumer_group))
         self._topic = topic
         self._fetch_message_max_bytes = valid_int(fetch_message_max_bytes)
         self._fetch_min_bytes = valid_int(fetch_min_bytes)

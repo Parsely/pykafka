@@ -23,6 +23,11 @@ class KafkaException(Exception):
     pass
 
 
+class UnicodeException(Exception):
+    """Indicates that an error was encountered while processing a unicode string"""
+    pass
+
+
 class NoBrokersAvailableError(KafkaException):
     """Indicates that no brokers were available to the cluster's metadata update attempts
     """
