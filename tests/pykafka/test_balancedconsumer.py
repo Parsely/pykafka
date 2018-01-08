@@ -40,8 +40,8 @@ class TestBalancedConsumer(unittest2.TestCase):
         cls._mock_consumer, _ = TestBalancedConsumer.buildMockConsumer(timeout=cls._consumer_timeout)
 
     @classmethod
-    def buildMockConsumer(self, num_partitions=10, num_participants=1, timeout=2000):
-        consumer_group = b'testgroup'
+    def buildMockConsumer(self, consumer_group=b'testgroup', num_partitions=10,
+                          num_participants=1, timeout=2000):
         topic = mock.Mock()
         topic.name = 'testtopic'
         topic.partitions = {}
@@ -58,6 +58,9 @@ class TestBalancedConsumer(unittest2.TestCase):
         return BalancedConsumer(topic, cluster, consumer_group,
                                 zookeeper=zk, auto_start=False, use_rdkafka=False,
                                 consumer_timeout_ms=timeout), topic
+
+    def test_unicode_consumer_group(self):
+        consumer, _ = self.buildMockConsumer(consumer_group=u'testgroup')
 
     def test_consume_returns(self):
         """Ensure that consume() returns in the amount of time it's supposed to
