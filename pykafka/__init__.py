@@ -10,7 +10,7 @@ from .balancedconsumer import BalancedConsumer
 from .managedbalancedconsumer import ManagedBalancedConsumer
 from .membershipprotocol import RangeProtocol, RoundRobinProtocol
 
-__version__ = '2.7.0-dev.2'
+__version__ = '2.7.0'
 
 
 __all__ = ["Broker", "SimpleConsumer", "Cluster", "Partition", "Producer",
