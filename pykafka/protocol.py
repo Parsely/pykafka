@@ -1481,7 +1481,12 @@ class OffsetFetchRequest(Request):
             TopicName => string
             Partition => int32
     """
+    API_VERSION = 0
     API_KEY = 9
+
+    @classmethod
+    def get_versions(cls):
+        return {0: OffsetFetchRequest, 1: OffsetFetchRequestV1, 2: OffsetFetchRequestV2}
 
     def __init__(self, consumer_group, partition_requests=[]):
         """Create a new offset fetch request
@@ -1494,6 +1499,9 @@ class OffsetFetchRequest(Request):
         self._reqs = defaultdict(list)
         for t in partition_requests:
             self._reqs[t.topic_name].append(t.partition_id)
+
+    def _reqs_len(self):
+        return len(self._reqs)
 
     def __len__(self):
         """Length of the serialized message, in bytes"""
@@ -1513,12 +1521,12 @@ class OffsetFetchRequest(Request):
         :rtype: :class:`bytearray`
         """
         output = bytearray(len(self))
-        self._write_header(output, api_version=1)
+        self._write_header(output, api_version=self.API_VERSION)
         offset = self.HEADER_LEN
         fmt = '!h%dsi' % len(self.consumer_group)
         struct.pack_into(fmt, output, offset,
                          len(self.consumer_group), self.consumer_group,
-                         len(self._reqs))
+                         self._reqs_len())
         offset += struct.calcsize(fmt)
         for topic_name, partitions in iteritems(self._reqs):
             fmt = '!h%dsi' % len(topic_name)
@@ -1530,6 +1538,18 @@ class OffsetFetchRequest(Request):
                 struct.pack_into(fmt, output, offset, pnum)
                 offset += struct.calcsize(fmt)
         return output
+
+
+class OffsetFetchRequestV1(OffsetFetchRequest):
+    API_VERSION = 1
+
+
+class OffsetFetchRequestV2(OffsetFetchRequest):
+    API_VERSION = 2
+
+    def _reqs_len(self):
+        # v2 allows a null array to select all topics
+        return len(self._reqs) or -1
 
 
 OffsetFetchPartitionResponse = namedtuple(
@@ -1550,6 +1570,12 @@ class OffsetFetchResponse(Response):
             Metadata => string
             ErrorCode => int16
     """
+    API_KEY = 9
+
+    @classmethod
+    def get_versions(cls):
+        return {0: OffsetFetchResponse, 1: OffsetFetchResponse, 2: OffsetFetchResponse}
+
     def __init__(self, buff):
         """Deserialize into a new Response
 
