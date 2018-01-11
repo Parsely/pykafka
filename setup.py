@@ -121,6 +121,8 @@ class PyTest(TestCommand):
 if 'nosetests' in sys.argv[1:]:
     setup_requires.append('nose')
 
+with open('README.rst') as f:
+    readme = f.read()
 
 def run_setup(with_rdkafka=True):
     """This just calls setuptools.setup() but makes ext_modules optional"""
@@ -138,6 +140,7 @@ def run_setup(with_rdkafka=True):
         author_email='pykafka-user@googlegroups.com',
         url='https://github.com/Parsely/pykafka',
         description='Full-Featured Pure-Python Kafka Client',
+        long_description=readme,
         keywords='apache kafka client driver',
         license='Apache License 2.0',
         packages=find_packages(),
