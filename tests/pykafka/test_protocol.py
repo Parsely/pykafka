@@ -906,11 +906,19 @@ class TestOffsetCommitFetchAPI(unittest2.TestCase):
         self.assertEqual(
             msg,
             bytearray(
-                b'\x00\x00\x00.\x00\t\x00\x01\x00\x00\x00\x00\x00\x07pykafka'  # header
+                # header
+                b'\x00\x00\x00\x2e'  # len(buffer)
+                b'\x00\x09'  # ApiKey
+                b'\x00\x00'  # api version
+                b'\x00\x00\x00\x00'  # correlation id
+                b'\x00\x07'  # len(client id)
+                    b'pykafka'  # client id
+                # end header
+
                 b'\x00\x04'  # len(consumer group)
                     b'test'  # consumer group # noqa
                 b'\x00\x00\x00\x01'  # len(topics)
-                    b'\x00\t'  # len(topic name)
+                    b'\x00\x09'  # len(topic name)
                         b'testtopic'  # topic name
                     b'\x00\x00\x00\x01'  # len(partitions)
                         b'\x00\x00\x00\x00'  # partition
@@ -932,6 +940,49 @@ class TestOffsetCommitFetchAPI(unittest2.TestCase):
         )
         self.assertEqual(response.topics[b'emmett.dummy'][0].metadata, b'')
         self.assertEqual(response.topics[b'emmett.dummy'][0].offset, 1)
+
+
+class TestOffsetCommitFetchAPIV2(unittest2.TestCase):
+    maxDiff = None
+
+    def test_offset_fetch_request(self):
+        req = protocol.OffsetFetchRequestV2(b'test', partition_requests=[ ])
+        msg = req.get_bytes()
+        self.assertEqual(
+            msg,
+            bytearray(
+                # header
+                b'\x00\x00\x00\x1b'  # len(buffer)
+                b'\x00\x09'  # ApiKey
+                b'\x00\x02'  # api version
+                b'\x00\x00\x00\x00'  # correlation id
+                b'\x00\x07'  # len(client id)
+                    b'pykafka'  # client id
+                # end header
+
+                b'\x00\x04'  # len(consumer group)
+                    b'test'  # consumer group # noqa
+                b'\xff\xff\xff\xff'  # len(topics) = -1 for empty topics list
+            )
+        )
+
+    def test_offset_fetch_response(self):
+        response = protocol.OffsetFetchResponseV2(
+            buffer(
+                b'\x00\x00\x00\x01'  # len(topics)
+                    b'\x00\x0c'  # len(topic name) # noqa
+                        b'emmett.dummy'  # topic name
+                    b'\x00\x00\x00\x01'  # len(partitions)
+                        b'\x00\x00\x00\x00'  # partition
+                            b'\x00\x00\x00\x00\x00\x00\x00\x01'  # offset
+                            b'\x00\x00'  # len(metadata)
+                            b'\x00\x00'  # error code
+                b'\x00\x00'  # response level error_code
+            )
+        )
+        self.assertEqual(response.topics[b'emmett.dummy'][0].metadata, b'')
+        self.assertEqual(response.topics[b'emmett.dummy'][0].offset, 1)
+        self.assertEqual(response.err, 0)
 
 
 class TestGroupMembershipAPI(unittest2.TestCase):

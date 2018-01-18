@@ -183,7 +183,8 @@ class Broker(object):
                    source_host=source_host,
                    source_port=source_port,
                    ssl_config=ssl_config,
-                   broker_version=broker_version)
+                   broker_version=broker_version,
+                   api_versions=api_versions)
 
     @property
     def connected(self):
@@ -432,8 +433,10 @@ class Broker(object):
         """
         if not self.offsets_channel_connected:
             self.connect_offsets_channel()
-        req = OffsetFetchRequest(consumer_group, partition_requests=preqs)
-        return self._offsets_channel_req_handler.request(req).get(OffsetFetchResponse)
+        request_class = OffsetFetchRequest.get_version_impl(self._api_versions)
+        response_class = OffsetFetchResponse.get_version_impl(self._api_versions)
+        req = request_class(consumer_group, partition_requests=preqs)
+        return self._offsets_channel_req_handler.request(req).get(response_class)
 
     ##########################
     #  Group Membership API  #

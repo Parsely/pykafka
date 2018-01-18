@@ -1481,7 +1481,12 @@ class OffsetFetchRequest(Request):
             TopicName => string
             Partition => int32
     """
+    API_VERSION = 0
     API_KEY = 9
+
+    @classmethod
+    def get_versions(cls):
+        return {0: OffsetFetchRequest, 1: OffsetFetchRequestV1, 2: OffsetFetchRequestV2}
 
     def __init__(self, consumer_group, partition_requests=[]):
         """Create a new offset fetch request
@@ -1494,6 +1499,9 @@ class OffsetFetchRequest(Request):
         self._reqs = defaultdict(list)
         for t in partition_requests:
             self._reqs[t.topic_name].append(t.partition_id)
+
+    def _reqs_len(self):
+        return len(self._reqs)
 
     def __len__(self):
         """Length of the serialized message, in bytes"""
@@ -1513,12 +1521,12 @@ class OffsetFetchRequest(Request):
         :rtype: :class:`bytearray`
         """
         output = bytearray(len(self))
-        self._write_header(output, api_version=1)
+        self._write_header(output, api_version=self.API_VERSION)
         offset = self.HEADER_LEN
         fmt = '!h%dsi' % len(self.consumer_group)
         struct.pack_into(fmt, output, offset,
                          len(self.consumer_group), self.consumer_group,
-                         len(self._reqs))
+                         self._reqs_len())
         offset += struct.calcsize(fmt)
         for topic_name, partitions in iteritems(self._reqs):
             fmt = '!h%dsi' % len(topic_name)
@@ -1532,6 +1540,18 @@ class OffsetFetchRequest(Request):
         return output
 
 
+class OffsetFetchRequestV1(OffsetFetchRequest):
+    API_VERSION = 1
+
+
+class OffsetFetchRequestV2(OffsetFetchRequestV1):
+    API_VERSION = 2
+
+    def _reqs_len(self):
+        # v2 allows a null array to select all topics
+        return len(self._reqs) or -1
+
+
 OffsetFetchPartitionResponse = namedtuple(
     'OffsetFetchPartitionResponse',
     ['offset', 'metadata', 'err']
@@ -1539,17 +1559,26 @@ OffsetFetchPartitionResponse = namedtuple(
 
 
 class OffsetFetchResponse(Response):
-    """An offset fetch response
+    """An offset fetch response v0
 
     Specification::
 
-        OffsetFetchResponse => [TopicName [Partition Offset Metadata ErrorCode]]
-            TopicName => string
-            Partition => int32
-            Offset => int64
-            Metadata => string
-            ErrorCode => int16
+    OffsetFetch Response (Version: 0) => [responses]
+        responses => topic [partition_responses]
+            topic => STRING
+            partition_responses => partition offset metadata error_code
+                partition => INT32
+                offset => INT64
+                metadata => NULLABLE_STRING
+                error_code => INT16
     """
+    API_VERSION = 0
+    API_KEY = 9
+
+    @classmethod
+    def get_versions(cls):
+        return {0: OffsetFetchResponse, 1: OffsetFetchResponseV1, 2: OffsetFetchResponseV2}
+
     def __init__(self, buff):
         """Deserialize into a new Response
 
@@ -1558,15 +1587,58 @@ class OffsetFetchResponse(Response):
         """
         fmt = '[S [iqSh ] ]'
         response = struct_helpers.unpack_from(fmt, buff, 0)
+        self._populate_partition_responses(response)
 
+    def _populate_partition_responses(self, partition_responses):
         self.topics = {}
-        for topic_name, partitions in response:
+        for topic_name, partitions in partition_responses:
             self.topics[topic_name] = {}
             for partition in partitions:
                 pres = OffsetFetchPartitionResponse(partition[1],
                                                     partition[2],
                                                     partition[3])
                 self.topics[topic_name][partition[0]] = pres
+
+
+class OffsetFetchResponseV1(OffsetFetchResponse):
+    """An offset fetch response v1 (all the same as v0)
+
+    Specification::
+
+    OffsetFetch Response (Version: 1) => [responses]
+        responses => topic [partition_responses]
+            topic => STRING
+            partition_responses => partition offset metadata error_code
+                partition => INT32
+                offset => INT64
+                metadata => NULLABLE_STRING
+                error_code => INT16
+    """
+    API_VERSION = 1
+
+
+class OffsetFetchResponseV2(OffsetFetchResponseV1):
+    """An offset fetch response v2
+
+    Specification::
+
+    OffsetFetch Response (Version: 2) => [responses] error_code
+        responses => topic [partition_responses]
+            topic => STRING
+            partition_responses => partition offset metadata error_code
+                partition => INT32
+                offset => INT64
+                metadata => NULLABLE_STRING
+                error_code => INT16
+        error_code => INT16 (new since v1)
+    """
+    API_VERSION = 2
+
+    def __init__(self, buff):
+        fmt = '[S [iqSh ] ] h'
+        response = struct_helpers.unpack_from(fmt, buff, 0)
+        partition_responses, self.err = response
+        self._populate_partition_responses(partition_responses)
 
 
 ###
@@ -2412,7 +2484,7 @@ API_VERSIONS_080 = {
     6: ApiVersionsSpec(6, 0, 0),
     7: ApiVersionsSpec(7, 0, 0),
     8: ApiVersionsSpec(8, 0, 1),
-    9: ApiVersionsSpec(9, 0, 0),
+    9: ApiVersionsSpec(9, 0, 1),
     10: ApiVersionsSpec(10, 0, 0),
     11: ApiVersionsSpec(11, 0, 0),
     12: ApiVersionsSpec(12, 0, 0),
@@ -2431,7 +2503,7 @@ API_VERSIONS_090 = {
     6: ApiVersionsSpec(6, 0, 0),
     7: ApiVersionsSpec(7, 0, 0),
     8: ApiVersionsSpec(8, 0, 1),
-    9: ApiVersionsSpec(9, 0, 0),
+    9: ApiVersionsSpec(9, 0, 1),
     10: ApiVersionsSpec(10, 0, 0),
     11: ApiVersionsSpec(11, 0, 0),
     12: ApiVersionsSpec(12, 0, 0),
