@@ -120,8 +120,8 @@ class TestBalancedConsumer(unittest2.TestCase):
 
 class TestManagedBalancedConsumer(TestBalancedConsumer):
     @classmethod
-    def buildMockConsumer(self, num_partitions=10, num_participants=1, timeout=2000):
-        consumer_group = b'testgroup'
+    def buildMockConsumer(self, consumer_group=b'testgroup', num_partitions=10,
+                          num_participants=1, timeout=2000):
         topic = mock.Mock()
         topic.name = 'testtopic'
         topic.partitions = {}
