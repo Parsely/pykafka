@@ -172,7 +172,7 @@ class ManagedBalancedConsumer(BalancedConsumer):
 
         self._cluster = cluster
         try:
-            self._consumer_group = consumer_group.encode('ascii')
+            self._consumer_group = str(consumer_group).encode('ascii')
         except UnicodeEncodeError:
             raise UnicodeException("Consumer group name '{}' contains non-ascii "
                                    "characters".format(consumer_group))

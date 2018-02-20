@@ -56,7 +56,7 @@ class TopicDict(dict):
 
     def __getitem__(self, key):
         try:
-            key = key.encode('ascii')
+            key = str(key).encode('ascii')
         except UnicodeEncodeError:
             raise UnicodeException("Topic name '{}' contains non-ascii "
                                    "characters".format(key))

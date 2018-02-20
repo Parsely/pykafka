@@ -161,7 +161,7 @@ class SimpleConsumer(object):
         self._consumer_group = None
         if consumer_group:
             try:
-                self._consumer_group = consumer_group.encode('ascii')
+                self._consumer_group = str(consumer_group).encode('ascii')
             except UnicodeEncodeError:
                 raise UnicodeException("Consumer group name '{}' contains non-ascii "
                                        "characters".format(consumer_group))
