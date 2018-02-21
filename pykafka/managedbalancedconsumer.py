@@ -30,7 +30,7 @@ from .exceptions import (IllegalGeneration, RebalanceInProgress, NotCoordinatorF
                          UnicodeException)
 from .membershipprotocol import RangeProtocol
 from .protocol import MemberAssignment
-from .utils.compat import iterkeys
+from .utils.compat import iterkeys, get_string
 from .utils.error_handlers import valid_int
 
 log = logging.getLogger(__name__)
@@ -172,7 +172,7 @@ class ManagedBalancedConsumer(BalancedConsumer):
 
         self._cluster = cluster
         try:
-            self._consumer_group = str(consumer_group).encode('ascii')
+            self._consumer_group = get_string(consumer_group).encode('ascii')
         except UnicodeEncodeError:
             raise UnicodeException("Consumer group name '{}' contains non-ascii "
                                    "characters".format(consumer_group))

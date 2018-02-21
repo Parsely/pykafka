@@ -38,7 +38,7 @@ from .exceptions import (ERROR_CODES,
 from .protocol import (GroupCoordinatorRequest, GroupCoordinatorResponse,
                        API_VERSIONS_090, API_VERSIONS_080)
 from .topic import Topic
-from .utils.compat import iteritems, itervalues, range
+from .utils.compat import iteritems, itervalues, range, get_string
 
 log = logging.getLogger(__name__)
 
@@ -56,7 +56,7 @@ class TopicDict(dict):
 
     def __getitem__(self, key):
         try:
-            key = str(key).encode('ascii')
+            key = get_string(key).encode('ascii')
         except UnicodeEncodeError:
             raise UnicodeException("Topic name '{}' contains non-ascii "
                                    "characters".format(key))
