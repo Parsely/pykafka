@@ -3,6 +3,7 @@ from __future__ import division
 import os
 import platform
 import pytest
+import random
 import time
 import types
 import unittest2
@@ -27,6 +28,7 @@ from pykafka.protocol import Message
 from pykafka.test.utils import get_cluster, stop_cluster, retry
 from pykafka.common import CompressionType
 from pykafka.producer import OwnedBroker
+from pykafka.utils import serialize_utf8, deserialize_utf8
 from tests.pykafka import patch_subclass
 
 kafka_version = os.environ.get('KAFKA_VERSION', '0.8.0')
@@ -54,11 +56,12 @@ class ProducerIntegrationTests(unittest2.TestCase):
         topic = self.client.topics[self.topic_name]
         return topic.get_producer(use_rdkafka=self.USE_RDKAFKA, **kwargs)
 
-    def _get_consumer(self):
+    def _get_consumer(self, **kwargs):
         return self.client.topics[self.topic_name].get_simple_consumer(
             consumer_timeout_ms=1000,
             auto_offset_reset=OffsetType.LATEST,
             reset_offset_on_start=True,
+            **kwargs
         )
 
     def test_produce(self):
@@ -71,6 +74,15 @@ class ProducerIntegrationTests(unittest2.TestCase):
         prod = self._get_producer(sync=True, min_queued_messages=1)
         prod.produce(payload)
 
+        message = consumer.consume()
+        assert message.value == payload
+
+    def test_produce_utf8(self):
+        payload = u"{}".format(random.random())
+        consumer = self._get_consumer(deserializer=deserialize_utf8)
+        prod = self._get_producer(sync=True, min_queued_messages=1,
+                                  serializer=serialize_utf8)
+        prod.produce(payload)
         message = consumer.consume()
         assert message.value == payload
 
