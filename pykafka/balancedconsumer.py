@@ -35,7 +35,8 @@ except ImportError:
 from six import reraise
 
 from .common import OffsetType
-from .exceptions import KafkaException, PartitionOwnedError, ConsumerStoppedException
+from .exceptions import (KafkaException, PartitionOwnedError, ConsumerStoppedException,
+                         UnicodeException)
 from .membershipprotocol import RangeProtocol
 from .simpleconsumer import SimpleConsumer
 from .utils.compat import range, get_bytes, itervalues, iteritems, get_string
@@ -111,7 +112,7 @@ class BalancedConsumer(object):
             should join. Consumer group names are namespaced at the cluster level,
             meaning that two consumers consuming different topics with the same group name
             will be treated as part of the same group.
-        :type consumer_group: bytes
+        :type consumer_group: str
         :param fetch_message_max_bytes: The number of bytes of messages to
             attempt to fetch with each fetch request
         :type fetch_message_max_bytes: int
@@ -205,9 +206,11 @@ class BalancedConsumer(object):
         :type membership_protocol: :class:`pykafka.membershipprotocol.GroupMembershipProtocol`
         """
         self._cluster = cluster
-        if not isinstance(consumer_group, bytes):
-            raise TypeError("consumer_group must be a bytes object")
-        self._consumer_group = consumer_group
+        try:
+            self._consumer_group = get_string(consumer_group).encode('ascii')
+        except UnicodeEncodeError:
+            raise UnicodeException("Consumer group name '{}' contains non-ascii "
+                                   "characters".format(consumer_group))
         self._topic = topic
 
         self._auto_commit_enable = auto_commit_enable

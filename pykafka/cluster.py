@@ -33,11 +33,12 @@ from .exceptions import (ERROR_CODES,
                          NoBrokersAvailableError,
                          SocketDisconnectedError,
                          LeaderNotFoundError,
-                         LeaderNotAvailable)
+                         LeaderNotAvailable,
+                         UnicodeException)
 from .protocol import (GroupCoordinatorRequest, GroupCoordinatorResponse,
                        API_VERSIONS_090, API_VERSIONS_080)
 from .topic import Topic
-from .utils.compat import iteritems, itervalues, range
+from .utils.compat import iteritems, itervalues, range, get_string
 
 log = logging.getLogger(__name__)
 
@@ -54,9 +55,11 @@ class TopicDict(dict):
         return [self[key] for key in self]
 
     def __getitem__(self, key):
-        if not isinstance(key, bytes):
-            raise TypeError("TopicDict.__getitem__ accepts a bytes object, but it "
-                            "got '%s'", type(key))
+        try:
+            key = get_string(key).encode('ascii')
+        except UnicodeEncodeError:
+            raise UnicodeException("Topic name '{}' contains non-ascii "
+                                   "characters".format(key))
         if self._should_exclude_topic(key):
             raise KeyError("You have configured KafkaClient/Cluster to hide "
                            "double-underscored, internal topics")

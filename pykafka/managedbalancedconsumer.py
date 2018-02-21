@@ -26,10 +26,11 @@ import weakref
 from .balancedconsumer import BalancedConsumer
 from .common import OffsetType
 from .exceptions import (IllegalGeneration, RebalanceInProgress, NotCoordinatorForGroup,
-                         GroupCoordinatorNotAvailable, ERROR_CODES, GroupLoadInProgress)
+                         GroupCoordinatorNotAvailable, ERROR_CODES, GroupLoadInProgress,
+                         UnicodeException)
 from .membershipprotocol import RangeProtocol
 from .protocol import MemberAssignment
-from .utils.compat import iterkeys
+from .utils.compat import iterkeys, get_string
 from .utils.error_handlers import valid_int
 
 log = logging.getLogger(__name__)
@@ -83,7 +84,7 @@ class ManagedBalancedConsumer(BalancedConsumer):
             should join. Consumer group names are namespaced at the cluster level,
             meaning that two consumers consuming different topics with the same group name
             will be treated as part of the same group.
-        :type consumer_group: bytes
+        :type consumer_group: str
         :param fetch_message_max_bytes: The number of bytes of messages to
             attempt to fetch with each fetch request
         :type fetch_message_max_bytes: int
@@ -170,9 +171,11 @@ class ManagedBalancedConsumer(BalancedConsumer):
         """
 
         self._cluster = cluster
-        if not isinstance(consumer_group, bytes):
-            raise TypeError("consumer_group must be a bytes object")
-        self._consumer_group = consumer_group
+        try:
+            self._consumer_group = get_string(consumer_group).encode('ascii')
+        except UnicodeEncodeError:
+            raise UnicodeException("Consumer group name '{}' contains non-ascii "
+                                   "characters".format(consumer_group))
         self._topic = topic
 
         self._auto_commit_enable = auto_commit_enable

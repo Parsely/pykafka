@@ -39,7 +39,7 @@ from .exceptions import (UnknownError, OffsetOutOfRangeError, UnknownTopicOrPart
                          ConsumerStoppedException, KafkaException,
                          NotLeaderForPartition, OffsetRequestFailedError,
                          RequestTimedOut, UnknownMemberId, RebalanceInProgress,
-                         IllegalGeneration, ERROR_CODES)
+                         IllegalGeneration, ERROR_CODES, UnicodeException)
 from .protocol import (PartitionFetchRequest, PartitionOffsetCommitRequest,
                        PartitionOffsetFetchRequest, PartitionOffsetRequest)
 from .utils.error_handlers import (handle_partition_responses, raise_error,
@@ -89,7 +89,7 @@ class SimpleConsumer(object):
         :type cluster: :class:`pykafka.cluster.Cluster`
         :param consumer_group: The name of the consumer group this consumer
             should use for offset committing and fetching.
-        :type consumer_group: bytes
+        :type consumer_group: str
         :param partitions: Existing partitions to which to connect
         :type partitions: Iterable of :class:`pykafka.partition.Partition`
         :param fetch_message_max_bytes: The number of bytes of messages to
@@ -158,9 +158,13 @@ class SimpleConsumer(object):
         """
         self._running = False
         self._cluster = cluster
-        if not (isinstance(consumer_group, bytes) or consumer_group is None):
-            raise TypeError("consumer_group must be a bytes object")
-        self._consumer_group = consumer_group
+        self._consumer_group = None
+        if consumer_group:
+            try:
+                self._consumer_group = get_string(consumer_group).encode('ascii')
+            except UnicodeEncodeError:
+                raise UnicodeException("Consumer group name '{}' contains non-ascii "
+                                       "characters".format(consumer_group))
         self._topic = topic
         self._fetch_message_max_bytes = valid_int(fetch_message_max_bytes)
         self._fetch_min_bytes = valid_int(fetch_min_bytes)
