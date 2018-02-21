@@ -155,6 +155,14 @@ class Producer(object):
             with kafka after __init__ is complete. If false, communication
             can be started with `start()`.
         :type auto_start: bool
+        :param serializer: A function defining how to serialize messages to be sent
+            to Kafka. A function with the signature d(value, partition_key) that
+            returns a tuple of (serialized_value, serialized_partition_key). The
+            arguments passed to this function are a message's value and partition key,
+            and the returned data should be these fields transformed according to the
+            client code's serialization logic.  See `pykafka.utils.__init__` for stock
+            implemtations.
+        :type serializer: function
         """
         self._cluster = cluster
         self._protocol_version = msg_protocol_version(cluster._broker_version)

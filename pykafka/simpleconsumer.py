@@ -156,6 +156,14 @@ class SimpleConsumer(object):
         :param consumer_id: The identifying string to use for this consumer on group
             requests
         :type consumer_id: bytes
+        :param deserializer: A function defining how to deserialize messages returned
+            from Kafka. A function with the signature d(value, partition_key) that
+            returns a tuple of (deserialized_value, deserialized_partition_key). The
+            arguments passed to this function are the bytes representations of a
+            message's value and partition key, and the returned data should be these
+            fields transformed according to the client code's serialization logic.
+            See `pykafka.utils.__init__` for stock implemtations.
+        :type deserializer: function
         """
         self._running = False
         self._cluster = cluster
