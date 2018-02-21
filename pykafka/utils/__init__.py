@@ -29,6 +29,10 @@ class Serializable(object):
 
 
 def serialize_utf8(value, partition_key):
+    """A serializer accepting bytes or str arguments and returning utf-8 encoded bytes
+
+    Can be used as `pykafka.producer.Producer(serializer=serialize_utf8)`
+    """
     if value is not None and type(value) != bytes:
         # allow UnicodeError to be raised here if the encoding fails
         value = value.encode('utf-8')
@@ -38,6 +42,11 @@ def serialize_utf8(value, partition_key):
 
 
 def deserialize_utf8(value, partition_key):
+    """A deserializer accepting bytes arguments and returning utf-8 strings
+
+    Can be used as `pykafka.simpleconsumer.SimpleConsumer(deserializer=deserialize_utf8)`,
+    or similarly in other consumer classes
+    """
     # allow UnicodeError to be raised here if the decoding fails
     if value is not None:
         value = value.decode('utf-8')
