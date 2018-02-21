@@ -49,7 +49,8 @@ class RdKafkaProducer(Producer):
                  max_request_size=1000012,
                  sync=False,
                  delivery_reports=False,
-                 auto_start=True):
+                 auto_start=True,
+                 serializer=None):
         callargs = {k: v for k, v in vars().items()
                     if k not in ("self", "__class__")}
         self._broker_version = cluster._broker_version
