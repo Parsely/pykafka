@@ -73,7 +73,8 @@ class Producer(object):
                  max_request_size=1000012,
                  sync=False,
                  delivery_reports=False,
-                 auto_start=True):
+                 auto_start=True,
+                 serializer=None):
         """Instantiate a new AsyncProducer
 
         :param cluster: The cluster to which to connect
@@ -182,6 +183,7 @@ class Producer(object):
                                   if delivery_reports or self._synchronous
                                   else _DeliveryReportNone())
         self._auto_start = auto_start
+        self._serializer = serializer
         self._running = False
         self._update_lock = self._cluster.handler.Lock()
         if self._auto_start:
@@ -317,16 +319,20 @@ class Producer(object):
         :return: The :class:`pykafka.protocol.Message` instance that was
             added to the internal message queue
         """
-        if partition_key is not None and type(partition_key) is not bytes:
-            raise TypeError("Producer.produce accepts a bytes object as partition_key, "
-                            "but it got '%s'", type(partition_key))
-        if message is not None and type(message) is not bytes:
-            raise TypeError("Producer.produce accepts a bytes object as message, but it "
-                            "got '%s'", type(message))
+        if self._serializer is None:
+            if partition_key is not None and type(partition_key) is not bytes:
+                raise TypeError("Producer.produce accepts a bytes object as partition_key, "
+                                "but it got '%s'", type(partition_key))
+            if message is not None and type(message) is not bytes:
+                raise TypeError("Producer.produce accepts a bytes object as message, but it "
+                                "got '%s'", type(message))
         if timestamp is not None and self._protocol_version < 1:
             raise RuntimeError("Producer.produce got a timestamp with protocol 0")
         if not self._running:
             raise ProducerStoppedException()
+        if self._serializer is not None:
+            message, partition_key = self._serializer(message, partition_key)
+
         partitions = list(self._topic.partitions.values())
         partition_id = self._partitioner(partitions, partition_key).id
 

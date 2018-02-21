@@ -28,6 +28,24 @@ class Serializable(object):
         raise NotImplementedError()
 
 
+def serialize_utf8(value, partition_key):
+    if value is not None and type(value) != bytes:
+        # allow UnicodeError to be raised here if the encoding fails
+        value = value.encode('utf-8')
+    if partition_key is not None and type(partition_key) != bytes:
+        partition_key = partition_key.encode('utf-8')
+    return value, partition_key
+
+
+def deserialize_utf8(value, partition_key):
+    # allow UnicodeError to be raised here if the decoding fails
+    if value is not None:
+        value = value.decode('utf-8')
+    if partition_key is not None:
+        partition_key = partition_key.decode('utf-8')
+    return value, partition_key
+
+
 VERSIONS_CACHE = {}
 
 

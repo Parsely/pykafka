@@ -74,7 +74,8 @@ class SimpleConsumer(object):
                  reset_offset_on_start=False,
                  compacted_topic=False,
                  generation_id=-1,
-                 consumer_id=b''):
+                 consumer_id=b'',
+                 deserializer=None):
         """Create a SimpleConsumer.
 
         Settings and default values are taken from the Scala
@@ -187,6 +188,7 @@ class SimpleConsumer(object):
         self._generation_id = valid_int(generation_id, allow_zero=True,
                                         allow_negative=True)
         self._consumer_id = consumer_id
+        self._deserializer = deserializer
 
         # incremented for any message arrival from any partition
         # the initial value is 0 (no messages waiting)
@@ -468,6 +470,9 @@ class SimpleConsumer(object):
             if not self._slot_available.is_set():
                 self._slot_available.set()
 
+        if self._deserializer is not None:
+            ret.value, ret.partition_key = self._deserializer(ret.value,
+                                                              ret.partition_key)
         return ret
 
     def _auto_commit(self):
