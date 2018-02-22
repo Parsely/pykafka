@@ -73,7 +73,8 @@ class Producer(object):
                  max_request_size=1000012,
                  sync=False,
                  delivery_reports=False,
-                 auto_start=True):
+                 auto_start=True,
+                 serializer=None):
         """Instantiate a new AsyncProducer
 
         :param cluster: The cluster to which to connect
@@ -154,6 +155,14 @@ class Producer(object):
             with kafka after __init__ is complete. If false, communication
             can be started with `start()`.
         :type auto_start: bool
+        :param serializer: A function defining how to serialize messages to be sent
+            to Kafka. A function with the signature d(value, partition_key) that
+            returns a tuple of (serialized_value, serialized_partition_key). The
+            arguments passed to this function are a message's value and partition key,
+            and the returned data should be these fields transformed according to the
+            client code's serialization logic.  See `pykafka.utils.__init__` for stock
+            implemtations.
+        :type serializer: function
         """
         self._cluster = cluster
         self._protocol_version = msg_protocol_version(cluster._broker_version)
@@ -182,6 +191,7 @@ class Producer(object):
                                   if delivery_reports or self._synchronous
                                   else _DeliveryReportNone())
         self._auto_start = auto_start
+        self._serializer = serializer
         self._running = False
         self._update_lock = self._cluster.handler.Lock()
         if self._auto_start:
@@ -317,16 +327,20 @@ class Producer(object):
         :return: The :class:`pykafka.protocol.Message` instance that was
             added to the internal message queue
         """
-        if partition_key is not None and type(partition_key) is not bytes:
-            raise TypeError("Producer.produce accepts a bytes object as partition_key, "
-                            "but it got '%s'", type(partition_key))
-        if message is not None and type(message) is not bytes:
-            raise TypeError("Producer.produce accepts a bytes object as message, but it "
-                            "got '%s'", type(message))
+        if self._serializer is None:
+            if partition_key is not None and type(partition_key) is not bytes:
+                raise TypeError("Producer.produce accepts a bytes object as partition_key, "
+                                "but it got '%s'", type(partition_key))
+            if message is not None and type(message) is not bytes:
+                raise TypeError("Producer.produce accepts a bytes object as message, but it "
+                                "got '%s'", type(message))
         if timestamp is not None and self._protocol_version < 1:
             raise RuntimeError("Producer.produce got a timestamp with protocol 0")
         if not self._running:
             raise ProducerStoppedException()
+        if self._serializer is not None:
+            message, partition_key = self._serializer(message, partition_key)
+
         partitions = list(self._topic.partitions.values())
         partition_id = self._partitioner(partitions, partition_key).id
 

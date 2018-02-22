@@ -73,7 +73,8 @@ class ManagedBalancedConsumer(BalancedConsumer):
                  use_rdkafka=False,
                  compacted_topic=True,
                  heartbeat_interval_ms=3000,
-                 membership_protocol=RangeProtocol):
+                 membership_protocol=RangeProtocol,
+                 deserializer=None):
         """Create a ManagedBalancedConsumer instance
 
         :param topic: The topic this consumer should consume
@@ -168,6 +169,14 @@ class ManagedBalancedConsumer(BalancedConsumer):
         :param membership_protocol: The group membership protocol to which this consumer
             should adhere
         :type membership_protocol: :class:`pykafka.membershipprotocol.GroupMembershipProtocol`
+        :param deserializer: A function defining how to deserialize messages returned
+            from Kafka. A function with the signature d(value, partition_key) that
+            returns a tuple of (deserialized_value, deserialized_partition_key). The
+            arguments passed to this function are the bytes representations of a
+            message's value and partition key, and the returned data should be these
+            fields transformed according to the client code's serialization logic.
+            See `pykafka.utils.__init__` for stock implemtations.
+        :type deserializer: function
         """
 
         self._cluster = cluster
@@ -199,6 +208,7 @@ class ManagedBalancedConsumer(BalancedConsumer):
         self._membership_protocol = membership_protocol
         self._membership_protocol.metadata.topic_names = [self._topic.name]
         self._heartbeat_interval_ms = valid_int(heartbeat_interval_ms)
+        self._deserializer = deserializer
         if use_rdkafka is True:
             raise ImportError("use_rdkafka is not available for {}".format(
                 self.__class__.__name__))

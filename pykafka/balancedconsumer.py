@@ -101,7 +101,8 @@ class BalancedConsumer(object):
                  post_rebalance_callback=None,
                  use_rdkafka=False,
                  compacted_topic=False,
-                 membership_protocol=RangeProtocol):
+                 membership_protocol=RangeProtocol,
+                 deserializer=None):
         """Create a BalancedConsumer instance
 
         :param topic: The topic this consumer should consume
@@ -204,6 +205,14 @@ class BalancedConsumer(object):
         :param membership_protocol: The group membership protocol to which this consumer
             should adhere
         :type membership_protocol: :class:`pykafka.membershipprotocol.GroupMembershipProtocol`
+        :param deserializer: A function defining how to deserialize messages returned
+            from Kafka. A function with the signature d(value, partition_key) that
+            returns a tuple of (deserialized_value, deserialized_partition_key). The
+            arguments passed to this function are the bytes representations of a
+            message's value and partition key, and the returned data should be these
+            fields transformed according to the client code's serialization logic.
+            See `pykafka.utils.__init__` for stock implemtations.
+        :type deserializer: function
         """
         self._cluster = cluster
         try:
@@ -238,6 +247,7 @@ class BalancedConsumer(object):
         self._worker_exception = None
         self._is_compacted_topic = compacted_topic
         self._membership_protocol = membership_protocol
+        self._deserializer = deserializer
 
         if not rdkafka and use_rdkafka:
             raise ImportError("use_rdkafka requires rdkafka to be installed")
@@ -436,7 +446,8 @@ class BalancedConsumer(object):
             auto_start=start,
             compacted_topic=self._is_compacted_topic,
             generation_id=self._generation_id,
-            consumer_id=self._consumer_id
+            consumer_id=self._consumer_id,
+            deserializer=self._deserializer
         )
 
     def _get_participants(self):
