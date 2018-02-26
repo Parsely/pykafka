@@ -517,13 +517,17 @@ class Producer(object):
                         self._produce(msg)
 
     def _wait_all(self):
-        """Block until all pending messages are sent
+        """Block until all pending messages are sent or until pending_timeout_ms
 
         "Pending" messages are those that have been used in calls to `produce`
-        and have not yet been dequeued and sent to the broker
+        and have not yet been acknowledged in a response from the broker
         """
-        log.info("Blocking until all messages are sent")
-        while any(q.message_is_pending() for q in itervalues(self._owned_brokers)):
+        log.info("Blocking until all messages are sent or until pending_timeout_ms")
+        start_time = time.time() * 1000
+        check_time = time.time() * 1000
+        while any(q.message_is_pending() for q in itervalues(self._owned_brokers)) and \
+                check_time - start_time < self._pending_timeout_ms:
+            check_time = time.time() * 1000
             self._cluster.handler.sleep(.3)
             self._raise_worker_exceptions()
 
