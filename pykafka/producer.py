@@ -24,6 +24,7 @@ import platform
 import struct
 import sys
 import threading
+import time
 import weakref
 
 from six import reraise
@@ -35,6 +36,7 @@ from .exceptions import (
     InvalidMessageSize,
     MessageSizeTooLarge,
     NotLeaderForPartition,
+    ProduceFailureError,
     ProducerQueueFullError,
     ProducerStoppedException,
     SocketDisconnectedError,
@@ -73,6 +75,7 @@ class Producer(object):
                  max_request_size=1000012,
                  sync=False,
                  delivery_reports=False,
+                 pending_timeout_ms=5 * 1000,
                  auto_start=True,
                  serializer=None):
         """Instantiate a new AsyncProducer
@@ -102,7 +105,7 @@ class Producer(object):
             before a request is considered complete
         :type required_acks: int
         :param ack_timeout_ms: The amount of time (in milliseconds) to wait for
-            acknowledgment of a produce request.
+            acknowledgment of a produce request on the server.
         :type ack_timeout_ms: int
         :param max_queued_messages: The maximum number of messages the producer
             can have waiting to be sent to the broker. If messages are sent
@@ -151,6 +154,13 @@ class Producer(object):
             `get_delivery_report()` is not called regularly with this setting enabled,
             memory usage will grow unbounded. This setting is ignored when `sync=True`.
         :type delivery_reports: bool
+        :param pending_timeout_ms: The amount of time (in milliseconds) to wait for
+            delivery reports to be returned from the broker during a `produce()` call.
+            Also, the time in ms to wait during a `stop()` call for all messages to be
+            marked as delivered. Differs from `ack_timeout_ms` in that `ack_timeout_ms`
+            is a value sent to the broker to control the broker-side timeout, while
+            `pending_timeout_ms` is used internally by pykafka and not sent to the broker.
+        :type pending_timeout_ms:
         :param auto_start: Whether the producer should begin communicating
             with kafka after __init__ is complete. If false, communication
             can be started with `start()`.
@@ -190,6 +200,7 @@ class Producer(object):
         self._delivery_reports = (_DeliveryReportQueue(self._cluster.handler)
                                   if delivery_reports or self._synchronous
                                   else _DeliveryReportNone())
+        self._pending_timeout_ms = pending_timeout_ms
         self._auto_start = auto_start
         self._serializer = serializer
         self._running = False
@@ -355,7 +366,11 @@ class Producer(object):
         self._produce(msg)
 
         if self._synchronous:
-            while True:
+            req_time = time.time() * 1000
+            attempt_time = time.time() * 1000
+            reported_msg = None
+            while attempt_time - req_time < self._pending_timeout_ms:
+                attempt_time = time.time() * 1000
                 self._raise_worker_exceptions()
                 self._cluster.handler.sleep()
                 try:
@@ -363,7 +378,8 @@ class Producer(object):
                     break
                 except Empty:
                     continue
-            assert reported_msg is msg
+            if reported_msg is not msg:
+                raise ProduceFailureError("Delivery report not received after timeout")
             if exc is not None:
                 raise exc
         self._raise_worker_exceptions()
