@@ -1,5 +1,6 @@
 from __future__ import division
 
+import mock
 import os
 import platform
 import pytest
@@ -22,7 +23,8 @@ except ImportError:
 
 from pykafka import KafkaClient
 from pykafka.common import OffsetType
-from pykafka.exceptions import MessageSizeTooLarge, ProducerQueueFullError
+from pykafka.exceptions import (MessageSizeTooLarge, ProducerQueueFullError,
+                                ProduceFailureError)
 from pykafka.partitioners import hashing_partitioner
 from pykafka.protocol import Message
 from pykafka.test.utils import get_cluster, stop_cluster, retry
@@ -101,6 +103,17 @@ class ProducerIntegrationTests(unittest2.TestCase):
             p._send_request = types.MethodType(stub_send_request, p)
             with self.assertRaises(ZeroDivisionError):
                 p.produce(b"test")
+
+    def test_sync_produce_doesnt_hang(self):
+        producer = self._get_producer(sync=True)
+
+        def stub_mark(w, x, y, z):
+            return None
+        # simulate delivery report being lost
+        producer._mark_as_delivered = types.MethodType(stub_mark, producer)
+        producer._delivery_reports = mock.MagicMock()
+        with self.assertRaises(ProduceFailureError):
+            producer.produce(b"test")
 
     def test_produce_hashing_partitioner(self):
         # unique bytes, just to be absolutely sure we're not fetching data

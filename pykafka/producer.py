@@ -24,6 +24,7 @@ import platform
 import struct
 import sys
 import threading
+import time
 import weakref
 
 from six import reraise
@@ -35,6 +36,7 @@ from .exceptions import (
     InvalidMessageSize,
     MessageSizeTooLarge,
     NotLeaderForPartition,
+    ProduceFailureError,
     ProducerQueueFullError,
     ProducerStoppedException,
     SocketDisconnectedError,
@@ -73,6 +75,7 @@ class Producer(object):
                  max_request_size=1000012,
                  sync=False,
                  delivery_reports=False,
+                 pending_timeout_ms=5 * 1000,
                  auto_start=True,
                  serializer=None):
         """Instantiate a new AsyncProducer
@@ -102,7 +105,7 @@ class Producer(object):
             before a request is considered complete
         :type required_acks: int
         :param ack_timeout_ms: The amount of time (in milliseconds) to wait for
-            acknowledgment of a produce request.
+            acknowledgment of a produce request on the server.
         :type ack_timeout_ms: int
         :param max_queued_messages: The maximum number of messages the producer
             can have waiting to be sent to the broker. If messages are sent
@@ -151,6 +154,14 @@ class Producer(object):
             `get_delivery_report()` is not called regularly with this setting enabled,
             memory usage will grow unbounded. This setting is ignored when `sync=True`.
         :type delivery_reports: bool
+        :param pending_timeout_ms: The amount of time (in milliseconds) to wait for
+            delivery reports to be returned from the broker during a `produce()` call.
+            Also, the time in ms to wait during a `stop()` call for all messages to be
+            marked as delivered. -1 indicates that these calls should block indefinitely.
+            Differs from `ack_timeout_ms` in that `ack_timeout_ms` is a value sent to the
+            broker to control the broker-side timeout, while `pending_timeout_ms` is used
+            internally by pykafka and not sent to the broker.
+        :type pending_timeout_ms:
         :param auto_start: Whether the producer should begin communicating
             with kafka after __init__ is complete. If false, communication
             can be started with `start()`.
@@ -190,6 +201,7 @@ class Producer(object):
         self._delivery_reports = (_DeliveryReportQueue(self._cluster.handler)
                                   if delivery_reports or self._synchronous
                                   else _DeliveryReportNone())
+        self._pending_timeout_ms = pending_timeout_ms
         self._auto_start = auto_start
         self._serializer = serializer
         self._running = False
@@ -311,6 +323,14 @@ class Producer(object):
                 for queue_reader in queue_readers:
                     queue_reader.join()
 
+    def _produce_has_timed_out(self, start_time):
+        """Indicates whether enough time has passed since start_time for a `produce()`
+            call to timeout
+        """
+        if self._pending_timeout_ms == -1:
+            return False
+        return time.time() * 1000 - start_time > self._pending_timeout_ms
+
     def produce(self, message, partition_key=None, timestamp=None):
         """Produce a message.
 
@@ -355,7 +375,9 @@ class Producer(object):
         self._produce(msg)
 
         if self._synchronous:
-            while True:
+            req_time = time.time() * 1000
+            reported_msg = None
+            while not self._produce_has_timed_out(req_time):
                 self._raise_worker_exceptions()
                 self._cluster.handler.sleep()
                 try:
@@ -363,7 +385,10 @@ class Producer(object):
                     break
                 except Empty:
                     continue
-            assert reported_msg is msg
+                except ValueError:
+                    raise ProduceFailureError("Error retrieving delivery report")
+            if reported_msg is not msg:
+                raise ProduceFailureError("Delivery report not received after timeout")
             if exc is not None:
                 raise exc
         self._raise_worker_exceptions()
@@ -402,6 +427,12 @@ class Producer(object):
             else:
                 success = False
 
+    def _mark_as_delivered(self, owned_broker, message_batch, req):
+        owned_broker.increment_messages_pending(-1 * len(message_batch))
+        req.delivered += len(message_batch)
+        for msg in message_batch:
+            self._delivery_reports.put(msg)
+
     def _send_request(self, message_batch, owned_broker):
         """Send the produce request to the broker and handle the response.
 
@@ -431,16 +462,10 @@ class Producer(object):
                 if p_id == partition_id
             )
 
-        def mark_as_delivered(message_batch):
-            owned_broker.increment_messages_pending(-1 * len(message_batch))
-            req.delivered += len(message_batch)
-            for msg in message_batch:
-                self._delivery_reports.put(msg)
-
         try:
             response = owned_broker.broker.produce_messages(req)
             if self._required_acks == 0:  # and thus, `response` is None
-                mark_as_delivered(message_batch)
+                self._mark_as_delivered(owned_broker, message_batch, req)
                 return
 
             # Kafka either atomically appends or rejects whole MessageSets, so
@@ -453,7 +478,7 @@ class Producer(object):
                         messages = req.msets[topic][partition].messages
                         for i, message in enumerate(messages):
                             message.offset = presponse.offset + i
-                        mark_as_delivered(messages)
+                        self._mark_as_delivered(owned_broker, messages, req)
                         continue  # All's well
                     if presponse.err == NotLeaderForPartition.ERROR_CODE:
                         # Update cluster metadata to get new leader
@@ -501,13 +526,15 @@ class Producer(object):
                         self._produce(msg)
 
     def _wait_all(self):
-        """Block until all pending messages are sent
+        """Block until all pending messages are sent or until pending_timeout_ms
 
         "Pending" messages are those that have been used in calls to `produce`
-        and have not yet been dequeued and sent to the broker
+        and have not yet been acknowledged in a response from the broker
         """
-        log.info("Blocking until all messages are sent")
-        while any(q.message_is_pending() for q in itervalues(self._owned_brokers)):
+        log.info("Blocking until all messages are sent or until pending_timeout_ms")
+        start_time = time.time() * 1000
+        while any(q.message_is_pending() for q in itervalues(self._owned_brokers)) and \
+                not self._produce_has_timed_out(start_time):
             self._cluster.handler.sleep(.3)
             self._raise_worker_exceptions()
 
