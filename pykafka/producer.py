@@ -425,6 +425,12 @@ class Producer(object):
             else:
                 success = False
 
+    def _mark_as_delivered(self, owned_broker, message_batch, req):
+        owned_broker.increment_messages_pending(-1 * len(message_batch))
+        req.delivered += len(message_batch)
+        for msg in message_batch:
+            self._delivery_reports.put(msg)
+
     def _send_request(self, message_batch, owned_broker):
         """Send the produce request to the broker and handle the response.
 
@@ -454,16 +460,10 @@ class Producer(object):
                 if p_id == partition_id
             )
 
-        def mark_as_delivered(message_batch):
-            owned_broker.increment_messages_pending(-1 * len(message_batch))
-            req.delivered += len(message_batch)
-            for msg in message_batch:
-                self._delivery_reports.put(msg)
-
         try:
             response = owned_broker.broker.produce_messages(req)
             if self._required_acks == 0:  # and thus, `response` is None
-                mark_as_delivered(message_batch)
+                self._mark_as_delivered(owned_broker, message_batch, req)
                 return
 
             # Kafka either atomically appends or rejects whole MessageSets, so
@@ -476,7 +476,7 @@ class Producer(object):
                         messages = req.msets[topic][partition].messages
                         for i, message in enumerate(messages):
                             message.offset = presponse.offset + i
-                        mark_as_delivered(messages)
+                        self._mark_as_delivered(owned_broker, messages, req)
                         continue  # All's well
                     if presponse.err == NotLeaderForPartition.ERROR_CODE:
                         # Update cluster metadata to get new leader
