@@ -1,5 +1,6 @@
 from __future__ import division
 
+import mock
 import os
 import platform
 import pytest
@@ -110,6 +111,7 @@ class ProducerIntegrationTests(unittest2.TestCase):
             return None
         # simulate delivery report being lost
         producer._mark_as_delivered = types.MethodType(stub_mark, producer)
+        producer._delivery_reports = mock.MagicMock()
         with self.assertRaises(ProduceFailureError):
             producer.produce(b"test")
 

@@ -383,7 +383,7 @@ class Producer(object):
                 try:
                     reported_msg, exc = self.get_delivery_report(timeout=1)
                     break
-                except Empty:
+                except (Empty, ValueError):
                     continue
             if reported_msg is not msg:
                 raise ProduceFailureError("Delivery report not received after timeout")
