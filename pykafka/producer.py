@@ -157,9 +157,10 @@ class Producer(object):
         :param pending_timeout_ms: The amount of time (in milliseconds) to wait for
             delivery reports to be returned from the broker during a `produce()` call.
             Also, the time in ms to wait during a `stop()` call for all messages to be
-            marked as delivered. Differs from `ack_timeout_ms` in that `ack_timeout_ms`
-            is a value sent to the broker to control the broker-side timeout, while
-            `pending_timeout_ms` is used internally by pykafka and not sent to the broker.
+            marked as delivered. -1 indicates that these calls should block indefinitely.
+            Differs from `ack_timeout_ms` in that `ack_timeout_ms` is a value sent to the
+            broker to control the broker-side timeout, while `pending_timeout_ms` is used
+            internally by pykafka and not sent to the broker.
         :type pending_timeout_ms:
         :param auto_start: Whether the producer should begin communicating
             with kafka after __init__ is complete. If false, communication
@@ -322,6 +323,14 @@ class Producer(object):
                 for queue_reader in queue_readers:
                     queue_reader.join()
 
+    def _produce_has_timed_out(self, start_time):
+        """Indicates whether enough time has passed since start_time for a `produce()`
+            call to timeout
+        """
+        if self._pending_timeout_ms == -1:
+            return False
+        return time.time() * 1000 - start_time > self._pending_timeout_ms
+
     def produce(self, message, partition_key=None, timestamp=None):
         """Produce a message.
 
@@ -367,10 +376,8 @@ class Producer(object):
 
         if self._synchronous:
             req_time = time.time() * 1000
-            attempt_time = time.time() * 1000
             reported_msg = None
-            while attempt_time - req_time < self._pending_timeout_ms:
-                attempt_time = time.time() * 1000
+            while not self._produce_has_timed_out(req_time):
                 self._raise_worker_exceptions()
                 self._cluster.handler.sleep()
                 try:
@@ -524,10 +531,8 @@ class Producer(object):
         """
         log.info("Blocking until all messages are sent or until pending_timeout_ms")
         start_time = time.time() * 1000
-        check_time = time.time() * 1000
         while any(q.message_is_pending() for q in itervalues(self._owned_brokers)) and \
-                check_time - start_time < self._pending_timeout_ms:
-            check_time = time.time() * 1000
+                not self._produce_has_timed_out(start_time):
             self._cluster.handler.sleep(.3)
             self._raise_worker_exceptions()
 
