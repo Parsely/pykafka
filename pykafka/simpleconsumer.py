@@ -864,6 +864,7 @@ class OwnedPartition(object):
         self.last_offset_consumed = -1
         self.next_offset = 0
         self.fetch_lock = handler.RLock() if handler is not None else threading.RLock()
+        self.set_consumer_id(self._consumer_id)
 
     def set_consumer_id(self, value):
         self._consumer_id = value
