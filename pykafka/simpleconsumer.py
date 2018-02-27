@@ -195,7 +195,7 @@ class SimpleConsumer(object):
         self._auto_start = auto_start
         self._reset_offset_on_start = reset_offset_on_start
         self._is_compacted_topic = compacted_topic
-        self._generation_id = 0
+        self._generation_id = -1
         self._consumer_id = b''
         self._deserializer = deserializer
 
