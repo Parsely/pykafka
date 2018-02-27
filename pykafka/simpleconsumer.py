@@ -197,7 +197,7 @@ class SimpleConsumer(object):
         self._is_compacted_topic = compacted_topic
         self._generation_id = valid_int(generation_id, allow_zero=True,
                                         allow_negative=True)
-        self._consumer_id = consumer_id
+        self._consumer_id = b''
         self._deserializer = deserializer
 
         # incremented for any message arrival from any partition
@@ -217,16 +217,14 @@ class SimpleConsumer(object):
             self._partitions = {p: OwnedPartition(p,
                                                   self._cluster.handler,
                                                   self._messages_arrived,
-                                                  self._is_compacted_topic,
-                                                  self._consumer_id)
+                                                  self._is_compacted_topic)
                                 for p in partitions}
         else:
             self._partitions = {topic.partitions[k]:
                                 OwnedPartition(p,
                                                self._cluster.handler,
                                                self._messages_arrived,
-                                               self._is_compacted_topic,
-                                               self._consumer_id)
+                                               self._is_compacted_topic)
                                 for k, p in iteritems(topic.partitions)}
         self._partitions_by_id = {p.partition.id: p
                                   for p in itervalues(self._partitions)}
@@ -238,6 +236,16 @@ class SimpleConsumer(object):
 
         if self._auto_start:
             self.start()
+
+    @property
+    def consumer_id(self):
+        return self._consumer_id
+
+    @consumer_id.setter
+    def consumer_id(self, value):
+        self._consumer_id = value
+        for op in itervalues(self._partitions):
+            op.set_consumer_id(self._consumer_id)
 
     def __repr__(self):
         return "<{module}.{name} at {id_} (consumer_group={group})>".format(
@@ -856,6 +864,9 @@ class OwnedPartition(object):
         self.last_offset_consumed = -1
         self.next_offset = 0
         self.fetch_lock = handler.RLock() if handler is not None else threading.RLock()
+
+    def set_consumer_id(self, value):
+        self._consumer_id = value
         # include consumer id in offset metadata for debugging
         self._offset_metadata = {
             'consumer_id': get_string(self._consumer_id),
