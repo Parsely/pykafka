@@ -445,10 +445,10 @@ class BalancedConsumer(object):
             reset_offset_on_start=reset_offset_on_start,
             auto_start=False,
             compacted_topic=self._is_compacted_topic,
-            generation_id=self._generation_id,
             deserializer=self._deserializer
         )
         cns.consumer_id = self._consumer_id
+        cns.generation_id = self._generation_id
         if start:
             cns.start()
         return cns

@@ -247,6 +247,14 @@ class SimpleConsumer(object):
         for op in itervalues(self._partitions):
             op.set_consumer_id(self._consumer_id)
 
+    @property
+    def generation_id(self):
+        return self._generation_id
+
+    @generation_id.setter
+    def generation_id(self, value):
+        self._generation_id = value
+
     def __repr__(self):
         return "<{module}.{name} at {id_} (consumer_group={group})>".format(
             module=self.__class__.__module__,
