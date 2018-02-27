@@ -376,13 +376,13 @@ class BalancedConsumer(object):
         self._zookeeper = KazooClient(zookeeper_connect, **kazoo_kwargs)
         self._zookeeper.start()
 
-    def _setup_internal_consumer(self, partitions=None):
+    def _setup_internal_consumer(self, partitions=None, start=True):
         """Instantiate an internal SimpleConsumer instance"""
         if partitions is None:
             partitions = []
         # Only re-create internal consumer if something changed.
         if partitions != self._partitions:
-            cns = self._get_internal_consumer(partitions=list(partitions))
+            cns = self._get_internal_consumer(partitions=list(partitions), start=start)
             if self._post_rebalance_callback is not None:
                 old_offsets = (self._consumer.held_offsets
                                if self._consumer else dict())
@@ -408,7 +408,7 @@ class BalancedConsumer(object):
                 self._internal_consumer_running.clear()
         return True
 
-    def _get_internal_consumer(self, partitions=None):
+    def _get_internal_consumer(self, partitions=None, start=True):
         """Instantiate a SimpleConsumer for internal use.
 
         If there is already a SimpleConsumer instance held by this object,
@@ -449,7 +449,8 @@ class BalancedConsumer(object):
             deserializer=self._deserializer
         )
         cns.consumer_id = self._consumer_id
-        cns.start()
+        if start:
+            cns.start()
         return cns
 
     def _get_participants(self):
