@@ -195,8 +195,7 @@ class SimpleConsumer(object):
         self._auto_start = auto_start
         self._reset_offset_on_start = reset_offset_on_start
         self._is_compacted_topic = compacted_topic
-        self._generation_id = valid_int(generation_id, allow_zero=True,
-                                        allow_negative=True)
+        self._generation_id = 0
         self._consumer_id = b''
         self._deserializer = deserializer
 
@@ -253,7 +252,8 @@ class SimpleConsumer(object):
 
     @generation_id.setter
     def generation_id(self, value):
-        self._generation_id = value
+        self._generation_id = valid_int(value, allow_zero=True,
+                                        allow_negative=True)
 
     def __repr__(self):
         return "<{module}.{name} at {id_} (consumer_group={group})>".format(
