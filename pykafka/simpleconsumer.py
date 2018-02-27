@@ -151,10 +151,12 @@ class SimpleConsumer(object):
             consumer to use less stringent message ordering logic because compacted
             topics do not provide offsets in strict incrementing order.
         :type compacted_topic: bool
-        :param generation_id: The generation id with which to make group requests
+        :param generation_id: Deprecated::2.7 Do not set if directly instantiating
+            SimpleConsumer. The generation id with which to make group requests
         :type generation_id: int
-        :param consumer_id: The identifying string to use for this consumer on group
-            requests
+        :param consumer_id: Deprecated::2.7 Do not set if directly instantiating
+            SimpleConsumer. The identifying string to use for this consumer on
+            group requests
         :type consumer_id: bytes
         :param deserializer: A function defining how to deserialize messages returned
             from Kafka. A function with the signature d(value, partition_key) that
