@@ -617,8 +617,11 @@ class BalancedConsumer(object):
         :type partitions: Iterable of :class:`pykafka.partition.Partition`
         """
         for p in partitions:
-            # TODO pass zk node version to make sure we still own this node
-            self._zookeeper.delete(self._path_from_partition(p))
+            try:
+                # TODO pass zk node version to make sure we still own this node
+                self._zookeeper.delete(self._path_from_partition(p))
+            except NoNodeException:
+                pass
 
     def _add_partitions(self, partitions):
         """Add partitions to the zookeeper registry for this consumer.
