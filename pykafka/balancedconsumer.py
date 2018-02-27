@@ -426,7 +426,7 @@ class BalancedConsumer(object):
             reset_offset_on_start = False
         Cls = (rdkafka.RdKafkaSimpleConsumer
                if self._use_rdkafka else SimpleConsumer)
-        return Cls(
+        cns = Cls(
             self._topic,
             self._cluster,
             consumer_group=self._consumer_group,
@@ -446,9 +446,10 @@ class BalancedConsumer(object):
             auto_start=start,
             compacted_topic=self._is_compacted_topic,
             generation_id=self._generation_id,
-            consumer_id=self._consumer_id,
             deserializer=self._deserializer
         )
+        cns.consumer_id = self._consumer_id
+        return cns
 
     def _get_participants(self):
         """Use zookeeper to get the other consumers of this topic.
