@@ -1,3 +1,5 @@
+import logging
+
 from .broker import Broker
 from .simpleconsumer import SimpleConsumer
 from .cluster import Cluster
@@ -16,3 +18,5 @@ __version__ = '2.8.0-dev.1'
 __all__ = ["Broker", "SimpleConsumer", "Cluster", "Partition", "Producer",
            "Topic", "SslConfig", "KafkaClient", "BalancedConsumer",
            "ManagedBalancedConsumer", "RangeProtocol", "RoundRobinProtocol"]
+
+logging.getLogger(__name__).addHandler(logging.NullHandler())
