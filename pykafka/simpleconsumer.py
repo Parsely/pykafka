@@ -151,10 +151,12 @@ class SimpleConsumer(object):
             consumer to use less stringent message ordering logic because compacted
             topics do not provide offsets in strict incrementing order.
         :type compacted_topic: bool
-        :param generation_id: The generation id with which to make group requests
+        :param generation_id: Deprecated::2.7 Do not set if directly instantiating
+            SimpleConsumer. The generation id with which to make group requests
         :type generation_id: int
-        :param consumer_id: The identifying string to use for this consumer on group
-            requests
+        :param consumer_id: Deprecated::2.7 Do not set if directly instantiating
+            SimpleConsumer. The identifying string to use for this consumer on
+            group requests
         :type consumer_id: bytes
         :param deserializer: A function defining how to deserialize messages returned
             from Kafka. A function with the signature d(value, partition_key) that
@@ -193,9 +195,8 @@ class SimpleConsumer(object):
         self._auto_start = auto_start
         self._reset_offset_on_start = reset_offset_on_start
         self._is_compacted_topic = compacted_topic
-        self._generation_id = valid_int(generation_id, allow_zero=True,
-                                        allow_negative=True)
-        self._consumer_id = consumer_id
+        self._generation_id = -1
+        self._consumer_id = b''
         self._deserializer = deserializer
 
         # incremented for any message arrival from any partition
@@ -215,16 +216,14 @@ class SimpleConsumer(object):
             self._partitions = {p: OwnedPartition(p,
                                                   self._cluster.handler,
                                                   self._messages_arrived,
-                                                  self._is_compacted_topic,
-                                                  self._consumer_id)
+                                                  self._is_compacted_topic)
                                 for p in partitions}
         else:
             self._partitions = {topic.partitions[k]:
                                 OwnedPartition(p,
                                                self._cluster.handler,
                                                self._messages_arrived,
-                                               self._is_compacted_topic,
-                                               self._consumer_id)
+                                               self._is_compacted_topic)
                                 for k, p in iteritems(topic.partitions)}
         self._partitions_by_id = {p.partition.id: p
                                   for p in itervalues(self._partitions)}
@@ -236,6 +235,25 @@ class SimpleConsumer(object):
 
         if self._auto_start:
             self.start()
+
+    @property
+    def consumer_id(self):
+        return self._consumer_id
+
+    @consumer_id.setter
+    def consumer_id(self, value):
+        self._consumer_id = value
+        for op in itervalues(self._partitions):
+            op.set_consumer_id(self._consumer_id)
+
+    @property
+    def generation_id(self):
+        return self._generation_id
+
+    @generation_id.setter
+    def generation_id(self, value):
+        self._generation_id = valid_int(value, allow_zero=True,
+                                        allow_negative=True)
 
     def __repr__(self):
         return "<{module}.{name} at {id_} (consumer_group={group})>".format(
@@ -854,6 +872,10 @@ class OwnedPartition(object):
         self.last_offset_consumed = -1
         self.next_offset = 0
         self.fetch_lock = handler.RLock() if handler is not None else threading.RLock()
+        self.set_consumer_id(self._consumer_id)
+
+    def set_consumer_id(self, value):
+        self._consumer_id = value
         # include consumer id in offset metadata for debugging
         self._offset_metadata = {
             'consumer_id': get_string(self._consumer_id),
