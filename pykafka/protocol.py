@@ -1132,7 +1132,7 @@ class FetchResponseV1(FetchResponse):
         :type offset: int
         """
         # TODO: Use throttle_time
-        self.throttle_time = struct_helpers.unpack_from("i", buff, offset)
+        self.throttle_time = struct_helpers.unpack_from("i", buff, offset)[0]
         super(FetchResponseV1, self).__init__(buff, offset + 4,
                                               broker_version=broker_version)
 
