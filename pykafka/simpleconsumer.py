@@ -76,7 +76,7 @@ class SimpleConsumer(object):
                  generation_id=-1,
                  consumer_id=b'',
                  deserializer=None,
-                 reset_offsets_on_consume=True):
+                 reset_offsets_on_fetch=True):
         """Create a SimpleConsumer.
 
         Settings and default values are taken from the Scala
@@ -167,9 +167,9 @@ class SimpleConsumer(object):
             fields transformed according to the client code's serialization logic.
             See `pykafka.utils.__init__` for stock implemtations.
         :type deserializer: function
-        :param reset_offsets_on_consume: Whether to update the offsets when consuming.
+        :param reset_offsets_on_fetch: Whether to update offsets during fetch_offsets.
                Disable for read-only use cases to prevent side-effects.
-        :type reset_offsets_on_consume: bool
+        :type reset_offsets_on_fetch: bool
         """
         self._running = False
         self._cluster = cluster
@@ -236,7 +236,7 @@ class SimpleConsumer(object):
         self.partition_cycle = itertools.cycle(self._partitions.values())
 
         self._default_error_handlers = self._build_default_error_handlers()
-        self.reset_offsets_on_consume = reset_offsets_on_consume
+        self.reset_offsets_on_fetch = reset_offsets_on_fetch
 
         if self._auto_start:
             self.start()
@@ -623,7 +623,7 @@ class SimpleConsumer(object):
             parts_by_error = handle_partition_responses(
                 self._default_error_handlers,
                 response=res,
-                success_handler=_handle_success if self.reset_offsets_on_consume else None,
+                success_handler=_handle_success if self.reset_offsets_on_fetch else None,
                 partitions_by_id=self._partitions_by_id)
 
             success_responses.extend([(op.partition.id, r)
