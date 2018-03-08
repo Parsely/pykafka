@@ -236,7 +236,7 @@ class SimpleConsumer(object):
         self.partition_cycle = itertools.cycle(self._partitions.values())
 
         self._default_error_handlers = self._build_default_error_handlers()
-        self.reset_offset_on_fetch = reset_offset_on_fetch
+        self._reset_offset_on_fetch = reset_offset_on_fetch
 
         if self._auto_start:
             self.start()
@@ -623,7 +623,7 @@ class SimpleConsumer(object):
             parts_by_error = handle_partition_responses(
                 self._default_error_handlers,
                 response=res,
-                success_handler=_handle_success if self.reset_offsets_on_fetch else None,
+                success_handler=_handle_success if self._reset_offset_on_fetch else None,
                 partitions_by_id=self._partitions_by_id)
 
             success_responses.extend([(op.partition.id, r)
