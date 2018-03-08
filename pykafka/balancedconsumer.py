@@ -102,7 +102,8 @@ class BalancedConsumer(object):
                  use_rdkafka=False,
                  compacted_topic=False,
                  membership_protocol=RangeProtocol,
-                 deserializer=None):
+                 deserializer=None,
+                 reset_offset_on_fetch=True):
         """Create a BalancedConsumer instance
 
         :param topic: The topic this consumer should consume
@@ -213,6 +214,9 @@ class BalancedConsumer(object):
             fields transformed according to the client code's serialization logic.
             See `pykafka.utils.__init__` for stock implemtations.
         :type deserializer: function
+        :param reset_offset_on_fetch: Whether to update offsets during fetch_offsets.
+               Disable for read-only use cases to prevent side-effects.
+        :type reset_offset_on_fetch: bool
         """
         self._cluster = cluster
         try:
@@ -248,6 +252,7 @@ class BalancedConsumer(object):
         self._is_compacted_topic = compacted_topic
         self._membership_protocol = membership_protocol
         self._deserializer = deserializer
+        self._reset_offset_on_fetch = reset_offset_on_fetch
 
         if not rdkafka and use_rdkafka:
             raise ImportError("use_rdkafka requires rdkafka to be installed")
@@ -445,7 +450,8 @@ class BalancedConsumer(object):
             reset_offset_on_start=reset_offset_on_start,
             auto_start=False,
             compacted_topic=self._is_compacted_topic,
-            deserializer=self._deserializer
+            deserializer=self._deserializer,
+            reset_offset_on_fetch=self._reset_offset_on_fetch
         )
         cns.consumer_id = self._consumer_id
         cns.generation_id = self._generation_id

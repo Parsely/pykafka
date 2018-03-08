@@ -202,6 +202,7 @@ class SimpleConsumer(object):
         self._generation_id = -1
         self._consumer_id = b''
         self._deserializer = deserializer
+        self._reset_offset_on_fetch = reset_offset_on_fetch
 
         # incremented for any message arrival from any partition
         # the initial value is 0 (no messages waiting)
@@ -236,7 +237,6 @@ class SimpleConsumer(object):
         self.partition_cycle = itertools.cycle(self._partitions.values())
 
         self._default_error_handlers = self._build_default_error_handlers()
-        self._reset_offset_on_fetch = reset_offset_on_fetch
 
         if self._auto_start:
             self.start()

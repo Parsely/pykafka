@@ -74,7 +74,8 @@ class ManagedBalancedConsumer(BalancedConsumer):
                  compacted_topic=True,
                  heartbeat_interval_ms=3000,
                  membership_protocol=RangeProtocol,
-                 deserializer=None):
+                 deserializer=None,
+                 reset_offset_on_fetch=True):
         """Create a ManagedBalancedConsumer instance
 
         :param topic: The topic this consumer should consume
@@ -177,6 +178,9 @@ class ManagedBalancedConsumer(BalancedConsumer):
             fields transformed according to the client code's serialization logic.
             See `pykafka.utils.__init__` for stock implemtations.
         :type deserializer: function
+        :param reset_offset_on_fetch: Whether to update offsets during fetch_offsets.
+               Disable for read-only use cases to prevent side-effects.
+        :type reset_offset_on_fetch: bool
         """
 
         self._cluster = cluster
@@ -209,6 +213,7 @@ class ManagedBalancedConsumer(BalancedConsumer):
         self._membership_protocol.metadata.topic_names = [self._topic.name]
         self._heartbeat_interval_ms = valid_int(heartbeat_interval_ms)
         self._deserializer = deserializer
+        self._reset_offset_on_fetch = reset_offset_on_fetch
         if use_rdkafka is True:
             raise ImportError("use_rdkafka is not available for {}".format(
                 self.__class__.__name__))
