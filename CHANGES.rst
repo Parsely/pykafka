@@ -1,6 +1,49 @@
 Changelog
 =========
 
+2.8.0-dev.1 (2018-3-14)
+-----------------------
+
+`Compare 2.8.0-dev.1`_
+
+.. _Compare 2.8.0-dev.1: https://github.com/Parsely/pykafka/compare/2.7.0...2.8.0-dev.1
+
+Minor Version Features
+----------------------
+
+* Added a `deserializer` kwarg to consumer components to facilitate unicode support
+* Added a `reset_offset_on_fetch` kwarg to consumer components to support read-only
+  consumption
+* Changed the expected type of the consumer's `consumer_group` kwarg to `str` from `bytes`
+* Changed the expected type of `TopicDict.__getitem__`'s parameter to `str` from `bytes`
+* Added a `pending_timeout_ms` kwarg to `Producer.__init__` to allow delivery report
+  wait timeouts
+* Added a `serializer` kwarg to `Producer.__init__` to facilitate unicode support
+* Deprecated the `generation_id` and `consumer_id` parameters on `SimpleConsumer`
+
+Bugfixes
+--------
+
+* Changed consumers to handle valid ascii strings for consumer group names instead of
+  bytes
+* Handled `NoNodeException` during consumer ZK node releases
+* Used `api_versions` to select the version-appropriate implementation for
+  `OffsetFetchRequest`
+* Adjusted synchronous production logic to avoid infinite blocking when delivery report
+  is lost
+* Fixed a bug in `FetchResponseV1` causing `throttle_time` to be returned as a tuple
+  instead of an integer
+* Implemented support for all current versions of `OffsetFetchRequest` and
+  `OffsetFetchResponse`
+
+Miscellaneous
+-------------
+
+* Used logging.NullHandler to remove nuisance logs
+* Added stock unicode serde to `utils`
+* Added README to pypi info
+
+
 2.7.0 (2018-1-11)
 -----------------
 
