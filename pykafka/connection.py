@@ -22,6 +22,7 @@ from functools import partial
 import logging
 import ssl
 import struct
+import time
 
 from .exceptions import SocketDisconnectedError
 from .utils.socket import recvall_into
@@ -158,21 +159,28 @@ class BrokerConnection(object):
         """Returns true if the socket connection is open."""
         return self._socket is not None
 
-    def connect(self, timeout):
-        """Connect to the broker."""
+    def connect(self, timeout, attempts=1):
+        """Connect to the broker, retrying if specified."""
         log.debug("Connecting to %s:%s", self.host, self.port)
-        try:
-            self._socket = self._wrap_socket(
-                self._handler.Socket.create_connection(
-                    (self.host, self.port),
-                    timeout / 1000,
-                    (self.source_host, self.source_port)
-                ))
-        except (self._handler.SockErr, self._handler.GaiError) as err:
-            log.info("Failed to connect to %s:%s", self.host, self.port)
-            log.info(err)
-            raise SocketDisconnectedError("<broker {}:{}>".format(self.host, self.port))
-        log.debug("Successfully connected to %s:%s", self.host, self.port)
+        for attempt in range(0, attempts):
+            try:
+                self._socket = self._wrap_socket(
+                    self._handler.Socket.create_connection(
+                        (self.host, self.port),
+                        timeout / 1000,
+                        (self.source_host, self.source_port)
+                    )
+                )
+                log.debug("Successfully connected to %s:%s", self.host, self.port)
+                return
+            except (self._handler.SockErr, self._handler.GaiError) as err:
+                log.info("Attempt %s: failed to connect to %s:%s", attempt, self.host, self.port)
+                log.info(err)
+                log.info("Retrying in 300ms.")
+                time.sleep(.3)
+                continue
+
+        raise SocketDisconnectedError("<broker {}:{}>".format(self.host, self.port))
 
     def disconnect(self):
         """Disconnect from the broker."""
