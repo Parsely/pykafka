@@ -155,6 +155,8 @@ class KafkaInstance(ManagedInstance):
         self._scala_version = scala_version
         self._bin_dir = bin_dir
         self._processes = []
+        self._broker_procs = []
+        self._brokers_started = 0  # incremented by _start_broker
         self.zookeeper = None
         self.brokers = None
         self.brokers_ssl = None
@@ -228,6 +230,19 @@ class KafkaInstance(ManagedInstance):
                 yield port
             port += 1
 
+    def _add_broker(self, broker_port):
+        new_broker = "localhost:{}".format(broker_port)
+        brokers = self.brokers.split(",") if self.brokers else []
+        brokers.append(new_broker)
+        self.brokers = ",".join(brokers)
+
+    def _add_ssl_broker(self, ssl_broker_port):
+        if ssl_broker_port:
+            new_broker_ssl = "localhost:{}".format(ssl_broker_port)
+            brokers_ssl = self.brokers_ssl.split(",") if self.brokers_ssl else []
+            brokers_ssl.append(new_broker_ssl)
+            self.brokers_ssl = ",".join(brokers_ssl)
+
     def _gen_ssl_certs(self):
         """Attempt generating ssl certificates for testing
 
@@ -249,10 +264,6 @@ class KafkaInstance(ManagedInstance):
         self.zookeeper = 'localhost:{port}'.format(port=zk_port)
 
         broker_ports, broker_ssl_ports = self._start_brokers()
-        self.brokers = ','.join('localhost:{port}'.format(port=port)
-                               for port in broker_ports)
-        self.brokers_ssl = ','.join('localhost:{port}'.format(port=port)
-                                    for port in broker_ssl_ports)
 
         # Process is started when the port isn't free anymore
         all_ports = [zk_port] + broker_ports
@@ -281,12 +292,60 @@ class KafkaInstance(ManagedInstance):
                 watch_thread.daemon = True
                 watch_thread.start()
 
+    def _start_broker_proc(self, port, ssl_port=None):
+        """Start a broker proc and maintain handlers
+
+        Returns a proc handler for the new broker.
+        """
+        # make port config for new broker
+        if self.certs is not None:
+            port_config = _kafka_ssl_properties.format(
+                port=port,
+                ssl_port=ssl_port,
+                keystore_path=self.certs.keystore,
+                truststore_path=self.certs.truststore,
+                store_pass=self.certs.broker_pass)
+        else:
+            port_config = "port={}".format(port)
+
+        self._brokers_started += 1
+        i = self._brokers_started
+
+        # write conf file for the new broker
+        conf = os.path.join(self._conf_dir,
+                            'kafka_{instance}.properties'.format(instance=i))
+        with open(conf, 'w') as f:
+            f.write(_kafka_properties.format(
+                broker_id=i,
+                port_config=port_config,
+                zk_connstr=self.zookeeper,
+                data_dir=self._data_dir + '_{instance}'.format(instance=i),
+            ))
+
+        # start process and append to self._broker_procs
+        binfile = os.path.join(self._bin_dir, 'bin/kafka-server-start.sh')
+        logfile = os.path.join(self._log_dir, 'kafka_{instance}.log'.format(instance=i))
+        new_proc = (utils.Popen(
+            args=[binfile, conf],
+            stderr=utils.STDOUT,
+            stdout=open(logfile, 'w'),
+            use_gevent=self.use_gevent
+        ))
+        self._broker_procs.append(new_proc)
+
+        # add localhost:port to internal list of (ssl)brokers
+        self._add_broker(port)
+        self._add_ssl_broker(ssl_port)
+
+        return new_proc
+
+
     def _start_brokers(self):
         """Start all brokers and return used ports."""
-        self._broker_procs = []
         ports = self._port_generator(9092)
         used_ports = []
         used_ssl_ports = []
+        ssl_port = None
         for i in range(self._num_instances):
             port = next(ports)
             used_ports.append(port)
@@ -294,34 +353,9 @@ class KafkaInstance(ManagedInstance):
 
             if self.certs is not None:
                 ssl_port = next(ports)
-                used_ssl_ports.append(ssl_port)
-                port_config = _kafka_ssl_properties.format(
-                    port=port,
-                    ssl_port=ssl_port,
-                    keystore_path=self.certs.keystore,
-                    truststore_path=self.certs.truststore,
-                    store_pass=self.certs.broker_pass)
-            else:
-                port_config = "port={}".format(port)
+                used_ssl_ports.append(ssl_port)  # to return at end
+            self._start_broker_proc(port, ssl_port)
 
-            conf = os.path.join(self._conf_dir,
-                                'kafka_{instance}.properties'.format(instance=i))
-            with open(conf, 'w') as f:
-                f.write(_kafka_properties.format(
-                    broker_id=i,
-                    port_config=port_config,
-                    zk_connstr=self.zookeeper,
-                    data_dir=self._data_dir + '_{instance}'.format(instance=i),
-                ))
-
-            binfile = os.path.join(self._bin_dir, 'bin/kafka-server-start.sh')
-            logfile = os.path.join(self._log_dir, 'kafka_{instance}.log'.format(instance=i))
-            self._broker_procs.append(utils.Popen(
-                args=[binfile, conf],
-                stderr=utils.STDOUT,
-                stdout=open(logfile, 'w'),
-                use_gevent=self.use_gevent
-            ))
         return used_ports, used_ssl_ports
 
     def _start_zookeeper(self):
