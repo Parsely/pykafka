@@ -176,8 +176,9 @@ class BrokerConnection(object):
             except (self._handler.SockErr, self._handler.GaiError) as err:
                 log.info("Attempt %s: failed to connect to %s:%s", attempt, self.host, self.port)
                 log.info(err)
-                log.info("Retrying in 300ms.")
-                time.sleep(.3)
+                if attempts > 1:
+                    log.info("Retrying in 300ms.")
+                    time.sleep(.3)
                 continue
 
         raise SocketDisconnectedError("<broker {}:{}>".format(self.host, self.port))
