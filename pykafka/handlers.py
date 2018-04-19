@@ -186,9 +186,11 @@ class RequestHandler(object):
         """Stop the request processor."""
         shared = self.shared
         self.shared = None
-        log.info("RequestHandler.stop: about to flush requests queue")
-        shared.requests.join()
-        shared.ending.set()
+        if log:
+            log.info("RequestHandler.stop: about to flush requests queue")
+        if shared:
+            shared.requests.join()
+            shared.ending.set()
 
     def _start_thread(self):
         """Run the request processor"""
