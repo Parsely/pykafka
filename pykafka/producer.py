@@ -273,7 +273,7 @@ class Producer(object):
                 owned_broker = self._owned_brokers.pop(broker)
                 owned_broker.stop()
 
-                # loop becuase flush is not garentee to empty owned
+                # loop because flush is not guaranteed to empty owned
                 # broker queue
                 while True:
                     batch = owned_broker.flush(self._linger_ms,
