@@ -129,12 +129,12 @@ def print_managed_consumer_groups(client, args):
         raise ValueError('Topic {} does not exist.'.format(args.topic))
     consumer_groups = {}
     brokers = client.brokers
-    for broker_id, broker in brokers.iteritems():
+    for broker_id, broker in iteritems(brokers):
         groups = broker.list_groups().groups.keys()
         groups_metadata = broker.describe_groups(group_ids=groups).groups
-        for group_id, describe_group_response in groups_metadata.iteritems():
+        for group_id, describe_group_response in iteritems(groups_metadata):
             members = describe_group_response.members
-            for member_id, member in members.iteritems():
+            for member_id, member in iteritems(members):
                 topics = member.member_metadata.topic_names
                 if args.topic in topics:
                     consumer_groups[group_id] = describe_group_response
@@ -142,7 +142,7 @@ def print_managed_consumer_groups(client, args):
     print('Topic: {}'.format(args.topic))
     print(tabulate.tabulate(
         [(group_id, x.state, x.protocol, x.protocol_type)
-         for group_id, x in consumer_groups.iteritems()],
+         for group_id, x in iteritems(consumer_groups)],
         headers=['GroupId', 'State', 'Protocol', 'ProtocolType']
     ))
 
