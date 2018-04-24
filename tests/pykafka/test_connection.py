@@ -1,8 +1,11 @@
 import unittest
 import threading
 import time
+import pytest
 
 from uuid import uuid4
+
+from testinstances.managed_instance import ManagedInstance
 
 from pykafka import KafkaClient, Broker
 from pykafka.connection import BrokerConnection
@@ -16,6 +19,8 @@ class TestBrokerConnection(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.kafka = get_cluster()
+        if not isinstance(cls.kafka, ManagedInstance):
+            pytest.skip("Only test on ManagedInstance (run locally)")
         cls.client = KafkaClient(cls.kafka.brokers)
 
         # BrokerConnection
