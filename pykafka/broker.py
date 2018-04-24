@@ -234,7 +234,7 @@ class Broker(object):
         """
         return self._offsets_channel_req_handler
 
-    def connect(self):
+    def connect(self, attempts=3):
         """Establish a connection to the broker server.
 
         Creates a new :class:`pykafka.connection.BrokerConnection` and a new
@@ -246,11 +246,11 @@ class Broker(object):
                                             source_host=self._source_host,
                                             source_port=self._source_port,
                                             ssl_config=self._ssl_config)
-        self._connection.connect(self._socket_timeout_ms)
+        self._connection.connect(self._socket_timeout_ms, attempts=attempts)
         self._req_handler = RequestHandler(self._handler, self._connection)
         self._req_handler.start()
 
-    def connect_offsets_channel(self):
+    def connect_offsets_channel(self, attempts=3):
         """Establish a connection to the Broker for the offsets channel
 
         Creates a new :class:`pykafka.connection.BrokerConnection` and a new
@@ -262,7 +262,8 @@ class Broker(object):
             buffer_size=self._buffer_size,
             source_host=self._source_host, source_port=self._source_port,
             ssl_config=self._ssl_config)
-        self._offsets_channel_connection.connect(self._offsets_channel_socket_timeout_ms)
+        self._offsets_channel_connection.connect(self._offsets_channel_socket_timeout_ms,
+                                                 attempts=attempts)
         self._offsets_channel_req_handler = RequestHandler(
             self._handler, self._offsets_channel_connection
         )
