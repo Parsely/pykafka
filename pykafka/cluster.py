@@ -489,6 +489,8 @@ class Cluster(object):
         for i in range(self._max_connection_retries):
             response = self._request_random_broker(broker_connects,
                                                    lambda b: b.fetch_api_versions())
+            if not response:
+                raise SocketDisconnectedError()
             if response.api_versions:
                 self._api_versions = response.api_versions
                 log.info("Got api version info: {}".format(self._api_versions))
