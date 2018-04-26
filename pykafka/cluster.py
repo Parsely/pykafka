@@ -451,7 +451,7 @@ class Cluster(object):
                 log.debug("Retrying offset manager discovery")
             time.sleep(i * 2)
             for broker in itervalues(self.brokers):
-
+                log.info("Asking broker {} for group coordinator information".format(broker.id))
                 req = GroupCoordinatorRequest(consumer_group)
                 future = broker.handler.request(req)
                 try:

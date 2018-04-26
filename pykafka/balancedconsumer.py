@@ -669,7 +669,7 @@ class BalancedConsumer(object):
             return False  # `False` tells ChildrenWatch to disable this watch
         if self._setting_watches:
             return
-        log.debug("Rebalance triggered by broker change ({})".format(
+        log.info("Rebalance triggered by broker change ({})".format(
             self._consumer_id))
         self._rebalance()
 
@@ -679,7 +679,7 @@ class BalancedConsumer(object):
             return False  # `False` tells ChildrenWatch to disable this watch
         if self._setting_watches:
             return
-        log.debug("Rebalance triggered by consumer change ({})".format(
+        log.info("Rebalance triggered by consumer change ({})".format(
             self._consumer_id))
         self._rebalance()
 
@@ -689,7 +689,7 @@ class BalancedConsumer(object):
             return False  # `False` tells ChildrenWatch to disable this watch
         if self._setting_watches:
             return
-        log.debug("Rebalance triggered by topic change ({})".format(
+        log.info("Rebalance triggered by topic change ({})".format(
             self._consumer_id))
         self._rebalance()
 
