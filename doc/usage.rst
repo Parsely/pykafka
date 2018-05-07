@@ -86,3 +86,30 @@ memory instead of letting them be garbage collected and reinstantiated repeatedl
     topic_producers = {topic.name: topic.get_producer() for topic in topics_to_produce_to}
     for destination_topic, message in consumed_messages:
         topic_producers[destination_topic.name].produce(message)
+
+
+Handling connection loss
+========================
+
+The pykafka components are designed to raise exceptions when sufficient connection to
+the Kafka cluster cannot be established. There are cases in which some but not all of
+the brokers in a cluster are accessible to pykafka. In these cases, the component will
+attempt to continue operating. When it can't, an exception will be raised. Often this
+exception will be either `NoBrokersAvailableError` or `SocketDisconnectedError`. These
+exceptions should be caught and the component instance should be reinstantiated. In some
+cases, calling `stop(); start()` in response to these exceptions can be enough to
+establish a working connection.
+
+.. sourcecode:: python
+
+    from pykafka.exceptions import SocketDisconnectedError, NoBrokersAvailableError
+    # this illustrates consumer error catching; a similar method can be used for producers
+    consumer = topic.get_simple_consumer()
+    try:
+        consumer.consume()
+    except (SocketDisconnectedError, NoBrokersAvailableError) as e:
+        consumer = topic.get_simple_consumer()
+        # use either the above method or the following:
+        consumer.stop()
+        consumer.start()
+
