@@ -275,7 +275,7 @@ def create_topic(client, args):
 
 def delete_topic(client, args):
     if parse_version(args.broker_version) < parse_version('0.10.0'):
-        raise ValueError("The topic deletoin API is not usable on brokers older than "
+        raise ValueError("The topic deletion API is not usable on brokers older than "
                          "0.10.0. Use --broker_version to specify the version")
     client.cluster.controller_broker.delete_topics([args.topic], args.timeout)
 
