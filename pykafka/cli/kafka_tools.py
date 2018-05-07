@@ -263,9 +263,9 @@ def reset_offsets(client, args):
 
 
 def create_topic(client, args):
-    if parse_version(args.broker_version) < parse_version('0.10.0'):
+    if parse_version(args.broker_version) < parse_version('0.10.1'):
         raise ValueError("The topic creation API is not usable on brokers older than "
-                         "0.10.0. Use --broker_version to specify the version")
+                         "0.10.1. Use --broker_version to specify the version")
     topic_req = CreateTopicRequest(args.topic, args.num_partitions,
                                    args.replication_factor,
                                    args.replica_assignment or [],
@@ -274,9 +274,9 @@ def create_topic(client, args):
 
 
 def delete_topic(client, args):
-    if parse_version(args.broker_version) < parse_version('0.10.0'):
+    if parse_version(args.broker_version) < parse_version('0.10.1'):
         raise ValueError("The topic deletion API is not usable on brokers older than "
-                         "0.10.0. Use --broker_version to specify the version")
+                         "0.10.1. Use --broker_version to specify the version")
     client.cluster.controller_broker.delete_topics([args.topic], args.timeout)
 
 
