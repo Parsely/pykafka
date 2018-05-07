@@ -570,6 +570,7 @@ class OwnedBroker(object):
         self.broker = broker
         self.lock = self.producer._cluster.handler.RLock()
         self.flush_ready = self.producer._cluster.handler.Event()
+        self.has_message = self.producer._cluster.handler.Event()
         self.slot_available = self.producer._cluster.handler.Event()
         self.queue = deque()
         self.messages_pending = 0
@@ -603,6 +604,9 @@ class OwnedBroker(object):
             queue_reader, name=name)
 
     def stop(self):
+        with self.lock:
+            if not self.has_message.is_set():
+                self.has_message.set()
         self.running = False
 
     def increment_messages_pending(self, amnt):
@@ -630,6 +634,8 @@ class OwnedBroker(object):
             if len(self.queue) >= self.producer._min_queued_messages:
                 if not self.flush_ready.is_set():
                     self.flush_ready.set()
+            if not self.has_message.is_set():
+                self.has_message.set()
 
     def flush(self, linger_ms, max_request_size, release_pending=False, wait=True):
         """Pop messages from the end of the queue
@@ -650,7 +656,9 @@ class OwnedBroker(object):
         :type wait: bool
         """
         if wait:
-            self._wait_for_flush_ready(linger_ms)
+            flush_is_ready = self._wait_for_flush_ready(linger_ms)
+        if not flush_is_ready:
+            return []
         with self.lock:
             batch = []
             batch_size_in_bytes = 0
@@ -714,6 +722,14 @@ class OwnedBroker(object):
                     self.flush_ready.clear()
             if linger_ms > 0:
                 self.flush_ready.wait((linger_ms / 1000))
+            if len(self.queue) == 0 and self.running:
+                with self.lock:
+                    if len(self.queue) == 0 and self.running:
+                        self.has_message.clear()
+                log.debug("Waiting on has_message after linger")
+                self.has_message.wait()
+                return False
+            return True
 
     def _wait_for_slot_available(self):
         """Block until the queue has at least one slot not containing a message"""
