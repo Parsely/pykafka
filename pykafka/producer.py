@@ -71,6 +71,8 @@ class Producer(object):
                  max_queued_messages=100000,
                  min_queued_messages=70000,
                  linger_ms=5 * 1000,
+                 # XXX 0 default here mirrors previous behavior - should default have a
+                 # nonzero wait to save CPU cycles?
                  queue_empty_timeout_ms=0,
                  block_on_queue_full=True,
                  max_request_size=1000012,
