@@ -71,7 +71,7 @@ class Producer(object):
                  max_queued_messages=100000,
                  min_queued_messages=70000,
                  linger_ms=5 * 1000,
-                 queue_empty_timeout_ms=5 * 1000,
+                 queue_empty_timeout_ms=0,
                  block_on_queue_full=True,
                  max_request_size=1000012,
                  sync=False,
