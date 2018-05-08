@@ -675,10 +675,19 @@ class OwnedBroker(object):
             attempt a flush immediately without waiting
         :type wait: bool
         """
+        # Q: why not simply wait for flush_ready here? do we need a separate Event for
+        #    has_message?
+        # A: If we're blocking on flush_ready with an empty queue, a single event arriving
+        #    does not mean we're ready to flush. We could flush whenever the
+        #    current linger_ms interval ends, but the better way is to pause the linger
+        #    loop when the queue is empty, restarting it when a message is added. Doing
+        #    this without two Events would require _wait_for_flush_ready to be modal,
+        #    returning a value indicating whether a flush should happen or whether it
+        #    returned for the sole purpose of unblocking the linger loop. This design is
+        #    cleaner.
         self._wait_for_has_message(self.producer._queue_empty_timeout_ms)
         if wait:
             self._wait_for_flush_ready(linger_ms)
-        log.debug("Flushing queue")
         with self.lock:
             batch = []
             batch_size_in_bytes = 0
