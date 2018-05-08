@@ -71,6 +71,7 @@ class Producer(object):
                  max_queued_messages=100000,
                  min_queued_messages=70000,
                  linger_ms=5 * 1000,
+                 queue_empty_timeout_ms=5 * 1000,
                  block_on_queue_full=True,
                  max_request_size=1000012,
                  sync=False,
@@ -128,6 +129,8 @@ class Producer(object):
             time waiting for more records to show up. linger_ms=0 indicates no
             lingering.
         :type linger_ms: int
+        :param queue_empty_timeout_ms:
+        :type queue_empty_timeout_ms:
         :param block_on_queue_full: When the producer's message queue for a
             broker contains max_queued_messages, we must either stop accepting
             new messages (block) or throw an error. If True, this setting
@@ -193,6 +196,8 @@ class Producer(object):
         self._min_queued_messages = max(1, valid_int(min_queued_messages)
                                         if not sync else 1)
         self._linger_ms = valid_int(linger_ms, allow_zero=True)
+        self._queue_empty_timeout_ms = valid_int(queue_empty_timeout_ms,
+                                                 allow_zero=True, allow_negative=True)
         self._block_on_queue_full = block_on_queue_full
         self._max_request_size = valid_int(max_request_size)
         self._synchronous = sync
@@ -655,7 +660,7 @@ class OwnedBroker(object):
             attempt a flush immediately without waiting
         :type wait: bool
         """
-        self._wait_for_has_message()
+        self._wait_for_has_message(self.producer._queue_empty_timeout_ms)
         if wait:
             self._wait_for_flush_ready(linger_ms)
         log.debug("Flushing queue")
@@ -723,13 +728,20 @@ class OwnedBroker(object):
             if linger_ms > 0:
                 self.flush_ready.wait((linger_ms / 1000))
 
-    def _wait_for_has_message(self):
-        """Block until the queue has at least one slot containing a message"""
+    def _wait_for_has_message(self, timeout_ms):
+        """Block until the queue has at least one slot containing a message
+
+        :param timeout_ms:
+        :type timeout_ms: int
+        """
         if len(self.queue) == 0 and self.running:
             with self.lock:
                 if len(self.queue) == 0 and self.running:
                     self.has_message.clear()
-            self.has_message.wait()
+            if timeout_ms != -1:
+                self.has_message.wait(timeout_ms / 1000)
+            else:
+                self.has_message.wait()
 
     def _wait_for_slot_available(self):
         """Block until the queue has at least one slot not containing a message"""
