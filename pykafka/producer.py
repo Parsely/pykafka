@@ -769,7 +769,7 @@ class OwnedBroker(object):
             if timeout_ms != -1:
                 self.has_message.wait(timeout_ms / 1000)
             else:
-                # inifinite wait that doesn't break under gevent
+                # infinite wait that doesn't break under gevent
                 while not self.has_message.is_set():
                     self.producer._cluster.handler.sleep()
                     self.has_message.wait(5)
