@@ -655,10 +655,10 @@ class OwnedBroker(object):
             attempt a flush immediately without waiting
         :type wait: bool
         """
+        self._wait_for_has_message()
         if wait:
-            flush_is_ready = self._wait_for_flush_ready(linger_ms)
-        if not flush_is_ready:
-            return []
+            self._wait_for_flush_ready(linger_ms)
+        log.debug("Flushing queue")
         with self.lock:
             batch = []
             batch_size_in_bytes = 0
@@ -722,14 +722,14 @@ class OwnedBroker(object):
                     self.flush_ready.clear()
             if linger_ms > 0:
                 self.flush_ready.wait((linger_ms / 1000))
-            if len(self.queue) == 0 and self.running:
-                with self.lock:
-                    if len(self.queue) == 0 and self.running:
-                        self.has_message.clear()
-                log.debug("Waiting on has_message after linger")
-                self.has_message.wait()
-                return False
-            return True
+
+    def _wait_for_has_message(self):
+        """Block until the queue has at least one slot containing a message"""
+        if len(self.queue) == 0 and self.running:
+            with self.lock:
+                if len(self.queue) == 0 and self.running:
+                    self.has_message.clear()
+            self.has_message.wait()
 
     def _wait_for_slot_available(self):
         """Block until the queue has at least one slot not containing a message"""
