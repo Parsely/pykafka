@@ -127,10 +127,23 @@ class Producer(object):
             this setting.  However, if we have fewer than this many messages
             accumulated for this partition we will 'linger' for the specified
             time waiting for more records to show up. linger_ms=0 indicates no
-            lingering.
+            lingering - messages are sent as fast as possible after they are
+            `produce()`d.
         :type linger_ms: int
-        :param queue_empty_timeout_ms:
-        :type queue_empty_timeout_ms:
+        :param queue_empty_timeout_ms: The amount of time in milliseconds for which
+            the producer's worker threads should block when no messages are available
+            to flush to brokers. After each `linger_ms` interval, the worker thread
+            checks for the presence of at least one message in its queue. If there is
+            not at least one, it enters an "empty wait" period for
+            `queue_empty_timeout_ms` before starting a new `linger_ms` wait loop. If
+            `queue_empty_timeout_ms` is 0, this "empty wait" period is a noop, and
+            flushes will continue to be attempted at intervals of `linger_ms`, even
+            when the queue is empty. If `queue_empty_timeout_ms` is a positive integer,
+            this "empty wait" period will last for at most that long, but it ends earlier
+            if a message is `produce()`d before that time. If `queue_empty_timeout_ms` is
+            -1, the "empty wait" period can only be stopped (and the worker thread killed)
+            by a call to either `produce()` or `stop()` - it will never time out.
+        :type queue_empty_timeout_ms: int
         :param block_on_queue_full: When the producer's message queue for a
             broker contains max_queued_messages, we must either stop accepting
             new messages (block) or throw an error. If True, this setting
@@ -609,6 +622,8 @@ class OwnedBroker(object):
             queue_reader, name=name)
 
     def stop(self):
+        # explicitly set has_message to kill any infinite waits triggered by
+        # queue_empty_timeout_ms=-1
         with self.lock:
             if not self.has_message.is_set():
                 self.has_message.set()
@@ -731,7 +746,9 @@ class OwnedBroker(object):
     def _wait_for_has_message(self, timeout_ms):
         """Block until the queue has at least one slot containing a message
 
-        :param timeout_ms:
+        :param timeout_ms: The amount of time in milliseconds to wait for a message
+            to be enqueued. -1 indicates infinite waiting; in this case a thread waiting
+            on this call can only be killed by a call to `stop()`.
         :type timeout_ms: int
         """
         if len(self.queue) == 0 and self.running:
