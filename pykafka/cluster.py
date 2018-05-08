@@ -467,10 +467,19 @@ class Cluster(object):
                     self.update()
                 else:
                     coordinator = self.brokers.get(res.coordinator_id, None)
-                    if coordinator is None:
+                    if coordinator is not None:
+                        log.info("Found coordinator broker with id %s", res.coordinator_id)
+                        return coordinator
+                    if i == max_connection_retries - 1:
                         raise Exception('Coordinator broker with id {id_} not found'.format(id_=res.coordinator_id))
-                    log.info("Found coordinator broker with id %s", res.coordinator_id)
-                    return coordinator
+                    else:
+                        # zookeeper may have outdated coordinator info. It should time out in
+                        # 30 seconds, give it a chance:
+                        # https://github.com/Parsely/engineering/issues/1931
+                        log.warning(
+                            'Coordinator broker with id %s not found. Waiting and retrying.',
+                            res.coordinator_id)
+                        time.sleep(10)
 
     def fetch_api_versions(self):
         """Get API version info from an available broker and save it"""
