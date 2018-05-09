@@ -479,7 +479,7 @@ class Cluster(object):
                         log.warning(
                             'Coordinator broker with id %s not found. Waiting and retrying.',
                             res.coordinator_id)
-                        time.sleep(10)
+                        time.sleep(5)
 
     def fetch_api_versions(self):
         """Get API version info from an available broker and save it"""
