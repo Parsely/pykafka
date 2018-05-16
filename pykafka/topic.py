@@ -229,7 +229,10 @@ class Topic(object):
                 self._partitions[meta.id] = Partition(
                     self, meta.id,
                     brokers[meta.leader],
-                    [brokers[b] for b in meta.replicas],
+                    # only add replicas that the cluster is aware of to avoid
+                    # KeyErrors here. inconsistencies will be automatically
+                    # resolved when `Cluster.update` is called.
+                    [brokers[b] for b in meta.replicas if b in brokers],
                     [brokers[b] for b in meta.isr],
                 )
             else:
