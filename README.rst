@@ -8,10 +8,10 @@ PyKafka
 
 .. image:: http://i.imgur.com/ztYl4lG.jpg
 
-PyKafka is a cluster-aware Kafka>=0.8.2 client for Python. It includes Python
+PyKafka is a programmer-friendly Kafka client for Python. It includes Python
 implementations of Kafka producers and consumers, which are optionally backed
-by a C extension built on `librdkafka`_, and runs under Python 2.7+, Python 3.4+,
-and PyPy.
+by a C extension built on `librdkafka`_. It runs under Python 2.7+, Python 3.4+,
+and PyPy, and supports versions of Kafka 0.8.2 and newer.
 
 .. _librdkafka: https://github.com/edenhill/librdkafka
 
@@ -73,7 +73,6 @@ them with:
 .. sourcecode:: python
 
     >>> client.topics
-    {'my.test': <pykafka.topic.Topic at 0x19bc8c0 (name=my.test)>}
     >>> topic = client.topics['my.test']
 
 Once you've got a `Topic`, you can create a `Producer` for it and start
@@ -90,7 +89,10 @@ returns after we have confirmation that the message made it to the cluster.
 
 To achieve higher throughput, we recommend using the ``Producer`` in
 asynchronous mode, so that ``produce()`` calls will return immediately and the
-producer may opt to send messages in larger batches.  You can still obtain
+producer may opt to send messages in larger batches. The ``Producer`` collects
+produced messages in an internal queue for ``linger_ms`` before sending each batch.
+This delay can be removed or changed at the expense of efficiency with ``linger_ms``,
+``min_queued_messages``, and other keyword arguments (see `readthedocs`_). You can still obtain
 delivery confirmation for messages, through a queue interface which can be
 enabled by setting ``delivery_reports=True``.  Here's a rough usage example:
 
@@ -172,9 +174,6 @@ After that, all that's needed is that you pass an extra parameter
 ``topic.get_simple_consumer()``, or ``topic.get_balanced_consumer()``.  Note
 that some configuration options may have different optimal values; it may be
 worthwhile to consult librdkafka's `configuration notes`_ for this.
-
-We currently test against librdkafka `0.9.1`_ only.  Note that use on pypy is
-not recommended at this time; the producer is certainly expected to crash.
 
 .. _0.9.1: https://github.com/edenhill/librdkafka/releases/tag/0.9.1
 .. _configuration notes: https://github.com/edenhill/librdkafka/blob/0.9.1/CONFIGURATION.md
