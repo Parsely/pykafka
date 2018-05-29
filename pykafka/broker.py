@@ -120,8 +120,9 @@ class Broker(object):
         try:
             self.connect()
         except SocketDisconnectedError:
-            log.warning("Failed to connect newly created broker for {host}:{port}".format(
-                host=self._host, port=self._port))
+            log.warning("Failed to connect to broker at {host}:{port}. Check the "
+                        "`listeners` property in server.config."
+                        .format(host=self._host, port=self._port))
 
     def __repr__(self):
         return "<{module}.{name} at {id_} (host={host}, port={port}, id={my_id})>".format(

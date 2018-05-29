@@ -453,11 +453,18 @@ class Cluster(object):
             for broker in itervalues(self.brokers):
 
                 req = GroupCoordinatorRequest(consumer_group)
-                future = broker.handler.request(req)
+                try:
+                    future = broker.handler.request(req)
+                except AttributeError:
+                    log.error("Broker {} not connected during offset manager discovery"
+                              .format(broker.id))
+                    if i == max_connection_retries - 1:
+                        raise
+                    continue
                 try:
                     res = future.get(GroupCoordinatorResponse)
                 except GroupCoordinatorNotAvailable:
-                    log.error('Error discovering offset manager.')
+                    log.error('Error discovering offset manager - GroupCoordinatorNotAvailable.')
                     if i == max_connection_retries - 1:
                         raise
                 except SocketDisconnectedError:
