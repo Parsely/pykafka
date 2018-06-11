@@ -518,15 +518,31 @@ class SimpleConsumer(object):
                 self.commit_offsets()
             self._last_auto_commit = time.time()
 
-    def commit_offsets(self):
+    def commit_offsets(self, partition_offsets=None):
         """Commit offsets for this consumer's partitions
 
         Uses the offset commit/fetch API
+
+        :param partition_offsets: (`partition`, `offset`) pairs to
+            commit where `partition` is the partition for which to commit the offset
+            and `offset` is the offset to commit for the partition
+        :type partition_offsets: Sequence of tuples of the form
+            (:class:`pykafka.partition.Partition`, int)
         """
         if not self._consumer_group:
             raise Exception("consumer group must be specified to commit offsets")
 
-        reqs = [p.build_offset_commit_request() for p in self._partitions.values()]
+        if partition_offsets is None:
+            partition_offsets = [(p, None) for p in self._partitions.keys()]
+
+        # turn Partitions into their corresponding OwnedPartitions
+        try:
+            owned_partition_offsets = {self._partitions[p]: offset
+                                       for p, offset in partition_offsets}
+        except KeyError as e:
+            raise KafkaException("Unknown partition supplied to commit_offsets\n%s", e)
+        reqs = [p.build_offset_commit_request(offset=o) for p, o in owned_partition_offsets]
+
         log.debug("Committing offsets for %d partitions to broker id %s", len(reqs),
                   self._group_coordinator.id)
         for i in range(self._offsets_commit_max_retries):
@@ -565,7 +581,8 @@ class SimpleConsumer(object):
                 op for code, err_group in iteritems(parts_by_error)
                 for op, res in err_group
             ]
-            reqs = [p.build_offset_commit_request() for p in errored_partitions]
+            reqs = [op.build_offset_commit_request(offset=owned_partition_offsets[op])
+                    for op in errored_partitions]
 
     def fetch_offsets(self):
         """Fetch offsets for this consumer's topic
