@@ -544,7 +544,8 @@ class SimpleConsumer(object):
                                        for p, offset in partition_offsets}
         except KeyError as e:
             raise KafkaException("Unknown partition supplied to commit_offsets\n%s", e)
-        reqs = [p.build_offset_commit_request(offset=o) for p, o in owned_partition_offsets]
+        reqs = [p.build_offset_commit_request(offset=o) for p, o
+                in iteritems(owned_partition_offsets)]
 
         log.debug("Committing offsets for %d partitions to broker id %s", len(reqs),
                   self._group_coordinator.id)
