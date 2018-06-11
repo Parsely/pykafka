@@ -768,12 +768,18 @@ class BalancedConsumer(object):
                 return
             yield message
 
-    def commit_offsets(self):
+    def commit_offsets(self, partition_offsets=None):
         """Commit offsets for this consumer's partitions
 
         Uses the offset commit/fetch API
+
+        :param partition_offsets: (`partition`, `offset`) pairs to
+            commit where `partition` is the partition for which to commit the offset
+            and `offset` is the offset to commit for the partition
+        :type partition_offsets: Sequence of tuples of the form
+            (:class:`pykafka.partition.Partition`, int)
         """
         self._raise_worker_exceptions()
         if not self._consumer:
             raise KafkaException("Cannot commit offsets - consumer not started")
-        return self._consumer.commit_offsets()
+        return self._consumer.commit_offsets(partition_offsets=partition_offsets)
