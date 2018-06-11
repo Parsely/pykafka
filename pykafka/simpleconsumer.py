@@ -945,14 +945,18 @@ class OwnedPartition(object):
             self.partition.topic.name, self.partition.id,
             self.next_offset, max_bytes)
 
-    def build_offset_commit_request(self):
+    def build_offset_commit_request(self, offset=None):
         """Create a :class:`pykafka.protocol.PartitionOffsetCommitRequest`
             for this partition
+
+        :param offset: The offset to send in the request. If None, defaults to
+            last_offset_consumed + 1
+        :type offset: int
         """
         return PartitionOffsetCommitRequest(
             self.partition.topic.name,
             self.partition.id,
-            self.last_offset_consumed + 1,
+            offset if offset is not None else self.last_offset_consumed + 1,
             int(time.time() * 1000),
             get_bytes('{}'.format(self._offset_metadata_json))
         )
