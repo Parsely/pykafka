@@ -101,8 +101,8 @@ class SimpleConsumer(object):
             FetchRequests
         :type num_consumer_fetchers: int
         :param auto_commit_enable: If true, periodically commit to kafka the
-            offset of messages already fetched by this consumer. This also
-            requires that `consumer_group` is not `None`.
+            offset of messages already returned from consume() calls. Requires that
+            `consumer_group` is not `None`.
         :type auto_commit_enable: bool
         :param auto_commit_interval_ms: The frequency (in milliseconds) at which the
             consumer offsets are committed to kafka. This setting is ignored if
@@ -525,7 +525,10 @@ class SimpleConsumer(object):
 
         :param partition_offsets: (`partition`, `offset`) pairs to
             commit where `partition` is the partition for which to commit the offset
-            and `offset` is the offset to commit for the partition
+            and `offset` is the offset to commit for the partition. Note that using
+            this argument when `auto_commit_enable` is enabled can cause inconsistencies
+            in committed offsets. For best results, use *either* this argument *or*
+            `auto_commit_enable`.
         :type partition_offsets: Sequence of tuples of the form
             (:class:`pykafka.partition.Partition`, int)
         """
