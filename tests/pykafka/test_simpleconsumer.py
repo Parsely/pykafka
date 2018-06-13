@@ -127,6 +127,19 @@ class TestSimpleConsumer(unittest2.TestCase):
             offsets_fetched = self._convert_offsets(consumer.fetch_offsets())
             self.assertEquals(offsets_fetched, offsets_committed)
 
+    def test_offset_commit_override(self):
+        """Check fetched offsets match committed offsets"""
+        with self._get_simple_consumer(
+                consumer_group=b'test_offset_commit') as consumer:
+            [consumer.consume() for _ in range(100)]
+            offset = 69
+            offsets_committed = [(p, offset) for p in consumer.partitions.values()]
+            consumer.commit_offsets(partition_offsets=offsets_committed)
+
+            offsets_fetched = self._convert_offsets(consumer.fetch_offsets())
+            offsets_committed = {p.id: offset - 1 for p in consumer.partitions.values()}
+            self.assertEquals(offsets_fetched, offsets_committed)
+
     def test_offset_resume(self):
         """Check resumed internal state matches committed offsets"""
         with self._get_simple_consumer(
