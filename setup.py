@@ -39,12 +39,12 @@ def get_version():
 
 install_requires = [
     'six>=1.5',
-    'kazoo',
+    'kazoo==2.5.0',
     'tabulate'
 ]
 
 extra_gevent_requires = [
-    'gevent>=1.2.2,<1.3'
+    'gevent==1.3'
 ]
 
 extra_requires = [
