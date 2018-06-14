@@ -1,6 +1,49 @@
 Changelog
 =========
 
+2.8.0-dev.2 (2018-6-14)
+-----------------------
+
+`Compare 2.8.0-dev.2`_
+
+.. _Compare 2.8.0-dev.2: https://github.com/Parsely/pykafka/compare/2.8.0-dev.1...2.8.0-dev.2
+
+Minor Version Features
+----------------------
+
+* Added a `partition_offsets` kwarg to consumers' `commit_offsets` method to decouple
+  the notions of "committed" vs "consumed" messages
+* Added an `attempts` kwarg to `Broker.connect` that controls retries during broker
+  connection
+* Added a `queue_empty_timeout_ms` kwarg to `Producer.__init__` that creates an "empty
+  wait" state in the `Producer` when no messages are available to produce
+
+Bugfixes
+--------
+
+* Updated some `cli.print_managed_consumer_groups` to be Py3 compatible
+* Updated the topic creation/deletion CLI to avoid trying to talk to 0.10.0 brokers
+* Improved error handling in `Cluster.get_group_coordinator`
+* Added retry logic to `BrokerConnection.connect`
+* Handled some nuisance errors when shutting down in `handlers.py`
+* Added a `threading.Event` instance to `Producer` indicating the presence of at least
+  one message in the queue to enable nonbusy "empty waiting"
+* Added logic to `SimpleConsumer.commit_offsets` and
+  `OwnedPartition.build_offset_commit_request` that handles user-specified offset
+  information and sends it in requests
+
+Miscellaneous
+-------------
+
+* Updated version of Kafka used in Travis tests to 1.0.1
+* Added usage guide section on connection loss
+* Updated test harness to allow simulated killing of brokers
+* Added a giant explanatory docstring to `Topic.fetch_offset_limits` clarifying how the
+  `ListOffsets` API works
+* Pinned `gevent` dependency to avoid breaking change in `kazoo`, which depends on it
+* Added tests for retrying broker connections
+* Added tests for user-specified offset commits
+
 2.8.0-dev.1 (2018-3-14)
 -----------------------
 
