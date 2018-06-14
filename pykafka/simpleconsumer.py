@@ -101,8 +101,8 @@ class SimpleConsumer(object):
             FetchRequests
         :type num_consumer_fetchers: int
         :param auto_commit_enable: If true, periodically commit to kafka the
-            offset of messages already fetched by this consumer. This also
-            requires that `consumer_group` is not `None`.
+            offset of messages already returned from consume() calls. Requires that
+            `consumer_group` is not `None`.
         :type auto_commit_enable: bool
         :param auto_commit_interval_ms: The frequency (in milliseconds) at which the
             consumer offsets are committed to kafka. This setting is ignored if
@@ -518,15 +518,35 @@ class SimpleConsumer(object):
                 self.commit_offsets()
             self._last_auto_commit = time.time()
 
-    def commit_offsets(self):
+    def commit_offsets(self, partition_offsets=None):
         """Commit offsets for this consumer's partitions
 
         Uses the offset commit/fetch API
+
+        :param partition_offsets: (`partition`, `offset`) pairs to
+            commit where `partition` is the partition for which to commit the offset
+            and `offset` is the offset to commit for the partition. Note that using
+            this argument when `auto_commit_enable` is enabled can cause inconsistencies
+            in committed offsets. For best results, use *either* this argument *or*
+            `auto_commit_enable`.
+        :type partition_offsets: Sequence of tuples of the form
+            (:class:`pykafka.partition.Partition`, int)
         """
         if not self._consumer_group:
             raise Exception("consumer group must be specified to commit offsets")
 
-        reqs = [p.build_offset_commit_request() for p in self._partitions.values()]
+        if partition_offsets is None:
+            partition_offsets = [(p, None) for p in self._partitions.keys()]
+
+        # turn Partitions into their corresponding OwnedPartitions
+        try:
+            owned_partition_offsets = {self._partitions[p]: offset
+                                       for p, offset in partition_offsets}
+        except KeyError as e:
+            raise KafkaException("Unknown partition supplied to commit_offsets\n%s", e)
+        reqs = [p.build_offset_commit_request(offset=o) for p, o
+                in iteritems(owned_partition_offsets)]
+
         log.debug("Committing offsets for %d partitions to broker id %s", len(reqs),
                   self._group_coordinator.id)
         for i in range(self._offsets_commit_max_retries):
@@ -565,7 +585,8 @@ class SimpleConsumer(object):
                 op for code, err_group in iteritems(parts_by_error)
                 for op, res in err_group
             ]
-            reqs = [p.build_offset_commit_request() for p in errored_partitions]
+            reqs = [op.build_offset_commit_request(offset=owned_partition_offsets[op])
+                    for op in errored_partitions]
 
     def fetch_offsets(self):
         """Fetch offsets for this consumer's topic
@@ -945,14 +966,18 @@ class OwnedPartition(object):
             self.partition.topic.name, self.partition.id,
             self.next_offset, max_bytes)
 
-    def build_offset_commit_request(self):
+    def build_offset_commit_request(self, offset=None):
         """Create a :class:`pykafka.protocol.PartitionOffsetCommitRequest`
             for this partition
+
+        :param offset: The offset to send in the request. If None, defaults to
+            last_offset_consumed + 1
+        :type offset: int
         """
         return PartitionOffsetCommitRequest(
             self.partition.topic.name,
             self.partition.id,
-            self.last_offset_consumed + 1,
+            offset if offset is not None else self.last_offset_consumed + 1,
             int(time.time() * 1000),
             get_bytes('{}'.format(self._offset_metadata_json))
         )
