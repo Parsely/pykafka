@@ -434,17 +434,25 @@ class Producer(object):
 
     def _produce(self, message):
         """Enqueue a message for the relevant broker
-
+        Attempts to update metadata in response to missing brokers.
         :param message: Message with valid `partition_id`, ready to be sent
         :type message: `pykafka.protocol.Message`
         """
         success = False
+        retry = 0
         while not success:
             leader_id = self._topic.partitions[message.partition_id].leader.id
             if leader_id in self._owned_brokers:
                 self._owned_brokers[leader_id].enqueue(message)
                 success = True
             else:
+                retry += 1
+                if retry < 10:
+                    log.debug("Failed to enqueue produced message. Updating metdata.")
+                    self._update()
+                else:
+                    raise ProduceFailureError("Message could not be enqueued due to missing broker "
+                                              "metadata for broker {}".format(leader_id))
                 success = False
 
     def _mark_as_delivered(self, owned_broker, message_batch, req):
