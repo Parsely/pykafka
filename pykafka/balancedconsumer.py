@@ -696,24 +696,20 @@ class BalancedConsumer(object):
     def reset_offsets(self, partition_offsets=None):
         """Reset offsets for the specified partitions
 
-        Issue an OffsetRequest for each partition and set the appropriate
-        returned offset in the consumer's internal offset counter.
+        For each value provided in `partition_offsets`: if the value is an integer,
+        immediately reset the partition's internal offset counter to that value. If
+        it's a `datetime.datetime` instance or a valid `OffsetType`, issue an
+        `OffsetRequest` using that timestamp value to discover the latest offset
+        in the latest log segment before that timestamp, then set the partition's
+        internal counter to that value.
 
         :param partition_offsets: (`partition`, `timestamp_or_offset`) pairs to
             reset where `partition` is the partition for which to reset the offset
-            and `timestamp_or_offset` is EITHER the timestamp of the message
-            whose offset the partition should have OR the new offset the
-            partition should have
+            and `timestamp_or_offset` is EITHER the timestamp before which to find
+            a valid offset to set the partition's counter to OR the new offset the
+            partition's counter should be set to
         :type partition_offsets: Sequence of tuples of the form
-            (:class:`pykafka.partition.Partition`, int)
-
-        NOTE: If an instance of `timestamp_or_offset` is treated by kafka as
-        an invalid offset timestamp, this function directly sets the consumer's
-        internal offset counter for that partition to that instance of
-        `timestamp_or_offset`. On the next fetch request, the consumer attempts
-        to fetch messages starting from that offset. See the following link
-        for more information on what kafka treats as a valid offset timestamp:
-        https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol#AGuideToTheKafkaProtocol-OffsetRequest
+            (:class:`pykafka.partition.Partition`, int OR `datetime.datetime`)
         """
         self._raise_worker_exceptions()
         if not self._consumer:

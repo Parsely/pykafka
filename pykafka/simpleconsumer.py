@@ -49,6 +49,7 @@ from .utils.error_handlers import (handle_partition_responses, raise_error,
 
 log = logging.getLogger(__name__)
 EPOCH = dt.datetime(1970, 1, 1)
+MAGIC_OFFSETS = [OffsetType.EARLIEST, OffsetType.LATEST]
 
 
 class SimpleConsumer(object):
@@ -670,15 +671,16 @@ class SimpleConsumer(object):
 
         For each value provided in `partition_offsets`: if the value is an integer,
         immediately reset the partition's internal offset counter to that value. If
-        it's a `datetime.datetime` instance, issue an `OffsetRequest` using that
-        timestamp value to discover the latest offset in the latest log segment before
-        that timestamp, then set the partition's internal counter to that value.
+        it's a `datetime.datetime` instance or a valid `OffsetType`, issue an
+        `OffsetRequest` using that timestamp value to discover the latest offset
+        in the latest log segment before that timestamp, then set the partition's
+        internal counter to that value.
 
         :param partition_offsets: (`partition`, `timestamp_or_offset`) pairs to
             reset where `partition` is the partition for which to reset the offset
             and `timestamp_or_offset` is EITHER the timestamp before which to find
             a valid offset to set the partition's counter to OR the new offset the
-            partition's counter should be set to
+            partition's counter should be set to.
         :type partition_offsets: Sequence of tuples of the form
             (:class:`pykafka.partition.Partition`, int OR `datetime.datetime`)
         """
@@ -710,12 +712,13 @@ class SimpleConsumer(object):
         log.info("Resetting offsets for %s partitions", len(list(owned_partition_offsets)))
 
         for op, offset in iteritems(owned_partition_offsets):
-            if isinstance(offset, int):
+            if isinstance(offset, int) and offset not in MAGIC_OFFSETS:
                 op.set_offset(offset)
 
-        owned_partition_timestamps = {op: timestamp for op, timestamp
-                                      in iteritems(owned_partition_offsets)
-                                      if isinstance(timestamp, dt.datetime)}
+        owned_partition_timestamps = {
+            op: timestamp for op, timestamp
+            in iteritems(owned_partition_offsets)
+            if isinstance(timestamp, dt.datetime) or timestamp in MAGIC_OFFSETS}
         if owned_partition_timestamps:
             for i in range(self._offsets_reset_max_retries):
                 # sort offsets to avoid deadlocks
