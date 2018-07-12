@@ -690,7 +690,7 @@ class SimpleConsumer(object):
                     # there is at least one log segment that starts before the given
                     # timestamp. set the counter to the latest offset of the latest
                     # log segment before the given timestamp.
-                    owned_partition.set_offset(pres.offset[0])
+                    owned_partition.set_offset(pres.offset[0] - 1)
                 else:
                     log.warning("Partition {id_}: no offsets available before {offset}."
                                 "Defaulting to OffsetType.EARLIEST.".format(
