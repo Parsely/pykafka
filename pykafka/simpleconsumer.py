@@ -939,9 +939,13 @@ class OwnedPartition(object):
             the earliest available message should be returned.
         :type offsets_before: `datetime.datetime`
         """
-        converted_timestamp = (offsets_before - EPOCH).total_seconds() * 1000
+        if isinstance(offsets_before, dt.datetime):
+            offsets_before = (offsets_before - EPOCH).total_seconds() * 1000
+        elif offsets_before not in MAGIC_OFFSETS:
+            raise ValueError("offsets_before is an invalid timestamp: {}"
+                             .format(offsets_before))
         return PartitionOffsetRequest(self.partition.topic.name, self.partition.id,
-                                      converted_timestamp, 1)
+                                      offsets_before, 1)
 
     def build_fetch_request(self, max_bytes):
         """Create a :class:`pykafka.protocol.FetchPartitionRequest` for this
