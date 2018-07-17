@@ -714,6 +714,10 @@ class SimpleConsumer(object):
         for op, offset in iteritems(owned_partition_offsets):
             if isinstance(offset, int) and offset not in MAGIC_OFFSETS:
                 op.set_offset(offset)
+        # XXX the bug here is that flush() isn't called in this case for
+        # affected partitions. solution(?): make requests for all relevant
+        # partitions if necessary, then set_offsets in a single loop that uses
+        # both given and fetched offsets as needed on a per-partition basis
 
         owned_partition_timestamps = {
             op: timestamp for op, timestamp
