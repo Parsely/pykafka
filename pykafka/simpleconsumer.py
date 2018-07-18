@@ -748,10 +748,13 @@ class SimpleConsumer(object):
         sorted_offsets = sorted(iteritems(owned_partition_offsets),
                                 key=lambda k: k[0].partition.id)
         for owned_partition, offset in sorted_offsets:
+            if not isinstance(offset, int):
+                raise ValueError(f"Invalid offset value encountered in reset_offsets:\n\t"
+                                 "Partition {owned_partition.partition.id} got offset "
+                                 "'{offset}'.")
             with owned_partition.fetch_lock:
                 owned_partition.flush()
-                if isinstance(offset, int):
-                    owned_partition.set_offset(offset)
+                owned_partition.set_offset(offset)
 
         if self._consumer_group is not None:
             self.commit_offsets()
