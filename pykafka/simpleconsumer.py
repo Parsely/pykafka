@@ -922,7 +922,7 @@ class OwnedPartition(object):
         :type offsets_before: `datetime.datetime`
         """
         if isinstance(offsets_before, dt.datetime):
-            offsets_before = (offsets_before - EPOCH).total_seconds() * 1000
+            offsets_before = round((offsets_before - EPOCH).total_seconds() * 1000)
         elif offsets_before not in MAGIC_OFFSETS:
             raise ValueError("offsets_before is an invalid timestamp: {}"
                              .format(offsets_before))
