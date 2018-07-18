@@ -690,14 +690,13 @@ class SimpleConsumer(object):
                     # there is at least one log segment that starts before the given
                     # timestamp. set the counter to the latest offset of the latest
                     # log segment before the given timestamp.
-                    owned_partition.set_offset(pres.offset[0] - 1)
+                    owned_partition_offsets[owned_partition] = pres.offset[0] - 1
                 else:
                     log.warning("Partition {id_}: no offsets available before {offset}."
                                 "Defaulting to OffsetType.EARLIEST.".format(
                                     id_=owned_partition.partition.id,
                                     offset=owned_partition_timestamps[owned_partition]))
-                    owned_partition.set_offset(OffsetType.EARLIEST)
-                owned_partition.fetch_lock.release()
+                    owned_partition_offsets[owned_partition] = OffsetType.EARLIEST
 
         if partition_offsets is None:
             partition_offsets = [(a, self._auto_offset_reset)
@@ -711,34 +710,15 @@ class SimpleConsumer(object):
 
         log.info("Resetting offsets for %s partitions", len(list(owned_partition_offsets)))
 
-        for op, offset in iteritems(owned_partition_offsets):
-            if isinstance(offset, int) and offset not in MAGIC_OFFSETS:
-                op.set_offset(offset)
-        # XXX the bug here is that flush() isn't called in this case for
-        # affected partitions. solution(?): make requests for all relevant
-        # partitions if necessary, then set_offsets in a single loop that uses
-        # both given and fetched offsets as needed on a per-partition basis
-
         owned_partition_timestamps = {
             op: timestamp for op, timestamp
             in iteritems(owned_partition_offsets)
             if isinstance(timestamp, dt.datetime) or timestamp in MAGIC_OFFSETS}
         if owned_partition_timestamps:
             for i in range(self._offsets_reset_max_retries):
-                # sort offsets to avoid deadlocks
-                sorted_timestamps = sorted(iteritems(owned_partition_timestamps), key=lambda k: k[0].partition.id)
-
-                # group partitions by leader
                 by_leader = defaultdict(list)
-                for partition, timestamp in sorted_timestamps:
-                    # acquire lock for each partition to stop fetching during offset
-                    # reset
-                    if partition.fetch_lock.acquire(True):
-                        # empty the queue for this partition to avoid sending
-                        # emitting messages from the old offset
-                        partition.flush()
-                        by_leader[partition.partition.leader].append((partition, timestamp))
-
+                for partition, timestamp in iteritems(owned_partition_timestamps):
+                    by_leader[partition.partition.leader].append((partition, timestamp))
                 # get valid offset ranges for each partition
                 for broker, timestamps in iteritems(by_leader):
                     reqs = [owned_partition.build_offset_request(timestamp)
@@ -749,7 +729,6 @@ class SimpleConsumer(object):
                         response=response,
                         success_handler=_handle_success,
                         partitions_by_id=self._partitions_by_id)
-
                     if 0 in parts_by_error:
                         # drop successfully reset partitions for next retry
                         successful = [part for part, _ in parts_by_error.pop(0)]
@@ -762,21 +741,22 @@ class SimpleConsumer(object):
                               self._topic.name,
                               {ERROR_CODES[err]: [op.partition.id for op, _ in parts]
                                for err, parts in iteritems(parts_by_error)})
-
                     self._cluster.handler.sleep(i * (self._offsets_channel_backoff_ms / 1000))
-
-                    for errcode, owned_partitions in iteritems(parts_by_error):
-                        if errcode != 0:
-                            for owned_partition, _ in owned_partitions:
-                                owned_partition.fetch_lock.release()
-
                 if not owned_partition_timestamps:
                     break
                 log.debug("Retrying offset reset")
-
             if owned_partition_timestamps:
                 raise OffsetRequestFailedError("reset_offsets failed after %d "
                                                "retries", self._offsets_reset_max_retries)
+
+        sorted_offsets = sorted(iteritems(owned_partition_offsets),
+                                key=lambda k: k[0].partition.id)
+        for owned_partition, offset in sorted_offsets:
+            if owned_partition.fetch_lock.acquire(True):
+                owned_partition.flush()
+            if isinstance(offset, int):
+                owned_partition.set_offset(offset)
+            owned_partition.fetch_lock.release()
 
         if self._consumer_group is not None:
             self.commit_offsets()
