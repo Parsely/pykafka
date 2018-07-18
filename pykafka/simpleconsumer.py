@@ -749,9 +749,9 @@ class SimpleConsumer(object):
                                 key=lambda k: k[0].partition.id)
         for owned_partition, offset in sorted_offsets:
             if not isinstance(offset, int):
-                raise ValueError(f"Invalid offset value encountered in reset_offsets:\n\t"
-                                 "Partition {owned_partition.partition.id} got offset "
-                                 "'{offset}'.")
+                raise ValueError("Invalid offset value encountered in reset_offsets:\n\t"
+                                 "Partition {pid} got offset '{offset}'."
+                                 .format(pid=owned_partition.partition.id, offset=offset))
             with owned_partition.fetch_lock:
                 owned_partition.flush()
                 owned_partition.set_offset(offset)
