@@ -729,10 +729,7 @@ class SimpleConsumer(object):
                         success_handler=_handle_success,
                         partitions_by_id=self._partitions_by_id)
                     if 0 in parts_by_error:
-                        # drop successfully reset partitions for next retry
                         successful = [part for part, _ in parts_by_error.pop(0)]
-                        # py3 creates a generate so we need to evaluate this
-                        # operation
                         list(map(owned_partition_timestamps.pop, successful))
                     if not parts_by_error:
                         continue
@@ -751,11 +748,10 @@ class SimpleConsumer(object):
         sorted_offsets = sorted(iteritems(owned_partition_offsets),
                                 key=lambda k: k[0].partition.id)
         for owned_partition, offset in sorted_offsets:
-            if owned_partition.fetch_lock.acquire(True):
+            with owned_partition.fetch_lock:
                 owned_partition.flush()
-            if isinstance(offset, int):
-                owned_partition.set_offset(offset)
-            owned_partition.fetch_lock.release()
+                if isinstance(offset, int):
+                    owned_partition.set_offset(offset)
 
         if self._consumer_group is not None:
             self.commit_offsets()
