@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+import datetime as dt
 import json
 import mock
 import os
@@ -45,6 +46,7 @@ class TestSimpleConsumer(unittest2.TestCase):
         cls.prod = cls.client.topics[cls.topic_name].get_producer(
             min_queued_messages=1
         )
+        cls.after_earliest = dt.datetime.now() + dt.timedelta(seconds=1)
         for i in range(cls.total_msgs):
             cls.prod.produce('msg {i}'.format(i=i).encode())
 
@@ -176,6 +178,30 @@ class TestSimpleConsumer(unittest2.TestCase):
                          if latest_offs[i] >= 0 else 0
                          for i in latest_offs)
         self.assertEqual(difference, self.total_msgs)
+
+    def test_reset_offsets_timestamp(self):
+        """Test resetting to user-provided timestamps"""
+        with self._get_simple_consumer(
+                auto_offset_reset=OffsetType.EARLIEST) as consumer:
+            # Find us a non-empty partition "target_part"
+            part_id, latest_offset = next(
+                (p, res.offset[0])
+                for p, res in consumer.topic.latest_available_offsets().items()
+                if res.offset[0] > 0)
+            target_part = consumer.partitions[part_id]
+
+            # Set all other partitions to LATEST, to ensure that any consume()
+            # calls read from target_part
+            partition_offsets = {
+                p: OffsetType.LATEST for p in consumer.partitions.values()}
+
+            partition_offsets[target_part] = self.after_earliest
+            consumer.reset_offsets(partition_offsets.items())
+
+            # expect EARLIEST here since our test partition has a single log segment
+            self.assertEqual(consumer.held_offsets[part_id], OffsetType.EARLIEST)
+            msg = consumer.consume()
+            self.assertEqual(msg.offset, 0)
 
     def test_reset_offsets(self):
         """Test resetting to user-provided offsets"""

@@ -719,7 +719,6 @@ class SimpleConsumer(object):
                 by_leader = defaultdict(list)
                 for partition, timestamp in iteritems(owned_partition_timestamps):
                     by_leader[partition.partition.leader].append((partition, timestamp))
-                # get valid offset ranges for each partition
                 for broker, timestamps in iteritems(by_leader):
                     reqs = [owned_partition.build_offset_request(timestamp)
                             for owned_partition, timestamp in timestamps]
@@ -744,9 +743,9 @@ class SimpleConsumer(object):
                     self._cluster.handler.sleep(i * (self._offsets_channel_backoff_ms / 1000))
                 if not owned_partition_timestamps:
                     break
-                log.debug("Retrying offset reset")
+                log.debug("Retrying offset request")
             if owned_partition_timestamps:
-                raise OffsetRequestFailedError("reset_offsets failed after %d "
+                raise OffsetRequestFailedError("Offset request failed after %d "
                                                "retries", self._offsets_reset_max_retries)
 
         sorted_offsets = sorted(iteritems(owned_partition_offsets),
