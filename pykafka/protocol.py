@@ -38,7 +38,7 @@ RequestMessage => ApiKey ApiVersion CorrelationId ClientId RequestMessage
   ApiVersion => int16
   CorrelationId => int32
   ClientId => string
-  RequestMessage => MetadataRequest | ProduceRequest | FetchRequest | OffsetRequest | OffsetCommitRequest | OffsetFetchRequest
+  RequestMessage => MetadataRequest | ProduceRequest | FetchRequest | ListOffsetRequest | OffsetCommitRequest | OffsetFetchRequest
 
 Response => CorrelationId ResponseMessage
   CorrelationId => int32
@@ -46,7 +46,7 @@ Response => CorrelationId ResponseMessage
 """
 __all__ = [
     "MetadataRequest", "MetadataResponse", "ProduceRequest", "ProduceResponse",
-    "OffsetRequest", "OffsetResponse", "OffsetCommitRequest",
+    "ListOffsetRequest", "OffsetResponse", "OffsetCommitRequest",
     "FetchRequest", "FetchResponse", "PartitionFetchRequest",
     "OffsetCommitResponse", "OffsetFetchRequest", "OffsetFetchResponse",
     "PartitionOffsetRequest", "GroupCoordinatorRequest",
@@ -1165,19 +1165,24 @@ class PartitionOffsetRequest(_PartitionOffsetRequest):
     pass
 
 
-class OffsetRequest(Request):
+class ListOffsetRequest(Request):
     """An offset request
 
     Specification::
 
-        OffsetRequest => ReplicaId [TopicName [Partition Time MaxNumberOfOffsets]]
+        ListOffsetRequest => ReplicaId [TopicName [Partition Time MaxNumberOfOffsets]]
           ReplicaId => int32
           TopicName => string
           Partition => int32
           Time => int64
           MaxNumberOfOffsets => int32
     """
+    API_VERSION = 0
     API_KEY = 2
+
+    @classmethod
+    def get_versions(cls):
+        return {0: ListOffsetRequest, 1: ListOffsetRequestV1}
 
     def __init__(self, partition_requests):
         """Create a new offset request"""
@@ -1216,6 +1221,57 @@ class OffsetRequest(Request):
             for pnum, (offsets_before, max_offsets) in iteritems(partitions):
                 struct.pack_into('!iqi', output, offset,
                                  pnum, offsets_before, max_offsets)
+                offset += 16
+        return output
+
+
+class ListOffsetRequestV1(ListOffsetRequest):
+    """
+    Specification::
+
+        ListOffsetRequest => ReplicaId [TopicName [Partition Time]]
+          ReplicaId => int32
+          TopicName => string
+          Partition => int32
+          Time => int64
+    """
+    API_VERSION = 1
+
+    def __init__(self, partition_requests):
+        """Create a new offset request"""
+        self._reqs = defaultdict(dict)
+        for t in partition_requests:
+            self._reqs[t.topic_name][t.partition_id] = t.offsets_before
+
+    def __len__(self):
+        """Length of the serialized message, in bytes"""
+        # Header + replicaId + len(topics)
+        size = self.HEADER_LEN + 4 + 4
+        for topic, parts in iteritems(self._reqs):
+            # topic name + len(parts)
+            size += 2 + len(topic) + 4
+            # partition + fetch offset => for each partition
+            size += (4 + 8) * len(parts)
+        return size
+
+    def get_bytes(self):
+        """Serialize the message
+
+        :returns: Serialized message
+        :rtype: :class:`bytearray`
+        """
+        output = bytearray(len(self))
+        self._write_header(output)
+        offset = self.HEADER_LEN
+        struct.pack_into('!ii', output, offset, -1, len(self._reqs))
+        offset += 8
+        for topic_name, partitions in iteritems(self._reqs):
+            fmt = '!h%dsi' % len(topic_name)
+            struct.pack_into(fmt, output, offset, len(topic_name),
+                             topic_name, len(partitions))
+            offset += struct.calcsize(fmt)
+            for pnum, offsets_before in iteritems(partitions):
+                struct.pack_into('!iq', output, offset, pnum, offsets_before)
                 offset += 16
         return output
 
