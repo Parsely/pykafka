@@ -990,7 +990,14 @@ class TestListOffsetAPIV1(unittest2.TestCase):
         self.assertEqual(
             msg,
             bytearray(
-                b'\x00\x00\x003\x00\x02\x00\x00\x00\x00\x00\x00\x00\x07pykafka'  # header
+                # header
+                b'\x00\x00\x00/'  # len(buffer)
+                b'\x00\x02'  # ApiKey
+                b'\x00\x01'  # api version
+                b'\x00\x00\x00\x00'  # correlation id
+                b'\x00\x07'  # len(client id)
+                    b'pykafka'  # client id  # noqa
+                # end header
                 b'\xff\xff\xff\xff'  # replica id
                 b'\x00\x00\x00\x01'  # len(topics)
                     b'\x00\x04'  # len(topic name) # noqa
@@ -998,7 +1005,6 @@ class TestListOffsetAPIV1(unittest2.TestCase):
                     b'\x00\x00\x00\x01'  # len(partitions)
                         b'\x00\x00\x00\x00'  # partition
                         b'\xff\xff\xff\xff\xff\xff\xff\xff'  # time
-                        b'\x00\x00\x00\x01'  # max number of offsets
             )
         )
 
@@ -1012,6 +1018,7 @@ class TestListOffsetAPIV1(unittest2.TestCase):
                     b'\x00\x00\x00\x01'  # len(partitions)
                         b'\x00\x00\x00\x00'  # partitoin
                         b'\x00\x03'  # error code
+                        b'\x00\x00\x00\x00\x00\x00\x00\x02'  # timestamp
                         b'\x00\x00\x00\x01'  # len(offsets)
                             b'\x00\x00\x00\x00\x00\x00\x00\x02'  # offset
             )
@@ -1027,6 +1034,7 @@ class TestListOffsetAPIV1(unittest2.TestCase):
                     b'\x00\x00\x00\x01'  # len(partitions)
                         b'\x00\x00\x00\x00'  # partitoin
                         b'\x00\x00'  # error code
+                        b'\x00\x00\x00\x00\x00\x00\x00\x02'  # timestamp
                         b'\x00\x00\x00\x01'  # len(offsets)
                             b'\x00\x00\x00\x00\x00\x00\x00\x02'  # offset
             )

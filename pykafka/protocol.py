@@ -1209,7 +1209,7 @@ class ListOffsetRequest(Request):
         :rtype: :class:`bytearray`
         """
         output = bytearray(len(self))
-        self._write_header(output)
+        self._write_header(output, api_version=self.API_VERSION)
         offset = self.HEADER_LEN
         struct.pack_into('!ii', output, offset, -1, len(self._reqs))
         offset += 8
@@ -1261,7 +1261,7 @@ class ListOffsetRequestV1(ListOffsetRequest):
         :rtype: :class:`bytearray`
         """
         output = bytearray(len(self))
-        self._write_header(output)
+        self._write_header(output, api_version=self.API_VERSION)
         offset = self.HEADER_LEN
         struct.pack_into('!ii', output, offset, -1, len(self._reqs))
         offset += 8
@@ -1272,7 +1272,7 @@ class ListOffsetRequestV1(ListOffsetRequest):
             offset += struct.calcsize(fmt)
             for pnum, offsets_before in iteritems(partitions):
                 struct.pack_into('!iq', output, offset, pnum, offsets_before)
-                offset += 16
+                offset += 12
         return output
 
 
