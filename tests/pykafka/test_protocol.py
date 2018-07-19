@@ -926,12 +926,12 @@ class TestFetchAPIV2(TestFetchAPIV1):
     RESPONSE_CLASS = protocol.FetchResponseV2
 
 
-class TestOffsetAPI(unittest2.TestCase):
+class TestListOffsetAPI(unittest2.TestCase):
     maxDiff = None
 
     def test_request(self):
         preq = protocol.PartitionOffsetRequest(b'test', 0, -1, 1)
-        req = protocol.OffsetRequest(partition_requests=[preq, ])
+        req = protocol.ListOffsetRequest(partition_requests=[preq, ])
         msg = req.get_bytes()
         self.assertEqual(
             msg,
@@ -950,7 +950,7 @@ class TestOffsetAPI(unittest2.TestCase):
 
     def test_partition_error(self):
         # Response has a UnknownTopicOrPartition error for test/0
-        response = protocol.OffsetResponse(
+        response = protocol.ListOffsetResponse(
             buffer(
                 b'\x00\x00\x00\x01'  # len(topics)
                     b'\x00\x04'  # len(topic name) # noqa
@@ -965,7 +965,61 @@ class TestOffsetAPI(unittest2.TestCase):
         self.assertEqual(response.topics[b'test'][0].err, 3)
 
     def test_response(self):
-        resp = protocol.OffsetResponse(
+        resp = protocol.ListOffsetResponse(
+            buffer(
+                b'\x00\x00\x00\x01'  # len(topics)
+                    b'\x00\x04'  # len(topic name) # noqa
+                        b'test'  # topic name
+                    b'\x00\x00\x00\x01'  # len(partitions)
+                        b'\x00\x00\x00\x00'  # partitoin
+                        b'\x00\x00'  # error code
+                        b'\x00\x00\x00\x01'  # len(offsets)
+                            b'\x00\x00\x00\x00\x00\x00\x00\x02'  # offset
+            )
+        )
+        self.assertEqual(resp.topics[b'test'][0].offset, [2])
+
+
+class TestListOffsetAPIV1(unittest2.TestCase):
+    maxDiff = None
+
+    def test_request(self):
+        preq = protocol.PartitionOffsetRequest(b'test', 0, -1, 1)
+        req = protocol.ListOffsetRequestV1(partition_requests=[preq, ])
+        msg = req.get_bytes()
+        self.assertEqual(
+            msg,
+            bytearray(
+                b'\x00\x00\x003\x00\x02\x00\x00\x00\x00\x00\x00\x00\x07pykafka'  # header
+                b'\xff\xff\xff\xff'  # replica id
+                b'\x00\x00\x00\x01'  # len(topics)
+                    b'\x00\x04'  # len(topic name) # noqa
+                        b'test'  # topic name
+                    b'\x00\x00\x00\x01'  # len(partitions)
+                        b'\x00\x00\x00\x00'  # partition
+                        b'\xff\xff\xff\xff\xff\xff\xff\xff'  # time
+                        b'\x00\x00\x00\x01'  # max number of offsets
+            )
+        )
+
+    def test_partition_error(self):
+        # Response has a UnknownTopicOrPartition error for test/0
+        response = protocol.ListOffsetResponseV1(
+            buffer(
+                b'\x00\x00\x00\x01'  # len(topics)
+                    b'\x00\x04'  # len(topic name) # noqa
+                        b'test'  # topic name
+                    b'\x00\x00\x00\x01'  # len(partitions)
+                        b'\x00\x00\x00\x00'  # partitoin
+                        b'\x00\x03'  # error code
+                        b'\x00\x00\x00\x01'  # len(offsets)
+                            b'\x00\x00\x00\x00\x00\x00\x00\x02'  # offset
+            )
+        )
+        self.assertEqual(response.topics[b'test'][0].err, 3)
+
+    def test_response(self):
+        resp = protocol.ListOffsetResponseV1(
             buffer(
                 b'\x00\x00\x00\x01'  # len(topics)
                     b'\x00\x04'  # len(topic name) # noqa
