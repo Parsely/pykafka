@@ -18,10 +18,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 __all__ = ["Message", "CompressionType", "OffsetType"]
+import datetime as dt
 import logging
 
 
 log = logging.getLogger(__name__)
+EPOCH = dt.datetime(1970, 1, 1)
 
 
 class Message(object):

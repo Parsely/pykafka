@@ -17,11 +17,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 __all__ = ["Topic"]
+import datetime as dt
 import logging
 from collections import defaultdict
 
 from .balancedconsumer import BalancedConsumer
-from .common import OffsetType
+from .common import OffsetType, EPOCH
 from .exceptions import LeaderNotFoundError
 from .managedbalancedconsumer import ManagedBalancedConsumer
 from .partition import Partition
@@ -162,14 +163,15 @@ class Topic(object):
         Thanks to Andras Beni from the Kafka users mailing list for providing
         this example.
 
-        :param offsets_before: Epoch timestamp in milliseconds indicating the
+        :param offsets_before: Epoch timestamp in milliseconds or datetime indicating the
             latest write time for returned offsets. Only offsets of messages
             written before this timestamp will be returned. Permissible
             special values are `common.OffsetType.LATEST`, indicating that
             offsets from all available log segments should be returned, and
             `common.OffsetType.EARLIEST`, indicating that only the offset of
-            the earliest available message should be returned.
-        :type offsets_before: int
+            the earliest available message should be returned. Deprecated::2.7,3.6:
+            do not use int
+        :type offsets_before: `datetime.datetime` or int
         :param max_offsets: The maximum number of offsets to return when more
             than one is available. In the case where `offsets_before ==
             OffsetType.EARLIEST`, this parameter is meaningless since there is
@@ -178,6 +180,8 @@ class Topic(object):
             latest `max_offsets` offsets.
         :type max_offsets: int
         """
+        if isinstance(offsets_before, dt.datetime):
+            offsets_before = round((offsets_before - EPOCH).total_seconds() * 1000)
         requests = defaultdict(list)  # one request for each broker
         for part in itervalues(self.partitions):
             requests[part.leader].append(PartitionOffsetRequest(
