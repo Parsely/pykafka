@@ -31,7 +31,7 @@ import weakref
 
 from six import reraise
 
-from .common import OffsetType
+from .common import OffsetType, EPOCH
 from .utils.compat import (Queue, Empty, iteritems, itervalues,
                            range, iterkeys, get_bytes, get_string)
 from .exceptions import (UnknownError, OffsetOutOfRangeError, UnknownTopicOrPartition,
@@ -48,7 +48,6 @@ from .utils.error_handlers import (handle_partition_responses, raise_error,
 
 
 log = logging.getLogger(__name__)
-EPOCH = dt.datetime(1970, 1, 1)
 MAGIC_OFFSETS = [OffsetType.EARLIEST, OffsetType.LATEST]
 
 

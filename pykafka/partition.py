@@ -95,12 +95,14 @@ class Partition(object):
         """Use the Offset API to find a limit of valid offsets
             for this partition.
 
-        :param offsets_before: Return an offset from before this timestamp (in
-            milliseconds)
-        :type offsets_before: int
+        :param offsets_before: Return an offset from before
+            this timestamp (in milliseconds). Deprecated::2.7,3.6: do not use int
+        :type offsets_before: `datetime.datetime` or int
         :param max_offsets: The maximum number of offsets to return
         :type max_offsets: int
         """
+        if isinstance(offsets_before, dt.datetime):
+            offsets_before = round((offsets_before - EPOCH).total_seconds() * 1000)
         for i in range(self.topic._cluster._max_connection_retries):
             if i > 0:
                 log.debug("Retrying offset limit fetch")
