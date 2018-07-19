@@ -24,7 +24,7 @@ from .connection import BrokerConnection
 from .exceptions import LeaderNotAvailable, SocketDisconnectedError
 from .handlers import RequestHandler
 from .protocol import (
-    FetchRequest, FetchResponse, ListOffsetRequest, OffsetResponse, MetadataRequest,
+    FetchRequest, FetchResponse, ListOffsetRequest, ListOffsetResponse, MetadataRequest,
     MetadataResponse, OffsetCommitRequest, OffsetCommitResponse, OffsetFetchRequest,
     OffsetFetchResponse, ProduceResponse, JoinGroupRequest, JoinGroupResponse,
     SyncGroupRequest, SyncGroupResponse, HeartbeatRequest, HeartbeatResponse,
@@ -350,8 +350,9 @@ class Broker(object):
             :class:`pykafka.protocol.PartitionOffsetRequest`
         """
         request_class = ListOffsetRequest.get_version_impl(self._api_versions)
+        response_class = ListOffsetResponse.get_version_impl(self._api_versions)
         future = self._req_handler.request(request_class(partition_requests))
-        return future.get(OffsetResponse)
+        return future.get(response_class)
 
     @_check_handler
     def request_metadata(self, topics=None):
