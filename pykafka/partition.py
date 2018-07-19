@@ -17,11 +17,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 __all__ = ["Partition"]
+import datetime as dt
 import logging
 import time
 import weakref
 
-from .common import OffsetType
+from .common import OffsetType, EPOCH
 from .exceptions import LeaderNotFoundError
 from .protocol import PartitionOffsetRequest
 
