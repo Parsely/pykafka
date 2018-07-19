@@ -25,7 +25,6 @@ from pykafka.membershipprotocol import (GroupMembershipProtocol, RoundRobinProto
                                         RangeProtocol)
 from pykafka.test.utils import get_cluster, stop_cluster
 from pykafka.utils.compat import range, iterkeys, iteritems
-from tests.pykafka import patch_subclass
 
 
 kafka_version_string = os.environ.get('KAFKA_VERSION', '0.8')
@@ -234,6 +233,7 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
                 except:
                     pass
 
+    @pytest.mark.skipif(USE_GEVENT)
     # weird name to ensure test execution order, because there is an unintended
     # interdependency between test_consume_latest and other tests
     def test_a_rebalance_unblock_event(self):
@@ -264,7 +264,6 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
 
         # consumer thread would die in case of any rebalancing errors
         self.assertTrue(consumer_a_thread.is_alive() and consumer_b_thread.is_alive())
-    test_a_rebalance_unblock_event.skip_condition = lambda cls: cls.USE_GEVENT
 
     def test_rebalance_callbacks(self):
         def on_rebalance(cns, old_partition_offsets, new_partition_offsets):
@@ -413,6 +412,7 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
             except:
                 pass
 
+    @pytest.mark.skipif(MANAGED_CONSUMER)
     def test_external_kazoo_client(self):
         """Run with pre-existing KazooClient instance
 
@@ -429,7 +429,6 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
             use_rdkafka=self.USE_RDKAFKA)
         [msg for msg in consumer]
         consumer.stop()
-    test_external_kazoo_client.skip_condition = lambda cls: cls.MANAGED_CONSUMER
 
     def test_no_partitions(self):
         """Ensure a consumer assigned no partitions doesn't fail"""
@@ -456,6 +455,7 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
         # check that stop() succeeds (cf #313 and #392)
         consumer.stop()
 
+    @pytest.mark.skipif(MANAGED_CONSUMER)
     def test_zk_conn_lost(self):
         """Check we restore zookeeper nodes correctly after connection loss
 
@@ -498,7 +498,6 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
                 zk.stop()
             except:
                 pass
-    test_zk_conn_lost.skip_condition = lambda cls: cls.MANAGED_CONSUMER
 
     def wait_for_rebalancing(self, *balanced_consumers):
         """Test helper that loops while rebalancing is ongoing
@@ -520,21 +519,21 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
             raise AssertionError("Rebalancing failed")
 
 
-@patch_subclass(BalancedConsumerIntegrationTests,
-                platform.python_implementation() == "PyPy" or gevent is None)
-class BalancedConsumerGEventIntegrationTests(unittest2.TestCase):
+@pytest.mark.skipif(platform.python_implementation() == "PyPy" or gevent is None,
+                    reason="Unresolved crashes")
+class BalancedConsumerGEventIntegrationTests(BalancedConsumerIntegrationTests):
     USE_GEVENT = True
 
 
-@patch_subclass(BalancedConsumerIntegrationTests, kafka_version < version_09)
-class ManagedBalancedConsumerIntegrationTests(unittest2.TestCase):
+@pytest.mark.skipif(kafka_version < version_09,
+                    reason="Managed consumer unsupported until 0.9")
+class ManagedBalancedConsumerIntegrationTests(BalancedConsumerIntegrationTests):
     MANAGED_CONSUMER = True
 
 
-@patch_subclass(
-    BalancedConsumerIntegrationTests,
-    platform.python_implementation() == "PyPy" or kafka_version < version_09 or gevent is None)
-class ManagedBalancedConsumerGEventIntegrationTests(unittest2.TestCase):
+@pytest.mark.skipif(platform.python_implementation() == "PyPy" or
+                    kafka_version < version_09 or gevent is None)
+class ManagedBalancedConsumerGEventIntegrationTests(BalancedConsumerIntegrationTests):
     MANAGED_CONSUMER = True
     USE_GEVENT = True
 

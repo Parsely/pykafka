@@ -1,7 +1,6 @@
 import pytest
-import unittest2
 
-from tests.pykafka import test_simpleconsumer, test_balancedconsumer, patch_subclass
+from tests.pykafka import test_simpleconsumer, test_balancedconsumer
 from pykafka.utils.compat import range
 try:
     from pykafka.rdkafka import _rd_kafka  # noqa
@@ -10,8 +9,8 @@ except ImportError:
     RDKAFKA = False  # C extension not built
 
 
-@patch_subclass(test_simpleconsumer.TestSimpleConsumer, not RDKAFKA)
-class TestRdKafkaSimpleConsumer(unittest2.TestCase):
+@pytest.mark.skipif(not RDKAFKA)
+class TestRdKafkaSimpleConsumer(test_simpleconsumer.TestSimpleConsumer):
     USE_RDKAFKA = True
 
     def test_update_cluster(self):
@@ -69,6 +68,6 @@ def _latest_partition_offsets_by_reading(consumer, n_reads):
     return latest_offs
 
 
-@patch_subclass(test_balancedconsumer.BalancedConsumerIntegrationTests, not RDKAFKA)
-class RdkBalancedConsumerIntegrationTests(unittest2.TestCase):
+@pytest.mark.skipif(not RDKAFKA)
+class RdkBalancedConsumerIntegrationTests(test_balancedconsumer.BalancedConsumerIntegrationTests):
     USE_RDKAFKA = True
