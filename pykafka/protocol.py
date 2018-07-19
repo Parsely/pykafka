@@ -42,11 +42,11 @@ RequestMessage => ApiKey ApiVersion CorrelationId ClientId RequestMessage
 
 Response => CorrelationId ResponseMessage
   CorrelationId => int32
-  ResponseMessage => MetadataResponse | ProduceResponse | FetchResponse | OffsetResponse | OffsetCommitResponse | OffsetFetchResponse
+  ResponseMessage => MetadataResponse | ProduceResponse | FetchResponse | ListOffsetResponse | OffsetCommitResponse | OffsetFetchResponse
 """
 __all__ = [
     "MetadataRequest", "MetadataResponse", "ProduceRequest", "ProduceResponse",
-    "ListOffsetRequest", "OffsetResponse", "OffsetCommitRequest",
+    "ListOffsetRequest", "ListOffsetResponse", "OffsetCommitRequest",
     "FetchRequest", "FetchResponse", "PartitionFetchRequest",
     "OffsetCommitResponse", "OffsetFetchRequest", "OffsetFetchResponse",
     "PartitionOffsetRequest", "GroupCoordinatorRequest",
@@ -1282,17 +1282,30 @@ OffsetPartitionResponse = namedtuple(
 )
 
 
-class OffsetResponse(Response):
+OffsetPartitionResponseV1 = namedtuple(
+    'OffsetPartitionResponse',
+    ['offset', 'timestamp', 'err']
+)
+
+
+class ListOffsetResponse(Response):
     """An offset response
 
     Specification::
 
-        OffsetResponse => [TopicName [PartitionOffsets]]
+        ListOffsetResponse => [TopicName [PartitionOffsets]]
           PartitionOffsets => Partition ErrorCode [Offset]
           Partition => int32
           ErrorCode => int16
           Offset => int64
     """
+    API_VERSION = 0
+    API_KEY = 2
+
+    @classmethod
+    def get_versions(cls):
+        return {0: ListOffsetResponse, 1: ListOffsetResponseV1}
+
     def __init__(self, buff):
         """Deserialize into a new Response
 
@@ -1308,6 +1321,36 @@ class OffsetResponse(Response):
             for partition in partitions:
                 self.topics[topic_name][partition[0]] = OffsetPartitionResponse(
                     partition[2], partition[1])
+
+
+class ListOffsetResponseV1(ListOffsetResponse):
+    """
+    Specification::
+
+        ListOffsetResponse => [TopicName [PartitionOffsets]]
+          PartitionOffsets => Partition ErrorCode Timestamp [Offset]
+          Partition => int32
+          ErrorCode => int16
+          Timestamp => int64
+          Offset => int64
+    """
+    API_VERSION = 1
+
+    def __init__(self, buff):
+        """Deserialize into a new Response
+
+        :param buff: Serialized message
+        :type buff: :class:`bytearray`
+        """
+        fmt = '[S [ihq [q] ] ]'
+        response = struct_helpers.unpack_from(fmt, buff, 0)
+
+        self.topics = {}
+        for topic_name, partitions in response:
+            self.topics[topic_name] = {}
+            for partition in partitions:
+                self.topics[topic_name][partition[0]] = OffsetPartitionResponseV1(
+                    partition[3], partition[2], partition[1])
 
 
 class GroupCoordinatorRequest(Request):
