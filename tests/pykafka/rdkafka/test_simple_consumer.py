@@ -9,7 +9,7 @@ except ImportError:
     RDKAFKA = False  # C extension not built
 
 
-@pytest.mark.skipif(not RDKAFKA)
+@pytest.mark.skipif(not RDKAFKA, reason="rdkafka")
 class TestRdKafkaSimpleConsumer(test_simpleconsumer.TestSimpleConsumer):
     USE_RDKAFKA = True
 
@@ -68,6 +68,6 @@ def _latest_partition_offsets_by_reading(consumer, n_reads):
     return latest_offs
 
 
-@pytest.mark.skipif(not RDKAFKA)
+@pytest.mark.skipif(not RDKAFKA, reason="rdkafka")
 class RdkBalancedConsumerIntegrationTests(test_balancedconsumer.BalancedConsumerIntegrationTests):
     USE_RDKAFKA = True

@@ -233,7 +233,7 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
                 except:
                     pass
 
-    @pytest.mark.skipif(USE_GEVENT)
+    @pytest.mark.skipif(USE_GEVENT, reason="Unresolved failure")
     # weird name to ensure test execution order, because there is an unintended
     # interdependency between test_consume_latest and other tests
     def test_a_rebalance_unblock_event(self):
@@ -412,7 +412,7 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
             except:
                 pass
 
-    @pytest.mark.skipif(MANAGED_CONSUMER)
+    @pytest.mark.skipif(MANAGED_CONSUMER, reason="Managed consumer doesn't use zookeeper")
     def test_external_kazoo_client(self):
         """Run with pre-existing KazooClient instance
 
@@ -455,7 +455,7 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
         # check that stop() succeeds (cf #313 and #392)
         consumer.stop()
 
-    @pytest.mark.skipif(MANAGED_CONSUMER)
+    @pytest.mark.skipif(MANAGED_CONSUMER, reason="Managed consumer doesn't use zookeeper")
     def test_zk_conn_lost(self):
         """Check we restore zookeeper nodes correctly after connection loss
 
@@ -532,7 +532,8 @@ class ManagedBalancedConsumerIntegrationTests(BalancedConsumerIntegrationTests):
 
 
 @pytest.mark.skipif(platform.python_implementation() == "PyPy" or
-                    kafka_version < version_09 or gevent is None)
+                    kafka_version < version_09 or gevent is None,
+                    reason="Unresolved crashes")
 class ManagedBalancedConsumerGEventIntegrationTests(BalancedConsumerIntegrationTests):
     MANAGED_CONSUMER = True
     USE_GEVENT = True
