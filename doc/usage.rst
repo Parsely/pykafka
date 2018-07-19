@@ -71,6 +71,32 @@ This behavior is based on the `auto.offset.reset` section of the `Kafka document
 
 .. _Kafka documentation: http://kafka.apache.org/documentation.html
 
+Consuming the last N messages from a topic
+------------------------------------------
+
+When you want to see only the last few messages of a topic, you can use the following
+pattern.
+
+.. sourcecode:: python
+
+    LAST_N_MESSAGES = 50  # adjust this depending on how many messages you want
+
+    # make a new consumer starting at LATEST
+    consumer = topic.get_simple_consumer(
+        auto_offset_reset=OffsetType.LATEST,
+        reset_offset_on_start=True)
+    # find the beginning of the range we care about for each partition
+    offsets = [(p, op.next_offset - LAST_N_MESSAGES) for p, op in consumer._partitions.iteritems()]
+    # reset the consumer's offsets to these values
+    consumer.reset_offsets(offsets)
+    # consume the (LATEST - LAST_N_MESSAGES) message from the topic
+    consumer.consume()
+
+`op.next_offset` is the "head" pointer of the consumer instance. Since we start by
+setting this consumer to `LATEST`, `next_offset` is the latest offset for the partition.
+Thus, `next_offset - LAST_N_MESSAGES` gives the starting offset of the last N messages
+per partition.
+
 Producer Patterns
 =================
 
