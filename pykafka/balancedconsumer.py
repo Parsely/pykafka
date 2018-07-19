@@ -94,7 +94,8 @@ class BalancedConsumer(object):
                  rebalance_max_retries=5,
                  rebalance_backoff_ms=2 * 1000,
                  zookeeper_connection_timeout_ms=6 * 1000,
-                 zookeeper_connect='127.0.0.1:2181',
+                 zookeeper_connect=None,
+                 zookeeper_hosts='127.0.0.1:2181',
                  zookeeper=None,
                  auto_start=True,
                  reset_offset_on_start=False,
@@ -168,9 +169,13 @@ class BalancedConsumer(object):
             milliseconds) that the consumer waits while establishing a
             connection to zookeeper.
         :type zookeeper_connection_timeout_ms: int
-        :param zookeeper_connect: Comma-separated (ip1:port1,ip2:port2) strings
-            indicating the zookeeper nodes to which to connect.
+        :param zookeeper_connect: Deprecated::2.7,3.6 Comma-Separated
+            (ip1:port1,ip2:port2) strings indicating the zookeeper nodes to which
+            to connect.
         :type zookeeper_connect: str
+        :param zookeeper_hosts: KazooClient-formatted string of ZooKeeper hosts to which
+            to connect.
+        :type zookeeper_hosts: str
         :param zookeeper: A KazooClient connected to a Zookeeper instance.
             If provided, `zookeeper_connect` is ignored.
         :type zookeeper: :class:`kazoo.client.KazooClient`
@@ -241,7 +246,7 @@ class BalancedConsumer(object):
         self._offsets_commit_max_retries = valid_int(offsets_commit_max_retries,
                                                      allow_zero=True)
         self._auto_offset_reset = auto_offset_reset
-        self._zookeeper_connect = zookeeper_connect
+        self._zookeeper_connect = zookeeper_connect or zookeeper_hosts
         self._zookeeper_connection_timeout_ms = valid_int(zookeeper_connection_timeout_ms,
                                                           allow_zero=True)
         self._reset_offset_on_start = reset_offset_on_start
