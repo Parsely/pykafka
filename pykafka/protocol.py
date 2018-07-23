@@ -1182,7 +1182,7 @@ class ListOffsetRequest(Request):
 
     @classmethod
     def get_versions(cls):
-        return {0: ListOffsetRequest, 1: ListOffsetRequest}
+        return {0: ListOffsetRequest, 1: ListOffsetRequestV1}
 
     def __init__(self, partition_requests):
         """Create a new offset request"""
@@ -1283,7 +1283,7 @@ OffsetPartitionResponse = namedtuple(
 
 
 OffsetPartitionResponseV1 = namedtuple(
-    'OffsetPartitionResponse',
+    'OffsetPartitionResponseV1',
     ['offset', 'timestamp', 'err']
 )
 
@@ -1304,7 +1304,7 @@ class ListOffsetResponse(Response):
 
     @classmethod
     def get_versions(cls):
-        return {0: ListOffsetResponse, 1: ListOffsetResponse}
+        return {0: ListOffsetResponse, 1: ListOffsetResponseV1}
 
     def __init__(self, buff):
         """Deserialize into a new Response
