@@ -239,9 +239,10 @@ class TestSimpleConsumer(unittest2.TestCase):
             self.assertEqual(msg.offset, expected_offset)
             self.assertEqual(consumer.held_offsets[part_id], expected_offset)
 
-    @pytest.mark.skipif(RDKAFKA, reason="Unresolved crashes")
     def test_update_cluster(self):
         """Check that the consumer can initiate cluster updates"""
+        if self.RDKAFKA:
+            pytest.skip("Unresolved crashes")
         with self._get_simple_consumer() as consumer:
             self.assertIsNotNone(consumer.consume())
 
