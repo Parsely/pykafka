@@ -412,13 +412,14 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
             except:
                 pass
 
-    @pytest.mark.skipif(MANAGED_CONSUMER, reason="Managed consumer doesn't use zookeeper")
     def test_external_kazoo_client(self):
         """Run with pre-existing KazooClient instance
 
         This currently doesn't assert anything, it just rules out any trivial
         exceptions in the code path that uses an external KazooClient
         """
+        if self.MANAGED_CONSUMER:
+            pytest.skip("Managed consumer doesn't use zookeeper")
         zk = KazooClient(self.kafka.zookeeper)
         zk.start()
 
