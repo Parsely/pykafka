@@ -1182,7 +1182,7 @@ class ListOffsetRequest(Request):
 
     @classmethod
     def get_versions(cls):
-        return {0: ListOffsetRequest, 1: ListOffsetRequestV1}
+        return {0: ListOffsetRequest, 1: ListOffsetRequest}
 
     def __init__(self, partition_requests):
         """Create a new offset request"""
