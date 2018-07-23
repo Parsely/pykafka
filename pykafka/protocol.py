@@ -1304,7 +1304,7 @@ class ListOffsetResponse(Response):
 
     @classmethod
     def get_versions(cls):
-        return {0: ListOffsetResponse, 1: ListOffsetResponseV1}
+        return {0: ListOffsetResponse, 1: ListOffsetResponse}
 
     def __init__(self, buff):
         """Deserialize into a new Response
