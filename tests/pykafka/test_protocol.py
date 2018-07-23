@@ -1040,6 +1040,7 @@ class TestListOffsetAPIV1(unittest2.TestCase):
             )
         )
         self.assertEqual(resp.topics[b'test'][0].offset, [2])
+        self.assertEqual(resp.topics[b'test'][0].timestamp, 2)
 
 
 class TestOffsetCommitFetchAPI(unittest2.TestCase):
