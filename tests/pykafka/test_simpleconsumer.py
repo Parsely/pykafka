@@ -241,7 +241,7 @@ class TestSimpleConsumer(unittest2.TestCase):
 
     def test_update_cluster(self):
         """Check that the consumer can initiate cluster updates"""
-        if self.RDKAFKA:
+        if self.USE_RDKAFKA:
             pytest.skip("Unresolved crashes")
         with self._get_simple_consumer() as consumer:
             self.assertIsNotNone(consumer.consume())
