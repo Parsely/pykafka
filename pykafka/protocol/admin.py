@@ -2,8 +2,8 @@
 import struct
 from collections import namedtuple
 
-from . import Request, Response, ConsumerGroupProtocolMetadata, MemberAssignment
-from pykafka.utils import struct_helpers
+from .base import Request, Response, ConsumerGroupProtocolMetadata, MemberAssignment
+from ..utils import struct_helpers
 
 
 class ListGroupsRequest(Request):

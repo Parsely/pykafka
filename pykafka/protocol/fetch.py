@@ -3,10 +3,11 @@ import struct
 from collections import namedtuple, defaultdict
 from pkg_resources import parse_version
 
-from . import Request, Response, MessageSet
-from pykafka.common import CompressionType
-from pykafka.utils import struct_helpers, compression
-from pykafka.utils.compat import iteritems
+from .base import Request, Response
+from .message import MessageSet
+from ..common import CompressionType
+from ..utils import struct_helpers, compression
+from ..utils.compat import iteritems
 
 
 _PartitionFetchRequest = namedtuple(
