@@ -32,9 +32,9 @@ class CompressionTests(unittest2.TestCase):
         decoded = compression.decode_snappy(encoded)
         self.assertEqual(self.text, decoded)
 
-    @pytest.mark.skipif(platform.python_implementation() == "PyPy",
-                        reason="PyPy fails to compress large messages with Snappy")
     def test_snappy_large_payload(self):
+        if platform.python_implementation() == "PyPy":
+            pytest.skip("PyPy fails to compress large messages with Snappy")
         payload = b''.join([uuid4().bytes for i in range(10)])
         c = compression.encode_snappy(payload)
         self.assertEqual(compression.decode_snappy(c), payload)
@@ -46,9 +46,9 @@ class CompressionTests(unittest2.TestCase):
         decoded = compression.decode_lz4(encoded)
         self.assertEqual(self.text, decoded)
 
-    @pytest.mark.skipif(platform.python_implementation() == "PyPy",
-                        reason="lz4f is currently unsupported with PyPy")
     def test_lz4f(self):
+        if platform.python_implementation() == "PyPy":
+            pytest.skip("lz4f is currently unsupported with PyPy")
         encoded = lz4f.compressFrame(self.text)
         self.assertNotEqual(self.text, encoded)
 
