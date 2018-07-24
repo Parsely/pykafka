@@ -182,9 +182,10 @@ class ProducerIntegrationTests(unittest2.TestCase):
         while consumer.consume() is not None:
             time.sleep(.05)
 
-    @pytest.mark.skipif(RDKAFKA, reason="rdkafka uses different lingering mechanism")
     def test_async_produce_lingers(self):
         """Ensure that the context manager waits for linger_ms milliseconds"""
+        if self.USE_RDKAFKA:
+            pytest.skip("rdkafka uses different lingering mechanism")
         linger = 3
         consumer = self._get_consumer()
         with self._get_producer(linger_ms=linger * 1000) as producer:
