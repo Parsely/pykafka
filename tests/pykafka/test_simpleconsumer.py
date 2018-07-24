@@ -241,6 +241,8 @@ class TestSimpleConsumer(unittest2.TestCase):
 
     def test_update_cluster(self):
         """Check that the consumer can initiate cluster updates"""
+        if self.USE_RDKAFKA:
+            pytest.skip("Unresolved crashes")
         with self._get_simple_consumer() as consumer:
             self.assertIsNotNone(consumer.consume())
 
@@ -262,7 +264,6 @@ class TestSimpleConsumer(unittest2.TestCase):
             # If the fetcher thread fell over during the cluster update
             # process, we'd get an exception here:
             self.assertIsNotNone(consumer.consume())
-    test_update_cluster.skip_condition = lambda cls: RDKAFKA
 
     def test_consumer_lag(self):
         """Ensure that after consuming the entire topic, lag is 0"""
