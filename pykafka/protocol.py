@@ -1182,7 +1182,8 @@ class ListOffsetRequest(Request):
 
     @classmethod
     def get_versions(cls):
-        return {0: ListOffsetRequest, 1: ListOffsetRequestV1}
+        # XXX use ListOffsetRequestV1 after 0.10 message format is supported
+        return {0: ListOffsetRequest, 1: ListOffsetRequest}
 
     def __init__(self, partition_requests):
         """Create a new offset request"""
@@ -1304,7 +1305,8 @@ class ListOffsetResponse(Response):
 
     @classmethod
     def get_versions(cls):
-        return {0: ListOffsetResponse, 1: ListOffsetResponseV1}
+        # XXX use ListOffsetResponseV1 after 0.10 message format is supported
+        return {0: ListOffsetResponse, 1: ListOffsetResponse}
 
     def __init__(self, buff):
         """Deserialize into a new Response
