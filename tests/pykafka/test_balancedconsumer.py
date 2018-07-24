@@ -25,7 +25,6 @@ from pykafka.membershipprotocol import (GroupMembershipProtocol, RoundRobinProto
                                         RangeProtocol)
 from pykafka.test.utils import get_cluster, stop_cluster
 from pykafka.utils.compat import range, iterkeys, iteritems
-from tests.pykafka import patch_subclass
 
 
 kafka_version_string = os.environ.get('KAFKA_VERSION', '0.8')
@@ -242,6 +241,8 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
 
         https://github.com/Parsely/pykafka/issues/701
         """
+        if self.USE_GEVENT:
+            pytest.skip("Unresolved failure")
         group = b'test_rebalance'
         consumer_a = self.get_balanced_consumer(group, consumer_timeout_ms=-1)
 
@@ -264,7 +265,6 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
 
         # consumer thread would die in case of any rebalancing errors
         self.assertTrue(consumer_a_thread.is_alive() and consumer_b_thread.is_alive())
-    test_a_rebalance_unblock_event.skip_condition = lambda cls: cls.USE_GEVENT
 
     def test_rebalance_callbacks(self):
         def on_rebalance(cns, old_partition_offsets, new_partition_offsets):
@@ -419,6 +419,8 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
         This currently doesn't assert anything, it just rules out any trivial
         exceptions in the code path that uses an external KazooClient
         """
+        if self.MANAGED_CONSUMER:
+            pytest.skip("Managed consumer doesn't use zookeeper")
         zk = KazooClient(self.kafka.zookeeper)
         zk.start()
 
@@ -429,7 +431,6 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
             use_rdkafka=self.USE_RDKAFKA)
         [msg for msg in consumer]
         consumer.stop()
-    test_external_kazoo_client.skip_condition = lambda cls: cls.MANAGED_CONSUMER
 
     def test_no_partitions(self):
         """Ensure a consumer assigned no partitions doesn't fail"""
@@ -461,6 +462,8 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
 
         See also github issue #204.
         """
+        if self.MANAGED_CONSUMER:
+            pytest.skip("Managed consumer doesn't use zookeeper")
         check_partitions = lambda c: c._get_held_partitions() == c._partitions
         zk = self.get_zk()
         zk.start()
@@ -498,7 +501,6 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
                 zk.stop()
             except:
                 pass
-    test_zk_conn_lost.skip_condition = lambda cls: cls.MANAGED_CONSUMER
 
     def wait_for_rebalancing(self, *balanced_consumers):
         """Test helper that loops while rebalancing is ongoing
@@ -520,21 +522,22 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
             raise AssertionError("Rebalancing failed")
 
 
-@patch_subclass(BalancedConsumerIntegrationTests,
-                platform.python_implementation() == "PyPy" or gevent is None)
-class BalancedConsumerGEventIntegrationTests(unittest2.TestCase):
+@pytest.mark.skipif(platform.python_implementation() == "PyPy" or gevent is None,
+                    reason="Unresolved crashes")
+class BalancedConsumerGEventIntegrationTests(BalancedConsumerIntegrationTests):
     USE_GEVENT = True
 
 
-@patch_subclass(BalancedConsumerIntegrationTests, kafka_version < version_09)
-class ManagedBalancedConsumerIntegrationTests(unittest2.TestCase):
+@pytest.mark.skipif(kafka_version < version_09,
+                    reason="Managed consumer unsupported until 0.9")
+class ManagedBalancedConsumerIntegrationTests(BalancedConsumerIntegrationTests):
     MANAGED_CONSUMER = True
 
 
-@patch_subclass(
-    BalancedConsumerIntegrationTests,
-    platform.python_implementation() == "PyPy" or kafka_version < version_09 or gevent is None)
-class ManagedBalancedConsumerGEventIntegrationTests(unittest2.TestCase):
+@pytest.mark.skipif(platform.python_implementation() == "PyPy" or
+                    kafka_version < version_09 or gevent is None,
+                    reason="Unresolved crashes")
+class ManagedBalancedConsumerGEventIntegrationTests(BalancedConsumerIntegrationTests):
     MANAGED_CONSUMER = True
     USE_GEVENT = True
 

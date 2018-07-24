@@ -31,7 +31,6 @@ from pykafka.test.utils import get_cluster, stop_cluster, retry
 from pykafka.common import CompressionType
 from pykafka.producer import OwnedBroker
 from pykafka.utils import serialize_utf8, deserialize_utf8
-from tests.pykafka import patch_subclass
 
 kafka_version = os.environ.get('KAFKA_VERSION', '0.8.0')
 
@@ -185,6 +184,8 @@ class ProducerIntegrationTests(unittest2.TestCase):
 
     def test_async_produce_lingers(self):
         """Ensure that the context manager waits for linger_ms milliseconds"""
+        if self.USE_RDKAFKA:
+            pytest.skip("rdkafka uses different lingering mechanism")
         linger = 3
         consumer = self._get_consumer()
         with self._get_producer(linger_ms=linger * 1000) as producer:
@@ -194,7 +195,6 @@ class ProducerIntegrationTests(unittest2.TestCase):
         self.assertTrue(int(time.time() - start) >= int(linger))
         consumer.consume()
         consumer.consume()
-    test_async_produce_lingers.skip_condition = lambda cls: RDKAFKA
 
     def test_async_produce_thread_exception(self):
         """Ensure that an exception on a worker thread is raised to the main thread"""
@@ -380,8 +380,8 @@ class ProducerIntegrationTests(unittest2.TestCase):
         retry(ensure_all_messages_consumed, retry_time=15)
 
 
-@patch_subclass(ProducerIntegrationTests, not RDKAFKA)
-class TestRdKafkaProducer(unittest2.TestCase):
+@pytest.mark.skipif(not RDKAFKA, reason="rdkafka")
+class TestRdKafkaProducer(ProducerIntegrationTests):
     USE_RDKAFKA = True
 
 
