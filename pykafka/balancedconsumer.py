@@ -703,8 +703,8 @@ class BalancedConsumer(object):
 
         For each value provided in `partition_offsets`: if the value is an integer,
         immediately reset the partition's internal offset counter to that value. If
-        it's a `datetime.datetime` instance or a valid `OffsetType`, issue an
-        `OffsetRequest` using that timestamp value to discover the latest offset
+        it's a `datetime.datetime` instance or a valid `OffsetType`, issue a
+        `ListOffsetRequest` using that timestamp value to discover the latest offset
         in the latest log segment before that timestamp, then set the partition's
         internal counter to that value.
 
