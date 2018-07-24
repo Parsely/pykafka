@@ -233,7 +233,6 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
                 except:
                     pass
 
-    @pytest.mark.skipif(USE_GEVENT, reason="Unresolved failure")
     # weird name to ensure test execution order, because there is an unintended
     # interdependency between test_consume_latest and other tests
     def test_a_rebalance_unblock_event(self):
@@ -242,6 +241,8 @@ class BalancedConsumerIntegrationTests(unittest2.TestCase):
 
         https://github.com/Parsely/pykafka/issues/701
         """
+        if self.USE_GEVENT:
+            pytest.skip("Unresolved failure")
         group = b'test_rebalance'
         consumer_a = self.get_balanced_consumer(group, consumer_timeout_ms=-1)
 
