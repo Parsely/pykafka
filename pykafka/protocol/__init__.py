@@ -3,14 +3,17 @@ from admin import (ListGroupsRequest, ListGroupsResponse,
                    DescribeGroupsRequest, DescribeGroupsResponse,
                    CreateTopicsRequest, CreateTopicsResponse, DeleteTopicsRequest,
                    DeleteTopicsResponse, ApiVersionsRequest, ApiVersionsResponse)
+from base import API_VERSIONS_080, API_VERSIONS_090
 from fetch import (PartitionFetchRequest, FetchRequest, FetchPartitionResponse,
-                   FetchResponse)
+                   FetchResponse, FetchResponseV1, FetchResponseV2)
 from group_membership import (JoinGroupRequest, JoinGroupResponse, SyncGroupRequest,
                               SyncGroupResponse, HeartbeatRequest, HeartbeatResponse,
-                              LeaveGroupRequest, LeaveGroupResponse)
+                              LeaveGroupRequest, LeaveGroupResponse,
+                              ConsumerGroupProtocolMetadata, MemberAssignment)
 from message import Message, MessageSet
-from metadata import MetadataRequest, MetadataResponse
-from offset import ListOffsetRequest, ListOffsetResponse
+from metadata import (MetadataRequest, MetadataResponse, MetadataRequestV1,
+                      MetadataResponseV1)
+from offset import ListOffsetRequest, ListOffsetResponse, PartitionOffsetRequest
 from offset_commit import (GroupCoordinatorRequest, GroupCoordinatorResponse,
                            PartitionOffsetCommitRequest, OffsetCommitRequest,
                            OffsetCommitPartitionResponse, OffsetCommitResponse,
@@ -62,4 +65,7 @@ __all__ = ["MetadataRequest", "MetadataResponse", "ProduceRequest", "ProduceResp
            "ListGroupsResponse", "DescribeGroupsRequest", "DescribeGroupsResponse",
            "Message", "MessageSet", "ApiVersionsRequest", "ApiVersionsResponse",
            "CreateTopicsRequest", "CreateTopicsResponse", "DeleteTopicsRequest",
-           "DeleteTopicsResponse"]
+           "DeleteTopicsResponse", "PartitionOffsetRequest", "API_VERSIONS_080",
+           "API_VERSIONS_090", "ConsumerGroupProtocolMetadata", "MemberAssignment",
+           "FetchResponseV1", "FetchResponseV2", "MetadataResponseV1",
+           "MetadataRequestV1"]
