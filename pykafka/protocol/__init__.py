@@ -1,31 +1,31 @@
 # - coding: utf-8 -
-from admin import (ListGroupsRequest, ListGroupsResponse,
-                   DescribeGroupsRequest, DescribeGroupsResponse,
-                   CreateTopicsRequest, CreateTopicsResponse, DeleteTopicsRequest,
-                   DeleteTopicsResponse, ApiVersionsRequest, ApiVersionsResponse,
-                   CreateTopicRequest)
-from base import API_VERSIONS_080, API_VERSIONS_090
-from fetch import (PartitionFetchRequest, FetchRequest, FetchPartitionResponse,
-                   FetchResponse, FetchResponseV1, FetchResponseV2)
-from group_membership import (JoinGroupRequest, JoinGroupResponse, SyncGroupRequest,
-                              SyncGroupResponse, HeartbeatRequest, HeartbeatResponse,
-                              LeaveGroupRequest, LeaveGroupResponse,
-                              ConsumerGroupProtocolMetadata, MemberAssignment)
-from message import Message, MessageSet
-from metadata import (MetadataRequest, MetadataResponse, MetadataRequestV1,
-                      MetadataResponseV1, MetadataRequestV2, MetadataResponseV2,
-                      MetadataRequestV3, MetadataResponseV3, MetadataResponseV4,
-                      MetadataRequestV4, MetadataRequestV5, MetadataResponseV5)
-from offset import (ListOffsetRequest, ListOffsetResponse, PartitionOffsetRequest,
-                    ListOffsetRequestV1, ListOffsetResponseV1)
-from offset_commit import (GroupCoordinatorRequest, GroupCoordinatorResponse,
-                           PartitionOffsetCommitRequest, OffsetCommitRequest,
-                           OffsetCommitPartitionResponse, OffsetCommitResponse,
-                           PartitionOffsetFetchRequest, OffsetFetchRequest,
-                           OffsetFetchPartitionResponse, OffsetFetchResponse,
-                           OffsetFetchRequestV1, OffsetFetchResponseV1,
-                           OffsetFetchRequestV2, OffsetFetchResponseV2)
-from produce import ProduceRequest, ProduceResponse, ProducePartitionResponse
+from .admin import (ListGroupsRequest, ListGroupsResponse,
+                    DescribeGroupsRequest, DescribeGroupsResponse,
+                    CreateTopicsRequest, CreateTopicsResponse, DeleteTopicsRequest,
+                    DeleteTopicsResponse, ApiVersionsRequest, ApiVersionsResponse,
+                    CreateTopicRequest)
+from .base import API_VERSIONS_080, API_VERSIONS_090
+from .fetch import (PartitionFetchRequest, FetchRequest, FetchPartitionResponse,
+                    FetchResponse, FetchResponseV1, FetchResponseV2)
+from .group_membership import (JoinGroupRequest, JoinGroupResponse, SyncGroupRequest,
+                               SyncGroupResponse, HeartbeatRequest, HeartbeatResponse,
+                               LeaveGroupRequest, LeaveGroupResponse,
+                               ConsumerGroupProtocolMetadata, MemberAssignment)
+from .message import Message, MessageSet
+from .metadata import (MetadataRequest, MetadataResponse, MetadataRequestV1,
+                       MetadataResponseV1, MetadataRequestV2, MetadataResponseV2,
+                       MetadataRequestV3, MetadataResponseV3, MetadataResponseV4,
+                       MetadataRequestV4, MetadataRequestV5, MetadataResponseV5)
+from .offset import (ListOffsetRequest, ListOffsetResponse, PartitionOffsetRequest,
+                     ListOffsetRequestV1, ListOffsetResponseV1)
+from .offset_commit import (GroupCoordinatorRequest, GroupCoordinatorResponse,
+                            PartitionOffsetCommitRequest, OffsetCommitRequest,
+                            OffsetCommitPartitionResponse, OffsetCommitResponse,
+                            PartitionOffsetFetchRequest, OffsetFetchRequest,
+                            OffsetFetchPartitionResponse, OffsetFetchResponse,
+                            OffsetFetchRequestV1, OffsetFetchResponseV1,
+                            OffsetFetchRequestV2, OffsetFetchResponseV2)
+from .produce import ProduceRequest, ProduceResponse, ProducePartitionResponse
 
 """
 Author: Keith Bourgoin, Emmett Butler
