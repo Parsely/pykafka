@@ -1,5 +1,5 @@
 # - coding: utf-8 -
-import datetime
+from datetime import datetime
 import struct
 from pkg_resources import parse_version
 from six import integer_types
