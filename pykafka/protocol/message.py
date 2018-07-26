@@ -170,6 +170,52 @@ class Message(Message, Serializable):
             raise RuntimeError()
 
 
+class Record(Message):
+    """
+    Specification::
+
+        Record =>
+          Length => varint
+          Attributes => int8
+          TimestampDelta => varint
+          OffsetDelta => varint
+          KeyLen => varint
+          Key => data
+          ValueLen => varint
+          Value => data
+          Headers => [Header]
+    """
+    def __init__(self,
+                 value,
+                 partition_key=None,
+                 compression_type=CompressionType.NONE,
+                 offset=-1,
+                 partition_id=-1,
+                 produce_attempt=0,
+                 protocol_version=0,
+                 timestamp=None,
+                 delivery_report_q=None,
+                 headers=None):
+        super(Record, self).__init__(value, partition_key=partition_key,
+                                     compression_type=compression_type,
+                                     offset=offset, partition_id=partition_id,
+                                     produce_attempt=produce_attempt,
+                                     protocol_version=protocol_version,
+                                     timestamp=timestamp,
+                                     delivery_report_q=delivery_report_q)
+        self.headers = headers
+
+    def __len__(self):
+        size = 4 + 1 + 1 + 4 + 4
+        if self.value is not None:
+            size += len(self.value)
+        if self.partition_key is not None:
+            size += len(self.partition_key)
+        if self.protocol_version > 0 and self.timestamp:
+            size += 8
+        return size
+
+
 class MessageSet(Serializable):
     """Representation of a set of messages in Kafka
 
