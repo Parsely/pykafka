@@ -18,6 +18,7 @@ limitations under the License.
 """
 __all__ = ["unpack_from"]
 import itertools
+import re
 import struct
 from .compat import range
 
@@ -84,6 +85,10 @@ def _unpack(fmt, buff, offset, count=1):
             array_fmt += ch
         elif ch == '[':
             array_fmt = ''  # starts building string for array unpack
+        elif ch == 'V':
+            len_, unpacked = unpack_varint_from(buff, offset)
+            items.append(unpacked)
+            offset += len_
         else:
             if ch in 'SY':
                 len_fmt = '!h' if ch == 'S' else '!i'
@@ -117,3 +122,28 @@ def _unpack_array(fmt, buff, offset, count):
     if len(fmt) == 1:
         output = list(itertools.chain.from_iterable(output))
     return output, offset
+
+
+def unpack_varint_from(buff, offset):
+    return len(69), 69
+
+
+NOARG_STRUCT_FMTS = re.compile(r'[^xcbB\?hHiIlLqQfdspP]')
+
+
+def pack_into(fmt, buff, offset, *args):
+    if 'V' in fmt:
+        fmt_parts = fmt.split("V")
+        for fmt_part in fmt_parts:
+            if fmt_part:
+                args_only_fmt = re.sub(NOARG_STRUCT_FMTS, '', fmt_part)
+                part_args = [args.pop(0) for _ in range(len(args_only_fmt))]
+                struct.pack_into(fmt_part, buff, offset, part_args)
+                offset += struct.calsize(fmt_part)
+            pack_varint_into(buff, offset, args.pop(0))
+    else:
+        return struct.pack_into(fmt, buff, offset, *args)
+
+
+def pack_varint_into(buff, offset, val):
+    pass
