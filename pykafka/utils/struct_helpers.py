@@ -125,7 +125,18 @@ def _unpack_array(fmt, buff, offset, count):
 
 
 def unpack_varint_from(buff, offset):
-    return -1, 100
+    size = 0
+    shift = 0
+    result = 0
+    while True:
+        size += 1
+        i = ord(buff[offset:offset + 1])
+        offset += 1
+        result |= (i & 0x7f) << shift
+        shift += 7
+        if not (i & 0x80):
+            break
+    return size, result
 
 
 NOARG_STRUCT_FMTS = re.compile(r'[^xcbB\?hHiIlLqQfdspP]')
@@ -133,6 +144,7 @@ NOARG_STRUCT_FMTS = re.compile(r'[^xcbB\?hHiIlLqQfdspP]')
 
 def pack_into(fmt, buff, offset, *args):
     if 'V' in fmt:
+        size = 0
         args = list(args)
         parts = [p for p in re.split('(V)', fmt) if p]
         for fmt_part in parts:
@@ -140,12 +152,29 @@ def pack_into(fmt, buff, offset, *args):
                 args_only_fmt = re.sub(NOARG_STRUCT_FMTS, '', fmt_part)
                 part_args = [args.pop(0) for _ in range(len(args_only_fmt))]
                 struct.pack_into(fmt_part, buff, offset, *part_args)
-                offset += struct.calcsize(fmt_part)
+                fmtsize = struct.calcsize(fmt_part)
+                offset += fmtsize
+                size += fmtsize
             else:
-                offset += pack_varint_into(buff, offset, args.pop(0))
+                fmtsize = pack_varint_into(buff, offset, args.pop(0))
+                offset += fmtsize
+                size += fmtsize
+        return size
     else:
         return struct.pack_into(fmt, buff, offset, *args)
 
 
 def pack_varint_into(buff, offset, val):
-    return 1
+    size = 0
+    while True:
+        towrite = val & 0x7f
+        val >>= 7
+        size += 1
+        if val:
+            struct.pack_into('c', buff, offset, chr(towrite | 0x80))
+            offset += 1
+        else:
+            struct.pack_into('c', buff, offset, chr(towrite))
+            offset += 1
+            break
+    return size
