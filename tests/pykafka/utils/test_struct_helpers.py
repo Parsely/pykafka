@@ -47,7 +47,7 @@ class StructHelpersTests(unittest2.TestCase):
     def test_varint_advanced(self):
         buff = bytearray(20)
         offset = 0
-        vals = [68, 69, 420, 30001]
+        vals = (68, 69, 420, 30001)
         fmt = 'qViV'
         struct_helpers.pack_into(fmt, buff, offset, *vals)
         output = struct_helpers.unpack_from(fmt, buff)

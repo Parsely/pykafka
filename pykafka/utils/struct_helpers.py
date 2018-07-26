@@ -151,8 +151,8 @@ def pack_into(fmt, buff, offset, *args):
             if fmt_part != "V":
                 args_only_fmt = re.sub(NOARG_STRUCT_FMTS, '', fmt_part)
                 part_args = [args.pop(0) for _ in range(len(args_only_fmt))]
-                struct.pack_into(fmt_part, buff, offset, *part_args)
-                fmtsize = struct.calcsize(fmt_part)
+                struct.pack_into("!" + fmt_part, buff, offset, *part_args)
+                fmtsize = struct.calcsize("!" + fmt_part)
                 offset += fmtsize
                 size += fmtsize
             else:
