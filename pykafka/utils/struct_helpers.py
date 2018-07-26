@@ -125,7 +125,7 @@ def _unpack_array(fmt, buff, offset, count):
 
 
 def unpack_varint_from(buff, offset):
-    return len(69), 69
+    return -1, 100
 
 
 NOARG_STRUCT_FMTS = re.compile(r'[^xcbB\?hHiIlLqQfdspP]')
@@ -133,17 +133,19 @@ NOARG_STRUCT_FMTS = re.compile(r'[^xcbB\?hHiIlLqQfdspP]')
 
 def pack_into(fmt, buff, offset, *args):
     if 'V' in fmt:
-        fmt_parts = fmt.split("V")
-        for fmt_part in fmt_parts:
-            if fmt_part:
+        args = list(args)
+        parts = [p for p in re.split('(V)', fmt) if p]
+        for fmt_part in parts:
+            if fmt_part != "V":
                 args_only_fmt = re.sub(NOARG_STRUCT_FMTS, '', fmt_part)
                 part_args = [args.pop(0) for _ in range(len(args_only_fmt))]
-                struct.pack_into(fmt_part, buff, offset, part_args)
-                offset += struct.calsize(fmt_part)
-            pack_varint_into(buff, offset, args.pop(0))
+                struct.pack_into(fmt_part, buff, offset, *part_args)
+                offset += struct.calcsize(fmt_part)
+            else:
+                offset += pack_varint_into(buff, offset, args.pop(0))
     else:
         return struct.pack_into(fmt, buff, offset, *args)
 
 
 def pack_varint_into(buff, offset, val):
-    pass
+    return 1

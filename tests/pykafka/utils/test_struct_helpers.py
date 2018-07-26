@@ -27,5 +27,24 @@ class StructHelpersTests(unittest2.TestCase):
         # A 1-length tuple with a 4-length tuple as the element
         self.assertEqual(output, [1, 2, 3, 4])
 
+    def test_varint_simple(self):
+        buff = bytearray(4)
+        offset = 0
+        val = 69
+        fmt = 'V'
+        struct_helpers.pack_into(fmt, buff, offset, val)
+        output = struct_helpers.unpack_from(fmt, buff)
+        self.assertEqual(output, (val,))
+
+    def test_varint_advanced(self):
+        buff = bytearray(20)
+        offset = 0
+        val = 69
+        fmt = 'qVi'
+        struct_helpers.pack_into(fmt, buff, offset, 68, val, 420)
+        output = struct_helpers.unpack_from(fmt, buff)
+        self.assertEqual(output[1], val)
+
+
 if __name__ == '__main__':
     unittest2.main()
