@@ -48,7 +48,7 @@ class StructHelpersTests(unittest2.TestCase):
         buff = bytearray(20)
         offset = 0
         vals = (68, 69, 420, 30001, 3987533)
-        fmt = 'qViVV'
+        fmt = '!qViVV'
         struct_helpers.pack_into(fmt, buff, offset, *vals)
         output = struct_helpers.unpack_from(fmt, buff)
         self.assertEqual(output, vals)

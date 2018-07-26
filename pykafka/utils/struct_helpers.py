@@ -147,12 +147,13 @@ def pack_into(fmt, buff, offset, *args):
         size = 0
         args = list(args)
         parts = [p for p in re.split('(V)', fmt) if p]
-        for fmt_part in parts:
+        for i, fmt_part in enumerate(parts):
             if fmt_part != "V":
                 args_only_fmt = re.sub(NOARG_STRUCT_FMTS, '', fmt_part)
                 part_args = [args.pop(0) for _ in range(len(args_only_fmt))]
-                struct.pack_into("!" + fmt_part, buff, offset, *part_args)
-                fmtsize = struct.calcsize("!" + fmt_part)
+                prefixed = "!" + fmt_part if fmt.startswith("!") and i != 0 else fmt_part
+                struct.pack_into(prefixed, buff, offset, *part_args)
+                fmtsize = struct.calcsize(prefixed)
                 offset += fmtsize
                 size += fmtsize
             else:
