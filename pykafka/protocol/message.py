@@ -14,7 +14,8 @@ from ..utils.compat import buffer
 class Message(Message, Serializable):
     """Representation of a Kafka Message
 
-    NOTE: Compression is handled in the protocol because of the way Kafka embeds compressed MessageSets within Messages
+    NOTE: Compression is handled in the protocol because of the way Kafka embeds
+    compressed MessageSets within Messages
 
     Specification::
 
@@ -222,7 +223,8 @@ class MessageSet(Serializable):
     This isn't useful outside of direct communications with Kafka, so we
     keep it hidden away here.
 
-    N.B.: MessageSets are not preceded by an int32 like other array elements in the protocol.
+    N.B.: MessageSets are not preceded by an int32 like other array elements in the
+    protocol.
 
     Specification::
 
@@ -314,7 +316,6 @@ class MessageSet(Serializable):
             message = Message.decode(buff[offset:offset + size],
                                      msg_offset,
                                      partition_id=partition_id)
-            # print '[%d] (%s) %s' % (message.offset, message.partition_key, message.value)
             messages.append(message)
             offset += size
         if len(messages) == 0 and attempted:
