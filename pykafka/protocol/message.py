@@ -207,14 +207,25 @@ class Record(Message):
         self.headers = headers
 
     def __len__(self):
-        size = 4 + 1 + 1 + 4 + 4
-        if self.value is not None:
-            size += len(self.value)
-        if self.partition_key is not None:
-            size += len(self.partition_key)
-        if self.protocol_version > 0 and self.timestamp:
-            size += 8
-        return size
+        return 0
+
+    def pack_into(self, buff, offset, base_timestamp=0, base_offset=0):
+        total_size = 0
+        fmt = '!cVVV%dsV%dsi' % (len(self.partition_key), len(self.value))
+        args = (0, self.timestamp - base_timestamp, self.offset - base_offset,
+                len(self.partition_key), self.partition_key, len(self.value),
+                self.value, len(self.headers))
+        # XXX offset needs to be moved up here to make room in front for Length
+        size = struct_helpers.pack_into(fmt, buff, offset, *args)
+        total_size += size
+        offset += size
+        for hkey, hval in self.headers:
+            fmt = '!V%dsV%ds' % (len(hkey), len(hval))
+            args = (len(hkey), hkey, len(hval), hval)
+            size = struct_helpers.pack_into(fmt, buff, offset, *args)
+            total_size += size
+            offset += size
+        # TODO calculate and pack Length to beginning of message
 
 
 class MessageSet(Serializable):
