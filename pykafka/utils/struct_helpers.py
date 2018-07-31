@@ -201,10 +201,10 @@ def pack_varint_into(buff, offset, val):
         val >>= 7
         size += 1
         if val:
-            struct.pack_into('c', buff, offset, chr(towrite | 0x80))
+            struct.pack_into('B', buff, offset, chr(towrite | 0x80))
             offset += 1
         else:
-            struct.pack_into('c', buff, offset, chr(towrite))
+            struct.pack_into('B', buff, offset, chr(towrite))
             offset += 1
             break
     return size
