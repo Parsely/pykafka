@@ -181,10 +181,14 @@ def calcsize(fmt, *args):
                 size += struct.calcsize(part_fmt)
             else:
                 for arg in part_args:
-                    size += math.ceil(math.log(arg, 128))
+                    size += get_varint_size(arg)
         return size
     else:
         return struct.calcsize(fmt)
+
+
+def get_varint_size(val):
+    return math.ceil(math.log(val, 128))
 
 
 def pack_varint_into(buff, offset, val):

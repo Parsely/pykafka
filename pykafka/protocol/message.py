@@ -1,5 +1,4 @@
 # - coding: utf-8 -
-import math
 import struct
 from datetime import datetime
 from pkg_resources import parse_version
@@ -207,26 +206,44 @@ class Record(Message):
                                      delivery_report_q=delivery_report_q)
         self.headers = headers
 
+    @property
+    def timestamp_delta(self, base_timestamp=0):
+        return self.timestamp - base_timestamp
+
+    @property
+    def offset_delta(self, base_offset=0):
+        return self.offset - base_offset
+
     def __len__(self):
-        return 0
+        size = 1
+        size += struct_helpers.get_varint_size(self.timestamp_delta)
+        size += struct_helpers.get_varint_size(self.offset_delta)
+        if self.partition_key is not None:
+            size += struct_helpers.get_varint_size(len(self.partition_key))
+            size += len(self.partition_key)
+        if self.value is not None:
+            size += struct_helpers.get_varint_size(len(self.value))
+            size += len(self.value)
+        size += 4
+        for hkey, hval in self.headers:
+            size += struct_helpers.get_varint_size(len(hkey))
+            size += len(hkey)
+            size += struct_helpers.get_varint_size(len(hval))
+            size += len(hval)
+        return size
 
     def pack_into(self, buff, offset, base_timestamp=0, base_offset=0):
-        total_size = 0
-        fmt = '!cVVV%dsV%dsi' % (len(self.partition_key), len(self.value))
-        args = (0, self.timestamp - base_timestamp, self.offset - base_offset,
+        fmt = '!VcVVV%dsV%dsi' % (len(self.partition_key), len(self.value))
+        args = (len(self), 0, self.timestamp_delta, self.offset_delta,
                 len(self.partition_key), self.partition_key, len(self.value),
                 self.value, len(self.headers))
-        # XXX offset needs to be moved up here to make room in front for Length
-        size = struct_helpers.pack_into(fmt, buff, offset, *args)
-        total_size += size
-        offset += size
+        struct_helpers.pack_into(fmt, buff, offset, *args)
+        offset += struct_helpers.calcsize(fmt, *args)
         for hkey, hval in self.headers:
             fmt = '!V%dsV%ds' % (len(hkey), len(hval))
             args = (len(hkey), hkey, len(hval), hval)
-            size = struct_helpers.pack_into(fmt, buff, offset, *args)
-            total_size += size
-            offset += size
-        # TODO calculate and pack Length to beginning of message
+            struct_helpers.pack_into(fmt, buff, offset, *args)
+            offset += struct_helpers.calcsize(fmt, *args)
 
 
 class MessageSet(Serializable):
