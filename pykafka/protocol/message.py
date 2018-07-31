@@ -1,6 +1,7 @@
 # - coding: utf-8 -
-from datetime import datetime
+import math
 import struct
+from datetime import datetime
 from pkg_resources import parse_version
 from six import integer_types
 from zlib import crc32

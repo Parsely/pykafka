@@ -18,6 +18,7 @@ limitations under the License.
 """
 __all__ = ["unpack_from"]
 import itertools
+import math
 import re
 import struct
 from .compat import range
@@ -139,30 +140,51 @@ def unpack_varint_from(buff, offset):
     return size, result
 
 
+def _split_struct_fmt(fmt, args):
+    if 'V' in fmt:
+        for i, fmt_part in enumerate([p for p in re.split('(V)', fmt) if p]):
+            if fmt_part != "V":
+                args_only_fmt = re.sub(NOARG_STRUCT_FMTS, '', fmt_part)
+                part_args = [args.pop(0) for _ in range(len(args_only_fmt))]
+                prefixed = "!" + fmt_part if fmt.startswith("!") and i != 0 else fmt_part
+                yield prefixed, part_args
+            else:
+                yield fmt_part, [args.pop(0)]
+    else:
+        yield fmt, args
+
+
 NOARG_STRUCT_FMTS = re.compile(r'[^xcbB\?hHiIlLqQfdspP]')
 
 
 def pack_into(fmt, buff, offset, *args):
     if 'V' in fmt:
-        size = 0
         args = list(args)
-        parts = [p for p in re.split('(V)', fmt) if p]
-        for i, fmt_part in enumerate(parts):
-            if fmt_part != "V":
-                args_only_fmt = re.sub(NOARG_STRUCT_FMTS, '', fmt_part)
-                part_args = [args.pop(0) for _ in range(len(args_only_fmt))]
-                prefixed = "!" + fmt_part if fmt.startswith("!") and i != 0 else fmt_part
-                struct.pack_into(prefixed, buff, offset, *part_args)
-                fmtsize = struct.calcsize(prefixed)
-                offset += fmtsize
-                size += fmtsize
+        for part_fmt, part_args in _split_struct_fmt(fmt, args):
+            if part_fmt != "V":
+                struct.pack_into(part_fmt, buff, offset, *part_args)
+                fmtsize = struct.calcsize(part_fmt)
             else:
-                fmtsize = pack_varint_into(buff, offset, args.pop(0))
-                offset += fmtsize
-                size += fmtsize
-        return size
+                pack_varint_into(buff, offset, *part_args)
+                fmtsize = calcsize(part_fmt, *part_args)
+            offset += fmtsize
     else:
         return struct.pack_into(fmt, buff, offset, *args)
+
+
+def calcsize(fmt, *args):
+    if 'V' in fmt:
+        size = 0
+        args = list(args)
+        for part_fmt, part_args in _split_struct_fmt(fmt, args):
+            if part_fmt != "V":
+                size += struct.calcsize(part_fmt)
+            else:
+                for arg in part_args:
+                    size += math.ceil(math.log(arg, 128))
+        return size
+    else:
+        return struct.calcsize(fmt)
 
 
 def pack_varint_into(buff, offset, val):
