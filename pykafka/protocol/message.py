@@ -186,6 +186,8 @@ class Record(Message):
           Value => data
           Headers => [Header]
     """
+    __slots__ = Message.__slots__ + ["headers"]
+
     def __init__(self,
                  value,
                  partition_key=None,
@@ -206,11 +208,9 @@ class Record(Message):
                                      delivery_report_q=delivery_report_q)
         self.headers = headers
 
-    @property
     def timestamp_delta(self, base_timestamp=0):
         return self.timestamp - base_timestamp
 
-    @property
     def offset_delta(self, base_offset=0):
         return self.offset - base_offset
 
@@ -222,21 +222,32 @@ class Record(Message):
             size += struct_helpers.get_varint_size(len(self.partition_key))
             size += len(self.partition_key)
         if self.value is not None:
-            size += struct_helpers.get_varint_size(len(self.value))
-            size += len(self.value)
+            size += struct_helpers.get_varint_size(len(self.value)) + len(self.value)
         size += 4
         for hkey, hval in self.headers:
-            size += struct_helpers.get_varint_size(len(hkey))
-            size += len(hkey)
-            size += struct_helpers.get_varint_size(len(hval))
-            size += len(hval)
+            size += struct_helpers.get_varint_size(len(hkey)) + len(hkey)
+            size += struct_helpers.get_varint_size(len(hval)) + len(hval)
         return size
 
+    @classmethod
+    def decode(self, buff, base_timestamp=0, base_offset=0, partition_id=-1,
+               compression_type=CompressionType.NONE):
+        (length, attr, timestamp_delta,
+         offset_delta, partition_key, value,
+         headers) = struct_helpers.unpack_from('VBVVGG [GG]', buff, 0)
+        return Record(value,
+                      partition_key=partition_key,
+                      compression_type=compression_type,
+                      offset=base_offset + offset_delta,
+                      protocol_version=1,  # XXX
+                      timestamp=base_timestamp + timestamp_delta,
+                      partition_id=partition_id)
+
     def pack_into(self, buff, offset, base_timestamp=0, base_offset=0):
-        fmt = '!VcVVV%dsV%dsi' % (len(self.partition_key), len(self.value))
-        args = (len(self), 0, self.timestamp_delta, self.offset_delta,
-                len(self.partition_key), self.partition_key, len(self.value),
-                self.value, len(self.headers))
+        fmt = '!VBVVV%dsV%dsi' % (len(self.partition_key), len(self.value))
+        args = (len(self), 0, self.timestamp_delta(base_timestamp),
+                self.offset_delta(base_offset), len(self.partition_key),
+                self.partition_key, len(self.value), self.value, len(self.headers))
         struct_helpers.pack_into(fmt, buff, offset, *args)
         offset += struct_helpers.calcsize(fmt, *args)
         for hkey, hval in self.headers:
