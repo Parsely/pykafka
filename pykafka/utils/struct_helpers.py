@@ -57,6 +57,9 @@ def unpack_from(fmt, buff, offset=0):
     return output
 
 
+BYTES_PREFIXES = {'S': '!h', 'Y': '!i', 'G': 'V'}
+
+
 def _unpack(fmt, buff, offset, count=1):
     """Recursive call for unpacking
 
@@ -91,10 +94,10 @@ def _unpack(fmt, buff, offset, count=1):
             items.append(unpacked)
             offset += len_
         else:
-            if ch in 'SY':
-                len_fmt = '!h' if ch == 'S' else '!i'
-                len_ = struct.unpack_from(len_fmt, buff, offset)[0]
-                offset += struct.calcsize(len_fmt)
+            if ch in 'SYG':
+                len_fmt = BYTES_PREFIXES[ch]
+                len_ = unpack_from(len_fmt, buff, offset)[0]
+                offset += calcsize(len_fmt, len_)
                 if len_ == -1:
                     items.append(None)
                     continue
