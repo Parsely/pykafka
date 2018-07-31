@@ -383,3 +383,59 @@ class MessageSet(Serializable):
             offset += 12
             message.pack_into(buff, offset)
             offset += mlen
+
+
+class RecordBatch(Serializable):
+    """Representation of a Kafka RecordBatch
+
+    Specification::
+
+        RecordBatch =>
+          FirstOffset => int64
+          Length => int32
+          PartitionLeaderEpoch => int32
+          Magic => int8
+          CRC => int32
+          Attributes => int16
+          LastOffsetDelta => int32
+          FirstTimestamp => int64
+          MaxTimestamp => int64
+          ProducerId => int64
+          ProducerEpoch => int16
+          FirstSequence => int32
+          Records => [Record]
+    """
+    def __init__(self, records=None, compression_type=CompressionType.NONE):
+        self.compression_type = compression_type
+        self._records = records or []
+
+    def __len__(self):
+        pass
+
+    @property
+    def records(self):
+        self._compressed = None
+        return self._records
+
+    def _get_compressed(self):
+        pass
+
+    @classmethod
+    def decode(cls, buff, partition_id=-1):
+        pass
+
+    def pack_into(self, buff, offset):
+        if self.compression_type == CompressionType.NONE:
+            records = self._records
+        else:
+            raise NotImplementedError()
+        offset = 0
+        fmt = '!qiiBihiqqqhii'
+        # NB these -1s are for currently unsupported fields introduced in 0.11
+        # XXX "magicbyte" aka protocol version (2) should be a class attribute
+        args = (-1, len(self), -1, 2, crc, attr, -1, -1, -1, -1, -1, -1, len(records))
+        struct.pack_into(fmt, buff, offset, *args)
+        offset += struct.calcsize(fmt)
+        for record in records:
+            record.pack_into(buff, offset)
+            offset += len(record)
