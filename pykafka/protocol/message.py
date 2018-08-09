@@ -453,7 +453,24 @@ class RecordBatch(MessageSet):
             self.max_timestamp = message.timestamp
 
     def _get_compressed(self):
-        pass
+        assert self.compression_type != CompressionType.NONE
+        tmp_mset = RecordBatch(messages=self._messages)
+        uncompressed = bytearray(len(tmp_mset))
+        tmp_mset.pack_record_array_into(uncompressed, 0)
+        if self.compression_type == CompressionType.GZIP:
+            compressed = compression.encode_gzip(buffer(uncompressed))
+        elif self.compression_type == CompressionType.SNAPPY:
+            compressed = compression.encode_snappy(buffer(uncompressed))
+        elif self.compression_type == CompressionType.LZ4:
+            if parse_version(self._broker_version) >= parse_version('0.10.0'):
+                compressed = compression.encode_lz4(buffer(uncompressed))
+            else:
+                compressed = compression.encode_lz4_old_kafka(buffer(uncompressed))
+        else:
+            raise TypeError("Unknown compression: %s" % self.compression_type)
+        protocol_version = max((m.protocol_version for m in self._messages))
+        return Record(compressed, compression_type=self.compression_type,
+                      protocol_version=protocol_version)
 
     @classmethod
     def decode(cls, buff, partition_id=-1):
@@ -481,7 +498,9 @@ class RecordBatch(MessageSet):
         if self.compression_type == CompressionType.NONE:
             records = self._records
         else:
-            raise NotImplementedError()
+            if self._compressed is None:
+                self._compressed = self._get_compressed()
+            records = [self._compressed]
         attr = self.compression_type
         offset = 0
         fmt = '!qiiB'
@@ -496,6 +515,8 @@ class RecordBatch(MessageSet):
                 -1, -1, -1, len(records))
         struct.pack_into(fmt, buff, offset + 4, *args)
         offset += struct.calcsize(fmt) + 4
+
+        # TODO replace this with call to pack_record_array_into
         for record in records:
             record.pack_into(buff, offset, base_timestamp=self.first_timestamp,
                              base_offset=self.first_offset)
@@ -505,3 +526,7 @@ class RecordBatch(MessageSet):
         data = buffer(buff[(crc_offset + 4):end_offset])
         crc = crc32(data) & 0xffffffff
         struct.pack_into('!I', buff, crc_offset, crc)
+
+    def pack_record_array_into(self, buff, offset):
+        """Pack only the array of Records, ignoring headers"""
+        pass
