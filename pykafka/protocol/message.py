@@ -420,7 +420,16 @@ class RecordBatch(MessageSet):
         self.max_timestamp = -1
 
     def __len__(self):
-        pass
+        if self.compression_type == CompressionType.NONE:
+            messages = self._messages
+        else:
+            if self._compressed is None:
+                self._compressed = self._get_compressed()
+            messages = [self._compressed]
+        length = 8 + 4 + 4 + 1 + 4 + 2 + 4 + 8 + 8 + 8 + 2 + 4
+        # XXX does this logic still apply to RecordBatch?
+        length += sum(len(m) for m in messages)
+        return length
 
     @property
     def records(self):
@@ -453,13 +462,23 @@ class RecordBatch(MessageSet):
             raise NotImplementedError()
         attr = self.compression_type
         offset = 0
-        fmt = '!qiiBihiqqqhii'
-        # NB these -1s are for currently unsupported fields introduced in 0.11
-        args = (self.first_offset, len(self), -1, self.protocol_version, crc, attr,
-                self.last_offset_delta, self.first_timestamp, self.max_timestamp, -1, -1,
-                -1, len(records))
+        fmt = '!qiiB'
+        args = (self.first_offset, len(self), -1, self.protocol_version)
         struct.pack_into(fmt, buff, offset, *args)
         offset += struct.calcsize(fmt)
+
+        crc_offset = offset
+        fmt = '!hiqqqhii'
+        args = (attr, self.last_offset_delta, self.first_timestamp, self.max_timestamp,
+                # NB these -1s are for currently unsupported fields introduced in 0.11
+                -1, -1, -1, len(records))
+        struct.pack_into(fmt, buff, offset + 4, *args)
+        offset += struct.calcsize(fmt) + 4
         for record in records:
             record.pack_into(buff, offset)
             offset += len(record)
+        end_offset = offset
+
+        data = buffer(buff[(crc_offset + 4):end_offset])
+        crc = crc32(data) & 0xffffffff
+        struct.pack_into('!I', buff, crc_offset, crc)
