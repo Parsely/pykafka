@@ -7,7 +7,7 @@ from zlib import crc32
 
 from ..common import CompressionType, Message
 from ..exceptions import MessageSetDecodeFailure
-from ..utils import Serializable, struct_helpers, compression
+from ..utils import Serializable, struct_helpers, compression, msg_protocol_version
 from ..utils.compat import buffer
 
 
@@ -195,7 +195,7 @@ class Record(Message):
                  offset=-1,
                  partition_id=-1,
                  produce_attempt=0,
-                 protocol_version=0,
+                 protocol_version=2,
                  timestamp=None,
                  delivery_report_q=None,
                  headers=None):
@@ -311,6 +311,9 @@ class MessageSet(Serializable):
         self._compressed = None
         return self._messages
 
+    def add_message(self, message):
+        self.messages.append(message)
+
     def _get_compressed(self):
         """Get a compressed representation of all current messages.
 
@@ -385,7 +388,7 @@ class MessageSet(Serializable):
             offset += mlen
 
 
-class RecordBatch(Serializable):
+class RecordBatch(MessageSet):
     """Representation of a Kafka RecordBatch
 
     Specification::
@@ -405,9 +408,16 @@ class RecordBatch(Serializable):
           FirstSequence => int32
           Records => [Record]
     """
-    def __init__(self, records=None, compression_type=CompressionType.NONE):
-        self.compression_type = compression_type
-        self._records = records or []
+    def __init__(self, records=None, compression_type=CompressionType.NONE,
+                 broker_version='0.9.0'):
+        super(RecordBatch, self).__init__(messages=records,
+                                          broker_version=broker_version,
+                                          compression_type=compression_type)
+        self.protocol_version = msg_protocol_version(broker_version)
+        self.first_offset = -1
+        self.last_offset_delta = -1
+        self.first_timestamp = -1
+        self.max_timestamp = -1
 
     def __len__(self):
         pass
@@ -415,7 +425,19 @@ class RecordBatch(Serializable):
     @property
     def records(self):
         self._compressed = None
-        return self._records
+        return self._messages
+
+    def add_message(self, message):
+        self._messages.append(message)
+        if message.offset < self.first_offset:
+            self.first_offset = message.offset
+        msg_offset_delta = message.offset - self.first_offset
+        if msg_offset_delta > self.last_offset_delta:
+            self.last_offset_delta = msg_offset_delta
+        if message.timestamp < self.first_timestamp:
+            self.first_timestamp = message.timestamp
+        if message.timestamp > self.max_timestamp:
+            self.max_timestamp = message.timestamp
 
     def _get_compressed(self):
         pass
@@ -429,11 +451,13 @@ class RecordBatch(Serializable):
             records = self._records
         else:
             raise NotImplementedError()
+        attr = self.compression_type
         offset = 0
         fmt = '!qiiBihiqqqhii'
         # NB these -1s are for currently unsupported fields introduced in 0.11
-        # XXX "magicbyte" aka protocol version (2) should be a class attribute
-        args = (-1, len(self), -1, 2, crc, attr, -1, -1, -1, -1, -1, -1, len(records))
+        args = (self.first_offset, len(self), -1, self.protocol_version, crc, attr,
+                self.last_offset_delta, self.first_timestamp, self.max_timestamp, -1, -1,
+                -1, len(records))
         struct.pack_into(fmt, buff, offset, *args)
         offset += struct.calcsize(fmt)
         for record in records:

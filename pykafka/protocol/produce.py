@@ -75,6 +75,8 @@ class ProduceRequest(Request):
         :param topic_name: the name of the topic to publish to
         :param partition_id: the partition to publish to
         """
+        # TODO this needs to use a method on MessageSet
+        # self.msets[topic_name][partition_id].add_message(message)
         self.msets[topic_name][partition_id].messages.append(message)
         self._message_count += 1
 
