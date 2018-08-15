@@ -196,6 +196,14 @@ class NotCoordinatorForGroup(ProtocolClientError):
     ERROR_CODE = 16
 
 
+class InvalidTopic(ProtocolClientError):
+    """For a request which attempts to access an invalid topic (e.g. one which has
+        an illegal name), or if an attempt is made to write to an internal topic
+        (such as the consumer offsets topic).
+    """
+    ERROR_CODE = 17
+
+
 class IllegalGeneration(ProtocolClientError):
     """Returned from group membership requests (such as heartbeats) when the generation
         id provided in the request is not the current generation
@@ -261,6 +269,7 @@ ERROR_CODES = dict(
                 GroupLoadInProgress,
                 GroupCoordinatorNotAvailable,
                 NotCoordinatorForGroup,
+                InvalidTopic,
                 IllegalGeneration,
                 InconsistentGroupProtocol,
                 UnknownMemberId,
