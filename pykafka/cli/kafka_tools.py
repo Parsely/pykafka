@@ -54,7 +54,8 @@ def fetch_consumer_lag(client, topic, consumer_group):
     """
     latest_offsets = fetch_offsets(client, topic, 'latest')
     consumer = topic.get_simple_consumer(consumer_group=consumer_group,
-                                         auto_start=False)
+                                         auto_start=False, 
+                                         reset_offset_on_fetch=False)
     current_offsets = consumer.fetch_offsets()
     return {p_id: (latest_offsets[p_id].offset[0], res.offset)
             for p_id, res in current_offsets}
