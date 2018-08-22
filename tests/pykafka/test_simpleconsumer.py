@@ -239,6 +239,7 @@ class TestSimpleConsumer(unittest2.TestCase):
             self.assertEqual(msg.offset, expected_offset)
             self.assertEqual(consumer.held_offsets[part_id], expected_offset)
 
+    @pytest.mark.xfail
     def test_update_cluster(self):
         """Check that the consumer can initiate cluster updates"""
         if self.USE_RDKAFKA:
@@ -265,6 +266,7 @@ class TestSimpleConsumer(unittest2.TestCase):
             # process, we'd get an exception here:
             self.assertIsNotNone(consumer.consume())
 
+    @pytest.mark.xfail
     def test_consumer_lag(self):
         """Ensure that after consuming the entire topic, lag is 0"""
         with self._get_simple_consumer(consumer_group=b"test_lag_group",
