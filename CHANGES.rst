@@ -1,6 +1,39 @@
 Changelog
 =========
 
+2.8.0-dev.3 (2018-8-22)
+-----------------------
+
+`Compare 2.8.0-dev.3`_
+
+.. _Compare 2.8.0-dev.3: https://github.com/Parsely/pykafka/compare/2.8.0-dev.2...2.8.0-dev.3
+
+Minor Version Features
+----------------------
+
+* Added the `zookeeper_hosts` kwarg to `BalancedConsumer` to standardize kwarg naming
+* Implemented versioning for `ListOffsetRequest`
+* Changed the behavior of integer arguments passed to `reset_offsets`
+
+Bugfixes
+--------
+
+* Fixed the internal logic of `reset_offsets` to be more predictable and user-friendly,
+  and to better handle the case where the topic has a single log segment
+* Standardized the handling of `offsets_before` arguments across the API
+* Added cluster update attempts to `produce()` retries
+
+Miscellaneous
+-------------
+
+* Added usage example on consuming the last N messages from a topic
+* Deprecated the `zookeeper_connect` kwarg on `BalancedConsumer`
+* Split the `protocol.py` file into multiple smaller files via the `protocol` module
+* Changed the lag monitor CLI to avoid resetting offsets
+* Added `InvalidTopic` to the list of supported exceptions
+* Updated requirement versions: lz4, pytest, xxhash
+* Removed hacky test-skipping logic from test suite
+
 2.8.0-dev.2 (2018-6-14)
 -----------------------
 
