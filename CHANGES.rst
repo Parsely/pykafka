@@ -1,6 +1,23 @@
 Changelog
 =========
 
+2.8.0-dev.4 (2018-9-17)
+-----------------------
+
+`Compare 2.8.0-dev.4`_
+
+.. _Compare 2.8.0-dev.4: https://github.com/Parsely/pykafka/compare/2.8.0-dev.3...2.8.0-dev.4
+
+Bugfixes
+--------
+
+* Added a more descriptive error message on certain broker version mismatch errors
+
+Miscellaneous
+-------------
+
+* xfail `test_update_cluster`, since it occasionally fails
+
 2.8.0-dev.3 (2018-8-22)
 -----------------------
 
