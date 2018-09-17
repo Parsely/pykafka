@@ -812,6 +812,10 @@ class SimpleConsumer(object):
                     # If the broker dies while we're supposed to stop,
                     # it's fine, and probably an integration test.
                     return
+                except socket.error:
+                    raise ValueError("Failed to decode IO buffer. Ensure that "
+                                     "the KafkaClient's broker_version kwarg "
+                                     "matches the version of the Kafka cluster.")
                 parts_by_error = build_parts_by_error(response, self._partitions_by_id)
                 handle_partition_responses(
                     self._default_error_handlers,
