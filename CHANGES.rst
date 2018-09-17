@@ -1,6 +1,13 @@
 Changelog
 =========
 
+2.8.0-dev.5 (2018-9-17)
+-----------------------
+
+`Compare 2.8.0-dev.5`_
+
+.. _Compare 2.8.0-dev.5: https://github.com/Parsely/pykafka/compare/2.8.0-dev.4...2.8.0-dev.5
+
 2.8.0-dev.4 (2018-9-17)
 -----------------------
 
