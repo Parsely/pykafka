@@ -95,7 +95,7 @@ Release Process
 * Add and commit updates to the `changelog`_
 * Increment the `version`_ according to SemVer, commit and tag with the version string
 * Use the GitHub `release UI`_ to create a new release
-* Push to PyPI with ``python setup.py sdist upload``
+* Push to PyPI with ``rm -rf dist && python setup.py sdist bdist_egg && twine upload dist/*``
 * Update conda-forge version string and `SHA`_ with a pull request `here`_
 
 .. _changelog: https://github.com/Parsely/pykafka/blob/master/CHANGES.rst
