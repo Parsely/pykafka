@@ -1,5 +1,5 @@
-.. image:: https://travis-ci.org/Parsely/pykafka.svg?branch=master
-    :target: https://travis-ci.org/Parsely/pykafka
+.. image:: https://travis-ci.com/Parsely/pykafka.svg?branch=master
+    :target: https://travis-ci.com/Parsely/pykafka
 .. image:: https://codecov.io/github/Parsely/pykafka/coverage.svg?branch=master
     :target: https://codecov.io/github/Parsely/pykafka?branch=master
 
