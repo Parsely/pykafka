@@ -197,13 +197,6 @@ or after installing PyKafka via setuptools or pip:
 
 .. _CLI tools: https://github.com/Parsely/pykafka/blob/master/pykafka/cli/kafka_tools.py
 
-PyKafka or kafka-python?
-------------------------
-
-These are two different projects.
-See `the discussion here <https://github.com/Parsely/pykafka/issues/334>`_ for comparisons
-between the two projects.
-
 Contributing
 ------------
 
