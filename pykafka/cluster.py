@@ -54,6 +54,13 @@ class TopicDict(dict):
     def values(self):
         return [self[key] for key in self]
 
+    def __contains__(self, key):
+        try:
+            key = get_string(key).encode('ascii')
+        except UnicodeEncodeError:
+            return False
+        return super(TopicDict, self).__contains__(key)
+
     def __getitem__(self, key):
         try:
             key = get_string(key).encode('ascii')
