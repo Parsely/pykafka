@@ -1,6 +1,85 @@
 Changelog
 =========
 
+2.8.0 (2018-9-24)
+-----------------
+
+`Compare 2.8.0`_
+
+.. _Compare 2.8.0: https://github.com/Parsely/pykafka/compare/2.7.0...2.8.0
+
+Minor Version Features
+----------------------
+* Added a `deserializer` kwarg to consumer components to facilitate unicode support
+* Added a `reset_offset_on_fetch` kwarg to consumer components to support read-only
+  consumption
+* Changed the expected type of the consumer's `consumer_group` kwarg to `str` from `bytes`
+* Changed the expected type of `TopicDict.__getitem__`'s parameter to `str` from `bytes`
+* Added a `pending_timeout_ms` kwarg to `Producer.__init__` to allow delivery report
+  wait timeouts
+* Added a `serializer` kwarg to `Producer.__init__` to facilitate unicode support
+* Deprecated the `generation_id` and `consumer_id` parameters on `SimpleConsumer`
+* Added a `partition_offsets` kwarg to consumers' `commit_offsets` method to decouple
+  the notions of "committed" vs "consumed" messages
+* Added an `attempts` kwarg to `Broker.connect` that controls retries during broker
+  connection
+* Added a `queue_empty_timeout_ms` kwarg to `Producer.__init__` that creates an "empty
+  wait" state in the `Producer` when no messages are available to produce
+* Added the `zookeeper_hosts` kwarg to `BalancedConsumer` to standardize kwarg naming
+* Implemented versioning for `ListOffsetRequest`
+* Changed the behavior of integer arguments passed to `reset_offsets`
+
+Bugfixes
+--------
+* Changed consumers to handle valid ascii strings for consumer group names instead of
+  bytes
+* Handled `NoNodeException` during consumer ZK node releases
+* Used `api_versions` to select the version-appropriate implementation for
+  `OffsetFetchRequest`
+* Adjusted synchronous production logic to avoid infinite blocking when delivery report
+  is lost
+* Fixed a bug in `FetchResponseV1` causing `throttle_time` to be returned as a tuple
+  instead of an integer
+* Implemented support for all current versions of `OffsetFetchRequest` and
+  `OffsetFetchResponse`
+* Updated some `cli.print_managed_consumer_groups` to be Py3 compatible
+* Updated the topic creation/deletion CLI to avoid trying to talk to 0.10.0 brokers
+* Improved error handling in `Cluster.get_group_coordinator`
+* Added retry logic to `BrokerConnection.connect`
+* Handled some nuisance errors when shutting down in `handlers.py`
+* Added a `threading.Event` instance to `Producer` indicating the presence of at least
+  one message in the queue to enable nonbusy "empty waiting"
+* Added logic to `SimpleConsumer.commit_offsets` and
+  `OwnedPartition.build_offset_commit_request` that handles user-specified offset
+  information and sends it in requests
+* Fixed the internal logic of `reset_offsets` to be more predictable and user-friendly,
+  and to better handle the case where the topic has a single log segment
+* Standardized the handling of `offsets_before` arguments across the API
+* Added cluster update attempts to `produce()` retries
+* Added a more descriptive error message on certain broker version mismatch errors
+
+Miscellaneous
+-------------
+* Used logging.NullHandler to remove nuisance logs
+* Added stock unicode serde to `utils`
+* Added README to pypi info
+* Updated version of Kafka used in Travis tests to 1.0.1
+* Added usage guide section on connection loss
+* Updated test harness to allow simulated killing of brokers
+* Added a giant explanatory docstring to `Topic.fetch_offset_limits` clarifying how the
+  `ListOffsets` API works
+* Pinned `gevent` dependency to avoid breaking change in `kazoo`, which depends on it
+* Added tests for retrying broker connections
+* Added tests for user-specified offset commits
+* Added usage example on consuming the last N messages from a topic
+* Deprecated the `zookeeper_connect` kwarg on `BalancedConsumer`
+* Split the `protocol.py` file into multiple smaller files via the `protocol` module
+* Changed the lag monitor CLI to avoid resetting offsets
+* Added `InvalidTopic` to the list of supported exceptions
+* Updated requirement versions: lz4, pytest, xxhash
+* Removed hacky test-skipping logic from test suite
+* xfail `test_update_cluster`, since it occasionally fails
+
 2.8.0-dev.5 (2018-9-17)
 -----------------------
 
