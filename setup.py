@@ -44,7 +44,7 @@ install_requires = [
 ]
 
 extra_gevent_requires = [
-    'gevent==1.3'
+    'gevent==1.3.6'
 ]
 
 extra_requires = [
