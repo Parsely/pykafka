@@ -490,8 +490,9 @@ class Cluster(object):
         """Get API version info from an available broker and save it"""
         version = parse_version(self._broker_version)
         if version < parse_version('0.10.0'):
-            log.info("Broker version is too old to use automatic API version "
-                     "discovery. Falling back to hardcoded versions list.")
+            log.info("Broker version %s is too old to use automatic API "
+                     "version discovery, minimum version is 0.10.0. "
+                     "Falling back to hardcoded versions list.", version)
             if version >= parse_version('0.9.0'):
                 self._api_versions = API_VERSIONS_090
             else:
