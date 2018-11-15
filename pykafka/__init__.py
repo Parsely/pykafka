@@ -12,11 +12,22 @@ from .balancedconsumer import BalancedConsumer
 from .managedbalancedconsumer import ManagedBalancedConsumer
 from .membershipprotocol import RangeProtocol, RoundRobinProtocol
 
-__version__ = '2.8.1-dev.1'
+__version__ = "2.8.1-dev.2"
 
 
-__all__ = ["Broker", "SimpleConsumer", "Cluster", "Partition", "Producer",
-           "Topic", "SslConfig", "KafkaClient", "BalancedConsumer",
-           "ManagedBalancedConsumer", "RangeProtocol", "RoundRobinProtocol"]
+__all__ = [
+    "Broker",
+    "SimpleConsumer",
+    "Cluster",
+    "Partition",
+    "Producer",
+    "Topic",
+    "SslConfig",
+    "KafkaClient",
+    "BalancedConsumer",
+    "ManagedBalancedConsumer",
+    "RangeProtocol",
+    "RoundRobinProtocol",
+]
 
 logging.getLogger(__name__).addHandler(logging.NullHandler())
