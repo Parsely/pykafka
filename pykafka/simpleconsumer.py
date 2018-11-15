@@ -448,8 +448,7 @@ class SimpleConsumer(object):
             try:
                 self.cleanup()
             except ReferenceError as e:
-                log.debug("Attempt to cleanup consumer failed")
-                log.exception(e)
+                log.debug("Attempt to cleanup consumer failed with ReferenceError")
             log.debug("Fetcher thread exiting")
         log.info("Starting %s fetcher threads", self._num_consumer_fetchers)
         return [self._cluster.handler.spawn(fetcher, name="pykafka.SimpleConsumer.fetcher")
