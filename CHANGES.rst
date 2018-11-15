@@ -1,6 +1,25 @@
 Changelog
 =========
 
+2.8.1-dev.1 (2018-11-15)
+------------------------
+
+`Compare 2.8.1-dev.1`_
+
+.. _Compare 2.8.1-dev.1: https://github.com/Parsely/pykafka/compare/2.8.0...2.8.1-dev.1
+
+Bugfixes
+--------
+
+* Fixed a bug causing topics to be erroneously reported as present on `Topic`
+* Fixed noisy logging from consumer shutdown
+
+Miscellaneous
+-------------
+
+* Updated dependencies: gevent, xxhash, pytest, lz4
+
+
 2.8.0 (2018-9-24)
 -----------------
 
