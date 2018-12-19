@@ -41,24 +41,37 @@ def fetch_offsets(client, topic, offset):
         return topic.fetch_offset_limits(offset)
 
 
-def fetch_consumer_lag(client, topic, consumer_group):
+def fetch_consumer_lag(client, topic, host, consumer_group):
     """Get raw lag data for a topic/consumer group.
 
     :param client: KafkaClient connected to the cluster.
     :type client:  :class:`pykafka.KafkaClient`
     :param topic:  Name of the topic.
     :type topic:  :class:`pykafka.topic.Topic`
+    :param host: Host of cluster
     :param consumer_group: Name of the consumer group to fetch lag for.
     :type consumer_groups: :class:`str`
     :returns: dict of {partition_id: (latest_offset, consumer_offset)}
     """
     latest_offsets = fetch_offsets(client, topic, 'latest')
+    from kazoo.client import KazooClient
+    zookeeper_host = host.replace("9092", "2181")
+    kz_client = KazooClient(hosts=zookeeper_host)
+    topic_path = '/consumers/{}/owners/{}'.format(consumer_group, topic.name)
+    kz_patitions = kz_client.get_children(topic_path)
+    sorted(kz_patitions)
     consumer = topic.get_simple_consumer(consumer_group=consumer_group,
                                          auto_start=False, 
                                          reset_offset_on_fetch=False)
     current_offsets = consumer.fetch_offsets()
-    return {p_id: (latest_offsets[p_id].offset[0], res.offset)
-            for p_id, res in current_offsets}
+    consumer_id_dict = {}
+    pos = 0
+    for p_id, _ in current_offsets:
+        consumer_id, _ = kz.get('{}/{}'.format(topic_path, kz_patitions[pos])))
+        consumer_id_dict[p_id] = consumer_id
+        pos += 1
+    return {p_id: (latest_offsets[p_id].offset[0], res.offset,
+            consumer_id_dict[p_id], ) for p_id, res in current_offsets}
 
 
 #
@@ -163,12 +176,12 @@ def print_consumer_lag(client, args):
         raise ValueError('Topic {} does not exist.'.format(args.topic))
     topic = client.topics[args.topic]
 
-    lag_info = fetch_consumer_lag(client, topic, args.consumer_group)
+    lag_info = fetch_consumer_lag(client, topic, args.host, args.consumer_group)
     lag_info = [(k, '{:,}'.format(v[0] - v[1]), v[0], v[1])
                 for k, v in iteritems(lag_info)]
     print(tabulate.tabulate(
         lag_info,
-        headers=['Partition', 'Lag', 'Latest Offset', 'Current Offset'],
+        headers=['Partition', 'Lag', 'Latest Offset', 'Current Offset', 'Consumer_ID'],
         numalign='center',
     ))
 
