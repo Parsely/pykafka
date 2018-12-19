@@ -70,6 +70,7 @@ def fetch_consumer_lag(client, topic, zookeeper_host, consumer_group):
                                          reset_offset_on_fetch=False)
     current_offsets = consumer.fetch_offsets()
     consumer_id_dict = {}
+    import pdb;pdb.set_trace()
     for p_id, _ in current_offsets:
         #print ("{} {}".format(p_id, kz_patitions[p_id]))
         if bool(kz_patitions):
