@@ -71,7 +71,7 @@ def fetch_consumer_lag(client, topic, host, consumer_group):
     current_offsets = consumer.fetch_offsets()
     consumer_id_dict = {}
     for p_id, _ in current_offsets:
-        print ("{} {}".format(p_id, kz_patitions[p_id]))
+        #print ("{} {}".format(p_id, kz_patitions[p_id]))
         if bool(kz_patitions):
             consumer_id, _ = kz_client.get('{}/{}'.format(topic_path, kz_patitions[p_id]))
         else:
