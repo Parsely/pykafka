@@ -57,19 +57,27 @@ def fetch_consumer_lag(client, topic, host, consumer_group):
     from kazoo.client import KazooClient
     zookeeper_host = host.replace("9092", "2181")
     kz_client = KazooClient(hosts=zookeeper_host)
-    topic_path = '/consumers/{}/owners/{}'.format(consumer_group, topic.name)
-    kz_patitions = kz_client.get_children(topic_path)
-    sorted(kz_patitions)
+    kz_client.start()
+    try:
+        topic_path = '/consumers/{}/owners/{}'.format(consumer_group, topic.name)
+        kz_patitions = kz_client.get_children(topic_path)
+        kz_patitions = sorted(kz_patitions)
+    except:
+        kz_patitions = None
+    
     consumer = topic.get_simple_consumer(consumer_group=consumer_group,
                                          auto_start=False, 
                                          reset_offset_on_fetch=False)
     current_offsets = consumer.fetch_offsets()
     consumer_id_dict = {}
-    pos = 0
     for p_id, _ in current_offsets:
-        consumer_id, _ = kz.get('{}/{}'.format(topic_path, kz_patitions[pos])))
+        print ("{} {}".format(p_id, kz_patitions[p_id]))
+        if bool(kz_patitions):
+            consumer_id, _ = kz_client.get('{}/{}'.format(topic_path, kz_patitions[p_id]))
+        else:
+            consumer_id = None
         consumer_id_dict[p_id] = consumer_id
-        pos += 1
+    kz_client.stop()
     return {p_id: (latest_offsets[p_id].offset[0], res.offset,
             consumer_id_dict[p_id], ) for p_id, res in current_offsets}
 
@@ -177,7 +185,7 @@ def print_consumer_lag(client, args):
     topic = client.topics[args.topic]
 
     lag_info = fetch_consumer_lag(client, topic, args.host, args.consumer_group)
-    lag_info = [(k, '{:,}'.format(v[0] - v[1]), v[0], v[1])
+    lag_info = [(k, '{:,}'.format(v[0] - v[1]), v[0], v[1], v[2])
                 for k, v in iteritems(lag_info)]
     print(tabulate.tabulate(
         lag_info,
