@@ -64,14 +64,13 @@ def fetch_consumer_lag(client, topic, host, consumer_group):
         kz_patitions = sorted(kz_patitions)
     except:
         kz_patitions = None
-    
+
     consumer = topic.get_simple_consumer(consumer_group=consumer_group,
-                                         auto_start=False, 
+                                         auto_start=False,
                                          reset_offset_on_fetch=False)
     current_offsets = consumer.fetch_offsets()
     consumer_id_dict = {}
     for p_id, _ in current_offsets:
-        print ("{} {}".format(p_id, kz_patitions[p_id]))
         if bool(kz_patitions):
             consumer_id, _ = kz_client.get('{}/{}'.format(topic_path, kz_patitions[p_id]))
         else:
