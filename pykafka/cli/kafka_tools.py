@@ -1,6 +1,7 @@
 from __future__ import print_function
 
 import argparse
+import ast
 import calendar
 import datetime as dt
 import sys
@@ -41,47 +42,29 @@ def fetch_offsets(client, topic, offset):
         return topic.fetch_offset_limits(offset)
 
 
-def fetch_consumer_lag(client, topic, zookeeper_host, consumer_group):
+def fetch_consumer_lag(client, topic, consumer_group):
     """Get raw lag data for a topic/consumer group.
 
     :param client: KafkaClient connected to the cluster.
     :type client:  :class:`pykafka.KafkaClient`
     :param topic:  Name of the topic.
     :type topic:  :class:`pykafka.topic.Topic`
-    :param zookeeper_host: Host of zookeeper
     :param consumer_group: Name of the consumer group to fetch lag for.
     :type consumer_groups: :class:`str`
     :returns: dict of {partition_id: (latest_offset, consumer_offset)}
     """
     latest_offsets = fetch_offsets(client, topic, 'latest')
-    from kazoo.client import KazooClient
-    try:
-        kz_client = KazooClient(hosts=zookeeper_host)
-        kz_client.start()
-        topic_path = '/consumers/{}/owners/{}'.format(consumer_group, topic.name)
-        kz_patitions = kz_client.get_children(topic_path)
-        kz_patitions = sorted(kz_patitions)
-    except:
-        kz_client = None
-        kz_patitions = None
-
     consumer = topic.get_simple_consumer(consumer_group=consumer_group,
                                          auto_start=False,
                                          reset_offset_on_fetch=False)
     current_offsets = consumer.fetch_offsets()
     consumer_id_dict = {}
-    import pdb;pdb.set_trace()
-    for p_id, _ in current_offsets:
-        #print ("{} {}".format(p_id, kz_patitions[p_id]))
-        if bool(kz_patitions):
-            consumer_id, _ = kz_client.get('{}/{}'.format(topic_path, kz_patitions[p_id]))
-        else:
-            consumer_id = None
-        consumer_id_dict[p_id] = consumer_id
-    if bool(kz_client):
-        kz_client.stop()
+    for p_id, stat in current_offsets:
+        info = ast.literal_eval(stat[1])
+        consumer_id_dict[p_id] = [info['consumer_id'], info['hostname']]
     return {p_id: (latest_offsets[p_id].offset[0], res.offset,
-            consumer_id_dict[p_id], ) for p_id, res in current_offsets}
+                   consumer_id_dict[p_id][0],
+                   consumer_id_dict[p_id][1], ) for p_id, res in current_offsets}
 
 
 #
@@ -186,12 +169,13 @@ def print_consumer_lag(client, args):
         raise ValueError('Topic {} does not exist.'.format(args.topic))
     topic = client.topics[args.topic]
 
-    lag_info = fetch_consumer_lag(client, topic, args.zookeeper_host, args.consumer_group)
-    lag_info = [(k, '{:,}'.format(v[0] - v[1]), v[0], v[1], v[2])
+    lag_info = fetch_consumer_lag(client, topic, args.consumer_group)
+    lag_info = [(k, '{:,}'.format(v[0] - v[1]), v[0], v[1], v[2], v[3])
                 for k, v in iteritems(lag_info)]
     print(tabulate.tabulate(
         lag_info,
-        headers=['Partition', 'Lag', 'Latest Offset', 'Current Offset', 'Consumer_ID'],
+        headers=['Partition', 'Lag', 'Latest Offset', 'Current Offset',
+                 'Consumer_ID', 'Client_ID'],
         numalign='center',
     ))
 
@@ -361,7 +345,6 @@ def _add_topic(parser):
 
 
 def _get_arg_parser():
-    import sys
     output = argparse.ArgumentParser(description='Tools for Kafka.')
 
     # Common arguments
@@ -371,12 +354,6 @@ def _get_arg_parser():
                         dest='host',
                         help='host:port of any Kafka broker. '
                              '[default: localhost:9092]')
-    output.add_argument('-z', '--zookeeper',
-                        required=False,
-                        default='localhost:2181',
-                        dest='zookeeper_host',
-                        help='zookeeper_host: port of zookeeper. '
-                              '[default: localhost:2181]')
     output.add_argument('-o', '--broker_version',
                         required=False,
                         default='0.9.0',
