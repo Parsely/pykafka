@@ -41,21 +41,21 @@ def fetch_offsets(client, topic, offset):
         return topic.fetch_offset_limits(offset)
 
 
-def fetch_consumer_lag(client, topic, host, consumer_group):
+def fetch_consumer_lag(client, topic, zookeeper_host, consumer_group):
     """Get raw lag data for a topic/consumer group.
 
     :param client: KafkaClient connected to the cluster.
     :type client:  :class:`pykafka.KafkaClient`
     :param topic:  Name of the topic.
     :type topic:  :class:`pykafka.topic.Topic`
-    :param host: Host of cluster
+    :param zookeeper_host: Host of zookeeper
     :param consumer_group: Name of the consumer group to fetch lag for.
     :type consumer_groups: :class:`str`
     :returns: dict of {partition_id: (latest_offset, consumer_offset)}
     """
     latest_offsets = fetch_offsets(client, topic, 'latest')
     from kazoo.client import KazooClient
-    zookeeper_host = host.replace("9092", "2181")
+    #zookeeper_host = host.replace("9092", "2181")
     kz_client = KazooClient(hosts=zookeeper_host)
     kz_client.start()
     try:
@@ -183,7 +183,7 @@ def print_consumer_lag(client, args):
         raise ValueError('Topic {} does not exist.'.format(args.topic))
     topic = client.topics[args.topic]
 
-    lag_info = fetch_consumer_lag(client, topic, args.host, args.consumer_group)
+    lag_info = fetch_consumer_lag(client, topic, args.zookeeper_host, args.consumer_group)
     lag_info = [(k, '{:,}'.format(v[0] - v[1]), v[0], v[1], v[2])
                 for k, v in iteritems(lag_info)]
     print(tabulate.tabulate(
@@ -367,6 +367,12 @@ def _get_arg_parser():
                         dest='host',
                         help='host:port of any Kafka broker. '
                              '[default: localhost:9092]')
+    output.add_argument('-z', '--zookeeper',
+                        required=False,
+                        default='localhost:2181',
+                        dest='zookeeper_host',
+                        help='zookeeper_host: port of zookeeper. '
+                              '[default: localhost:2181]')
     output.add_argument('-o', '--broker_version',
                         required=False,
                         default='0.9.0',
