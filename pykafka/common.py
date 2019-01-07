@@ -44,6 +44,7 @@ class CompressionType(object):
     :cvar NONE: Indicates no compression in use
     :cvar GZIP: Indicates gzip compression in use
     :cvar SNAPPY: Indicates snappy compression in use
+    :cvar LZ4: Indicates lz4 compression in use
     """
     NONE = 0
     GZIP = 1
