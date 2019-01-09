@@ -5,6 +5,7 @@ import calendar
 import datetime as dt
 import sys
 import time
+import json
 from pkg_resources import parse_version
 
 import tabulate
@@ -54,12 +55,21 @@ def fetch_consumer_lag(client, topic, consumer_group):
     """
     latest_offsets = fetch_offsets(client, topic, 'latest')
     consumer = topic.get_simple_consumer(consumer_group=consumer_group,
-                                         auto_start=False, 
+                                         auto_start=False,
                                          reset_offset_on_fetch=False)
     current_offsets = consumer.fetch_offsets()
-    return {p_id: (latest_offsets[p_id].offset[0], res.offset)
-            for p_id, res in current_offsets}
+    pid_dict = {}
+    for p_id, stat in current_offsets:
+        consumer_id = None
+        hostname = None
+        if stat.metadata:
+            info = json.loads(stat.metadata.decode())
+            consumer_id = info.get('consumer_id')
+            hostname = info.get('hostname') 
+        pid_dict[p_id] = (latest_offsets[p_id].offset[0], stat.offset,
+                          consumer_id, hostname)
 
+    return pid_dict
 
 #
 # Commands
@@ -164,11 +174,12 @@ def print_consumer_lag(client, args):
     topic = client.topics[args.topic]
 
     lag_info = fetch_consumer_lag(client, topic, args.consumer_group)
-    lag_info = [(k, '{:,}'.format(v[0] - v[1]), v[0], v[1])
+    lag_info = [(k, '{:,}'.format(v[0] - v[1]), v[0], v[1], v[2], v[3])
                 for k, v in iteritems(lag_info)]
     print(tabulate.tabulate(
         lag_info,
-        headers=['Partition', 'Lag', 'Latest Offset', 'Current Offset'],
+        headers=['Partition', 'Lag', 'Latest Offset', 'Current Offset',
+                 'Consumer_ID', 'Client_ID'],
         numalign='center',
     ))
 
