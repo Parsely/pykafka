@@ -1,11 +1,11 @@
 from __future__ import print_function
 
 import argparse
-import ast
 import calendar
 import datetime as dt
 import sys
 import time
+import json
 from pkg_resources import parse_version
 
 import tabulate
@@ -58,14 +58,20 @@ def fetch_consumer_lag(client, topic, consumer_group):
                                          auto_start=False,
                                          reset_offset_on_fetch=False)
     current_offsets = consumer.fetch_offsets()
-    consumer_id_dict = {}
+    pid_dict = {}
     for p_id, stat in current_offsets:
-        info = ast.literal_eval(stat[1])
-        consumer_id_dict[p_id] = [info['consumer_id'], info['hostname']]
-    return {p_id: (latest_offsets[p_id].offset[0], res.offset,
-                   consumer_id_dict[p_id][0],
-                   consumer_id_dict[p_id][1], ) for p_id, res in current_offsets}
+        # Check if metadata stored into current_offsets
+        consumer_id = None
+        hostname = None
+        if bool(stat.metadata):
+            info = json.loads(stat.metadata.decode())
+            consumer_id = info['consumer_id'] if 'consumer_id' in info else None
+            hostname = info['hostname'] if 'hostname' in info else None
+        # Fill data in to the dict
+        pid_dict[p_id] = (latest_offsets[p_id].offset[0], stat.offset,
+                          consumer_id, hostname)
 
+    return pid_dict
 
 #
 # Commands
