@@ -60,14 +60,12 @@ def fetch_consumer_lag(client, topic, consumer_group):
     current_offsets = consumer.fetch_offsets()
     pid_dict = {}
     for p_id, stat in current_offsets:
-        # Check if metadata stored into current_offsets
         consumer_id = None
         hostname = None
-        if bool(stat.metadata):
+        if stat.metadata:
             info = json.loads(stat.metadata.decode())
-            consumer_id = info['consumer_id'] if 'consumer_id' in info else None
-            hostname = info['hostname'] if 'hostname' in info else None
-        # Fill data in to the dict
+            consumer_id = info.get('consumer_id')
+            hostname = info.get('hostname') 
         pid_dict[p_id] = (latest_offsets[p_id].offset[0], stat.offset,
                           consumer_id, hostname)
 
