@@ -41,6 +41,7 @@ from .exceptions import (
     ProducerQueueFullError,
     ProducerStoppedException,
     SocketDisconnectedError,
+    UnknownTopicOrPartition,
 )
 from .partitioners import RandomPartitioner
 from .protocol import Message, ProduceRequest
@@ -541,7 +542,10 @@ class Producer(object):
                             message.offset = presponse.offset + i
                         self._mark_as_delivered(owned_broker, messages, req)
                         continue  # All's well
-                    if presponse.err == NotLeaderForPartition.ERROR_CODE:
+                    if presponse.err in (
+                        NotLeaderForPartition.ERROR_CODE,
+                        UnknownTopicOrPartition.ERROR_CODE,
+                    ):
                         # Update cluster metadata to get new leader
                         self._update()
                     info = "Produce request for {}/{} to {}:{} failed with error code {}.".format(
