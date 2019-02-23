@@ -148,7 +148,8 @@ class ProducerIntegrationTests(unittest2.TestCase):
         message = consumer.consume()
         assert message.value == payload
 
-    def test_recover_disconnected(self):
+    # FIXME: add xxx prefix to move to last because this test causes subsequent tests to fail with rdkafka
+    def test_xxx_recover_disconnected(self):
         """Test our retry-loop with a recoverable error"""
         payload = uuid4().bytes
         prod = self._get_producer(min_queued_messages=1, delivery_reports=True)
