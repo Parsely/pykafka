@@ -44,7 +44,6 @@ addons:
     packages:
     - libev-dev
     - libsnappy-dev
-    - liblz4-dev
     - zlib1g-dev  # for librdkafka
 
 notifications:
@@ -69,9 +68,9 @@ install:
         fi
     - pip install -U pip setuptools
     - pip install codecov kazoo tox testinstances
-    - wget https://github.com/edenhill/librdkafka/archive/0.9.1.tar.gz
-    - tar -xzf 0.9.1.tar.gz
-    - cd librdkafka-0.9.1/ && ./configure --prefix=$HOME
+    - wget https://github.com/edenhill/librdkafka/archive/v0.9.5.tar.gz
+    - tar -xzf v0.9.5.tar.gz
+    - cd librdkafka-0.9.5/ && ./configure --prefix=$HOME
     - make -j 2 && make -j 2 install && cd -
 
 before_script:
