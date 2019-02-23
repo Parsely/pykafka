@@ -44,6 +44,7 @@ addons:
     packages:
     - libev-dev
     - libsnappy-dev
+    - liblz4-dev
     - zlib1g-dev  # for librdkafka
 
 notifications:
