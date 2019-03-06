@@ -4,6 +4,7 @@ import mock
 import os
 import platform
 import pytest
+from parameterized import parameterized
 import random
 import time
 import types
@@ -147,7 +148,8 @@ class ProducerIntegrationTests(unittest2.TestCase):
         message = consumer.consume()
         assert message.value == payload
 
-    def test_recover_disconnected(self):
+    # FIXME: add xxx prefix to move to last because this test causes subsequent tests to fail with rdkafka
+    def test_xxx_recover_disconnected(self):
         """Test our retry-loop with a recoverable error"""
         payload = uuid4().bytes
         prod = self._get_producer(min_queued_messages=1, delivery_reports=True)
@@ -378,6 +380,29 @@ class ProducerIntegrationTests(unittest2.TestCase):
                 msgs.append(msg)
             assert len(msgs) == 10
         retry(ensure_all_messages_consumed, retry_time=15)
+
+    @parameterized.expand([
+        [CompressionType.NONE],
+        [CompressionType.GZIP],
+        [CompressionType.SNAPPY],
+        [CompressionType.LZ4],
+    ])
+    def test_sync_produce_compression_large_message(self, compression_type):
+        if platform.python_implementation() == 'PyPy' and compression_type == CompressionType.LZ4:
+            pytest.skip("PyPy doesn't work well with LZ4")
+
+        consumer = self._get_consumer()
+
+        prod = self._get_producer(sync=True, min_queued_messages=1, compression=compression_type)
+
+        # 16B * 1024 * 10 = 160KB
+        # Default lz4 block size is 64KB
+        # 160KB message size will catch Kafka-incompatible lz4 dependent blocks error
+        payload = b''.join([uuid4().bytes for _ in range(10 * 1024)])
+        prod.produce(payload)
+
+        message = consumer.consume()
+        assert message.value == payload
 
 
 @pytest.mark.skipif(not RDKAFKA, reason="rdkafka")
