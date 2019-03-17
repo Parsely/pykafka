@@ -71,7 +71,7 @@ class ManagedBalancedConsumer(BalancedConsumer):
                  reset_offset_on_start=False,
                  post_rebalance_callback=None,
                  use_rdkafka=False,
-                 compacted_topic=True,
+                 compacted_topic=False,
                  heartbeat_interval_ms=3000,
                  membership_protocol=RangeProtocol,
                  deserializer=None,
