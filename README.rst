@@ -159,7 +159,8 @@ Using the librdkafka extension
 ------------------------------
 
 PyKafka includes a C extension that makes use of librdkafka to speed up producer
-and consumer operation. To use the librdkafka extension, you need to make sure the header
+and consumer operation. PyKafka requires librdkafka v0.9.1+. Some system package managers may 
+not have up-to-date versions. To use the librdkafka extension, you need to make sure the header
 files and shared library are somewhere where python can find them, both when you build
 the extension (which is taken care of by ``setup.py develop``) and at run time.
 Typically, this means that you need to either install librdkafka in a place
