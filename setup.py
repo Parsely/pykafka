@@ -184,8 +184,19 @@ def run_setup(with_rdkafka=True):
         ]
     )
 
+
+# Use environment variable RDKAFKA_INSTALL to explicitly specify whether rdkafka c extension should be compiled
+# 'system': Compile with librdkafka installed in system
+# '' (empty string): No compile
+install_type = os.environ.get('RDKAFKA_INSTALL')
+
 try:
-    if not is_cpython:
+    if install_type == '':
+        run_setup(with_rdkafka=False)
+    elif not is_cpython:
+        if install_type == 'system':
+            raise Exception("librdkafka is not supported under %s, but RDKAFKA_INSTALL specified"
+                            % python_implementation)
         print("librdkafka is not supported under %s" % python_implementation)
         print(15 * "-")
         print("INFO: Failed to build rdkafka extension:")
@@ -193,8 +204,10 @@ try:
         print(15 * "-")
         run_setup(with_rdkafka=False)
     else:
-        run_setup()
+        run_setup()  # Try to compile c ext for cpython by default
 except ve_build_ext.BuildFailed as exc:
+    if install_type == 'system':
+        raise
     print(15 * "-")
     print("INFO: Failed to build rdkafka extension:")
     print(exc.cause)
