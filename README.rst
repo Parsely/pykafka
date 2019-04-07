@@ -182,7 +182,7 @@ Operational Tools
 
 PyKafka includes a small collection of `CLI tools`_ that can help with common tasks
 related to the administration of a Kafka cluster, including offset and lag monitoring and
-topic inspection. The full, up-to-date interface for these tools can be fould by running
+topic inspection. The full, up-to-date interface for these tools can be found by running
 
 .. sourcecode:: sh
 
@@ -216,7 +216,7 @@ Support
 
 If you need help using PyKafka, there are a bunch of resources available.
 For usage questions or common recipes, check out the `StackOverflow tag`_.
-The `Google Group`_ can be useful for more in-depth questions or inquries
+The `Google Group`_ can be useful for more in-depth questions or inquiries
 you'd like to send directly to the PyKafka maintainers. If you believe you've
 found a bug in PyKafka, please open a `github issue`_ after reading the
 `contribution guide`_.
