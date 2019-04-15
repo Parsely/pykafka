@@ -83,6 +83,10 @@ class TopicDict(dict):
                     log.warning("LeaderNotFoundError encountered during Topic creation")
                     if i == self._cluster()._max_connection_retries - 1:
                         raise
+
+                    # A partition's leader is not present in our cluster's brokers list.
+                    # Refresh the cluster metadata & retry
+                    self._cluster().update()
                 else:
                     self[key] = weakref.ref(topic)
                     return topic
