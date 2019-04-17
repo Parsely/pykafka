@@ -237,7 +237,7 @@ class Topic(object):
                     # KeyErrors here. inconsistencies will be automatically
                     # resolved when `Cluster.update` is called.
                     [brokers[b] for b in meta.replicas if b in brokers],
-                    [brokers[b] for b in meta.isr],
+                    [brokers[b] for b in meta.isr if b in brokers],
                 )
             else:
                 self._partitions[id_].update(brokers, meta)

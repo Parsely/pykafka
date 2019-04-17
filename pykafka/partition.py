@@ -48,7 +48,7 @@ class Partition(object):
         :param replicas: A list of brokers containing this partition's replicas
         :type replicas: Iterable of :class:`pykafka.broker.Broker`
         :param isr: The current set of in-sync replicas for this partition
-        :type isr: :class:`pykafka.broker.Broker`
+        :type isr: Iterable of :class:`pykafka.broker.Broker`
         """
         self._id = id_
         self._leader = leader
