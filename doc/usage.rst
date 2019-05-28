@@ -136,21 +136,36 @@ The pykafka components are designed to raise exceptions when sufficient connecti
 the Kafka cluster cannot be established. There are cases in which some but not all of
 the brokers in a cluster are accessible to pykafka. In these cases, the component will
 attempt to continue operating. When it can't, an exception will be raised. Often this
-exception will be either `NoBrokersAvailableError` or `SocketDisconnectedError`. These
+exception will be `SocketDisconnectedError`. These
 exceptions should be caught and the component instance should be reinstantiated. In some
 cases, calling `stop(); start()` in response to these exceptions can be enough to
 establish a working connection.
 
 .. sourcecode:: python
 
-    from pykafka.exceptions import SocketDisconnectedError, NoBrokersAvailableError
-    # this illustrates consumer error catching; a similar method can be used for producers
+    from pykafka.exceptions import SocketDisconnectedError, LeaderNotAvailable
+    # this illustrates consumer error catching;
     consumer = topic.get_simple_consumer()
     try:
         consumer.consume()
-    except (SocketDisconnectedError, NoBrokersAvailableError) as e:
+    except (SocketDisconnectedError) as e:
         consumer = topic.get_simple_consumer()
         # use either the above method or the following:
         consumer.stop()
         consumer.start()
 
+        
+A similar method can be used for producers
+
+.. sourcecode:: python 
+
+   from pykafka.exceptions import SocketDisconnectedError, LeaderNotAvailable
+
+   producer = topic.get_producer()
+   try:
+       producer.produce('test msg')
+   except (SocketDisconnectedError, LeaderNotAvailable) as e:
+       producer = topic.get_producer()
+       producer.stop()
+       producer.start()
+       producer.produce('test msg')
