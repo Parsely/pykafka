@@ -143,7 +143,7 @@ def run_setup(with_rdkafka=True):
         long_description=readme,
         keywords='apache kafka client driver',
         license='Apache License 2.0',
-        packages=find_packages(),
+        packages=find_packages(exclude=["tests", "tests.*"]),
         entry_points={
             'console_scripts': [
                 'kafka-tools = pykafka.cli.kafka_tools:main',
