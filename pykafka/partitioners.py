@@ -63,10 +63,8 @@ class HashingPartitioner(BasePartitioner):
     """
     def __init__(self, hash_func=None):
         """
-        :param hash_func: hash function (defaults to :func:`hash`), should return
-            an `int`. If hash randomization (Python 2.7) is enabled, a custom
-            hashing function should be defined that is consistent between
-            interpreter restarts.
+        :param hash_func: hash function (defaults to :func:`sha1`), should return
+            an `int`.
         :type hash_func: function
         """
         self.hash_func = hash_func
